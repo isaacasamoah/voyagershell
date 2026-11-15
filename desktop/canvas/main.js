@@ -400,7 +400,7 @@ export default class Canvas extends View {
     this.drag = null;
     if (this.busy) {
       if (
-        action.operation === "resize-panel-split" ||
+        action.operation === "resize-placement-split" ||
         (action.operation === "set-portal-presentation" &&
           action.width !== undefined)
       ) {
@@ -411,7 +411,7 @@ export default class Canvas extends View {
         return;
       }
       if (
-        action.operation === "remove-panel" ||
+        action.operation === "remove-placement" ||
         action.operation === "set-portal-presentation"
       ) {
         const target = this.presentationTarget(action);
@@ -428,7 +428,7 @@ export default class Canvas extends View {
         cx.notify();
         return;
       }
-      if (action.operation === "save-panel-layout" && this.savingLayout) {
+      if (action.operation === "save-arrangement" && this.savingLayout) {
         this.pendingLayout = action;
       } else if (this.editing?.saving || this.savingLayout) {
         if (
@@ -448,7 +448,7 @@ export default class Canvas extends View {
     if (action.operation === "inspect") this.refreshRequested = false;
     const changesSelection = [
       "create-voyage-from-source",
-      "create-fleet-with-content",
+      "create-fleet-with-vessel",
       "close-fleet",
       "reopen-fleet",
       "close-voyage",
@@ -460,9 +460,9 @@ export default class Canvas extends View {
     ].includes(action.operation);
     const oldLayout = this.layout;
     const maximization =
-      action.operation === "set-panel-maximized" ? action : null;
+      action.operation === "set-placement-maximized" ? action : null;
     const creating =
-      ["create-content", "reopen-panel"].includes(action.operation) &&
+      ["create-vessel", "reopen-placement"].includes(action.operation) &&
       "destination" in action
         ? action
         : null;
@@ -527,9 +527,9 @@ export default class Canvas extends View {
             const creates = [
               "create-voyage",
               "create-voyage-from-source",
-              "create-fleet-with-content",
+              "create-fleet-with-vessel",
               "create-fleet",
-              "create-content",
+              "create-vessel",
             ].includes(action.operation);
             const allowed = new Set(result.createdVessels);
             if (creates)
@@ -1026,7 +1026,7 @@ export default class Canvas extends View {
     ) {
       this.run(
         kind === "vessel" && typeof side === "string"
-          ? { operation: "move-panel", id, target, side }
+          ? { operation: "move-placement", id, target, side }
           : {
               operation: kind === "voyage" ? "move-voyage" : "move-fleet",
               id,
@@ -1067,7 +1067,7 @@ export default class Canvas extends View {
     }
     this.run(
       {
-        operation: "set-panel-maximized",
+        operation: "set-placement-maximized",
         id,
         maximized: group.maximizedPlacement !== id,
       },
@@ -1233,7 +1233,7 @@ export default class Canvas extends View {
       state.release();
       if (name) {
         this.savingLayout = true;
-        this.run({ operation: "save-panel-layout", owner, name }, task, () => {
+        this.run({ operation: "save-arrangement", owner, name }, task, () => {
           this.savingLayout = false;
         });
       } else this.status = "A layout name is required.";
@@ -1259,7 +1259,7 @@ export default class Canvas extends View {
           label: `Load ${saved.name}`,
           choose: (version, cx) =>
             this.run(
-              { operation: "load-panel-layout", owner, name: saved.name },
+              { operation: "load-arrangement", owner, name: saved.name },
               cx,
               undefined,
               version,
@@ -1269,7 +1269,7 @@ export default class Canvas extends View {
           label: `Remove saved ${saved.name}`,
           choose: (version, cx) =>
             this.run(
-              { operation: "remove-panel-layout", owner, name: saved.name },
+              { operation: "remove-arrangement", owner, name: saved.name },
               cx,
               undefined,
               version,
@@ -1400,7 +1400,7 @@ export default class Canvas extends View {
       triggerOpens,
       (destination, cx) => {
         if (
-          destination.kind !== "panel" ||
+          destination.kind !== "placement" ||
           destination.owner.kind !== "portals"
         )
           return;
@@ -1444,7 +1444,7 @@ export default class Canvas extends View {
     if (this.busy || this.editing || this.layoutName) return;
     const insertion = id ? { kind: "beside", id, side } : { kind: "empty" };
     const destination = {
-      kind: "panel",
+      kind: "placement",
       owner: group.owner,
       insertion,
     };
@@ -1487,7 +1487,12 @@ export default class Canvas extends View {
       this.splitReset,
       (revision, share, cx) =>
         this.run(
-          { operation: "resize-panel-split", owner: group.owner, path, share },
+          {
+            operation: "resize-placement-split",
+            owner: group.owner,
+            path,
+            share,
+          },
           cx,
           (result, task) => {
             if (result?.status === "applied") return;
@@ -1511,7 +1516,7 @@ export default class Canvas extends View {
     return this.creationControl(
       id,
       {
-        kind: "panel",
+        kind: "placement",
         owner: group.owner,
         insertion: { kind: "beside", id: panel.id, side },
       },
@@ -1542,7 +1547,7 @@ export default class Canvas extends View {
     const edges = [];
     const opening = this.creation?.current;
     if (
-      opening?.destination.kind === "panel" &&
+      opening?.destination.kind === "placement" &&
       opening.destination.insertion.kind === "beside" &&
       opening.destination.insertion.id === panel.id
     ) {
@@ -1604,7 +1609,11 @@ export default class Canvas extends View {
       .child(
         this.creationControl(
           id,
-          { kind: "panel", owner: group.owner, insertion: { kind: "empty" } },
+          {
+            kind: "placement",
+            owner: group.owner,
+            insertion: { kind: "empty" },
+          },
           trigger,
         ),
       );
@@ -1654,7 +1663,7 @@ export default class Canvas extends View {
         )
           return;
         const destination = {
-          kind: "panel",
+          kind: "placement",
           owner: group.owner,
           insertion: { kind: "empty" },
         };

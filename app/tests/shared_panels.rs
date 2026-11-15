@@ -6,9 +6,9 @@ use voyager_contract::{
 
 fn create(model: &mut Model, owner: PlacementOwner, insertion: PlacementInsertion, type_id: &str) {
     model
-        .apply(Action::CreateContent {
+        .apply(Action::CreateVessel {
             type_id: type_id.into(),
-            destination: ContentDestination::Panel { owner, insertion },
+            destination: ContentDestination::Placement { owner, insertion },
             launch: None,
         })
         .unwrap();
@@ -104,12 +104,14 @@ fn home_portals_hide_remove_reveal_and_presentation_retain_the_instance() {
         })
         .unwrap();
     model
-        .apply(Action::SetPanelHidden {
+        .apply(Action::SetPlacementHidden {
             id: id.clone(),
             hidden: true,
         })
         .unwrap();
-    model.apply(Action::RemovePanel { id: id.clone() }).unwrap();
+    model
+        .apply(Action::RemovePlacement { id: id.clone() })
+        .unwrap();
     assert!(
         !model
             .layout
@@ -134,7 +136,9 @@ fn home_portals_hide_remove_reveal_and_presentation_retain_the_instance() {
             .root
             .is_none()
     );
-    model.apply(Action::RevealPanel { id: id.clone() }).unwrap();
+    model
+        .apply(Action::RevealPlacement { id: id.clone() })
+        .unwrap();
     model
         .apply(Action::SetPortalPresentation {
             voyage: home_id,
@@ -191,13 +195,13 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
         "notes",
     );
     model
-        .apply(Action::SetPanelHidden {
+        .apply(Action::SetPlacementHidden {
             id: first,
             hidden: true,
         })
         .unwrap();
     model
-        .apply(Action::ResizePanelSplit {
+        .apply(Action::ResizePlacementSplit {
             owner: owner.clone(),
             path: vec![voyager_contract::SplitChild::Second],
             share: voyager_contract::SplitShare::try_from(3700).unwrap(),
@@ -215,7 +219,7 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
         .collect();
     for id in ids {
         model
-            .apply(Action::SetPanelHidden { id, hidden: true })
+            .apply(Action::SetPlacementHidden { id, hidden: true })
             .unwrap();
     }
     create(&mut model, owner, PlacementInsertion::Empty, "notes");
@@ -237,7 +241,7 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::MovePanel {
+            .apply(Action::MovePlacement {
                 id,
                 target: portal,
                 side: Side::Right

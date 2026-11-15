@@ -82,7 +82,7 @@ test("generated wire validator rejects a forged caller and malformed split", asy
   assert.equal(request(valid), true);
   assert.equal(request({ ...valid, role: "owner" }), false);
   assert.equal(
-    request({ ...valid, action: { operation: "reveal-panel", id: "p1" } }),
+    request({ ...valid, action: { operation: "reveal-placement", id: "p1" } }),
     true,
   );
   assert.equal(
@@ -90,13 +90,13 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     false,
   );
   assert.equal(
-    request({ ...valid, action: { operation: "reveal-panel", id: 12 } }),
+    request({ ...valid, action: { operation: "reveal-placement", id: 12 } }),
     false,
   );
   assert.equal(
     request({
       ...valid,
-      action: { operation: "reveal-panel", id: "p1", fleet: "other" },
+      action: { operation: "reveal-placement", id: "p1", fleet: "other" },
     }),
     false,
   );
@@ -128,7 +128,7 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     request({
       ...valid,
       action: {
-        operation: "move-panel",
+        operation: "move-placement",
         id: "p1",
         target: "p2",
         side: "diagonal",
@@ -137,10 +137,10 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     false,
   );
   const creation = {
-    operation: "create-content",
+    operation: "create-vessel",
     typeId: "notes",
     destination: {
-      kind: "panel",
+      kind: "placement",
       owner: { kind: "fleet", id: "fleet-1" },
       insertion: { kind: "beside", id: "placement-1", side: "right" },
     },

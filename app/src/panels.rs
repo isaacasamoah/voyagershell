@@ -7,7 +7,7 @@ use voyager_contract::{
 pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Result<(), String> {
     use voyager_contract::{Action, Arrangement, SplitChild, WorkspaceView};
     match action {
-        Action::SavePanelLayout { owner, name } => {
+        Action::SaveArrangement { owner, name } => {
             let name = name.trim().to_owned();
             if name.is_empty() || name.len() > 128 {
                 return Err("A layout name must contain 1 to 128 bytes".into());
@@ -28,7 +28,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 layout.arrangements.push(saved);
             }
         }
-        Action::LoadPanelLayout { owner, name } => {
+        Action::LoadArrangement { owner, name } => {
             let root = layout
                 .arrangements
                 .iter()
@@ -46,7 +46,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = root;
             repair_maximized(current);
         }
-        Action::RemovePanelLayout { owner, name } => {
+        Action::RemoveArrangement { owner, name } => {
             group(layout, &owner)?;
             let index = layout
                 .arrangements
@@ -55,7 +55,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 .ok_or("Saved layout not found for this arrangement")?;
             layout.arrangements.remove(index);
         }
-        Action::ResizePanelSplit { owner, path, share } => {
+        Action::ResizePlacementSplit { owner, path, share } => {
             if path.len() > 128 {
                 return Err("Split path exceeds 128 steps".into());
             }
@@ -75,7 +75,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             };
             *current = share;
         }
-        Action::SetPanelMaximized { id, maximized } => {
+        Action::SetPlacementMaximized { id, maximized } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             let shown = visible(current.root, current.members);
@@ -87,7 +87,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             }
             *current.maximized = maximized.then_some(id);
         }
-        Action::SetPanelHidden { id, hidden } => {
+        Action::SetPlacementHidden { id, hidden } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             if !contains(current.root, &id) {
@@ -101,7 +101,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 .hidden = hidden;
             repair_maximized(current);
         }
-        Action::RemovePanel { id } => {
+        Action::RemovePlacement { id } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             if !contains(current.root, &id) {
@@ -121,7 +121,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 column.visible = false;
             }
         }
-        Action::MovePanel { id, target, side } => {
+        Action::MovePlacement { id, target, side } => {
             let owner = owner_of(layout, &id)?;
             if owner_of(layout, &target)? != owner {
                 return Err("Panels must belong to the same arrangement".into());
@@ -143,9 +143,9 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = Some(root);
             repair_maximized(current);
         }
-        Action::ReopenPanel {
+        Action::ReopenPlacement {
             id,
-            destination: voyager_contract::ContentDestination::Panel { owner, insertion },
+            destination: voyager_contract::ContentDestination::Placement { owner, insertion },
         } => {
             let source = owner_of(layout, &id)?;
             if source != owner {
@@ -188,7 +188,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             }
             insert(group_mut(layout, &owner)?, &owner, insertion, panel)?;
         }
-        Action::RevealPanel { id } => {
+        Action::RevealPlacement { id } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             current
@@ -812,9 +812,9 @@ mod tests {
         let voyage = model.layout.voyages[0].id.clone();
         let first = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Panel {
+                destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),
                     },
@@ -830,7 +830,7 @@ mod tests {
         let panel = source.placements[0].clone();
         let retained = source.placements[1].clone();
         model
-            .apply(Action::SavePanelLayout {
+            .apply(Action::SaveArrangement {
                 owner: PlacementOwner::Fleet {
                     id: source.id.clone(),
                 },
@@ -838,7 +838,7 @@ mod tests {
             })
             .unwrap();
         model
-            .apply(Action::RemovePanel {
+            .apply(Action::RemovePlacement {
                 id: panel.id.clone(),
             })
             .unwrap();
@@ -856,9 +856,9 @@ mod tests {
             id: target.placements[0].id.clone(),
             side: Side::Left,
         };
-        let action = Action::ReopenPanel {
+        let action = Action::ReopenPlacement {
             id: panel.id.clone(),
-            destination: ContentDestination::Panel {
+            destination: ContentDestination::Placement {
                 owner: owner.clone(),
                 insertion: insertion.clone(),
             },
@@ -896,9 +896,9 @@ mod tests {
             let before = model.layout.clone();
             assert!(
                 model
-                    .apply(Action::ReopenPanel {
+                    .apply(Action::ReopenPlacement {
                         id: panel.id.clone(),
-                        destination: ContentDestination::Panel {
+                        destination: ContentDestination::Placement {
                             owner: destination,
                             insertion: PlacementInsertion::Empty
                         }
@@ -939,9 +939,9 @@ mod tests {
         let before = model.layout.clone();
         assert!(
             model
-                .apply(Action::ReopenPanel {
+                .apply(Action::ReopenPlacement {
                     id: panel.id.clone(),
-                    destination: ContentDestination::Panel { owner, insertion }
+                    destination: ContentDestination::Placement { owner, insertion }
                 })
                 .is_err()
         );

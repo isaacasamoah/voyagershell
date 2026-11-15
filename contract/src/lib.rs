@@ -287,7 +287,7 @@ pub struct Layout {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ContentDestination {
-    Panel {
+    Placement {
         owner: PlacementOwner,
         insertion: PlacementInsertion,
     },
@@ -304,11 +304,11 @@ pub enum Action {
     SetSidebar {
         collapsed: bool,
     },
-    SavePanelLayout {
+    SaveArrangement {
         owner: PlacementOwner,
         name: String,
     },
-    LoadPanelLayout {
+    LoadArrangement {
         owner: PlacementOwner,
         name: String,
     },
@@ -323,7 +323,7 @@ pub enum Action {
         voyage: VoyageId,
         name: String,
     },
-    CreateFleetWithContent {
+    CreateFleetWithVessel {
         voyage: VoyageId,
         name: String,
         source: DirectorySource,
@@ -332,7 +332,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         launch: Option<launch::Launch>,
     },
-    CreateContent {
+    CreateVessel {
         #[serde(rename = "typeId")]
         type_id: String,
         destination: ContentDestination,
@@ -345,11 +345,11 @@ pub enum Action {
         #[serde(rename = "expectedBackend")]
         expected_backend: CoreTerminalId,
     },
-    RemoveContentPackage {
+    RemoveVesselPackage {
         #[serde(rename = "typeId")]
         type_id: String,
     },
-    RestoreContentPackage {
+    RestoreVesselPackage {
         #[serde(rename = "typeId")]
         type_id: String,
     },
@@ -357,13 +357,13 @@ pub enum Action {
         target: RenameTarget,
         name: String,
     },
-    ResizePanelSplit {
+    ResizePlacementSplit {
         owner: PlacementOwner,
         #[schemars(length(max = 128))]
         path: Vec<SplitChild>,
         share: SplitShare,
     },
-    MovePanel {
+    MovePlacement {
         id: PlacementId,
         target: PlacementId,
         side: Side,
@@ -404,28 +404,28 @@ pub enum Action {
     ReopenFleet {
         id: FleetId,
     },
-    RevealPanel {
+    RevealPlacement {
         id: PlacementId,
     },
-    ReopenPanel {
+    ReopenPlacement {
         id: PlacementId,
         destination: ContentDestination,
     },
     Dock {
         context: Context,
     },
-    SetPanelMaximized {
+    SetPlacementMaximized {
         id: PlacementId,
         maximized: bool,
     },
-    SetPanelHidden {
+    SetPlacementHidden {
         id: PlacementId,
         hidden: bool,
     },
-    RemovePanel {
+    RemovePlacement {
         id: PlacementId,
     },
-    RemovePanelLayout {
+    RemoveArrangement {
         owner: PlacementOwner,
         name: String,
     },

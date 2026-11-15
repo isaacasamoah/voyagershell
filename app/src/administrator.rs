@@ -125,22 +125,22 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
     Ok(vec![
         ToolDefinition {
             name: "voyager_worktree",
-            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace focus. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
+            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace dock context. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
             schema: worktree_schema,
         },
         ToolDefinition {
             name: "voyager_workspace",
-            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
+            description: "Inspect and manage the captured dock context. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes the context only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
             schema,
         },
         ToolDefinition {
             name: "voyager_process",
-            description: "Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.",
+            description: "Operate only bound terminals within this request's captured dock context. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_vessel tool.",
             schema: process_schema,
         },
         ToolDefinition {
-            name: "voyager_content",
-            description: "Describe, inspect, select files and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
+            name: "voyager_vessel",
+            description: "Describe, inspect, select files and update an existing Notes Vessel only inside the immutable captured dock context. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-vessel initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
             schema: content_schema,
         },
     ])
@@ -230,7 +230,7 @@ impl Tools {
             && turn.is_some_and(|turn| !turn.is_empty() && value.turn == turn)
             && matches!(
                 tool,
-                "voyager_workspace" | "voyager_process" | "voyager_content" | "voyager_worktree"
+                "voyager_workspace" | "voyager_process" | "voyager_vessel" | "voyager_worktree"
             )
             && value.namespace.is_none();
         let call = value.call.as_str();
@@ -302,7 +302,7 @@ impl Tools {
                 "The turn's 32-call limit was reached; no new call was dispatched",
             ));
         }
-        let limit = if tool == "voyager_content" {
+        let limit = if tool == "voyager_vessel" {
             crate::content::ENVELOPE_LIMIT
         } else {
             8192
@@ -310,7 +310,7 @@ impl Tools {
         let arguments =
             (value.arguments.to_string().len() <= limit).then(|| value.arguments.clone());
         let Some(arguments) = arguments else {
-            let message = if tool == "voyager_content" {
+            let message = if tool == "voyager_vessel" {
                 "Content arguments exceed 1 MiB plus 16 KiB. This call ID remains refused; use a new call for a different request."
             } else {
                 "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request."
@@ -708,29 +708,29 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
     match status {
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
-            Action::SetPanelMaximized {
+            Action::SetPlacementMaximized {
                 maximized: true, ..
             } => "Panel maximized",
-            Action::SetPanelMaximized {
+            Action::SetPlacementMaximized {
                 maximized: false, ..
             } => "Panel restored",
             Action::Home => "Home opened",
             Action::UpdateCanvas { .. } => "Workspace layout updated",
             Action::SetSidebar { .. } => "Sidebar updated",
-            Action::SavePanelLayout { .. } => "Panel layout saved",
-            Action::LoadPanelLayout { .. } => "Panel layout loaded",
+            Action::SaveArrangement { .. } => "Panel layout saved",
+            Action::LoadArrangement { .. } => "Panel layout loaded",
             Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => "Voyage created",
-            Action::CreateFleet { .. } | Action::CreateFleetWithContent { .. } => "Fleet created",
-            Action::CreateContent { .. } => "Content created",
-            Action::SetPanelHidden { .. } => "Panel visibility changed",
-            Action::RemovePanel { .. } => "Panel removed from layout",
-            Action::RemovePanelLayout { .. } => "Saved arrangement removed",
+            Action::CreateFleet { .. } | Action::CreateFleetWithVessel { .. } => "Fleet created",
+            Action::CreateVessel { .. } => "Content created",
+            Action::SetPlacementHidden { .. } => "Panel visibility changed",
+            Action::RemovePlacement { .. } => "Panel removed from layout",
+            Action::RemoveArrangement { .. } => "Saved arrangement removed",
             Action::SetPortalPresentation { .. } => "Portal column updated",
-            Action::RemoveContentPackage { .. } => "Content package removed",
-            Action::RestoreContentPackage { .. } => "Content package restored",
+            Action::RemoveVesselPackage { .. } => "Content package removed",
+            Action::RestoreVesselPackage { .. } => "Content package restored",
             Action::Rename { .. } => "Name changed",
-            Action::ResizePanelSplit { .. } => "Split resized",
-            Action::MovePanel { .. } => "Panel moved",
+            Action::ResizePlacementSplit { .. } => "Split resized",
+            Action::MovePlacement { .. } => "Panel moved",
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
@@ -741,8 +741,8 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::SelectFleet { .. } => "Fleet selected",
             Action::CloseFleet { .. } => "Fleet closed",
             Action::ReopenFleet { .. } => "Fleet reopened",
-            Action::RevealPanel { .. } => "Panel revealed",
-            Action::ReopenPanel { .. } => "Existing panel reopened",
+            Action::RevealPlacement { .. } => "Panel revealed",
+            Action::ReopenPlacement { .. } => "Existing panel reopened",
             Action::Dock { .. } => "Focus changed",
             Action::StartNewShell { .. } => "New shell authorized",
         }
@@ -840,10 +840,10 @@ mod tests {
             let voyage = initial.layout.voyages[0].id.clone();
             let fleet = initial.layout.voyages[0].fleets[0].id.clone();
             let created = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PlacementInsertion::Beside {
                             id: initial.layout.voyages[0].fleets[0].placements[0].id.clone(),
@@ -862,10 +862,10 @@ mod tests {
                 .id
                 .clone();
             let created = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals { voyage },
                         insertion: voyager_contract::PlacementInsertion::Empty,
                     },
@@ -945,7 +945,7 @@ mod tests {
                 preview: None,
             };
             let mut tools = Tools::default();
-            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","vesselId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
+            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_vessel","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","vesselId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
             assert!(
                 tools
                     .callback(

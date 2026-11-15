@@ -1021,10 +1021,10 @@ mod tests {
             })
             .unwrap();
         model
-            .apply(voyager_contract::Action::CreateContent {
+            .apply(voyager_contract::Action::CreateVessel {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Portals {
                         voyage: model.layout.voyages[0].id.clone(),
                     },
@@ -1142,10 +1142,10 @@ mod tests {
         let before_layout = model.layout.clone();
         assert!(
             model
-                .apply(voyager_contract::Action::CreateContent {
+                .apply(voyager_contract::Action::CreateVessel {
                     launch: None,
                     type_id: "unknown".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
                             voyage: before_layout.voyages[0].id.clone()
                         },
@@ -1221,10 +1221,10 @@ mod tests {
         let voyage = old.voyages[0].id.clone();
         let fleet = old.voyages[0].fleets[0].id.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
                     insertion: voyager_contract::PlacementInsertion::Beside {
                         id: old.voyages[0].fleets[0].placements[0].id.clone(),
@@ -1241,10 +1241,10 @@ mod tests {
             .id
             .clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Portals { voyage },
                     insertion: voyager_contract::PlacementInsertion::Empty,
                 },

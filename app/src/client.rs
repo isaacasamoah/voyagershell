@@ -1656,7 +1656,7 @@ impl Client {
                             (|| {
                                 if let Some((view, revision)) = &note_exit {
                                     if !view.is_active()
-                                        || !matches!(&request.action, Action::RemovePanel { id }
+                                        || !matches!(&request.action, Action::RemovePlacement { id }
                                             if note_exit_target(&layout, view.binding.id()).as_ref() == Ok(id))
                                     {
                                         return Err(rejected("The Notes view or placement changed; nothing was closed".into()));
@@ -1899,8 +1899,8 @@ impl Client {
                                         deferred_reply = true;
                                         return Ok(());
                                     }
-                                    if let Action::RemoveContentPackage { type_id }
-                                    | Action::RestoreContentPackage { type_id } = &request.action
+                                    if let Action::RemoveVesselPackage { type_id }
+                                    | Action::RestoreVesselPackage { type_id } = &request.action
                                     {
                                         let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
                                         layout = Arc::new(current);
@@ -1927,7 +1927,7 @@ impl Client {
                                             rejected("Content owner unavailable".into())
                                         })?;
                                         match &request.action {
-                                            Action::RemoveContentPackage { .. } => {
+                                            Action::RemoveVesselPackage { .. } => {
                                                 owner.remove_package(type_id)
                                             }
                                             _ => owner.restore_package(type_id),
@@ -1936,15 +1936,15 @@ impl Client {
                                         package_changed = true;
                                         return Ok(());
                                     }
-                                    if let Action::CreateContent { type_id, .. }
-                                    | Action::CreateFleetWithContent { type_id, .. } =
+                                    if let Action::CreateVessel { type_id, .. }
+                                    | Action::CreateFleetWithVessel { type_id, .. } =
                                         &request.action
                                         && let Some(owner) = &content
                                     {
                                         owner.require_available(type_id).map_err(rejected)?;
                                     }
                                     if let Action::CreateVoyageFromSource { source }
-                                    | Action::CreateFleetWithContent { source, .. } =
+                                    | Action::CreateFleetWithVessel { source, .. } =
                                         &request.action
                                     {
                                         let terminals = if matches!(
@@ -1969,7 +1969,8 @@ impl Client {
                                     }
                                     if matches!(
                                         request.action,
-                                        Action::StartNewShell { .. } | Action::ReopenPanel { .. }
+                                        Action::StartNewShell { .. }
+                                            | Action::ReopenPlacement { .. }
                                     ) {
                                         let (current, revision, missing) = load(core, &cwd)?;
                                         layout = Arc::new(current);
@@ -2003,7 +2004,7 @@ impl Client {
                                             let observed = core.terminal_get(&expected_backend.0)?;
                                             require_finished(&observed, expected_backend)?;
                                         }
-                                        if let Action::ReopenPanel { id, .. } = &request.action
+                                        if let Action::ReopenPlacement { id, .. } = &request.action
                                             && let Some(backend) = reopen_backend(&layout, id, &unconfirmed).map_err(rejected)? {
                                                 let observed = core.terminal_get(&backend.0)
                                                     .map_err(|error| rejected(format!("Terminal liveness unavailable; no viewer was reopened: {error:?}")))?;
@@ -2022,14 +2023,14 @@ impl Client {
                                             grant_new_shell(&mut created_vessels, vessel_id, expected_backend, &request.request_id);
                                             unconfirmed.remove(&vessel_id.0);
                                         }
-                                        if (scope.is_some() || matches!(request.action, Action::CreateContent { .. } | Action::CreateVoyageFromSource { .. } | Action::CreateFleetWithContent { .. }))
+                                        if (scope.is_some() || matches!(request.action, Action::CreateVessel { .. } | Action::CreateVoyageFromSource { .. } | Action::CreateFleetWithVessel { .. }))
                                             && matches!(
                                                 request.action,
                                                 Action::CreateVoyage { .. }
                                                     | Action::CreateVoyageFromSource { .. }
                                                     | Action::CreateFleet { .. }
-                                                    | Action::CreateFleetWithContent { .. }
-                                                    | Action::CreateContent { .. }
+                                                    | Action::CreateFleetWithVessel { .. }
+                                                    | Action::CreateVessel { .. }
                                             )
                                         {
                                             record_created_terminals(
@@ -2473,7 +2474,7 @@ impl Client {
         Ok(Request {
             request_id: self.request_id(),
             expected_version: observed.version,
-            action: Action::RemovePanel {
+            action: Action::RemovePlacement {
                 id: note_exit_target(&observed.layout, view.binding.id())
                     .map_err(CallError::Rejected)?,
             },
@@ -2724,9 +2725,9 @@ mod voice_scope_tests {
             .clone();
         assert!(note_exit_target(&model.layout, &shell).is_err());
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                     insertion: voyager_contract::PlacementInsertion::Beside {
                         id: model.layout.voyages[0].fleets[0].placements[0].id.clone(),
@@ -2755,9 +2756,11 @@ mod voice_scope_tests {
         fleet.placements.push(duplicate.clone());
         assert!(note_exit_target(&model.layout, &note.vessel).is_err());
         model
-            .apply(Action::RemovePanel { id: duplicate.id })
+            .apply(Action::RemovePlacement { id: duplicate.id })
             .unwrap();
-        model.apply(Action::RemovePanel { id: note.id }).unwrap();
+        model
+            .apply(Action::RemovePlacement { id: note.id })
+            .unwrap();
         assert!(note_exit_target(&model.layout, &note.vessel).is_err());
     }
 
@@ -3673,15 +3676,15 @@ mod terminal_outcome_tests {
             let closed = client
                 .call(request(
                     bound.version,
-                    Action::RemovePanel {
+                    Action::RemovePlacement {
                         id: panel.id.clone(),
                     },
                 ))
                 .unwrap();
             assert_eq!(closed.status, Status::Applied);
-            let action = Action::ReopenPanel {
+            let action = Action::ReopenPlacement {
                 id: panel.id.clone(),
-                destination: ContentDestination::Panel {
+                destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet {
                         id: target.id.clone(),
                     },
@@ -3717,7 +3720,7 @@ mod terminal_outcome_tests {
             let closed = client
                 .call(request(
                     opened.version,
-                    Action::RemovePanel { id: panel.id },
+                    Action::RemovePlacement { id: panel.id },
                 ))
                 .unwrap();
             core.terminal_kill(&backend.0).unwrap();
@@ -3751,9 +3754,9 @@ mod terminal_outcome_tests {
             })
             .unwrap();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: "terminal".into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Portals {
                         voyage: model.layout.voyages[0].id.clone(),
                     },
@@ -3849,10 +3852,10 @@ mod terminal_outcome_tests {
         let terminal = model.layout.vessels[0].id.clone();
         let previous = model.layout.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 launch: None,
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
                     insertion: voyager_contract::PlacementInsertion::Beside {
                         id: after.clone(),
@@ -3873,10 +3876,10 @@ mod terminal_outcome_tests {
         assert_eq!(pending, vec![record(terminal.clone())]);
         let previous = model.layout.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 launch: None,
                 type_id: "terminal".into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                     insertion: voyager_contract::PlacementInsertion::Beside {
                         id: after,
@@ -3942,10 +3945,10 @@ mod terminal_outcome_tests {
             };
             if portals {
                 model
-                    .apply(Action::CreateContent {
+                    .apply(Action::CreateVessel {
                         type_id: "terminal".into(),
                         launch: None,
-                        destination: voyager_contract::ContentDestination::Panel {
+                        destination: voyager_contract::ContentDestination::Placement {
                             owner: owner.clone(),
                             insertion: voyager_contract::PlacementInsertion::Empty,
                         },
@@ -3954,10 +3957,10 @@ mod terminal_outcome_tests {
             }
             let first = crate::panels::group(&model.layout, &owner).unwrap().members[0].clone();
             model
-                .apply(Action::CreateContent {
+                .apply(Action::CreateVessel {
                     type_id: "terminal".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: owner.clone(),
                         insertion: voyager_contract::PlacementInsertion::Beside {
                             id: first.id.clone(),
@@ -3978,7 +3981,7 @@ mod terminal_outcome_tests {
                 vec![second.vessel.clone()]
             );
             model
-                .apply(Action::SetPanelMaximized {
+                .apply(Action::SetPlacementMaximized {
                     id: first.id.clone(),
                     maximized: true,
                 })
@@ -3989,7 +3992,7 @@ mod terminal_outcome_tests {
                 vec![second.vessel.clone()]
             );
             model
-                .apply(Action::SetPanelMaximized {
+                .apply(Action::SetPlacementMaximized {
                     id: first.id,
                     maximized: false,
                 })

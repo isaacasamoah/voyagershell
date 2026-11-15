@@ -41,7 +41,7 @@ export const Notes: { new: (id: string, props: { vesselId: string }) => import("
 export function descriptions(): Promise<string>;
 "#;
 
-pub const CONTENT_MODULE: &str = "voyager_content";
+pub const CONTENT_MODULE: &str = "voyager_vessel";
 pub const CONTENT: &str = r#"
 export function identity(): string;
 export function request_id(): string;

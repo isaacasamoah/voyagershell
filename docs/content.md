@@ -12,7 +12,7 @@ every agent action, resource limit or the combined-foundation proving-code cap.
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
 The existing generator exports their validators beside the workspace and
 conversation contract. `app/src/content.rs` owns persisted data, revisions and
-schema checks. `create-content` uses the shared panel owner and an explicit
+schema checks. `create-vessel` uses the shared panel owner and an explicit
 empty or beside-placement insertion with a left/right/top/bottom side and
 an explicit type ID. The supported type IDs are `terminal` and `notes`. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
 Changing a placement does not change its content ID or data. A Notes placement
@@ -93,7 +93,7 @@ check Notes availability; its direct Notes selection still needs its own native
 journey. The configuration journey creates Notes through actual administrator
 tools. Personal package JavaScript remains independently editable.
 
-The source adds explicit remove-content-package and restore-content-package
+The source adds explicit remove-vessel-package and restore-vessel-package
 workspace actions. Native administration and an administrator captured at whole
 Workspace scope use the existing Client queue and request receipts. Narrower
 captured scopes refuse. Before changing files, the owner reads the actual Core
@@ -188,7 +188,7 @@ host-task lifetime remain required native/resource observations.
 ## Personal-source compatibility
 
 Existing profile JavaScript is never overwritten. The original TitleState,
-BodyState, Title, Body and bound voyager_content methods remain available with
+BodyState, Title, Body and bound voyager_vessel methods remain available with
 their previous signatures. Old packages continue to own their legacy local
 controller and do not automatically gain retained native draft migration. Using
 the new session requires a deliberate personal-package source upgrade. The exact
@@ -210,7 +210,7 @@ Each Notes candidate loads in its own isolated QuickJS VM with the private
 voyager_input registry, under the limits in
 [Vessel engine limits](#vessel-engine-limits). Candidates cannot import Header
 Terminal, Name or workspace modules. Each candidate has its captured
-voyager_content module and application generation.
+voyager_vessel module and application generation.
 The host renders the published ScriptView beneath the existing single window
 ShellRoot and retains the accessibility activation/overlay invalidation route.
 The older native journey observed the legacy inputs with accessibility enabled
@@ -264,7 +264,7 @@ input still reaches the original Core terminal afterward. The sibling pixel chec
 cover its measured title, body and status area, not the whole Portal header or
 desktop. Earlier failed fixture attempts remain recorded separately.
 
-The N3 source candidate adds generated voyager_content describe/inspect/update to
+The N3 source candidate adds generated voyager_vessel describe/inspect/update to
 the same actual-provider callback path. Captured focus stays outside its payload.
 The Client worker now owns the one Notes Owner and orders both UI and agent calls
 with fresh membership checks. An existing hidden Notes instance is allowed only
@@ -447,7 +447,7 @@ revision before saving. Native inputs become read-only while the existing
 revision-checked save completes. A refusal or unconfirmed save retains the view
 and draft. The captured binding, placement and saved file revision are checked
 again at the application owner. The request then enters the existing typed
-RemovePanel dispatch, including receipts, workspace revision checks and owner
+RemovePlacement dispatch, including receipts, workspace revision checks and owner
 notifications. Exit never stops a Core program. Notes has no separate process.
 
 A confirmed Exit retires the view and releases its cached native instance. The

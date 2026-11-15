@@ -146,9 +146,9 @@ mod linux {
                 snapshot = call(
                     &client,
                     snapshot.version,
-                    Action::CreateContent {
+                    Action::CreateVessel {
                         type_id: "terminal".into(),
-                        destination: voyager_contract::ContentDestination::Panel {
+                        destination: voyager_contract::ContentDestination::Placement {
                             owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
                             insertion: voyager_contract::PlacementInsertion::Beside {
                                 id: after.clone(),
@@ -389,9 +389,9 @@ mod linux {
             let snapshot = call(
                 &client,
                 snapshot.version,
-                Action::CreateContent {
+                Action::CreateVessel {
                     type_id: "terminal".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PlacementInsertion::Beside {
                             id: after,

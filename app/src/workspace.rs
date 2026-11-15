@@ -150,7 +150,7 @@ impl Model {
             Action::StartNewShell { .. } => {
                 return Err("New shell intent requires terminal owner validation".into());
             }
-            Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => {
+            Action::RemoveVesselPackage { .. } | Action::RestoreVesselPackage { .. } => {
                 return Err("Content package operations require the application owner".into());
             }
             Action::Home => self.layout.view = WorkspaceView::Home,
@@ -221,7 +221,7 @@ impl Model {
                 self.layout.view = WorkspaceView::Fleet;
                 self.layout.voyages[index].fleets.push(fleet);
             }
-            Action::CreateFleetWithContent {
+            Action::CreateFleetWithVessel {
                 voyage,
                 name,
                 source,
@@ -391,9 +391,9 @@ impl Model {
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
-            Action::CreateContent {
+            Action::CreateVessel {
                 type_id,
-                destination: ContentDestination::Panel { owner, insertion },
+                destination: ContentDestination::Placement { owner, insertion },
                 launch,
             } => {
                 if !crate::content::supports_type(&type_id) {
@@ -500,16 +500,16 @@ impl Model {
                 }
                 self.layout.context = context;
             }
-            action @ (Action::ResizePanelSplit { .. }
-            | Action::MovePanel { .. }
-            | Action::SetPanelMaximized { .. }
-            | Action::SetPanelHidden { .. }
-            | Action::RemovePanel { .. }
-            | Action::RevealPanel { .. }
-            | Action::ReopenPanel { .. }
-            | Action::SavePanelLayout { .. }
-            | Action::LoadPanelLayout { .. }
-            | Action::RemovePanelLayout { .. }
+            action @ (Action::ResizePlacementSplit { .. }
+            | Action::MovePlacement { .. }
+            | Action::SetPlacementMaximized { .. }
+            | Action::SetPlacementHidden { .. }
+            | Action::RemovePlacement { .. }
+            | Action::RevealPlacement { .. }
+            | Action::ReopenPlacement { .. }
+            | Action::SaveArrangement { .. }
+            | Action::LoadArrangement { .. }
+            | Action::RemoveArrangement { .. }
             | Action::SetPortalPresentation { .. }) => panels::apply(&mut self.layout, action)?,
             Action::MoveVoyage { id, target, before } => {
                 let source = self
@@ -584,7 +584,7 @@ mod tests {
         let id = model.layout.home.as_ref().unwrap().fleets[0].placements[0]
             .id
             .clone();
-        model.apply(Action::RemovePanel { id }).unwrap();
+        model.apply(Action::RemovePlacement { id }).unwrap();
         let empty = model.layout.clone();
         assert_eq!(Model::prepare(empty.clone(), "/elsewhere").unwrap(), empty);
         model.layout.home.as_mut().unwrap().fleets[0].name = "My landing".into();

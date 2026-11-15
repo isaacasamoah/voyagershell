@@ -530,7 +530,7 @@ def prove(
         if process_case
         else "Use your native file read tool to read administrator-read.txt in your current directory. Then use voyager_workspace to inspect the workspace and create exactly one Fleet named Native admin inside the existing Voyage. Report the file marker and actual result briefly. Do not change project files or launch agents."
         if administrator
-        else f"Use voyager_workspace to inspect this workspace. Create exactly one Voyage named Content trial with cwd {workspace}. In its first Fleet create exactly two Notes instances: one Vessel beside its terminal and one Portal in that Voyage. Use voyager_content to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all previous content and avatar context unchanged. Do not edit files, send terminal input, create extra Fleets, repeat an uncertain action or use native tools to bypass the content owner."
+        else f"Use voyager_workspace to inspect this workspace. Create exactly one Voyage named Content trial with cwd {workspace}. In its first Fleet create exactly two Notes instances: one Vessel beside its terminal and one Portal in that Voyage. Use voyager_vessel to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all previous content and avatar context unchanged. Do not edit files, send terminal input, create extra Fleets, repeat an uncertain action or use native tools to bypass the content owner."
         if content_case
         else "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
@@ -653,7 +653,7 @@ def prove(
             message["tool"]["status"] == "applied"
             or (
                 message["tool"]["status"] == "rejected"
-                and message["tool"]["action"]["action"]["operation"] == "create-content"
+                and message["tool"]["action"]["action"]["operation"] == "create-vessel"
                 and message["text"]
                 == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
             )
@@ -670,7 +670,7 @@ def prove(
         actions = [
             message["tool"]["action"]["action"]
             for message in tools
-            if message["tool"]["name"] == "voyager_content"
+            if message["tool"]["name"] == "voyager_vessel"
         ]
         assert {action["operation"] for action in actions} == {
             "describe",
@@ -702,7 +702,7 @@ def prove(
             calls = [
                 message["tool"]
                 for message in tools
-                if message["tool"]["name"] == "voyager_content"
+                if message["tool"]["name"] == "voyager_vessel"
                 and message["tool"]["action"]["action"]["vesselId"] == key
             ]
             assert [call["action"]["action"]["operation"] for call in calls] == [

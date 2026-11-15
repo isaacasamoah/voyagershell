@@ -113,7 +113,7 @@ pub(crate) fn close_exited(
         .map(|(id, _)| id)
         .collect();
     for id in &closing {
-        model.apply(voyager_contract::Action::RemovePanel { id: id.clone() })?;
+        model.apply(voyager_contract::Action::RemovePlacement { id: id.clone() })?;
     }
     Ok(!closing.is_empty())
 }

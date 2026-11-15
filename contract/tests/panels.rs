@@ -18,9 +18,9 @@ fn projected_panel_names_are_required_while_legacy_data_still_decodes() {
 #[test]
 fn shared_panel_requests_and_empty_roots_have_one_wire_shape() {
     for action in [
-        json!({"operation":"create-content","typeId":"notes","destination":{"kind":"panel","owner":{"kind":"portals","voyage":"voyage-1"},"insertion":{"kind":"beside","id":"p1","side":"left"}}}),
-        json!({"operation":"resize-panel-split","owner":{"kind":"fleet","id":"fleet-1"},"path":[],"share":3700}),
-        json!({"operation":"set-panel-hidden","id":"p1","hidden":true}),
+        json!({"operation":"create-vessel","typeId":"notes","destination":{"kind":"placement","owner":{"kind":"portals","voyage":"voyage-1"},"insertion":{"kind":"beside","id":"p1","side":"left"}}}),
+        json!({"operation":"resize-placement-split","owner":{"kind":"fleet","id":"fleet-1"},"path":[],"share":3700}),
+        json!({"operation":"set-placement-hidden","id":"p1","hidden":true}),
     ] {
         assert!(
             serde_json::from_value::<Action>(action.clone()).is_ok(),

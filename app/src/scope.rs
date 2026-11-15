@@ -160,10 +160,10 @@ pub(crate) fn check(
     };
     let allowed = match action {
         Action::Inspect | Action::Dock { .. } | Action::Home => true,
-        Action::SavePanelLayout { owner, .. }
-        | Action::LoadPanelLayout { owner, .. }
-        | Action::RemovePanelLayout { owner, .. }
-        | Action::ResizePanelSplit { owner, .. } => match owner {
+        Action::SaveArrangement { owner, .. }
+        | Action::LoadArrangement { owner, .. }
+        | Action::RemoveArrangement { owner, .. }
+        | Action::ResizePlacementSplit { owner, .. } => match owner {
             PlacementOwner::Fleet { id } => {
                 matches!(scope, Context::Voyage { .. } | Context::Fleet { .. })
                     && fleet(id).is_some()
@@ -177,7 +177,7 @@ pub(crate) fn check(
         }
         Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => false,
         Action::UpdateCanvas { .. } | Action::SetSidebar { .. } => false,
-        Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => false,
+        Action::RemoveVesselPackage { .. } | Action::RestoreVesselPackage { .. } => false,
         Action::StartNewShell { vessel_id, .. } => {
             scoped.vessels.iter().any(|item| &item.id == vessel_id)
         }
@@ -196,7 +196,7 @@ pub(crate) fn check(
                 && fleet(id).is_some()
                 && fleet(target).is_some()
         }
-        Action::MovePanel { id, target, .. } => scoped.containers().any(|voyage| {
+        Action::MovePlacement { id, target, .. } => scoped.containers().any(|voyage| {
             voyage
                 .fleets
                 .iter()
@@ -208,16 +208,16 @@ pub(crate) fn check(
                 })
         }),
         Action::CreateFleet { voyage, .. }
-        | Action::CreateFleetWithContent { voyage, .. }
+        | Action::CreateFleetWithVessel { voyage, .. }
         | Action::SelectVoyage { id: voyage } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }
-        Action::CreateContent {
-            destination: ContentDestination::Panel { owner, insertion },
+        Action::CreateVessel {
+            destination: ContentDestination::Placement { owner, insertion },
             ..
         }
-        | Action::ReopenPanel {
-            destination: ContentDestination::Panel { owner, insertion },
+        | Action::ReopenPlacement {
+            destination: ContentDestination::Placement { owner, insertion },
             ..
         } => {
             let members = scoped.containers().find_map(|voyage| match owner {
@@ -263,10 +263,10 @@ pub(crate) fn check(
                 .flat_map(|voyage| &voyage.portals)
                 .any(|portal| &portal.id == id),
         },
-        Action::RevealPanel { id }
-        | Action::SetPanelMaximized { id, .. }
-        | Action::SetPanelHidden { id, .. }
-        | Action::RemovePanel { id } => scoped.containers().any(|voyage| {
+        Action::RevealPlacement { id }
+        | Action::SetPlacementMaximized { id, .. }
+        | Action::SetPlacementHidden { id, .. }
+        | Action::RemovePlacement { id } => scoped.containers().any(|voyage| {
             voyage
                 .fleets
                 .iter()
@@ -276,7 +276,7 @@ pub(crate) fn check(
         }),
         Action::SelectFleet { id } => fleet(id).is_some(),
     };
-    let retained_in_scope = !matches!(action, Action::ReopenPanel { id, .. }
+    let retained_in_scope = !matches!(action, Action::ReopenPlacement { id, .. }
         if crate::panels::owner_of(&scoped, id).is_err());
     if allowed && retained_in_scope {
         Ok(())
@@ -305,14 +305,14 @@ mod tests {
             id: home.fleets[0].id.clone(),
         };
         model
-            .apply(Action::RemovePanel {
+            .apply(Action::RemovePlacement {
                 id: home.fleets[0].placements[0].id.clone(),
             })
             .unwrap();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Panel {
+                destination: ContentDestination::Placement {
                     owner,
                     insertion: PlacementInsertion::Empty,
                 },
@@ -363,14 +363,14 @@ mod tests {
             check(
                 &snapshot,
                 Some(&Context::Voyage { id: ordinary }),
-                &Action::RemovePanel {
+                &Action::RemovePlacement {
                     id: panel.id.clone()
                 }
             )
             .is_err()
         );
         model
-            .apply(Action::RemovePanel {
+            .apply(Action::RemovePlacement {
                 id: panel.id.clone(),
             })
             .unwrap();

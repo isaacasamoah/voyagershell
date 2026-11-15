@@ -183,12 +183,12 @@ test("an unsent Close waits once and refuses changed placement identity", async 
   for (const changed of [false, true]) {
     const { view, cx, pending, actions, layout } = fixture("applied");
     view.run({ operation: "inspect" }, cx);
-    view.run({ operation: "remove-panel", id: "vessel" }, cx);
+    view.run({ operation: "remove-placement", id: "vessel" }, cx);
     if (changed) layout.voyages[0].fleets[0].placements[0].vessel = "different";
     await pending[0];
     await Promise.all(pending);
     assert.equal(
-      actions.filter((action) => action === "remove-panel").length,
+      actions.filter((action) => action === "remove-placement").length,
       changed ? 0 : 1,
     );
     if (changed) assert.match(view.status, /changed/);
@@ -203,9 +203,9 @@ test("refused uncertain and failed preparation never submit a waiting presentati
   ]) {
     const { view, cx, pending, actions } = fixture(open, outcome, true);
     view.run({ operation: "inspect" }, cx);
-    view.run({ operation: "remove-panel", id: "vessel" }, cx);
+    view.run({ operation: "remove-placement", id: "vessel" }, cx);
     await pending[0];
-    assert.equal(actions.includes("remove-panel"), false);
+    assert.equal(actions.includes("remove-placement"), false);
     assert.equal(view.pendingPresentation, null);
     assert.match(view.status, /not sent/);
   }
@@ -220,14 +220,14 @@ test("waiting presentation admission refuses stale competing and width-drag requ
     mode: "overlay",
   };
   view.run({ operation: "inspect" }, cx);
-  view.run({ operation: "remove-panel", id: "vessel" }, cx, undefined, "0");
+  view.run({ operation: "remove-placement", id: "vessel" }, cx, undefined, "0");
   assert.match(view.status, /changed/);
   view.run(
     { operation: "set-portal-presentation", voyage: "voyage", width: 480 },
     cx,
   );
   assert.equal(view.pendingPresentation, null);
-  view.run({ operation: "remove-panel", id: "vessel" }, cx);
+  view.run({ operation: "remove-placement", id: "vessel" }, cx);
   view.run(
     { operation: "set-portal-presentation", voyage: "voyage", visible: true },
     cx,
@@ -235,7 +235,10 @@ test("waiting presentation admission refuses stale competing and width-drag requ
   assert.match(view.status, /already waiting/);
   await pending[0];
   await Promise.all(pending);
-  assert.equal(actions.filter((action) => action === "remove-panel").length, 1);
+  assert.equal(
+    actions.filter((action) => action === "remove-placement").length,
+    1,
+  );
   assert.equal(actions.includes("set-portal-presentation"), false);
 });
 
@@ -343,7 +346,7 @@ test("drag targets preserve identity and stale gestures dispatch nothing", () =>
     bounds: { x: 0, y: 0, width: 100, height: 100 },
   };
   for (const [kind, expected] of [
-    ["vessel", "move-panel"],
+    ["vessel", "move-placement"],
     ["fleet", "move-fleet"],
     ["voyage", "move-voyage"],
   ]) {
@@ -519,7 +522,7 @@ test("maximizing another terminal transfers unchanged native focus to that retai
     for (const id of ["content", "other"])
       view.openings.set(id, { status: "applied" });
     view.run(
-      { operation: "set-panel-maximized", id: "second", maximized: true },
+      { operation: "set-placement-maximized", id: "second", maximized: true },
       cx,
     );
     fleet.maximizedPlacement = "second";
@@ -834,7 +837,7 @@ test("navigation waits for a layout save and is cleared on refusal or uncertaint
     view.savingLayout = true;
     view.run(
       {
-        operation: "save-panel-layout",
+        operation: "save-arrangement",
         owner: { kind: "fleet", id: "fleet" },
         name: "Focus",
       },
@@ -848,8 +851,8 @@ test("navigation waits for a layout save and is cleared on refusal or uncertaint
     assert.deepEqual(
       actions,
       status === "applied"
-        ? ["save-panel-layout", "home"]
-        : ["save-panel-layout"],
+        ? ["save-arrangement", "home"]
+        : ["save-arrangement"],
     );
     assert.equal(view.afterRename, null);
   }
@@ -877,7 +880,7 @@ test("a layout save begun during an existing request waits before navigation", a
   view.savingLayout = true;
   view.run(
     {
-      operation: "save-panel-layout",
+      operation: "save-arrangement",
       owner: { kind: "fleet", id: "fleet" },
       name: "Focus",
     },
@@ -885,7 +888,7 @@ test("a layout save begun during an existing request waits before navigation", a
   );
   view.run({ operation: "home" }, cx);
   for (let index = 0; index < pending.length; index++) await pending[index];
-  assert.deepEqual(actions, ["inspect", "save-panel-layout", "home"]);
+  assert.deepEqual(actions, ["inspect", "save-arrangement", "home"]);
 });
 
 test("layout shortcuts ignore a retained hidden Vessel", () => {
@@ -951,7 +954,7 @@ test("maximize shortcuts bind the displayed event origin and refuse busy intents
   };
   view.maximizeShortcut("second", event, cx);
   assert.deepEqual(calls.pop(), {
-    operation: "set-panel-maximized",
+    operation: "set-placement-maximized",
     id: "second",
     maximized: true,
   });
@@ -1277,7 +1280,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   maximize.calls.on_click[0]({}, {});
   assert.equal(view.focused, "vessel");
   assert.deepEqual(actions.pop(), {
-    operation: "set-panel-maximized",
+    operation: "set-placement-maximized",
     id: "vessel",
     maximized: true,
   });
@@ -1293,7 +1296,10 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     ],
   );
   menu.find((item) => item.label === "Close Vessel").choose("7", {});
-  assert.deepEqual(actions.pop(), { operation: "remove-panel", id: "vessel" });
+  assert.deepEqual(actions.pop(), {
+    operation: "remove-placement",
+    id: "vessel",
+  });
   start[0].calls.on_click[0]({}, {});
   assert.deepEqual(actions.pop(), {
     operation: "start-new-shell",
@@ -1389,7 +1395,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   );
   assert.ok(goThere);
   goThere.calls.on_click[0]({ click_count: 1 }, {});
-  assert.deepEqual(actions, [{ operation: "reveal-panel", id: "vessel" }]);
+  assert.deepEqual(actions, [{ operation: "reveal-placement", id: "vessel" }]);
   actions.length = 0;
   packageRevision = "1";
   view.render({});
@@ -1493,7 +1499,7 @@ test("a delayed request cannot rewind a newer native dock snapshot", async () =>
 test("resize dispatch keeps the captured revision and restores a busy preview without sending", async () => {
   const { view, cx, pending, versions } = fixture("applied");
   const action = {
-    operation: "resize-panel-split",
+    operation: "resize-placement-split",
     owner: { kind: "fleet", id: "fleet" },
     path: [],
     share: 3500,

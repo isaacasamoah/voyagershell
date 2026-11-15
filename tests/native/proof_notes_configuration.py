@@ -53,11 +53,11 @@ def configuration_setup(*, native, pid, evidence, type_text, click, owned):
     )
     operations = [tool["action"]["action"]["operation"] for tool in tools]
     assert (
-        operations.count("create-content") == 2
+        operations.count("create-vessel") == 2
         and operations.count("set-portal-presentation") == 1
     )
     assert all(
-        operation in ("inspect", "create-content", "set-portal-presentation")
+        operation in ("inspect", "create-vessel", "set-portal-presentation")
         for operation in operations
     )
     click(chat_close_point(native, pid, evidence))
@@ -221,7 +221,7 @@ def configuration(
             f"Do not use application tools before its output contains READY {token}. "
             "A timeout, nonzero status or absent READY requires stopping with no content effect. "
             "After READY, inspect the current workspace with voyager_workspace for its fresh expectedVersion. "
-            f"Use voyager_content describe and inspect on vesselId {target}. "
+            f"Use voyager_vessel describe and inspect on vesselId {target}. "
         )
         if operation == "configure":
             instruction += (
@@ -261,7 +261,7 @@ def configuration(
             for message in final["messages"]
             if message["role"] == "tool" and message["requestId"] == user["requestId"]
         ]
-        content = [tool for tool in tools if tool["name"] == "voyager_content"]
+        content = [tool for tool in tools if tool["name"] == "voyager_vessel"]
         effects = [
             tool
             for tool in content
@@ -307,7 +307,7 @@ def configuration(
             if tool not in effects
         )
         assert all(
-            tool["name"] in ("voyager_workspace", "voyager_content") for tool in tools
+            tool["name"] in ("voyager_workspace", "voyager_vessel") for tool in tools
         )
         assert all(
             tool["callbackIds"] and tool["callId"] and tool["requestId"]

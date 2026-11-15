@@ -147,7 +147,7 @@ union all come from that list.
 | `toggle-portals` | Voyage id | The button that shows or hides the Portals | `portalControls` in `navigation-view.ts` |
 | `close-panel` | Placement id | The close button of a Vessel or Portal, which keeps its process running | `renderPanel` in `panel-view.ts` |
 | `hidden-panels` | Empty | The Hidden Vessels or Hidden Portals entry of the creation menu | `CreationPicker.render` in `creation.ts` |
-| `reopen-panel` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
+| `reopen-placement` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
 | `workspace-dock` | Empty | The avatar's workspace dock, which wraps the brand | `renderSidebar` |
 | `portal-area` | Voyage id | The area that holds the Voyage's Portals while they are visible | `Workspace.render` in `main.ts` |
 | `go-there` | Empty | The Go there button of the context bar, drawn when the dock target is out of view | `renderContext` in `navigation-view.ts` |

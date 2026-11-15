@@ -64,7 +64,7 @@ export function renderPanel(workspace, placement, scope, group) {
               workspace.focused = placement.id;
               workspace.run(
                 {
-                  operation: "set-panel-maximized",
+                  operation: "set-placement-maximized",
                   id: placement.id,
                   maximized: !maximized,
                 },
@@ -80,7 +80,7 @@ export function renderPanel(workspace, placement, scope, group) {
       label: `Close ${entity}`,
       choose: (version, cx) =>
         workspace.run(
-          { operation: "remove-panel", id: placement.id },
+          { operation: "remove-placement", id: placement.id },
           cx,
           undefined,
           version,
@@ -201,7 +201,7 @@ export function renderPanel(workspace, placement, scope, group) {
                       workspace.focused = placement.id;
                       workspace.run(
                         {
-                          operation: "set-panel-maximized",
+                          operation: "set-placement-maximized",
                           id: placement.id,
                           maximized: !maximized,
                         },
@@ -227,7 +227,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     .child(Marker.new("close-panel", placement.id))
                     .on_click((_event, cx) =>
                       workspace.run(
-                        { operation: "remove-panel", id: placement.id },
+                        { operation: "remove-placement", id: placement.id },
                         cx,
                       ),
                     ),
@@ -250,7 +250,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     workspace.processes,
                     workspace.reportedActivity,
                     (id, cx) =>
-                      workspace.run({ operation: "reveal-panel", id }, cx),
+                      workspace.run({ operation: "reveal-placement", id }, cx),
                     workspace.processError,
                     {
                       collapsed: workspace.collapsedGroups,

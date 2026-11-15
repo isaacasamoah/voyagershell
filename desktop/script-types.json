@@ -1,6 +1,6 @@
 {
   "canvas": {
-    "rawSha256": "e6dc027e4eff47d8041c4a63e6a2740f631e92103101ab1dca6700bfb91609f1",
+    "rawSha256": "dcc200e7671e2a5135067d47424c87b9e5a9603d654eb359fde0e2dd69d0c591",
     "modules": [
       "gpui-base",
       "gpui-kit",
@@ -14,13 +14,13 @@
     ]
   },
   "notes": {
-    "rawSha256": "13afb749da95bcf2735413cd27c6b566e14e692ae806fdcc89218309eb78b05b",
+    "rawSha256": "ca3d5fb5e5320cae14d2a33d62ea94d830474fef73513ee64a5a903e7801819a",
     "modules": [
       "gpui-base",
       "gpui-kit",
       "gpui-shell",
-      "voyager_content",
-      "voyager_input"
+      "voyager_input",
+      "voyager_vessel"
     ]
   }
 }

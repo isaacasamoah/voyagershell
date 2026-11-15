@@ -82,10 +82,10 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
             .call(Request {
                 request_id: client.request_id(),
                 expected_version: applied.version,
-                action: Action::CreateContent {
+                action: Action::CreateVessel {
                     launch: None,
                     type_id: "notes".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
                             voyage: initial.layout.selected_voyage.clone().unwrap(),
                         },
@@ -166,14 +166,14 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 Context::Fleet {
                     id: initial.layout.selected_fleet.clone().unwrap(),
                 },
-                request(Action::RemoveContentPackage {
+                request(Action::RemoveVesselPackage {
                     type_id: "notes".into(),
                 }),
             )
             .unwrap();
         assert_eq!(refused.status, Status::Rejected);
         assert!(package.exists());
-        let remove = request(Action::RemoveContentPackage {
+        let remove = request(Action::RemoveVesselPackage {
             type_id: "notes".into(),
         });
         let removed = client
@@ -185,10 +185,10 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let unavailable = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::CreateContent {
+                request(Action::CreateVessel {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
                             voyage: initial.layout.selected_voyage.clone().unwrap(),
                         },
@@ -202,7 +202,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let restored = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::RestoreContentPackage {
+                request(Action::RestoreVesselPackage {
                     type_id: "notes".into(),
                 }),
             )
@@ -246,7 +246,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let stale = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::RemoveContentPackage {
+                request(Action::RemoveVesselPackage {
                     type_id: "notes".into(),
                 }),
             )

@@ -566,7 +566,7 @@ class Routes(unittest.TestCase):
         proof = importlib.import_module("proof_foundation_notes")
         header = (ROOT / "desktop/canvas/main.js").read_text()
         setup = proof.setup_source(header)
-        self.assertEqual(setup.count('operation: "create-content"'), 2)
+        self.assertEqual(setup.count('operation: "create-vessel"'), 2)
         with self.assertRaises(AssertionError):
             proof.setup_source(header + header)
         source = (ROOT / "desktop/notes-legacy-fixture.js").read_text()

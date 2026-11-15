@@ -309,7 +309,7 @@ def prove(
                 tool["status"] == "applied"
                 or (
                     tool["status"] == "rejected"
-                    and tool["action"]["action"]["operation"] == "create-content"
+                    and tool["action"]["action"]["operation"] == "create-vessel"
                     and tool["text"]
                     == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
                 )
@@ -327,10 +327,10 @@ def prove(
             == operations.count("set-portal-presentation")
             == 1
         )
-        assert operations.count("create-content") == 2
+        assert operations.count("create-vessel") == 2
         assert all(
             operation
-            in ("inspect", "create-voyage", "create-content", "set-portal-presentation")
+            in ("inspect", "create-voyage", "create-vessel", "set-portal-presentation")
             for operation in operations
         )
         control("Close chat")

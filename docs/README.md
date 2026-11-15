@@ -203,7 +203,7 @@ from step 4. Open each file as you read and find the named function.
 
 1. [`desktop/canvas/creation.ts`](../desktop/canvas/creation.ts)
    builds the action
-   `{operation: "create-content", destination, typeId: "terminal", launch}`.
+   `{operation: "create-vessel", destination, typeId: "terminal", launch}`.
    The `launch` entry comes from `launches.json` in the profile.
 2. The generated `invoke` in
    [`contract/generated/workspace.ts`](../contract/generated/workspace.ts) adds a

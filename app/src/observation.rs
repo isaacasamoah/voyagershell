@@ -323,9 +323,9 @@ mod tests {
             .unwrap()
             .backend = Some(CoreTerminalId("t1".into()));
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: "terminal".into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),
                     },
@@ -493,7 +493,7 @@ mod tests {
         };
         let before = model.layout.vessels.len();
         model
-            .apply(Action::CreateFleetWithContent {
+            .apply(Action::CreateFleetWithVessel {
                 voyage: voyage.clone(),
                 name: "Fleet 2".into(),
                 source: source.clone(),
@@ -516,7 +516,7 @@ mod tests {
         let saved = model.layout.clone();
         assert!(
             model
-                .apply(Action::CreateFleetWithContent {
+                .apply(Action::CreateFleetWithVessel {
                     voyage: voyager_contract::VoyageId("wrong".into()),
                     name: "Fleet".into(),
                     source,

@@ -352,7 +352,7 @@ mod tests {
                 include_str!("../../contract/generated/processTool.schema.json"),
             ),
             (
-                "voyager_content",
+                "voyager_vessel",
                 include_str!("../../contract/generated/contentTool.schema.json"),
             ),
         ];

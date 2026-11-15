@@ -96,8 +96,8 @@ fn explicit_worker_creation_binds_only_its_new_content() {
     let fleet = model.layout.selected_fleet.clone().unwrap();
     let after = model.layout.voyages[0].fleets[0].placements[0].id.clone();
     let mut request = serde_json::json!({
-        "operation": "create-content", "typeId": "terminal",
-        "destination": {"kind": "panel", "owner": {"kind": "fleet", "id": fleet}, "insertion": {"kind": "beside", "id": after, "side": "right"}},
+        "operation": "create-vessel", "typeId": "terminal",
+        "destination": {"kind": "placement", "owner": {"kind": "fleet", "id": fleet}, "insertion": {"kind": "beside", "id": after, "side": "right"}},
         "launch": {"kind": "codex", "model": "gpt-6.1-sol", "effort": "high", "permissions": "yolo"}
     });
     let create: Action = serde_json::from_value(request.clone()).unwrap();
@@ -143,8 +143,8 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             .unwrap();
         let fleet = &initial.layout.voyages[0].fleets[0];
         let action: Action = serde_json::from_value(serde_json::json!({
-            "operation":"create-content", "typeId":"terminal",
-            "destination":{"kind":"panel", "owner":{"kind":"fleet", "id":fleet.id}, "insertion":{"kind":"beside", "id":fleet.placements[0].id, "side":"right"}},
+            "operation":"create-vessel", "typeId":"terminal",
+            "destination":{"kind":"placement", "owner":{"kind":"fleet", "id":fleet.id}, "insertion":{"kind":"beside", "id":fleet.placements[0].id, "side":"right"}},
             "launch":{"kind":"program", "argv":["/no-voyager-worker-here"]}
         })).unwrap();
         let request = Request {
@@ -155,7 +155,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         let created = client.call(request.clone()).unwrap();
         assert_eq!(created.status, Status::Applied);
         let mut changed = request.clone();
-        if let Action::CreateContent { launch, .. } = &mut changed.action {
+        if let Action::CreateVessel { launch, .. } = &mut changed.action {
             *launch = Some(voyager_contract::launch::Launch::Terminal);
         }
         let changed = client.call(changed).unwrap();

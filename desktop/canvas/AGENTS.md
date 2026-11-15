@@ -17,7 +17,7 @@ retains the content menu's captured destination and workspace version.
 
 Humans arrange panels through edge/corner gestures, keyboard shortcuts and
 context menus. A split selects its owner, anchor and direction before opening
-the available content menu. Only choosing a type dispatches `create-content`;
+the available content menu. Only choosing a type dispatches `create-vessel`;
 cancelling creates nothing. Keep one visible plus for Voyage creation. There is
 no separate Vessel plus or human Workspace layout JSON editor. Authorized
 agents use the generated typed JSON actions through the same Rust owner.
@@ -88,8 +88,8 @@ native UX revision, its appearance, input behavior or performance.
 
 ## Viewer controls
 
-Each panel header has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-panel`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
+Each panel header has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
 
-The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-panel` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
+The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-placement` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
 
 `processes(version)` is a fixed read-only Header binding returning the generated ProcessResponse. It runs off the UI executor. The Home Agents view uses the same snapshot and program-reported activity. Silence is not success, and an ordinary shell is not an agent.

@@ -89,7 +89,7 @@ def prove(
         tool["status"] == "applied"
         or (
             tool["status"] == "rejected"
-            and tool["action"]["action"]["operation"] == "create-content"
+            and tool["action"]["action"]["operation"] == "create-vessel"
             and tool["text"]
             == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
         )
@@ -103,7 +103,7 @@ def prove(
     ]
     assert (
         applied.count("create-voyage")
-        == applied.count("create-content")
+        == applied.count("create-vessel")
         == applied.count("update")
         == 1
     )

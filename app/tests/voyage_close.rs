@@ -103,9 +103,9 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         snapshot = call(
             &client,
             snapshot.version,
-            Action::CreateContent {
+            Action::CreateVessel {
                 type_id: "notes".into(),
-                destination: ContentDestination::Panel {
+                destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet {
                         id: original.fleets[0].id.clone(),
                     },
@@ -287,7 +287,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         let frozen = call(
             &client,
             prepared.version,
-            Action::RemovePanel {
+            Action::RemovePlacement {
                 id: first.id.clone(),
             },
         );

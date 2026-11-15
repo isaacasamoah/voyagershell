@@ -280,9 +280,9 @@ mod tests {
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
         let beside = model.layout.voyages[0].fleets[0].placements[0].id.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Panel {
+                destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet { id: fleet },
                     insertion: PlacementInsertion::Beside {
                         id: beside,

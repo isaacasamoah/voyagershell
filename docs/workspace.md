@@ -30,7 +30,7 @@ with an ordinary Agents 1 panel. Every stored Home, including an empty or
 customized arrangement, remains unchanged. Closing that panel does not seed it
 again. New ordinary Voyages and Fleets keep their initial plain shell.
 
-`create-content` names the chosen content type and a panel destination. Insertion
+`create-vessel` names the chosen content type and a panel destination. Insertion
 is either `empty` or `beside` a captured placement with a left, right, top or
 bottom side. Split controls choose content before dispatch. Cancellation creates
 nothing. Old default-terminal split and Fleet-only action aliases are removed;
@@ -45,8 +45,8 @@ visible panel. Hidden-leaf pruning preserves original accepted resize paths.
 Save captures the visible arrangement; load shows its included retained panels.
 Neither operation stops or restarts a program or changes explicit context.
 
-`reopen-panel` takes a retained placement ID and the same destination as
-`create-content`. It inserts that instance into the chosen empty or beside slot,
+`reopen-placement` takes a retained placement ID and the same destination as
+`create-vessel`. It inserts that instance into the chosen empty or beside slot,
 preserving its content, data, name and Core binding. A closed Fleet panel may
 transfer between Fleets in the same Voyage. A Portal stays in its column, and
 Home stays separate. A transfer prunes only that leaf from source saved layouts,
@@ -85,7 +85,7 @@ Core checks do not establish the separate integrated native UX journey.
 ## Pane maximize and restore
 
 Each Fleet and Portal arrangement optionally records `maximizedPlacement` in the
-existing workspace document. `set-panel-maximized` names one placement and an
+existing workspace document. `set-placement-maximized` names one placement and an
 explicit Boolean.
 The Rust owner checks scope, accepted tree membership and the existing version
 before saving. A restore for another placement refuses unchanged. Stored invalid
@@ -442,7 +442,7 @@ unavailable. The profile's seeded JavaScript stays editable and is preserved;
 repository checks do not automatically validate later personal edits. See
 [native Notes](content.md) for remaining owner, signature and lifecycle limits.
 
-Go there sends `reveal-panel` with a retained Vessel or Portal placement ID. The
+Go there sends `reveal-placement` with a retained Vessel or Portal placement ID. The
 owner selects its original arrangement, clears hidden state and reinserts its
 leaf only when absent. A Portal reveal also opens its own Voyage's column. This
 preserves content, backend and explicit dock context. Unknown placements refuse
@@ -555,7 +555,7 @@ presentation fallback for other or absent reports. Raw reports and diagnostic
 reasons remain distinct. Confirmed-ended programs and closed Voyages are absent.
 Voyage headings remain expandable, and Home uses its Home icon.
 
-RemovePanel retains the placement, content and backend. Removing the last
+RemovePlacement retains the placement, content and backend. Removing the last
 visible Portal panel also collapses that Voyage's column. Opening an empty
 column shows new types and hidden Portals. Dismissing that empty chooser
 collapses it; restoring a hidden Portal keeps its existing identity and backend.

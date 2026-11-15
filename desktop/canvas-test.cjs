@@ -171,7 +171,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   });
   const picker = new exports.CreationPicker();
   const destination = {
-    kind: "panel",
+    kind: "placement",
     owner: { kind: "fleet", id: "fleet" },
     insertion: { kind: "beside", id: "original", side: "right" },
   };
@@ -283,7 +283,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   choose({}, cx);
   assert.equal(actions.length, 1);
   assert.deepEqual(actions[0], [
-    { operation: "create-content", typeId: "terminal", destination, launch },
+    { operation: "create-vessel", typeId: "terminal", destination, launch },
     "7",
     cx,
   ]);
@@ -331,7 +331,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   buttons.clear();
   picker.render("original", destination, "7", create);
   assert.deepEqual(markers(buttons.get("reopen-hidden-1")), [
-    ["reopen-panel", "hidden-1"],
+    ["reopen-placement", "hidden-1"],
   ]);
   picker.current = null;
   buttons.clear();
@@ -976,7 +976,7 @@ test("hidden choices retain process-free data and require matching live backends
     ],
   };
   const destination = {
-    kind: "panel",
+    kind: "placement",
     owner: { kind: "fleet", id: "first" },
     insertion: { kind: "beside", id: "visible", side: "right" },
   };
@@ -1325,7 +1325,7 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
   const pending = view.readProcesses({ notify() {} });
   const choices = view.hiddenChoices(
     {
-      kind: "panel",
+      kind: "placement",
       owner: { kind: "fleet", id: "f" },
       insertion: { kind: "empty" },
     },
@@ -1900,7 +1900,7 @@ test("Notes keeps file actions together and preview leaves its draft unchanged",
         },
         TextView: { markdown: element },
       };
-    if (name === "voyager_content")
+    if (name === "voyager_vessel")
       return {
         theme: () => ({
           foreground: "#ffffff",

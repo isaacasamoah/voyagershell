@@ -571,9 +571,9 @@ export function renderContext(workspace, layout, voyage, fleet) {
   else if (context.kind === "voyage")
     goThere = { operation: "select-voyage", id: context.id };
   else if (context.kind === "vessel")
-    goThere = { operation: "reveal-panel", id: context.id };
+    goThere = { operation: "reveal-placement", id: context.id };
   else if (context.kind === "portal")
-    goThere = { operation: "reveal-panel", id: context.id };
+    goThere = { operation: "reveal-placement", id: context.id };
   const facts = workspace.contextFacts;
   const branch =
     workspace.observation?.branch.kind === "named"
@@ -658,7 +658,7 @@ export function portalControls(workspace, voyage) {
     workspace.creationControl(
       `portal-choices-${voyage.id}`,
       {
-        kind: "panel",
+        kind: "placement",
         owner: { kind: "portals", voyage: voyage.id },
         insertion: { kind: "empty" },
       },

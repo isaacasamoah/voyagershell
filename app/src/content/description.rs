@@ -55,7 +55,7 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         module: "voyager_content_view",
         component: "Notes",
         backend: None,
-        tool: "voyager_content",
+        tool: "voyager_vessel",
         input: include_str!("../../../contract/generated/contentTool.schema.json"),
         output: include_str!("../../../contract/generated/contentResponse.schema.json"),
         action_definition: "Action",

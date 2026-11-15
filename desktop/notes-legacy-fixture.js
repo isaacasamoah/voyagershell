@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { TitleState, Title, BodyState, Body } from "voyager_input";
-import { identity, request_id, changed, invoke, theme } from "voyager_content";
+import { identity, request_id, changed, invoke, theme } from "voyager_vessel";
 import {
   contentRequest as validateRequest,
   contentResponse as validateResponse,

@@ -27,9 +27,9 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let split = client
             .call(request(
                 initial.version,
-                Action::CreateContent {
+                Action::CreateVessel {
                     type_id: "terminal".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PlacementInsertion::Beside {
                             id: first.clone(),
@@ -45,7 +45,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let zoom = client
             .call(request(
                 split.version,
-                Action::SetPanelMaximized {
+                Action::SetPlacementMaximized {
                     id: first.clone(),
                     maximized: true,
                 },
@@ -57,7 +57,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 Context::Vessel { id: second.clone() },
                 request(
                     zoom.version,
-                    Action::SetPanelMaximized {
+                    Action::SetPlacementMaximized {
                         id: second,
                         maximized: false,
                     },
@@ -78,7 +78,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let stale = client
             .call(request(
                 split.version,
-                Action::SetPanelMaximized {
+                Action::SetPlacementMaximized {
                     id: first.clone(),
                     maximized: false,
                 },

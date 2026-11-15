@@ -71,7 +71,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "save-panel-layout",
+              "const": "save-arrangement",
               "type": "string"
             },
             "owner": {
@@ -92,7 +92,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "load-panel-layout",
+              "const": "load-arrangement",
               "type": "string"
             },
             "owner": {
@@ -182,7 +182,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "create-fleet-with-content",
+              "const": "create-fleet-with-vessel",
               "type": "string"
             },
             "source": {
@@ -221,7 +221,7 @@
               ]
             },
             "operation": {
-              "const": "create-content",
+              "const": "create-vessel",
               "type": "string"
             },
             "typeId": {
@@ -260,7 +260,7 @@
           "additionalProperties": false,
           "properties": {
             "operation": {
-              "const": "remove-content-package",
+              "const": "remove-vessel-package",
               "type": "string"
             },
             "typeId": {
@@ -277,7 +277,7 @@
           "additionalProperties": false,
           "properties": {
             "operation": {
-              "const": "restore-content-package",
+              "const": "restore-vessel-package",
               "type": "string"
             },
             "typeId": {
@@ -315,7 +315,7 @@
           "additionalProperties": false,
           "properties": {
             "operation": {
-              "const": "resize-panel-split",
+              "const": "resize-placement-split",
               "type": "string"
             },
             "owner": {
@@ -347,7 +347,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "move-panel",
+              "const": "move-placement",
               "type": "string"
             },
             "side": {
@@ -566,7 +566,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "reveal-panel",
+              "const": "reveal-placement",
               "type": "string"
             }
           },
@@ -586,7 +586,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "reopen-panel",
+              "const": "reopen-placement",
               "type": "string"
             }
           },
@@ -624,7 +624,7 @@
               "type": "boolean"
             },
             "operation": {
-              "const": "set-panel-maximized",
+              "const": "set-placement-maximized",
               "type": "string"
             }
           },
@@ -645,7 +645,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "set-panel-hidden",
+              "const": "set-placement-hidden",
               "type": "string"
             }
           },
@@ -663,7 +663,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "remove-panel",
+              "const": "remove-placement",
               "type": "string"
             }
           },
@@ -680,7 +680,7 @@
               "type": "string"
             },
             "operation": {
-              "const": "remove-panel-layout",
+              "const": "remove-arrangement",
               "type": "string"
             },
             "owner": {
@@ -885,7 +885,7 @@
               "$ref": "#/definitions/PlacementInsertion"
             },
             "kind": {
-              "const": "panel",
+              "const": "placement",
               "type": "string"
             },
             "owner": {

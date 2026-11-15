@@ -15,12 +15,12 @@ export type Action =
     }
   | {
       name: string;
-      operation: "save-panel-layout";
+      operation: "save-arrangement";
       owner: PlacementOwner;
     }
   | {
       name: string;
-      operation: "load-panel-layout";
+      operation: "load-arrangement";
       owner: PlacementOwner;
     }
   | {
@@ -40,7 +40,7 @@ export type Action =
   | {
       launch?: Launch | null;
       name: string;
-      operation: "create-fleet-with-content";
+      operation: "create-fleet-with-vessel";
       source: DirectorySource;
       typeId: string;
       voyage: string;
@@ -48,7 +48,7 @@ export type Action =
   | {
       destination: ContentDestination;
       launch?: Launch | null;
-      operation: "create-content";
+      operation: "create-vessel";
       typeId: string;
     }
   | {
@@ -57,11 +57,11 @@ export type Action =
       vesselId: string;
     }
   | {
-      operation: "remove-content-package";
+      operation: "remove-vessel-package";
       typeId: string;
     }
   | {
-      operation: "restore-content-package";
+      operation: "restore-vessel-package";
       typeId: string;
     }
   | {
@@ -70,7 +70,7 @@ export type Action =
       target: RenameTarget;
     }
   | {
-      operation: "resize-panel-split";
+      operation: "resize-placement-split";
       owner: PlacementOwner;
       /**
        * @maxItems 128
@@ -80,7 +80,7 @@ export type Action =
     }
   | {
       id: string;
-      operation: "move-panel";
+      operation: "move-placement";
       side: Side;
       target: string;
     }
@@ -132,12 +132,12 @@ export type Action =
     }
   | {
       id: string;
-      operation: "reveal-panel";
+      operation: "reveal-placement";
     }
   | {
       destination: ContentDestination;
       id: string;
-      operation: "reopen-panel";
+      operation: "reopen-placement";
     }
   | {
       context: Context;
@@ -146,20 +146,20 @@ export type Action =
   | {
       id: string;
       maximized: boolean;
-      operation: "set-panel-maximized";
+      operation: "set-placement-maximized";
     }
   | {
       hidden: boolean;
       id: string;
-      operation: "set-panel-hidden";
+      operation: "set-placement-hidden";
     }
   | {
       id: string;
-      operation: "remove-panel";
+      operation: "remove-placement";
     }
   | {
       name: string;
-      operation: "remove-panel-layout";
+      operation: "remove-arrangement";
       owner: PlacementOwner;
     }
   | {
@@ -250,7 +250,7 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type ContentDestination = {
   insertion: PlacementInsertion;
-  kind: "panel";
+  kind: "placement";
   owner: PlacementOwner;
 };
 export type PlacementInsertion =

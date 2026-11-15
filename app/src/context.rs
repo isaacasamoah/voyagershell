@@ -330,9 +330,9 @@ mod tests {
         assert_eq!(facts.branch, Branch::Unavailable);
         let voyage = model.layout.voyages[0].id.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Panel {
+                destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Portals {
                         voyage: voyage.clone(),
                     },

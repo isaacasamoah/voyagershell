@@ -195,10 +195,10 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         let mut ids = Vec::new();
         for _ in 0..2 {
             workspace = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Panel {
+                    destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
                             voyage: workspace.layout.voyages[0].id.clone(),
                         },
