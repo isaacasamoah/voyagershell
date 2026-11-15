@@ -235,6 +235,75 @@ the case after launch, edit with `edit_profile_file`, and read the result with
 runs out and returns `None` without an error. Record a missing result as a
 failed expectation, so it blames the product.
 
+### Battery
+
+`voyager-verification battery` is the post-merge check. It takes two builds, the
+new head and the previous main, and runs every journey in the registry on both.
+
+```sh
+tests/native/target/debug/voyager-verification battery --base "$old/target/release/voyager-shell" --base-assets "$old/desktop/assets" --head "$new/target/release/voyager-shell" --head-assets "$new/desktop/assets" --evidence /var/tmp/battery-NEW --runs 3 --history /var/tmp/battery-history.jsonl
+```
+
+`--evidence` is a new folder. `--runs` is the number of rounds and defaults to 3.
+A journey that needs inputs gets them from the battery. `profile` runs with the
+committed `tests/native/fixtures` (found from `--head-assets`, or given with
+`--fixtures DIR`) and the other side's build as its second binary. A journey whose
+inputs the battery cannot supply is not run. `battery.json` lists it under
+`not_run` with the reason, `battery.md` says so, and it counts as neither green
+nor red. A battery in which nothing could run is an error.
+
+`--threshold` is a fraction and defaults to 0.15. `--journeys a,b` limits the
+list. `hc` comes from `PATH`, and its hash is taken at the start. Each build's
+hash is also taken at the start and recorded. It names the file that ran. It
+does not prove how the file was built. Each candidate needs its own `--assets`
+folder, because a build reads the folder of the checkout that built it. The
+battery prints one line for each run on standard error.
+
+Each round runs, for every journey, the base and then the head, or the head and
+then the base on alternate journeys and rounds. Both builds therefore meet the
+same machine load within minutes of each other. Every run is an ordinary `run`
+in its own folder under `runs/`. A run that does not pass is run once more. A
+journey that fails and then passes is a flake. One that fails twice is red.
+
+The blame is the one the run wrote. When a journey is red in more than one
+round, its blame is chosen across all red rounds in a fixed order, product, then
+fixture, then unknown, so the order of the rounds never changes it. A red
+journey with product blame is red. A red journey with fixture or unknown blame, or a run that wrote no
+`checks.json`, makes the battery `inconclusive`. The per-case status is the
+worst status seen in the final attempts.
+
+Wall time is the whole `run` command. The verdict for a journey compares the
+median over the passing runs of the head with the median of the base. A head
+more than the threshold above the base is a `regression`. With `--history`, the
+head's median is also compared with the median of the last ten head medians in
+that file, and the battery appends this head's medians to it when the result is
+`green` or `flaky`. A journey needs at least two timed runs on each side to be
+judged. Otherwise its timing is `unmeasured`. When timing was not compared, for example because the base was red
+or the head was, the journey's `timing_note` says why, the summary lists it in
+`unmeasured`, and `battery.md` repeats it. A green verdict then means only that
+the head passed.
+
+A journey flagged as a regression is rerun on both sides for 5 more interleaved
+rounds, and the verdict uses all of its rounds. `rerun` in `battery.json` names
+these journeys. The default stays at 3 rounds, so only a flagged journey pays
+for the extra rounds.
+
+`battery.json` is the summary a watcher reads. Its `result` is `green`, `flaky`,
+`red` or `inconclusive`. `flakes`, `regressions`, `red` and `inconclusive` name
+the journeys. Each journey lists both sides, their cases, every timed run, the
+median and the spread, which is the range over the median. `battery.md` is a
+short table of the same. `logs/` holds each run's standard error. Exit 0 is
+`green` or `flaky`, 1 is `red`, and 2 is `inconclusive`.
+
+Limits.
+
+- Wall time includes the sandbox and display start, which every run pays equally. That fixed cost dilutes a slowdown.
+- The comparison against history spans time, so machine load at different hours is a confounder. Only the comparison against the base shares load.
+- Three rounds make a median of three. One slow run cannot move it, and two can. The rerun of a flagged journey is what protects against this.
+- Observed on this machine, equal builds differed by at most 5 percent in every journey over three rounds, and a 400 ms sleep in the scroll path made terminal-scrolling 39 percent slower. A planted 60 ms sleep made it 5 percent slower and was not flagged. In one battery, two slow runs in three moved a journey's head median 12 percent with no code change.
+- A deterministic failure costs a second run before it is called red.
+- Linux X11 only.
+
 ### Stand-in provider
 
 The app starts its private conversation by running `codex app-server` from
