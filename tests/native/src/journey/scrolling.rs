@@ -37,6 +37,8 @@ fn received(value: &Value, input: &str) -> Result<u64> {
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
     terminal.focus(native)?;
+    let prompt =
+        Lines::of(&terminal.settled(native, "prompt", |look| !Lines::of(look).is_empty())?);
     cases.check(native, Case::NormalHistory, |native| {
         let empty = terminal.look(native)?;
         terminal.line(native, "printf 'HISTORY-%03d\\n' {1..120}")?;
@@ -134,9 +136,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
     }
     cases.check(native, Case::ReattachedHistory, |native| {
+        let ready = terminal.settled(native, "reattached-ready", |look| {
+            Lines::of(look).ends_like(&prompt)
+        })?;
         terminal.line(native, "printf 'REATTACH-%03d\\n' {1..60}")?;
         terminal.shows(native, "REATTACH-060")?;
-        let kept = terminal.settled(native, "reattached-before", |_| true)?;
+        let kept = terminal.settled(native, "reattached-before", |look| {
+            look != &ready && Lines::of(look).ends_like(&prompt)
+        })?;
         let drawn = Lines::of(&kept);
         native.close()?;
         terminal.same_program(native)?;
