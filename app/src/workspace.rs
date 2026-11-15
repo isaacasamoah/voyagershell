@@ -151,7 +151,7 @@ impl Model {
                 return Err("New shell intent requires terminal owner validation".into());
             }
             Action::RemoveVesselPackage { .. } | Action::RestoreVesselPackage { .. } => {
-                return Err("Content package operations require the application owner".into());
+                return Err("Vessel package operations require the application owner".into());
             }
             Action::Home => self.layout.view = WorkspaceView::Home,
             Action::UpdateCanvas { canvas } => {
@@ -234,7 +234,7 @@ impl Model {
                     return Err("Selected Voyage changed; reopen the choice".into());
                 }
                 if name.trim().is_empty() || !crate::content::supports_type(&type_id) {
-                    return Err("Fleet name or content type is invalid".into());
+                    return Err("Fleet name or Vessel type is invalid".into());
                 }
                 if let Some(launch) = &launch {
                     if type_id != "terminal" {
@@ -397,7 +397,7 @@ impl Model {
                 launch,
             } => {
                 if !crate::content::supports_type(&type_id) {
-                    return Err("Unsupported content type".into());
+                    return Err("Unsupported Vessel type".into());
                 }
                 if let Some(launch) = &launch {
                     if type_id != "terminal" {

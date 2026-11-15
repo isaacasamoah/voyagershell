@@ -33,20 +33,34 @@ function load(file = TABLE) {
     ids.add(rule.id);
   }
   const settings = table.settings ?? {};
+  const exceptions = table.exceptions ?? [];
+  for (const entry of exceptions)
+    if (!entry.text || !entry.reason)
+      throw Error(
+        `Vocabulary exception needs text and reason: ${JSON.stringify(entry)}`,
+      );
   return {
     rules,
     moves: table.moves ?? [],
     kinds: new Set(settings.kinds ?? []),
+    foreign: new RegExp(
+      [FOREIGN.source, ...exceptions.map((entry) => escape(entry.text))].join(
+        "|",
+      ),
+      "g",
+    ),
     skipped: any(matchers(settings.skip)),
     generated: any(matchers(settings.generated)),
   };
 }
 
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const FOREIGN = /https?:\/\/[^\s)>\]"'`]+|[\w./-]*herdr-app[\w./-]*/g;
 
-function shield(text) {
+function shield(table, text) {
   const held = [];
-  const masked = text.replace(FOREIGN, (match) => {
+  const masked = text.replace(table.foreign, (match) => {
     held.push(match);
     return `\u0000${held.length - 1}\u0000`;
   });
@@ -64,7 +78,7 @@ function scan(table, names, read) {
   const found = new Map();
   for (const name of names) {
     if (table.skipped(name) || !isText(table, name)) continue;
-    const lines = shield(read(name)).masked.split("\n");
+    const lines = shield(table, read(name)).masked.split("\n");
     for (const rule of table.rules) {
       if (!rule.banned || !rule.applies(name)) continue;
       lines.forEach((text, index) => {
@@ -138,7 +152,7 @@ function segments(name, text) {
 }
 
 function rewrite(table, stage, name, text) {
-  const guarded = shield(text);
+  const guarded = shield(table, text);
   let next = guarded.masked;
   for (const rule of table.rules) {
     if (rule.stage !== stage || !rule.applies(name)) continue;

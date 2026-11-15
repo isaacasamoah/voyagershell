@@ -156,6 +156,7 @@ function violations(rule, facts) {
         id: `${rule.id}: ${file}`,
         at: file,
         count,
+        unit: "lines",
         limit: rule.limit,
       }));
   }
@@ -164,6 +165,7 @@ function violations(rule, facts) {
       id: `${rule.id}: ${id}`,
       at: `${hits[0].file}:${hits[0].line}`,
       count: hits.length,
+      unit: "hits",
       limit: 0,
     }));
   }
@@ -224,18 +226,18 @@ function gate({
       fresh.push(
         item.count === undefined
           ? `NEW ${id}${where}`
-          : `NEW ${id} has ${item.count} lines, over the limit of ${item.limit}`,
+          : `NEW ${id} has ${item.count} ${item.unit}, over the limit of ${item.limit}`,
       );
     } else if (item.count !== undefined) {
       if (typeof entry.limit !== "number")
         throw new Error(`Known size violation needs a numeric limit: ${id}`);
       if (item.count > entry.limit)
         fresh.push(
-          `NEW ${id} has ${item.count} lines, over its recorded limit of ${entry.limit}`,
+          `NEW ${id} has ${item.count} ${item.unit}, over its recorded limit of ${entry.limit}`,
         );
       else if (item.count < entry.limit)
         stale.push(
-          `STALE ${id} has ${item.count} lines, lower its recorded limit from ${entry.limit} to ${item.count} in known-violations.yaml`,
+          `STALE ${id} has ${item.count} ${item.unit}, lower its recorded limit from ${entry.limit} to ${item.count} in known-violations.yaml`,
         );
     }
   }

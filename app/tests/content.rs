@@ -417,7 +417,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         let refused_v2 = client.content(access.clone(), v2).unwrap();
         assert!(
             matches!(&*refused_v2, Response::Rejected {message, ..}
-                if message == "Content type notes does not support action configure"),
+                if message == "Vessel type notes does not support action configure"),
             "{refused_v2:?}"
         );
         let after_v2 = external.document_get("voyager-layout-v2").unwrap();

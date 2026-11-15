@@ -209,7 +209,7 @@ impl Host {
                 let runtime_error = runtime_error.clone();
                 Ok(async move {
                     let packages = packages
-                        .ok_or_else(|| HostError::new("Content package root is unavailable"))?;
+                        .ok_or_else(|| HostError::new("Vessel package root is unavailable"))?;
                     let mut catalog =
                         voyager_app::content::discover(&packages).map_err(HostError::new)?;
                     if let Some(reason) = runtime_error {

@@ -70,7 +70,7 @@ fn implementation(type_id: &str) -> Result<&'static Implementation, String> {
     IMPLEMENTATIONS
         .iter()
         .find(|kind| kind.type_id == type_id)
-        .ok_or_else(|| "Unsupported content type".into())
+        .ok_or_else(|| "Unsupported Vessel type".into())
 }
 
 pub(crate) fn supports_type(type_id: &str) -> bool {
@@ -87,7 +87,7 @@ pub(crate) fn package_name(type_id: &str) -> Result<Option<&'static str>, String
 pub(crate) fn require_ready(description: &Description) -> Result<(), String> {
     match &description.availability {
         Availability::Ready => Ok(()),
-        Availability::Removed => Err("Content package is removed".into()),
+        Availability::Removed => Err("Vessel package is removed".into()),
         Availability::Unavailable { reason } => Err(reason.clone()),
     }
 }
@@ -105,7 +105,7 @@ fn installed_schema(package: &Path, file: &str) -> Result<Option<serde_json::Val
             .is_none_or(str::is_empty)
         || !package.join(entry).is_file()
     {
-        return Err("Content package requires a name, version 1 and an existing entry file".into());
+        return Err("Vessel package requires a name, version 1 and an existing entry file".into());
     }
     state_schema(&manifest)
 }
@@ -266,7 +266,7 @@ pub fn require_action(description: &Description, name: &str) -> Result<(), Strin
         Ok(())
     } else {
         Err(format!(
-            "Content type {} does not support action {name}",
+            "Vessel type {} does not support action {name}",
             description.type_id
         ))
     }

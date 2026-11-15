@@ -555,7 +555,7 @@ impl Owner {
 
     fn package_path(&self, type_id: &str) -> Result<PathBuf, String> {
         let name = description::package_name(type_id)?
-            .ok_or("This content type has no removable package")?;
+            .ok_or("This Vessel type has no removable package")?;
         Ok(self
             .root
             .parent()
@@ -579,7 +579,7 @@ impl Owner {
             .types
             .iter()
             .find(|kind| kind.type_id == type_id)
-            .ok_or("Unsupported content type")?;
+            .ok_or("Unsupported Vessel type")?;
         description::require_ready(kind)
     }
 

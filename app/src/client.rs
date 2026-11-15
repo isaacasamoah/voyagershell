@@ -1902,12 +1902,12 @@ impl Client {
                                     if let Action::RemoveVesselPackage { type_id }
                                     | Action::RestoreVesselPackage { type_id } = &request.action
                                     {
-                                        let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
+                                        let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no Vessel package was changed: {error:?}")))?;
                                         layout = Arc::new(current);
                                         version = revision;
                                         fresh = true;
                                         if missing || request.expected_version != version {
-                                            return Err(rejected("Workspace changed; inspect before changing a content package".into()));
+                                            return Err(rejected("Workspace changed; inspect before changing a Vessel package".into()));
                                         }
                                         crate::scope::check(
                                             &layout,

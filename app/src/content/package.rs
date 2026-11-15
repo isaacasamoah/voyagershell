@@ -29,7 +29,7 @@ pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {
 pub(crate) fn remove(package: &Path) -> Result<(), String> {
     let removed = removed_path(package);
     if !package.exists() || removed.exists() {
-        return Err("Content package is missing or already removed".into());
+        return Err("Vessel package is missing or already removed".into());
     }
     move_package(package, &removed)
 }

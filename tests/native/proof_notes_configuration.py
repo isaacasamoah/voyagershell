@@ -25,7 +25,7 @@ def configuration_setup(*, native, pid, evidence, type_text, click, owned):
     click(named_button(native, evidence, "Chat"))
     prompt = (
         "Use voyager_workspace to inspect the workspace. Keep the original terminal and Workspace context. "
-        "Create exactly two Notes content instances: one Vessel beside the existing terminal in the selected Fleet, "
+        "Create exactly two Notes Vessels: one Vessel beside the existing terminal in the selected Fleet, "
         "and one Portal in its Voyage. Then inspect the workspace again and use set-portal-presentation "
         "with that Voyage ID and mode make-room, preserving its other presentation fields. Use fresh expectedVersion for each action. "
         "Do not create another Fleet, change data, edit files, launch programs or repeat an uncertain action. "

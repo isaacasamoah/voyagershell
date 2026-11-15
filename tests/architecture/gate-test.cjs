@@ -123,7 +123,7 @@ function expectFailure(result, ...named) {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /(\d+) violations, \1 known\n.*PASS\n$/s);
+  assert.match(result.out, /13 violations, 13 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -527,6 +527,11 @@ const PLANTS = [
   [
     "AGENTS.md",
     `A ${["content", "package"].join(" ")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "app/src/lib.rs",
+    `fn planted() -> &'static str { "${["Content", "package"].join(" ")} removed" }`,
     "content-words",
   ],
   [

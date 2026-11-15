@@ -144,7 +144,7 @@ pub(crate) fn prepare(
                     }
                 }
             } else {
-                append_preview(&mut text, &format!("Content type: {}\n", instance.type_id));
+                append_preview(&mut text, &format!("Vessel type: {}\n", instance.type_id));
             }
             remaining -= 1;
         }
