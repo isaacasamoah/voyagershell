@@ -5,6 +5,7 @@ pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 use crate::inspection::{self, Target, Unseen, drawn_for};
+use crate::provider::Script;
 use crate::sandbox;
 use crate::system::{
     Identity, Owned, PATIENCE, Pinned, Stopped, System, TimedOut, digest, interrupted, poll, save,
@@ -155,6 +156,7 @@ pub struct Native {
     pub system: System,
     pub candidate: Pinned,
     pub hc: Pinned,
+    pub script: Option<Script>,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -191,6 +193,7 @@ impl Native {
             system,
             candidate,
             hc,
+            script: None,
             surface,
             display: None,
             x11: None,

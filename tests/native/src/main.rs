@@ -47,7 +47,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--provider-script FILE]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -106,6 +106,7 @@ fn entry() -> Result<i32> {
         "--core-delay",
         "--window",
         "--sidebar",
+        "--provider-script",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -171,6 +172,11 @@ fn entry() -> Result<i32> {
         return Ok(0);
     }
     let journey = Journey::parse(&get("--journey")?)?;
+    ensure!(
+        journey.name() == "chat" || get("--provider-script").is_err(),
+        "--provider-script is played only by the chat journey, not {}",
+        journey.name()
+    );
     let surface = Surface::parse(
         get("--window").ok().as_deref(),
         get("--sidebar").ok().as_deref(),
@@ -185,7 +191,7 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().map(|text| core_relay::CoreDelay::parse(&text)).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -230,6 +236,8 @@ struct Plan {
     fault: Option<Fault>,
     #[serde(rename = "coreDelay")]
     core_delay: Option<core_relay::CoreDelay>,
+    #[serde(rename = "providerScript")]
+    provider_script: Option<provider::Script>,
     surface: Surface,
 }
 
@@ -290,6 +298,7 @@ fn drive(plan: Plan) -> Result<i32> {
     }
     let mut outcomes = Outcomes::new(plan.journey, system.evidence.join("observations.json"));
     let mut native = Native::new(system, plan.candidate, plan.hc, plan.surface);
+    native.script = plan.provider_script;
     let mut gate = Run::default();
     let result = journey(
         &mut native,
@@ -299,18 +308,30 @@ fn drive(plan: Plan) -> Result<i32> {
         plan.host,
         plan.fault.as_ref(),
     );
-    let relay = plan.core_delay.as_ref().map(|delay| {
-        delay.audit(
-            &fs::read_to_string(native.system.evidence.join("core-relay.jsonl"))
-                .unwrap_or_default(),
-        )
-    });
-    let ledger_fault = relay
-        .as_ref()
-        .and_then(|audit| audit.as_ref().err())
-        .map(|error| format!("{error:#}"));
-    let cause = match (result, relay) {
-        (_, Some(Err(error))) => Some(Cause::Fixture(format!("{error:#}"))),
+    let ledgers = [
+        plan.core_delay.as_ref().map(|delay| {
+            (
+                "core-relay-ledger",
+                delay.audit(
+                    &fs::read_to_string(native.system.evidence.join("core-relay.jsonl"))
+                        .unwrap_or_default(),
+                ),
+            )
+        }),
+        Some((
+            "stand-in-ledger",
+            provider::audit(
+                &fs::read_to_string(native.system.evidence.join("provider.jsonl"))
+                    .unwrap_or_default(),
+            ),
+        )),
+    ];
+    let ledger_fault = ledgers
+        .into_iter()
+        .flatten()
+        .find_map(|(check, audit)| audit.err().map(|error| (check, format!("{error:#}"))));
+    let cause = match (result, &ledger_fault) {
+        (_, Some((_, detail))) => Some(Cause::Fixture(detail.clone())),
         (Err(error), _) => Some(native.diagnose(&error)),
         (Ok(()), _) => None,
     };
@@ -352,7 +373,7 @@ fn drive(plan: Plan) -> Result<i32> {
     let recording_error = recording.err().map(|e| e.to_string());
     let verdict = gate.verdict();
     let first_failure = match &ledger_fault {
-        Some(detail) => json!({"check":"core-relay-ledger","blame":"fixture","detail":detail}),
+        Some((check, detail)) => json!({"check":check,"blame":"fixture","detail":detail}),
         None => diagnosis::Findings {
             cause: cause.as_ref(),
             outcomes: &outcomes,
@@ -371,7 +392,7 @@ fn drive(plan: Plan) -> Result<i32> {
             &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     match verdict {

@@ -214,6 +214,69 @@ deadline, and one ended `inconclusive` with an operating system error 11 in
 exit through that reply. A journey that holds a method this long therefore
 measures the app's tolerance for the delay, and a failure under it is the
 journey's finding about the app, not a defect of the relay.
+#### Scripted tool calls
+
+`run --provider-script FILE` gives the stand-in a list of tool calls to play
+inside a turn. The file is JSON, `{"calls":[CALL,...]}`, and each call is
+`{"atMs":N,"tool":"voyager_workspace","arguments":{...}}`. `atMs` is optional,
+counts from the moment the journey calls `Provider::play`, and must not
+decrease from one call to the next. A time is at most 60000 ms. `arguments` is
+the object that the app's tool takes, with no other fields in the file. The
+driver reads and checks the file before it starts anything, so a malformed file
+ends the run `inconclusive` with no sandbox. `checks.json` records the script as
+`providerScript`.
+
+A later call can use an earlier result. An argument that is exactly
+`{"$result":[INDEX,"/json/pointer"]}` is replaced by the value at that pointer
+in the JSON that call INDEX returned. A workspace result is the app's whole
+response, so `/version` is the layout version to give as `expectedVersion`, and
+`/layout/selectedFleet` is the selected Fleet. A reference to a call that has not
+run, or to a pointer the result lacks, ends the run `inconclusive`, blamed on
+the verifier. A `--provider-script` given to a journey other than `chat` is
+refused before the run starts, because only that journey plays it.
+
+`Provider::play` first checks every scripted tool name against the tools the app
+offered in its `thread/start` request. A name the app did not offer ends the run
+`inconclusive`, blamed on the verifier, before any call is sent. Then it sends
+each call as the provider's `item/tool/call` request, in the Codex app-server
+shape, with a new call identity, and waits up to the usual patience for the
+app's reply to that identity. The call therefore takes the app's real tool path.
+`provider.jsonl` gets one `tool-call` line for each call, holding the call
+identity, the tool, the arguments the script resolved to (`scripted`), the
+arguments in the request frame as the stand-in wrote it (`arguments`), the app's
+reply frame exactly as returned and the round trip in milliseconds. A refusal is a reply like any other
+and is recorded as the app returned it, with `success` false or an error. The
+round trip runs from writing the request to reading the reply on the socket, so
+it includes the relay and the app's dispatch but not drawing. After the journey the
+driver reads those lines, and one that does not hold the app's reply to its own
+call, or whose written request carried arguments other than the scripted ones,
+ends the run `inconclusive` at `stand-in-ledger`, blamed on the verifier even
+when a case failed first. When a Core delay is also given, the driver checks both
+ledgers and the report names the first that failed, `core-relay-ledger` or
+`stand-in-ledger`.
+
+The `chat` journey's `tool-call-inspect` case plays one built-in workspace
+`inspect` and compares the returned selected Fleet with the saved layout. Its
+`tool-call-effect` case plays the file's script when `--provider-script` is
+given, and otherwise a built-in inspect followed by a rename of the selected
+Fleet. For a file script it checks only that every call was answered in order,
+so the journey does not know what a custom script should have done and the
+reader of `provider.jsonl` must judge each result. For the built-in script it
+also checks that the saved name and the drawn name are the new name. A
+`--provider-script` with no calls ends the run `inconclusive` in that case,
+blamed on the verifier, because nothing was played and the app did nothing
+wrong. The `streamed-reply` control patch still fails first with product blame,
+so the negative control runs with an empty script.
+
+Limits. The script runs only inside a turn that the journey has started, one
+call at a time, so it cannot test two calls in flight or a call that arrives
+after the turn ended. It does not play callbacks the app does not support, for
+example a method other than `item/tool/call`. The app allows 32 calls in a turn.
+The stand-in does not count them. Result text is read as JSON when it is JSON,
+so a plain-text refusal is kept as a string. The app's tool names and argument
+shapes come from `contract/generated`, and nothing in the verifier checks the
+script's arguments against them, so a call that the app refuses as malformed is
+a refusal to read in the ledger and not a verifier error.
 
 ### Negative controls
 
