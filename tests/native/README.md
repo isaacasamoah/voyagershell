@@ -438,7 +438,7 @@ Limits. The relay reads only channel 0, so it holds replies to requests and
 never the terminal data frames or events that arrive on other channels. It
 cannot hold a request, reorder requests or drop a frame. It sits in front of the
 one `hc connect` that the app starts, so each further bridge process is its own
-relay with its own ledger lines. The app limits itself to ten pending Core
+relay with its own ledger lines. The app limits itself to eleven pending Core
 requests, so a long delay on a busy method can make the app refuse new requests
 as busy. That is the app's behavior and what the delay is for. The relay delays
 the reply, not Core's work.
@@ -453,6 +453,44 @@ deadline, and one ended `inconclusive` with an operating system error 11 in
 exit through that reply. A journey that holds a method this long therefore
 measures the app's tolerance for the delay, and a failure under it is the
 journey's finding about the app, not a defect of the relay.
+
+A journey can declare the delay that it runs under. `Journey::core_delay` in
+`src/journey.rs` names it, `voyager-verification journeys` prints it as
+`coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
+on the command line replaces it. Only `slow-save` declares one, `doc.set=1500`.
+
+The `slow-save` journey proves what the app answers while Core's reply to a
+layout save is held. It opens the chat and starts a turn, so the stand-in can
+play tool calls. Each case then creates a Fleet from the canvas and reads Core's
+document directly until Core holds the new Fleet. At that moment Core has done
+the save and the relay still holds the reply, so the app's save is in flight.
+
+- `inspect-answered-during-held-save` plays one scripted workspace inspect. It
+  passes when the app returned Applied, the driver had the reply before the
+  relay's `releasedAtMs` for that save, and the round trip was under a quarter
+  of the hold.
+- `effect-answered-after-held-save` inspects first, then creates the Fleet, then
+  plays a scripted rename that carries the version from that inspect. It passes
+  when the driver had the reply at or after `releasedAtMs`, the app refused the
+  rename because the layout changed, and the Fleet kept its saved name. A
+  rename that ran during the flight would reach Core at the old version and
+  come back as a Core conflict instead.
+
+Each case reads its save from `core-relay.jsonl` as the last `doc.set` that was
+requested before the scripted call was sent. The journey ends the run
+`inconclusive`, blamed on the verifier, when the run holds `doc.set` for under
+1000 ms, or when the driver sent its call after that save was released, because
+then the two never overlapped and the app was not tested. The round trip in
+`played` is the measured latency of a request with no effect during a held
+save. It includes the stand-in, the conversation owner and the tool dispatch.
+
+Limits. The journey holds only the layout save of a canvas Fleet create. It
+does not hold the saves that open the new Fleet's terminal, which still block
+the app's owner, so each case waits for that terminal before it ends. It plays
+one scripted call during each held save, so it does not fill the app's list of
+waiting effects and does not reach the busy refusal. It does not quit during a
+held save.
+
 #### Scripted tool calls
 
 `run --provider-script FILE` gives the stand-in a list of tool calls to play
@@ -562,6 +600,11 @@ the text, so only a read taken while the reply streams catches it. The `terminal
 nothing. `copy-puts-the-selection-on-the-clipboard` then fails on the
 expectation `another X client reads exactly COPYβ界 from the clipboard`, and
 the observed text is the verifier's own `VERIFIER-SENTINEL`.
+
+The `slow-save` patch makes the app's owner wait for Core's reply to a layout
+save before it takes the next request. `inspect-answered-during-held-save` then
+fails on the expectation `the inspect was answered before Core's held reply to
+the Fleet's save was released`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

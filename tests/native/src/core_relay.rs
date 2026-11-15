@@ -62,7 +62,7 @@ impl CoreDelay {
             .join(",")
     }
 
-    fn hold(&self, method: &str) -> Option<Duration> {
+    pub fn hold(&self, method: &str) -> Option<Duration> {
         self.0
             .get(method)
             .filter(|milliseconds| **milliseconds > 0)
