@@ -1,3 +1,4 @@
+mod core_relay;
 mod diagnosis;
 mod features;
 mod inspection;
@@ -27,6 +28,9 @@ use std::time::Duration;
 use system::{Pinned, System};
 
 fn main() {
+    if core_relay::invoked_as_relay() {
+        std::process::exit(core_relay::relay());
+    }
     if provider::invoked_as_relay() {
         std::process::exit(provider::relay());
     }
@@ -43,7 +47,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -99,6 +103,7 @@ fn entry() -> Result<i32> {
         "--assets",
         "--evidence",
         "--fault",
+        "--core-delay",
         "--window",
         "--sidebar",
     ];
@@ -180,7 +185,7 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().map(|text| core_relay::CoreDelay::parse(&text)).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -223,6 +228,8 @@ struct Plan {
     session: String,
     host: Vec<Resource>,
     fault: Option<Fault>,
+    #[serde(rename = "coreDelay")]
+    core_delay: Option<core_relay::CoreDelay>,
     surface: Surface,
 }
 
@@ -277,7 +284,10 @@ fn acknowledge(gate: &mut Run, system: &System) -> Result<()> {
 
 fn drive(plan: Plan) -> Result<i32> {
     system::listen_for_cancel()?;
-    let system = System::new(plan.evidence, plan.session)?;
+    let mut system = System::new(plan.evidence, plan.session)?;
+    if let Some(delay) = &plan.core_delay {
+        system.delay_core(delay);
+    }
     let mut outcomes = Outcomes::new(plan.journey, system.evidence.join("observations.json"));
     let mut native = Native::new(system, plan.candidate, plan.hc, plan.surface);
     let mut gate = Run::default();
@@ -289,7 +299,21 @@ fn drive(plan: Plan) -> Result<i32> {
         plan.host,
         plan.fault.as_ref(),
     );
-    let cause = result.err().map(|error| native.diagnose(&error));
+    let relay = plan.core_delay.as_ref().map(|delay| {
+        delay.audit(
+            &fs::read_to_string(native.system.evidence.join("core-relay.jsonl"))
+                .unwrap_or_default(),
+        )
+    });
+    let ledger_fault = relay
+        .as_ref()
+        .and_then(|audit| audit.as_ref().err())
+        .map(|error| format!("{error:#}"));
+    let cause = match (result, relay) {
+        (_, Some(Err(error))) => Some(Cause::Fixture(format!("{error:#}"))),
+        (Err(error), _) => Some(native.diagnose(&error)),
+        (Ok(()), _) => None,
+    };
     acknowledge(&mut gate, &native.system)?;
     let product_fault = matches!(cause, Some(Cause::Product(_)));
     match &cause {
@@ -327,14 +351,17 @@ fn drive(plan: Plan) -> Result<i32> {
     let evidence_retained = observations.is_file();
     let recording_error = recording.err().map(|e| e.to_string());
     let verdict = gate.verdict();
-    let first_failure = diagnosis::Findings {
-        cause: cause.as_ref(),
-        outcomes: &outcomes,
-        recording_error: recording_error.as_deref(),
-        cleanup_errors: &cleanup_errors,
-        identity_changed,
-    }
-    .first_failing_check();
+    let first_failure = match &ledger_fault {
+        Some(detail) => json!({"check":"core-relay-ledger","blame":"fixture","detail":detail}),
+        None => diagnosis::Findings {
+            cause: cause.as_ref(),
+            outcomes: &outcomes,
+            recording_error: recording_error.as_deref(),
+            cleanup_errors: &cleanup_errors,
+            identity_changed,
+        }
+        .first_failing_check(),
+    };
     let bundle = native.system.evidence.join("bundle");
     let bundled = verdict != "passed";
     if bundled {
@@ -344,7 +371,7 @@ fn drive(plan: Plan) -> Result<i32> {
             &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     match verdict {
@@ -357,6 +384,7 @@ fn drive(plan: Plan) -> Result<i32> {
 
 const SOURCES: &[(&str, &[u8])] = &[
     ("src/main.rs", include_bytes!("main.rs")),
+    ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
