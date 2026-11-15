@@ -8,6 +8,7 @@ const DOCS = {
   map: "docs/context-map.md",
 };
 const SOURCE = "tests/architecture/vocabulary.yaml";
+const TABLE_PREFIX = "tests/architecture/vocabulary.";
 const GENERATE = "npm run vocabulary:generate";
 
 function model(table) {
@@ -72,7 +73,10 @@ function validate(table, repository, names = tracked(repository)) {
     if (!byName.has(String(entry.term).toLowerCase()))
       problems.push(`retired ${entry.id} names unknown term ${entry.term}`);
   const sources = names.filter(
-    (name) => !name.startsWith("docs/") && !name.startsWith("experiments/"),
+    (name) =>
+      !name.startsWith("docs/") &&
+      !name.startsWith("experiments/") &&
+      !name.startsWith(TABLE_PREFIX),
   );
   const text = sources
     .map((name) => fs.readFileSync(path.join(repository, name), "utf8"))

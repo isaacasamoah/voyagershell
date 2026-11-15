@@ -83,7 +83,8 @@ function shield(table, text) {
 const isText = (text) => !text.includes("\u0000");
 
 const PARTS = /[A-Z]+(?![a-z])|[A-Z]?[a-z]+/g;
-const JOINER = /^(?:[ \t_-]|\r?\n[ \t]*(?:(?:\/\/[/!]?|#+|\*+|>+)[ \t]*)?)*$/;
+const JOINER =
+  /^[ \t_-]*(?:\r?\n[ \t]*(?:(?:\/\/[/!]?|#+|\*+|>+)[ \t]*)?[ \t_-]*)?$/;
 
 function retiredRule(entry) {
   for (const key of ["id", "group", "words", "term"])
@@ -224,7 +225,14 @@ function tracked(repository) {
   })
     .split("\0")
     .filter(Boolean)
-    .filter((name) => fs.lstatSync(path.join(repository, name)).isFile());
+    .filter((name) => {
+      try {
+        return fs.lstatSync(path.join(repository, name)).isFile();
+      } catch (error) {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      }
+    });
 }
 
 function move(repository, from, to) {

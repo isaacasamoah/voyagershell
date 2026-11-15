@@ -15,7 +15,7 @@ conversation contract. `app/src/content.rs` owns persisted data, revisions and
 schema checks. `create-vessel` uses the shared panel owner and an explicit
 empty or beside-placement insertion with a left/right/top/bottom side and
 an explicit type ID. The supported type IDs are `terminal` and `notes`. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
-Changing a placement does not change its vessel ID or data. A Notes placement
+Changing a placement does not change its Vessel ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
 `app/src/content/description.rs` describes the two supported Vessel types through
@@ -134,7 +134,7 @@ seventeen-stage result remains tied to its legacy controller.
 
 `desktop/src/notes_session.rs` owns one real native Title editor, Body editor,
 resizable body height, dirty draft, original data revision and accepted save task
-per mounted vessel ID. The fresh shipped TypeScript remains the visual
+per mounted Vessel ID. The fresh shipped TypeScript remains the visual
 composition. It opts into SessionState, RetainedTitleState and RetainedBodyState.
 The retained editor handles expose values, not setters or focus commands, so an
 unpublished candidate cannot replace a dirty buffer during construction. Native
@@ -198,7 +198,7 @@ establish only that supported legacy behavior. They do not establish the fresh
 native session or a new native lifecycle journey.
 
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
-Canvas policy. Its native factory retains one view per vessel ID. Before opening
+Canvas policy. Its native factory retains one view per Vessel ID. Before opening
 data, background work asks the existing Client worker for a binding. That worker
 reads the authoritative workspace and checks the exact Notes placement before
 binding existing data. It never creates a missing file while binding or inspecting.

@@ -661,6 +661,9 @@ retired:
     swap: vessel type
     stage: 6
     term: Vessel type
+    allow:
+      - '\bContent-Type\b'
+      - '"content-type"'
   - id: retired-content-package
     group: content-words
     words: content package
@@ -678,6 +681,7 @@ retired:
     allow:
       - '\b(?:pub(?:\([^)]*\))?\s+)?mod\s+[a-z_][a-z0-9_]*\s*[;{]'
       - {pattern: '\b(?:Mods|set_mods)\b', files: ['desktop/src/terminal.rs']}
+      - '\bmod\.rs\b'
     skip: ['tests/architecture/observe*.cjs', 'tests/architecture/rust.cjs']
   - id: retired-realm
     group: legacy-names

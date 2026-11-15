@@ -118,7 +118,7 @@ conversation for layout changes.
 
 The process catalogue has list, read, send, interrupt and selected-program stop operations. List and read
 retain access to known-ended bound terminals without a PID. Send, interrupt and stop
-require the inspected vessel ID, exact Core terminal address and live PID.
+require the inspected Vessel ID, exact Core terminal address and live PID.
 Process inspection also reports Core's actual optional foreground program name,
 without arguments or an inferred work state. Every operation uses the same Client queue and physical Core connection as the
 workspace. The owner reads the actual current document revision and mapping

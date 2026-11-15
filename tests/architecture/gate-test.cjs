@@ -762,6 +762,17 @@ const ALLOWED = [
     "The content of a note stays when its type changes.",
   ],
   ["words that contain the old word", "docs/content.md", "A modal model."],
+  ["a mod.rs path", "docs/content.md", `See app/src/${OLD_PKG}.rs for it.`],
+  [
+    "an HTTP Content-Type string",
+    "app/src/x.rs",
+    `let h = "${join("Content", "-Type")}: text/plain";`,
+  ],
+  [
+    "the word content, a blank line and the word Type",
+    "docs/content.md",
+    `A note holds ${join("content", "\n\n", "Type")} data.`,
+  ],
   [
     "a named exception",
     "README.md",
@@ -894,4 +905,39 @@ test("the vocabulary check names a context that owns a missing file", () => {
     result.out,
     /context core-adapter owns app\/src\/gone.rs, which has no file/,
   );
+});
+
+const GONE = join("FleetId", "ThatIsGone");
+
+test("the vocabulary check names a code name that is gone", () => {
+  const directory = scratch();
+  edit(directory, "tests/architecture/vocabulary.yaml", (text) =>
+    text.replace("code: [FleetId]", `code: [${GONE}]`),
+  );
+  const result = vocabularyCheck(directory, [
+    "--table",
+    path.join(directory, "tests/architecture/vocabulary.yaml"),
+  ]);
+  assert.strictEqual(result.status, 1);
+  assert.match(
+    result.out,
+    new RegExp(`term Fleet names code ${GONE}, which is gone`),
+  );
+});
+
+test("the vocabulary check names a deleted tracked document as stale", () => {
+  const directory = scratch();
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  fs.rmSync(path.join(directory, "docs/context-map.md"));
+  const result = spawnSync(
+    "node",
+    [path.join(__dirname, "vocabulary.cjs"), "--repository", directory],
+    { encoding: "utf8", env: ENV },
+  );
+  assert.strictEqual(result.status, 1, result.stdout + result.stderr);
+  assert.match(
+    result.stdout,
+    /docs\/context-map.md is stale, run npm run vocabulary:generate/,
+  );
+  assert.doesNotMatch(result.stderr, /ENOENT/);
 });

@@ -236,7 +236,7 @@ An attachment transport failure remains unconfirmed. The view retries a known
 refusal only after an explicit Refresh has obtained a fresh workspace snapshot;
 it does not use Refresh to replay an uncertain start.
 
-The generated terminal request carries a request ID, vessel ID and expected
+The generated terminal request carries a request ID, Vessel ID and expected
 workspace revision. The response returns both identities and a typed applied,
 rejected or uncertain outcome. This separate request is needed because an
 applied attachment yields a native viewer retained by Rust, not a serializable
@@ -472,7 +472,7 @@ remain uncertain without an automatic replay.
 ## Earlier explicit new-shell mechanism
 
 The current source adds a deliberate `start-new-shell` workspace action for an
-existing terminal vessel ID and expected old backend. It uses the ordinary
+existing terminal Vessel ID and expected old backend. It uses the ordinary
 request revision, captured caller scope, single Client queue and receipt. The
 owner refreshes the document, verifies the binding and canonical finished state,
 and retains the old backend while saving a shell intent. A historical PID on a
@@ -494,7 +494,7 @@ Advertising eligibility still requires the exact current tuple to match.
 
 The updated canvas treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
-vessel ID, name, tree and avatar context stay unchanged. The new program always
+Vessel ID, name, tree and avatar context stay unchanged. The new program always
 uses the ordinary shell launch. A fresh intent can replace the old opening;
 an automatic owner notice cannot retry a refusal for the same intent. Refresh
 does not gain start permission merely from an old ended response. Existing
