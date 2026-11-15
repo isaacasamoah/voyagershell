@@ -37,13 +37,14 @@ fn received(value: &Value, input: &str) -> Result<u64> {
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
     terminal.focus(native)?;
-    let prompt =
-        Lines::of(&terminal.settled(native, "prompt", |look| !Lines::of(look).is_empty())?);
+    let start = terminal.settled(native, "prompt", |look| !Lines::of(look).is_empty())?;
+    let prompt = Lines::of(&start);
     cases.check(native, Case::NormalHistory, |native| {
-        let empty = terminal.look(native)?;
         terminal.line(native, "printf 'HISTORY-%03d\\n' {1..120}")?;
         terminal.shows(native, "HISTORY-120")?;
-        let live = terminal.settled(native, "history-live", |look| look != &empty)?;
+        let live = terminal.settled(native, "history-live", |look| {
+            look != &start && Lines::of(look).ends_like(&prompt)
+        })?;
         history(native, &terminal, "history", &live, Verdict::new())
     })?;
     let executable = std::env::current_exe()?;
