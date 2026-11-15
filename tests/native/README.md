@@ -245,6 +245,13 @@ tests/native/target/debug/voyager-verification battery --base "$old/target/relea
 ```
 
 `--evidence` is a new folder. `--runs` is the number of rounds and defaults to 3.
+A journey that needs inputs gets them from the battery. `profile` runs with the
+committed `tests/native/fixtures` (found from `--head-assets`, or given with
+`--fixtures DIR`) and the other side's build as its second binary. A journey whose
+inputs the battery cannot supply is not run. `battery.json` lists it under
+`not_run` with the reason, `battery.md` says so, and it counts as neither green
+nor red. A battery in which nothing could run is an error.
+
 `--threshold` is a fraction and defaults to 0.15. `--journeys a,b` limits the
 list. `hc` comes from `PATH`, and its hash is taken at the start. Each build's
 hash is also taken at the start and recorded. It names the file that ran. It

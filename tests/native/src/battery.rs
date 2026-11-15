@@ -1,9 +1,10 @@
 use crate::journey::Journey;
 use crate::system::{self, Pinned};
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -193,6 +194,7 @@ struct Summary {
     red: Vec<String>,
     inconclusive: Vec<String>,
     unmeasured: Vec<String>,
+    not_run: Vec<String>,
     rerun: Vec<String>,
     wall_seconds: f64,
     limits: Vec<&'static str>,
@@ -456,6 +458,52 @@ struct Options {
     threshold: f64,
     history: Option<PathBuf>,
     journeys: Vec<Journey>,
+    not_run: Vec<String>,
+    fixtures: PathBuf,
+}
+
+fn journey_inputs(
+    journey: Journey,
+    other: &Build,
+    fixtures: &Path,
+) -> Result<Vec<OsString>, String> {
+    match journey {
+        Journey::Profile => {
+            let theme = fixtures.join("profile-theme");
+            let document = fixtures.join("core-document").join("verifier-probe.json");
+            if !theme.is_dir() || !document.is_file() {
+                return Err(format!(
+                    "the committed profile fixtures are missing under {}",
+                    fixtures.display()
+                ));
+            }
+            let mut args: Vec<OsString> = vec!["--profile-fixture".into(), theme.into()];
+            args.push("--core-document".into());
+            let mut named = OsString::from("voyager-verifier-probe=");
+            named.push(&document);
+            args.push(named);
+            args.push("--second-binary".into());
+            args.push(other.binary.clone().into());
+            args.push("--second-sha256".into());
+            args.push(other.sha256.clone().into());
+            args.push("--second-assets".into());
+            args.push(other.assets.clone().into());
+            Ok(args)
+        }
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn split_runnable(options: &Options) -> (Vec<Journey>, Vec<String>) {
+    let mut runnable = Vec::new();
+    let mut not_run = Vec::new();
+    for journey in &options.journeys {
+        match journey_inputs(*journey, &options.base, &options.fixtures) {
+            Ok(_) => runnable.push(*journey),
+            Err(reason) => not_run.push(format!("{}: {reason}", journey.name())),
+        }
+    }
+    (runnable, not_run)
 }
 
 fn parse(args: &[String]) -> Result<Options> {
@@ -470,6 +518,7 @@ fn parse(args: &[String]) -> Result<Options> {
         "--threshold",
         "--history",
         "--journeys",
+        "--fixtures",
     ];
     let mut given: BTreeMap<&str, &str> = BTreeMap::new();
     for pair in args.as_chunks::<2>().0 {
@@ -521,6 +570,14 @@ fn parse(args: &[String]) -> Result<Options> {
     ensure!(!journeys.is_empty(), "--journeys named no journey");
     let hc_path = system::installed("hc")?;
     let hc = Pinned::check(&hc_path, &system::digest(&hc_path)?).context("Core")?;
+    let head_assets = need("--head-assets")?;
+    let fixtures = match given.get("--fixtures") {
+        Some(path) => PathBuf::from(path),
+        None => fs::canonicalize(head_assets)?
+            .ancestors()
+            .nth(2)
+            .map_or_else(PathBuf::new, |root| root.join("tests/native/fixtures")),
+    };
     Ok(Options {
         base: build(Side::Base, need("--base")?, need("--base-assets")?)?,
         head: build(Side::Head, need("--head")?, need("--head-assets")?)?,
@@ -530,6 +587,8 @@ fn parse(args: &[String]) -> Result<Options> {
         threshold,
         history: given.get("--history").map(PathBuf::from),
         journeys,
+        not_run: Vec::new(),
+        fixtures,
     })
 }
 
@@ -621,10 +680,12 @@ fn attempt(
     round: usize,
     number: u8,
 ) -> Result<Attempt> {
-    let build = match side {
-        Side::Base => &options.base,
-        Side::Head => &options.head,
+    let (build, other) = match side {
+        Side::Base => (&options.base, &options.head),
+        Side::Head => (&options.head, &options.base),
     };
+    let inputs = journey_inputs(journey, other, &options.fixtures)
+        .map_err(|reason| anyhow!("{}: {reason}", journey.name()))?;
     let name = format!("{side:?}-{}-r{round}-a{number}", journey.name()).to_lowercase();
     let evidence = options.evidence.join("runs").join(&name);
     let logs = options.evidence.join("logs");
@@ -639,6 +700,7 @@ fn attempt(
         .arg(&build.assets)
         .arg("--evidence")
         .arg(&evidence)
+        .args(&inputs)
         .stdout(Stdio::null())
         .stderr(stderr)
         .spawn()
@@ -709,12 +771,23 @@ fn markdown(summary: &Summary) -> String {
             );
         }
     }
+    for entry in &summary.not_run {
+        text += &format!("\nNot run, neither green nor red: {entry}\n");
+    }
     text += "\nA flake is a run that failed once and passed on its rerun. Wall time is the whole `run` command, including the sandbox and display start. A journey flagged as a regression is rerun for 5 more interleaved rounds and judged on all of its rounds. Read `battery.json` for every run.\n";
     text
 }
 
 pub fn run(args: &[String]) -> Result<i32> {
-    let options = parse(args)?;
+    let mut options = parse(args)?;
+    let (runnable, not_run) = split_runnable(&options);
+    ensure!(
+        !runnable.is_empty(),
+        "No selected journey could run: {}",
+        not_run.join("; ")
+    );
+    options.journeys = runnable;
+    options.not_run = not_run;
     let verifier = std::env::current_exe()?;
     ensure!(
         options.evidence.is_absolute(),
@@ -767,6 +840,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         red: names(&judged.reports, "red"),
         inconclusive: names(&judged.reports, "inconclusive"),
         unmeasured: unmeasured(&judged.reports),
+        not_run: options.not_run.clone(),
         rerun: rerun
             .iter()
             .map(|journey| journey.name().to_owned())
@@ -853,6 +927,62 @@ mod tests {
             ));
         }
         all
+    }
+
+    fn build(side: Side, name: &str) -> Build {
+        Build {
+            side,
+            binary: PathBuf::from(format!("/builds/{name}/app")),
+            sha256: format!("hash-{name}"),
+            assets: PathBuf::from(format!("/builds/{name}/assets")),
+        }
+    }
+
+    fn fixtures_in(root: &Path) -> PathBuf {
+        fs::create_dir_all(root.join("profile-theme")).unwrap();
+        fs::create_dir_all(root.join("core-document")).unwrap();
+        fs::write(root.join("core-document/verifier-probe.json"), "{}").unwrap();
+        root.to_path_buf()
+    }
+
+    #[test]
+    fn profile_runs_on_the_other_sides_build_with_the_committed_fixtures() {
+        let root = std::env::temp_dir().join(format!("battery-fixtures-{}", std::process::id()));
+        let fixtures = fixtures_in(&root);
+        let (base, head) = (build(Side::Base, "base"), build(Side::Head, "head"));
+        let on_head = journey_inputs(Journey::Profile, &base, &fixtures).unwrap();
+        let text: Vec<String> = on_head
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        let after = |flag: &str| {
+            let at = text.iter().position(|arg| arg == flag).unwrap();
+            text[at + 1].clone()
+        };
+        assert_eq!(after("--second-binary"), "/builds/base/app");
+        assert_eq!(after("--second-sha256"), "hash-base");
+        assert_eq!(after("--second-assets"), "/builds/base/assets");
+        assert!(after("--profile-fixture").ends_with("profile-theme"));
+        assert!(after("--core-document").starts_with("voyager-verifier-probe="));
+        let on_base = journey_inputs(Journey::Profile, &head, &fixtures).unwrap();
+        assert!(on_base.iter().any(|arg| arg == "/builds/head/app"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn profile_with_missing_fixtures_is_not_run_with_a_reason() {
+        let base = build(Side::Base, "base");
+        let reason = journey_inputs(Journey::Profile, &base, Path::new("/nowhere")).unwrap_err();
+        assert!(reason.contains("fixtures are missing"));
+    }
+
+    #[test]
+    fn journeys_without_inputs_get_none() {
+        let base = build(Side::Base, "base");
+        for journey in Journey::ALL.iter().filter(|j| **j != Journey::Profile) {
+            let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();
+            assert!(args.is_empty());
+        }
     }
 
     const J: Journey = Journey::TerminalScrolling;
