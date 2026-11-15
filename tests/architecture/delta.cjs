@@ -6,7 +6,7 @@ const HERE = __dirname;
 const SCHEMA = "architecture-delta/v0";
 const OFFERED = new Set(["offers", "exposes"]);
 const USAGE =
-  "usage: delta.cjs <base> <head> [--repository <path>] [--format table|json]";
+  "usage: delta.cjs <base> <head> [--repository <path>] [--format table|json|both]";
 
 const compareText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const sorted = (values) => [...values].sort(compareText);
@@ -139,7 +139,7 @@ function resolve(repository, revision) {
       },
     );
   } catch {
-    throw new Error(`${revision} is not a revision in ${repository}`);
+    throw new Error(`${revision} is not a revision in ${repository}\n${USAGE}`);
   }
 }
 
@@ -149,7 +149,7 @@ function delta({ repository, base, head }) {
       stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
-    throw new Error(`${repository} is not a git repository`);
+    throw new Error(`${repository} is not a git repository\n${USAGE}`);
   }
   resolve(repository, base);
   resolve(repository, head);
@@ -205,7 +205,7 @@ function table(result) {
     (module) =>
       `  ${module.id}  ${fan(module, "users")}  ${fan(module, "dependencies")}`,
   );
-  lines.push("Fan-in and fan-out", ...fanLines);
+  if (fanLines.length) lines.push("Fan-in and fan-out", ...fanLines);
   const functionText = (item) => `${item.module}.${item.function}`;
   lines.push(
     ...section(

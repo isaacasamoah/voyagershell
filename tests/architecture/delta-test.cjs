@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { test, after } = require("node:test");
-const { compare } = require("./delta.cjs");
+const { compare, table } = require("./delta.cjs");
 
 const DELTA = path.join(__dirname, "delta.cjs");
 const ENV = Object.fromEntries(
@@ -290,6 +290,16 @@ test("an empty range says so and exits cleanly", () => {
   );
 });
 
+test("the table leaves out the fan-in header when no module changed", () => {
+  const result = compare(
+    side("base", [host("voyager_workspace", ["open"])], []),
+    side("head", [host("voyager_workspace", ["open", "stop_session"])], []),
+  );
+  const text = table(result);
+  assert.match(text, /Host functions\n  \+ voyager_workspace\.stop_session/);
+  assert.doesNotMatch(text, /Fan-in and fan-out/);
+});
+
 test("a commit that changes no module, edge or host function is empty", () => {
   const result = run(second, third, "--repository", directory);
   assert.equal(result.status, 0, result.err);
@@ -304,6 +314,7 @@ test("a missing or unknown input exits non-zero and names it without a stack", (
       [first, "no-such-revision", "--repository", directory],
       /no-such-revision/,
     ],
+    [["no-such-base", second, "--repository", directory], /no-such-base/],
     [[first, second, "--repository", path.join(directory, "absent")], /absent/],
     [[first, second, "--format", "xml"], /unknown format xml/],
     [[first, second, "--bogus"], /unknown option --bogus/],
@@ -313,6 +324,10 @@ test("a missing or unknown input exits non-zero and names it without a stack", (
     assert.equal(result.status, 2, `${args} ${result.out}`);
     assert.match(result.err, /^architecture delta: /);
     assert.match(result.err, message);
+    assert.match(
+      result.err,
+      /\nusage: delta\.cjs <base> <head> .*table\|json\|both\]\n$/,
+    );
     assert.doesNotMatch(result.err, /\n\s+at /);
     assert.equal(result.out, "");
   }

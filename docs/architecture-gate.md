@@ -75,11 +75,11 @@ The table has these parts. A part with no change is left out.
 - `Fan-in and fan-out` gives each touched module its added and removed users, which are the modules with an edge to it, and its added and removed dependencies, which are the modules it has an edge to. The JSON `modules` list names them.
 - `Host functions` lists each function added to or removed from a script host module, as `module.function`. A new host module adds all its functions.
 - `Agent tools` lists added and removed agent tools.
-- `Offered operations` lists added and removed `offers` and `exposes` edges, which are the places where code offers a tool or a host module to a caller.
+- `Offered operations` lists added and removed `offers` and `exposes` edges, which are the places where code offers a tool or a host module to a caller. Operations in the typed application contract are not observed, so "offered operations" means only those two edge kinds.
 
 Revisions that observe the same facts, such as equal revisions or a commit that changes only prose, print `no structural change` and exit 0.
 
-A missing input prints one `architecture delta:` line that names it, followed by the usage line, and exits with code 2. Missing inputs are a missing base or head, an unknown revision, a path that is not a git repository, an unknown option and an unknown format.
+A missing or unknown input prints one `architecture delta:` line that names it, followed by the usage line, and exits with code 2. Missing inputs are a missing base or head, an unknown revision, a path that is not a git repository, an unknown option and an unknown format.
 
 ## Test the gate
 
