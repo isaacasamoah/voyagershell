@@ -10,6 +10,7 @@ mod conversation;
 mod diagnostics;
 mod host;
 mod inspect;
+mod lifecycle;
 mod measure;
 mod notes;
 mod notes_draft;
@@ -21,17 +22,19 @@ mod platform;
 mod quit;
 mod script_types;
 mod shipped;
+mod source_snapshot;
 mod speech;
 mod split;
 mod status;
 mod terminal;
 mod terminal_screen;
 mod text;
+mod window_frame;
 
 use anyhow::{Context as _, Result, bail};
 use gpui::{
-    App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, point, px,
-    size,
+    App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowDecorations,
+    WindowOptions, point, px, size,
 };
 use gpui_shell::{AppAssets, ShellRoot, ShellRuntime};
 use std::{
@@ -78,7 +81,8 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         bail!("Canvas manifest requires a name, version 1 and main.js entry");
     }
     let initial_theme = fs::read(&theme).context("Reading theme")?;
-    let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
+    let initial_source =
+        source_snapshot::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
     let launches_path = profile.join("launches.json");
     seed(
@@ -133,6 +137,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     ..Default::default()
                 }),
                 app_id: Some("voyager-shell".into()),
+                window_decorations: cfg!(target_os = "linux").then_some(WindowDecorations::Client),
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
@@ -143,7 +148,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 }
                 let quit_conversation = conversation.clone();
                 let quit_workspace = client.clone();
-                let (stop_session, stop_requests) = async_channel::bounded(1);
+                let (lifecycle, lifecycle_requests) = lifecycle::Requests::channel();
                 window.on_window_should_close(cx, |window, cx| {
                     window.dispatch_action(Box::new(Quit), cx);
                     false
@@ -164,7 +169,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             conversation,
                             notes,
                             avatar,
-                            stop_session,
+                            lifecycle,
                             profile_updates,
                         },
                         window,
@@ -175,7 +180,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     canvas.downgrade(),
                     quit_workspace,
                     quit_conversation,
-                    stop_requests,
+                    lifecycle_requests,
                     cx,
                 );
                 cx.new(|cx| {

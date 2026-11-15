@@ -4,6 +4,7 @@ import { Name, MeasureHeight, Marker, EditorMarker } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_theme";
+import { client_decorated, quit } from "voyager_workspace";
 import type Canvas from "./main.js";
 import type { NativeElement } from "gpui-kit";
 import type { NameState } from "voyager_native";
@@ -438,6 +439,55 @@ export function renderSidebar(
   return measure("sidebar", sidebar);
 }
 
+function windowButton(
+  id: string,
+  label: string,
+  role: "window-minimize" | "window-maximize" | "window-close",
+  glyph: NativeElement,
+  run: () => void,
+): NativeElement {
+  return Button.new(id)
+    .accessibility_label(label)
+    .tooltip(label)
+    .w(26)
+    .h(26)
+    .p(7)
+    .flex_shrink_0()
+    .child(glyph)
+    .child(Marker.new(role))
+    .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+    .on_click(run);
+}
+
+function windowControls(): NativeElement[] {
+  if (!client_decorated()) return [];
+  return [
+    windowButton(
+      "window-minimize",
+      "Minimize",
+      "window-minimize",
+      div().w(10).h(1).bg(projection().foreground),
+      () => window.minimize_window(),
+    ),
+    windowButton(
+      "window-maximize",
+      window.is_maximized() ? "Restore" : "Maximize",
+      "window-maximize",
+      window.is_maximized()
+        ? svg("restore.svg").size(12)
+        : div().w(10).h(10).border_1().border_color(projection().foreground),
+      () => window.zoom_window(),
+    ),
+    windowButton(
+      "window-close",
+      "Close",
+      "window-close",
+      svg("close.svg").size(12),
+      () => quit(),
+    ),
+  ];
+}
+
 export function renderFleets(
   workspace: Canvas,
   layout: Layout,
@@ -466,8 +516,9 @@ export function renderFleets(
         ),
       )
       .child(div().flex_1())
-      .children(voyage ? [portalControls(workspace, voyage)] : []);
-  if (!voyage) return strip;
+      .children(voyage ? [portalControls(workspace, voyage)] : [])
+      .children(windowControls());
+  if (!voyage) return strip.child(div().flex_1()).children(windowControls());
   const tabs = div()
     .id("fleet-tabs")
     .flex()
@@ -593,7 +644,10 @@ export function renderFleets(
       workspace.closedFleetItems(voyage),
     ),
   );
-  return strip.child(tabs).child(portalControls(workspace, voyage));
+  return strip
+    .child(tabs)
+    .child(portalControls(workspace, voyage))
+    .children(windowControls());
 }
 
 export function renderContext(

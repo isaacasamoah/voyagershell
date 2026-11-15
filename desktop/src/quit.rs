@@ -25,7 +25,7 @@ pub fn register(
     canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
-    stop_requests: async_channel::Receiver<()>,
+    requests: async_channel::Receiver<Lifecycle>,
     cx: &mut App,
 ) {
     let ending = Ending {
@@ -37,8 +37,8 @@ pub fn register(
     let quit = ending.clone();
     cx.on_action(move |_: &Quit, cx| quit.run(Lifecycle::QuitAndKeep, cx));
     cx.spawn(async move |cx: &mut AsyncApp| {
-        while stop_requests.recv().await.is_ok() {
-            cx.update(|cx| ending.run(Lifecycle::StopSession, cx));
+        while let Ok(operation) = requests.recv().await {
+            cx.update(|cx| ending.run(operation, cx));
         }
     })
     .detach();

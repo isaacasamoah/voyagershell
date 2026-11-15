@@ -711,6 +711,23 @@ acceptance require their separate journeys.
 
 ## Restoring a decorated Linux window
 
+On Linux the app asks for client decorations. Where the compositor draws the
+frame itself, such as KDE or a compositor-less X11 session, the window manager's
+bar remains and the app draws nothing extra. Where it does not, such as GNOME,
+the app draws its own title bar. `client_decorated()` in the Workspace host
+module reports which of the two applies. `renderFleets` in `navigation-view.ts`
+draws Minimize, Maximize or Restore and Close at the right end of the top strip
+only when it is true, in the Home view as well. Minimize and Maximize call
+`window.minimize_window()` and `window.zoom_window()`. Close calls `quit()`, which
+sends the same quit-and-keep request as Ctrl+Q and as a window close request.
+Stop session stays in the Home menu behind its confirmation, and no window button
+calls it. `window_frame.rs` also draws resize grips along the window edges, six
+logical pixels wide, under client decorations when the window is neither
+maximized nor fullscreen. A press on a grip asks the window manager to start a
+resize from that edge.
+
+### Restoring the window position
+
 GPUI reports the client window's root-relative origin. An X11 ConfigureRequest
 without explicit gravity instead uses the window frame's reference point. In
 the observed desktop the top frame is 74 device pixels, so reusing the client

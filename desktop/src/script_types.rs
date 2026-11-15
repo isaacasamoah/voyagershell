@@ -24,6 +24,8 @@ export function notice(): { revision: string; closeRevision: string; packageRevi
 export function reported_activity(): string;
 export function refresh_activity(): Promise<void>;
 export function stop_session(): void;
+export function quit(): void;
+export function client_decorated(): boolean;
 "#;
 
 pub const CONVERSATION_MODULE: &str = "voyager_conversation";

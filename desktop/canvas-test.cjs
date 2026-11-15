@@ -340,6 +340,8 @@ test("worker creation keeps its opening target and revision across a delayed cat
 });
 
 test("inspection markers name each control by its role and id and report the text it shows", () => {
+  let decorated = false;
+  const quits = [];
   const buttons = new Map();
   const Button = {
     new(id) {
@@ -361,6 +363,8 @@ test("inspection markers name each control by its role and id and report the tex
     "MeasureHeight",
     "speech_in_primary",
     "dock_target_visible",
+    "client_decorated",
+    "quit",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(
     class {},
@@ -379,6 +383,8 @@ test("inspection markers name each control by its role and id and report the tex
     { new: element },
     () => false,
     () => dockVisible,
+    () => decorated,
+    () => quits.push("quit"),
   );
   const menus = new Map();
   let dockVisible = false;
@@ -420,6 +426,33 @@ test("inspection markers name each control by its role and id and report the tex
   assert.deepEqual(markers(buttons.get("create-fleet-tab")), [
     ["create-fleet", "voyage-7"],
   ]);
+  const controls = ["minimize", "maximize", "close"].map(
+    (name) => `window-${name}`,
+  );
+  assert.deepEqual(
+    controls.filter((id) => buttons.has(id)),
+    [],
+  );
+  decorated = true;
+  const windowCalls = [];
+  globalThis.window = {
+    is_maximized: () => false,
+    minimize_window: () => windowCalls.push("minimize"),
+    zoom_window: () => windowCalls.push("zoom"),
+  };
+  view.fleetRegion(layout, { id: "voyage-7", fleets: [] }, undefined);
+  assert.deepEqual(
+    controls.map((id) => markers(buttons.get(id))),
+    controls.map((id) => [[id, ""]]),
+  );
+  for (const id of controls)
+    buttons
+      .get(id)
+      .calls.find(([name]) => name === "on_click")[1]();
+  assert.deepEqual(windowCalls, ["minimize", "zoom"]);
+  assert.deepEqual(quits, ["quit"]);
+  delete globalThis.window;
+  decorated = false;
   for (const kind of ["voyage", "fleet", "vessel", "portal"])
     assert.deepEqual(
       markers(view.action("A label", null, false, { kind, id: `${kind}-7` })),

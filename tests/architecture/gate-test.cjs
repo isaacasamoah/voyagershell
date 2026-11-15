@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /32 violations, 32 known\n.*PASS\n$/s);
+  assert.match(result.out, /31 violations, 31 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {

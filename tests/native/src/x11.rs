@@ -4,7 +4,7 @@ mod requests;
 
 pub use clipboard::{Clipboard, Exchange, Reading};
 pub use compositor::Compositor;
-pub use requests::{Observed, Requests};
+pub use requests::{Observed, Request, Requests};
 
 use anyhow::{Context, Result, bail, ensure};
 use image::RgbaImage;
