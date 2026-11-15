@@ -1,4 +1,5 @@
-use crate::core::{Core, Error, LayoutKeep};
+use crate::core::{Core, Error, LayoutKeep, Pending};
+use crate::core_shapes::DocSetResult;
 use crate::workspace::Model;
 use serde_json::Value;
 use voyager_contract::layout_document::{
@@ -90,11 +91,19 @@ pub(crate) fn carry_notice(notice: &mut Option<String>, action: &Action, respons
 }
 
 pub(crate) fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
+    Ok(begin_save(core, layout, version)?.wait()?.version)
+}
+
+pub(crate) fn begin_save(
+    core: &mut Core,
+    layout: &Layout,
+    version: u64,
+) -> Result<Pending<DocSetResult>, Error> {
     let value: Value = write(layout, &core.layout.kept).map_err(|error| Error::Rejected {
         kind: "invalid".into(),
         message: error.to_string(),
     })?;
-    Ok(core.document_set(DOCUMENT, &value, version)?.version)
+    core.begin_document_set(DOCUMENT, &value, version)
 }
 
 #[cfg(test)]

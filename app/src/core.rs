@@ -466,11 +466,20 @@ impl Core {
         value: &T,
         version: u64,
     ) -> Result<DocSetResult, Error> {
+        self.begin_document_set(name, value, version)?.wait()
+    }
+
+    pub(crate) fn begin_document_set<T: Serialize + ?Sized>(
+        &mut self,
+        name: &str,
+        value: &T,
+        version: u64,
+    ) -> Result<Pending<DocSetResult>, Error> {
         let value = serde_json::to_value(value).map_err(|error| Error::Rejected {
             kind: "invalid".into(),
             message: error.to_string(),
         })?;
-        self.call(
+        self.begin(
             "doc.set",
             DocSetParams {
                 name: name.into(),

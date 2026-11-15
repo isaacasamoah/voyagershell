@@ -8,6 +8,7 @@ pub mod core;
 mod core_endpoint;
 pub mod core_state;
 pub mod diagnostics;
+mod front_door;
 pub mod launch;
 mod layout_store;
 pub mod observation;

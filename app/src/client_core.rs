@@ -13,7 +13,7 @@ use voyager_contract::{
     Context, CoreTerminalId, Layout, PlacementId, observation::WorkspaceObservation,
 };
 
-fn post<R: serde::de::DeserializeOwned + Send + 'static>(
+pub(super) fn post<R: serde::de::DeserializeOwned + Send + 'static>(
     sender: &async_channel::Sender<Message>,
     pending: crate::core::Pending<R>,
     done: impl FnOnce(Result<R, Error>) -> Message + Send + 'static,
@@ -25,13 +25,17 @@ fn post<R: serde::de::DeserializeOwned + Send + 'static>(
 }
 
 pub(super) fn next_message(
+    waiting: Option<Message>,
     receiver: &async_channel::Receiver<Message>,
     activity: &Arc<Mutex<Activity>>,
     layout: &Layout,
     mut notice: WorkspaceNotice,
     listener: Option<&async_channel::Sender<WorkspaceNotice>>,
 ) -> Result<Message, async_channel::RecvError> {
-    let message = receiver.recv_blocking()?;
+    let message = match waiting {
+        Some(message) => message,
+        None => receiver.recv_blocking()?,
+    };
     if let Ok(mut activity) = activity.lock() {
         activity.bind(
             layout
@@ -246,7 +250,15 @@ mod activity_notice_tests {
             activity_revision: 0,
         };
         assert!(matches!(
-            next_message(&receiver, &activity, &model.layout, notice, Some(&listener)).unwrap(),
+            next_message(
+                None,
+                &receiver,
+                &activity,
+                &model.layout,
+                notice,
+                Some(&listener)
+            )
+            .unwrap(),
             Message::RefreshContentViews
         ));
         let actual = changed.try_recv().unwrap();

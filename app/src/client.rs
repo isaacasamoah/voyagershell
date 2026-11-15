@@ -21,8 +21,9 @@ use voyager_contract::{
 
 #[path = "client_core.rs"]
 mod core_calls;
-use crate::layout_store::{carry_notice, load, save};
-use core_calls::{Listing, Observer, changed_layout, commit, live, next_message};
+use crate::front_door::{Admission, Envelope, FrontDoor, Kind, Outcome, WAITING};
+use crate::layout_store::{begin_save, carry_notice, load, save};
+use core_calls::{Listing, Observer, changed_layout, commit, live, next_message, post};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
@@ -102,13 +103,15 @@ enum Message {
         reply: SyncSender<Arc<voyager_contract::worktree::Response>>,
     },
     WorktreeRemoveReady {
-        request_id: String,
+        scope: Option<Context>,
+        request: voyager_contract::worktree::Request,
         source_directory: String,
         checkout: voyager_contract::worktree::Checkout,
         reply: SyncSender<Result<(), String>>,
     },
     WorktreeDone {
-        request_id: String,
+        scope: Option<Context>,
+        request: voyager_contract::worktree::Request,
         source_directory: String,
         response: voyager_contract::worktree::Response,
         reply: SyncSender<Arc<voyager_contract::worktree::Response>>,
@@ -148,6 +151,9 @@ enum Message {
         expected_version: u64,
         reply: SyncSender<Result<Viewer, Error>>,
     },
+    Saved {
+        result: Result<u64, Error>,
+    },
 }
 
 enum ContentReply {
@@ -168,11 +174,125 @@ impl ContentReply {
     }
 }
 
-struct Outcome {
+#[derive(Clone)]
+struct Settled {
     status: Status,
     message: Option<String>,
     created_workspace: bool,
     close_plan: Option<voyager_contract::voyage_close::Plan>,
+}
+
+#[derive(Clone)]
+enum Receipt {
+    Workspace(Settled),
+    Content(Arc<voyager_contract::content::Response>),
+    Worktree(Arc<voyager_contract::worktree::Response>),
+    Process(Arc<ProcessResponse>),
+    Terminal(Result<WeakViewer, Error>),
+}
+
+impl Receipt {
+    fn workspace(&self) -> Option<Settled> {
+        match self {
+            Self::Workspace(settled) => Some(settled.clone()),
+            _ => None,
+        }
+    }
+
+    fn content(&self) -> Option<Arc<voyager_contract::content::Response>> {
+        match self {
+            Self::Content(response) => Some(Arc::clone(response)),
+            _ => None,
+        }
+    }
+
+    fn worktree(&self) -> Option<Arc<voyager_contract::worktree::Response>> {
+        match self {
+            Self::Worktree(response) => Some(Arc::clone(response)),
+            _ => None,
+        }
+    }
+
+    fn process(&self) -> Option<Arc<ProcessResponse>> {
+        match self {
+            Self::Process(response) => Some(Arc::clone(response)),
+            _ => None,
+        }
+    }
+
+    fn terminal(&self) -> Option<Result<WeakViewer, Error>> {
+        match self {
+            Self::Terminal(result) => Some(result.clone()),
+            _ => None,
+        }
+    }
+}
+
+struct Departure {
+    before: Arc<Layout>,
+    candidate: Layout,
+    reopening: Vec<VesselId>,
+    created_notes: bool,
+}
+
+struct Flight {
+    request: Request,
+    scope: Option<Context>,
+    reply: SyncSender<Response>,
+    departure: Box<Departure>,
+}
+
+enum Step {
+    Done,
+    Deferred,
+    Save(Box<Departure>),
+}
+
+fn unbound(created_notes: bool, error: Error) -> Error {
+    if created_notes {
+        Error::Uncertain(format!(
+            "A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}"
+        ))
+    } else {
+        error
+    }
+}
+
+impl Message {
+    fn waits(&self, held: usize) -> bool {
+        let effect = match self {
+            Self::Workspace { request, scope, .. } => {
+                Envelope::workspace(scope.as_ref(), request).effect
+            }
+            Self::NoteExit { request, .. } => Envelope::workspace(None, request).effect,
+            Self::Content {
+                access, request, ..
+            } => Envelope::content(access, request).effect,
+            Self::Process { scope, request, .. } => Envelope::process(scope, request).effect,
+            Self::Worktree { .. } | Self::Terminal { .. } => true,
+            Self::CloseDone { .. }
+            | Self::Quit { .. }
+            | Self::Listed { .. }
+            | Self::WorktreeRemoveReady { .. }
+            | Self::WorktreeDone { .. }
+            | Self::NoteRenameReady { .. } => return true,
+            Self::PrepareContext { .. }
+            | Self::CloseSaves { .. }
+            | Self::ActivityChanged
+            | Self::RefreshActivity { .. }
+            | Self::Launches { .. }
+            | Self::RefreshContentViews
+            | Self::RegisterView { .. }
+            | Self::ContextFacts { .. }
+            | Self::WorkspaceObservation { .. }
+            | Self::WorkspaceChanges { .. }
+            | Self::BindContent { .. }
+            | Self::ContentChanges { .. }
+            | Self::ProcessDone { .. }
+            | Self::Saved { .. } => return false,
+        };
+        effect && held < WAITING
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -201,13 +321,6 @@ impl CreatedTerminal {
             && (content.backend.is_none() || self.shell_intent.is_some())
             && content.start_pending.is_none()
     }
-}
-
-struct ContentReceipt {
-    access: crate::content::Access,
-    request_id: String,
-    fingerprint: [u8; 32],
-    result: Arc<voyager_contract::content::Response>,
 }
 
 #[derive(Clone, Debug)]
@@ -336,27 +449,15 @@ impl Client {
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
             let mut fresh = false;
-            let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
+            let mut door = FrontDoor::<Receipt>::default();
+            let mut held = VecDeque::<Message>::new();
+            let mut flight: Option<Flight> = None;
             let mut unconfirmed = HashMap::<String, String>::new();
             let mut created_vessels = Vec::<CreatedTerminal>::new();
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut listing = Listing::default();
-            let mut terminal_requests: VecDeque<(TerminalRequest, Result<WeakViewer, Error>)> =
-                VecDeque::new();
-            let mut process_requests: VecDeque<(
-                Context,
-                ProcessRequest,
-                Option<Arc<ProcessResponse>>,
-            )> = VecDeque::new();
-            let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
-            let mut worktree_requests: VecDeque<(
-                Option<Context>,
-                voyager_contract::worktree::Request,
-                Option<Arc<voyager_contract::worktree::Response>>,
-            )> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
-            let mut quit_result: Option<(Lifecycle, Result<(), Error>)> = None;
             let mut closing = crate::voyage_close::Closing::default();
             let mut renaming: Option<(
                 crate::voyage_close::SaveTicket,
@@ -364,6 +465,7 @@ impl Client {
                 crate::voyage_close::RenameRelease,
             )> = None;
             while let Ok(message) = next_message(
+                (!door.flying()).then(|| held.pop_front()).flatten(),
                 &receiver,
                 &observed_activity,
                 &layout,
@@ -375,17 +477,24 @@ impl Client {
                 },
                 workspace_listener.as_ref(),
             ) {
+                if door.flying() && message.waits(held.len()) {
+                    held.push_back(message);
+                    continue;
+                }
                 if observed_activity
                     .lock()
                     .is_ok_and(|mut activity| activity.take_ended())
                 {
                     listing.exit();
                 }
-                if quit_result.is_none()
+                if !door.quitting()
                     && let Ok(current_core) = core.as_mut()
                 {
                     listing.start(current_core, &layout, version, fresh, &core_sender);
                 }
+                let previous_version = version;
+                let previous_close_revision = closing.revision;
+                let mut landed = None;
                 let mut note_exit = None;
                 let mut rename_ready = None;
                 let mut rename_rebind = None;
@@ -428,7 +537,7 @@ impl Client {
                                 rename_release = Some(release);
                                 (ticket, plan, result)
                             });
-                            receipts.retain(|(prior, _, _)| prior.request_id != request.request_id);
+                            door.forget(&request.request_id);
                         }
                         (request, scope, reply)
                     }
@@ -474,14 +583,10 @@ impl Client {
                             }
                             Ok(())
                         });
-                        if matches!(result, Err(Error::Uncertain(_))) {
+                        let status = Outcome::from(result.clone()).status();
+                        if status == Status::Uncertain {
                             fresh = false;
                         }
-                        let status = match &result {
-                            Ok(()) => Status::Applied,
-                            Err(Error::Rejected { .. }) => Status::Rejected,
-                            Err(Error::Uncertain(_)) => Status::Uncertain,
-                        };
                         closing.finish(result);
                         let plan = closing.projected(&layout, scope.as_ref());
                         let response = Response {
@@ -499,17 +604,15 @@ impl Client {
                             message: plan.as_ref().and_then(|plan| plan.message.clone()),
                             close_plan: plan.clone(),
                         };
-                        if let Some((_, _, receipt)) = receipts
-                            .iter_mut()
-                            .find(|(prior, _, _)| prior.request_id == request.request_id)
-                        {
-                            *receipt = Outcome {
+                        door.settle(
+                            &request.request_id,
+                            Receipt::Workspace(Settled {
                                 status,
                                 message: response.message.clone(),
                                 created_workspace: false,
                                 close_plan: plan,
-                            };
-                        }
+                            }),
+                        );
                         if let Some(listener) = &workspace_listener {
                             let _ = listener.try_send(WorkspaceNotice {
                                 revision: version,
@@ -526,7 +629,7 @@ impl Client {
                     }
                     Message::ActivityChanged => continue,
                     Message::RefreshActivity { reply } => {
-                        if quit_result.is_none()
+                        if !door.quitting()
                             && let Ok(core) = &mut core
                         {
                             core.refresh_activity();
@@ -535,7 +638,7 @@ impl Client {
                         continue;
                     }
                     Message::Quit { operation, reply } => {
-                        let result = operation.end(&mut quit_result, &mut core);
+                        let result = door.end(operation, &mut core);
                         created_vessels.clear();
                         fresh = false;
                         let _ = reply.try_send(result);
@@ -576,7 +679,7 @@ impl Client {
                             reply,
                         };
                         match core.as_mut() {
-                            Ok(current_core) if quit_result.is_none() => {
+                            Ok(current_core) if !door.quitting() => {
                                 listing.observe(observer);
                                 listing.start(current_core, &layout, version, fresh, &core_sender);
                             }
@@ -586,9 +689,11 @@ impl Client {
                     }
                     Message::Listed { terminals } => {
                         let (begun, terminals) = (listing.listed(), terminals.ok());
+                        let observed =
+                            Envelope::observed(close_client.request_id(), begun.unwrap_or(version));
                         let closed = (|| -> Result<(), String> {
-                            let (Some(terminals), Ok(current_core), None, true) =
-                                (&terminals, core.as_mut(), &quit_result, fresh)
+                            let (Some(terminals), Ok(current_core), Ok(()), true) =
+                                (&terminals, core.as_mut(), door.gate(&observed), fresh)
                             else {
                                 return Ok(());
                             };
@@ -625,7 +730,7 @@ impl Client {
                         })();
                         let listed = closed.map(|()| terminals.as_deref());
                         listing.answer(begun, listed, &layout, version, fresh);
-                        if quit_result.is_none()
+                        if !door.quitting()
                             && let Ok(current_core) = core.as_mut()
                         {
                             listing.start(current_core, &layout, version, fresh, &core_sender);
@@ -685,26 +790,27 @@ impl Client {
                         close_ticket,
                         native_save,
                     } => {
-                        let previous_version = version;
-                        let (_, request_id, expected) = crate::content::identity(&request);
-                        let fingerprint = crate::content::fingerprint(&request);
-                        if let Some(previous) = content_requests
-                            .iter()
-                            .find(|prior| prior.request_id == request_id)
-                        {
-                            let response = if previous.access == access
-                                && previous.fingerprint == fingerprint
-                            {
-                                Arc::clone(&previous.result)
-                            } else {
-                                Arc::new(crate::content::reject(
-                                    &request,
-                                    "Content request identity changed; nothing was repeated".into(),
-                                ))
-                            };
-                            reply.deliver(response);
-                            continue;
-                        }
+                        let agent = match &access {
+                            crate::content::Access::Agent {
+                                expected_version, ..
+                            } => Some(*expected_version),
+                            crate::content::Access::View(_) => None,
+                        };
+                        let ticket = match door.admit(
+                            &Envelope::content(&access, &request),
+                            &(&request, agent),
+                            Receipt::content,
+                        ) {
+                            Admission::New(ticket) => ticket,
+                            Admission::Repeat(first) => {
+                                reply.deliver(first);
+                                continue;
+                            }
+                            Admission::Pending(message) | Admission::Refused(message) => {
+                                reply.deliver(Arc::new(crate::content::reject(&request, message)));
+                                continue;
+                            }
+                        };
                         let result = (|| {
                             if renaming.as_ref().is_some_and(|(ticket, plan, _)| {
                                 plan.vessels.contains(crate::content::identity(&request).0)
@@ -735,43 +841,6 @@ impl Client {
                                 return Err(
                                     "This Voyage is closing; its Notes are temporarily read-only"
                                         .into(),
-                                );
-                            }
-                            if quit_result.is_some()
-                                && matches!(
-                                    request,
-                                    voyager_contract::content::Request::Update { .. }
-                                        | voyager_contract::content::Request::Configure { .. }
-                                        | voyager_contract::content::Request::MigrateNote { .. }
-                                        | voyager_contract::content::Request::NewNote { .. }
-                                        | voyager_contract::content::Request::OpenNote { .. }
-                                )
-                            {
-                                return Err("Voyager is quitting; no content was changed".into());
-                            }
-                            if request_id.is_empty()
-                                || request_id.len() > 128
-                                || expected.is_some_and(|revision| {
-                                    revision.is_empty() || revision.len() > 128
-                                })
-                            {
-                                return Err("Invalid content request identity".into());
-                            }
-                            if worktree_requests
-                                .iter()
-                                .any(|(_, prior, _)| prior.request_id == request_id)
-                                || receipts
-                                    .iter()
-                                    .any(|(prior, _, _)| prior.request_id == request_id)
-                                || process_requests
-                                    .iter()
-                                    .any(|(_, prior, _)| prior.request_id == request_id)
-                                || terminal_requests
-                                    .iter()
-                                    .any(|(prior, _)| prior.request_id == request_id)
-                            {
-                                return Err(
-                                    "This request identity belongs to another operation".into()
                                 );
                             }
                             if serde_json::to_vec(&request)
@@ -865,34 +934,22 @@ impl Client {
                                     .unwrap_or(0),
                             });
                         }
-                        content_requests.push_back(ContentReceipt {
-                            access,
-                            request_id: request_id.into(),
-                            fingerprint,
-                            result: Arc::clone(&response),
-                        });
-                        if content_requests.len() > 32 {
-                            content_requests.pop_front();
-                        }
+                        door.record(ticket, Receipt::Content(Arc::clone(&response)));
                         reply.deliver(response);
                         continue;
                     }
                     Message::WorktreeRemoveReady {
-                        request_id,
+                        scope,
+                        request,
                         source_directory,
                         checkout,
                         reply,
                     } => {
                         let preflight = (|| -> Result<(), String> {
-                            let (scope, request, _) = worktree_requests
-                                .iter()
-                                .find(|(_, request, result)| {
-                                    request.request_id == request_id && result.is_none()
-                                })
-                                .ok_or("Worktree request is no longer pending")?;
-                            if quit_result.is_some() {
-                                return Err("Voyager is quitting; no worktree was removed".into());
-                            }
+                            door.gate(&Envelope::worktree(scope.as_ref(), &request))
+                                .map_err(|_| {
+                                    "Voyager is quitting; no worktree was removed".to_owned()
+                                })?;
                             let core = core
                                 .as_mut()
                                 .map_err(|error| format!("Core unavailable: {error:?}"))?;
@@ -904,8 +961,8 @@ impl Client {
                             if missing || version != request.expected_version {
                                 return Err("Workspace changed; no worktree was removed".into());
                             }
-                            if !matches!(scope, None | Some(Context::Workspace))
-                                && !matches!(scope, Some(Context::Voyage { id }) if id == &request.voyage)
+                            if !matches!(&scope, None | Some(Context::Workspace))
+                                && !matches!(&scope, Some(Context::Voyage { id }) if id == &request.voyage)
                             {
                                 return Err(
                                     "Captured focus no longer authorizes this Voyage".into()
@@ -951,7 +1008,8 @@ impl Client {
                         continue;
                     }
                     Message::WorktreeDone {
-                        request_id,
+                        scope,
+                        request,
                         source_directory,
                         mut response,
                         reply,
@@ -959,132 +1017,121 @@ impl Client {
                         use voyager_contract::worktree::{
                             Action as WorktreeAction, Status as WorktreeStatus,
                         };
-                        if let Some((scope, request, result)) = worktree_requests
-                            .iter_mut()
-                            .find(|(_, request, _)| request.request_id == request_id)
+                        if response.status == WorktreeStatus::Applied
+                            && matches!(
+                                request.action,
+                                WorktreeAction::Create { .. }
+                                    | WorktreeAction::Open { .. }
+                                    | WorktreeAction::Remove { .. }
+                            )
                         {
-                            if response.status == WorktreeStatus::Applied
-                                && matches!(
-                                    request.action,
-                                    WorktreeAction::Create { .. }
-                                        | WorktreeAction::Open { .. }
-                                        | WorktreeAction::Remove { .. }
-                                )
-                            {
-                                let completion = (|| -> Result<(), String> {
-                                    if quit_result.is_some() {
-                                        return Err("Voyager is quitting".into());
+                            let completion = (|| -> Result<(), String> {
+                                door.gate(&Envelope::worktree(scope.as_ref(), &request))
+                                    .map_err(|_| "Voyager is quitting".to_owned())?;
+                                let checkout = response
+                                    .checkouts
+                                    .first()
+                                    .ok_or("Git did not return the selected checkout")?;
+                                let core = core
+                                    .as_mut()
+                                    .map_err(|error| format!("Core unavailable: {error:?}"))?;
+                                let (current, revision, missing) = load(core, &cwd)
+                                    .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                                layout = Arc::new(current);
+                                version = revision;
+                                fresh = !missing;
+                                if missing {
+                                    return Err("Workspace is unavailable".into());
+                                }
+                                if version != request.expected_version {
+                                    return Err("Workspace changed after Git dispatch".into());
+                                }
+                                let current_source = layout
+                                    .voyages
+                                    .iter()
+                                    .find(|voyage| voyage.id == request.voyage)
+                                    .and_then(|voyage| voyage.cwd.as_deref())
+                                    .ok_or("Source Voyage is unavailable")?;
+                                let removing =
+                                    matches!(request.action, WorktreeAction::Remove { .. });
+                                if removing {
+                                    if current_source != source_directory {
+                                        return Err("Source Voyage directory changed".into());
                                     }
-                                    let checkout = response
-                                        .checkouts
-                                        .first()
-                                        .ok_or("Git did not return the selected checkout")?;
-                                    let core = core
-                                        .as_mut()
-                                        .map_err(|error| format!("Core unavailable: {error:?}"))?;
-                                    let (current, revision, missing) =
-                                        load(core, &cwd).map_err(|error| {
-                                            format!("Workspace unavailable: {error:?}")
+                                } else {
+                                    let original = std::fs::canonicalize(&source_directory)
+                                        .map_err(|error| {
+                                            format!("Source directory unavailable: {error}")
                                         })?;
-                                    layout = Arc::new(current);
-                                    version = revision;
-                                    fresh = !missing;
-                                    if missing {
-                                        return Err("Workspace is unavailable".into());
+                                    let current =
+                                        std::fs::canonicalize(current_source).map_err(|error| {
+                                            format!("Current Voyage directory unavailable: {error}")
+                                        })?;
+                                    if original != current {
+                                        return Err("Source Voyage directory changed".into());
                                     }
-                                    if version != request.expected_version {
-                                        return Err("Workspace changed after Git dispatch".into());
-                                    }
-                                    let current_source = layout
+                                }
+                                let mut candidate = Model {
+                                    layout: (*layout).clone(),
+                                };
+                                let actions = if let WorktreeAction::Remove { path } =
+                                    &request.action
+                                {
+                                    candidate
+                                        .layout
                                         .voyages
                                         .iter()
-                                        .find(|voyage| voyage.id == request.voyage)
-                                        .and_then(|voyage| voyage.cwd.as_deref())
-                                        .ok_or("Source Voyage is unavailable")?;
-                                    let removing =
-                                        matches!(request.action, WorktreeAction::Remove { .. });
-                                    if removing {
-                                        if current_source != source_directory {
-                                            return Err("Source Voyage directory changed".into());
-                                        }
-                                    } else {
-                                        let original = std::fs::canonicalize(&source_directory)
-                                            .map_err(|error| {
-                                                format!("Source directory unavailable: {error}")
-                                            })?;
-                                        let current = std::fs::canonicalize(current_source)
-                                            .map_err(|error| {
-                                                format!(
-                                                    "Current Voyage directory unavailable: {error}"
-                                                )
-                                            })?;
-                                        if original != current {
-                                            return Err("Source Voyage directory changed".into());
-                                        }
-                                    }
-                                    let mut candidate = Model {
-                                        layout: (*layout).clone(),
-                                    };
-                                    let actions =
-                                        if let WorktreeAction::Remove { path } = &request.action {
-                                            candidate
-                                                .layout
-                                                .voyages
-                                                .iter()
-                                                .filter(|voyage| {
-                                                    voyage.cwd.as_ref().is_some_and(|cwd| {
-                                                        std::path::Path::new(cwd).starts_with(path)
-                                                    })
-                                                })
-                                                .map(|voyage| Action::CloseVoyage {
-                                                    id: voyage.id.clone(),
-                                                })
-                                                .collect::<Vec<_>>()
-                                        } else {
-                                            vec![worktree_voyage_action(
-                                                &candidate.layout,
-                                                &checkout.path,
-                                            )?]
-                                        };
-                                    for action in actions {
-                                        crate::scope::check(&layout, scope.as_ref(), &action)?;
-                                        candidate.apply(action)?;
-                                    }
-                                    let saved = save(core, &candidate.layout, version).map_err(
-                                        |error| format!("Workspace save not confirmed: {error:?}"),
-                                    )?;
-                                    record_created_terminals(
-                                        &mut created_vessels,
-                                        &layout,
-                                        &candidate.layout,
-                                    );
-                                    layout = Arc::new(candidate.layout);
-                                    version = saved;
-                                    if let Some(owner) = content.as_mut() {
-                                        owner.refresh_views();
-                                    }
-                                    if let Some(listener) = &workspace_listener {
-                                        let _ = listener.try_send(WorkspaceNotice {
-                                            close_revision: closing.revision,
-                                            revision: version,
-                                            package_revision: published_packages
-                                                .load(Ordering::Relaxed),
-                                            activity_revision: core.activity_revision(),
-                                        });
-                                    }
-                                    Ok(())
-                                })();
-                                if let Err(error) = completion {
-                                    response.status = WorktreeStatus::Uncertain;
-                                    response.message = Some(format!(
-                                        "Git completed, but updating its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
-                                    ));
+                                        .filter(|voyage| {
+                                            voyage.cwd.as_ref().is_some_and(|cwd| {
+                                                std::path::Path::new(cwd).starts_with(path)
+                                            })
+                                        })
+                                        .map(|voyage| Action::CloseVoyage {
+                                            id: voyage.id.clone(),
+                                        })
+                                        .collect::<Vec<_>>()
+                                } else {
+                                    vec![worktree_voyage_action(&candidate.layout, &checkout.path)?]
+                                };
+                                for action in actions {
+                                    crate::scope::check(&layout, scope.as_ref(), &action)?;
+                                    candidate.apply(action)?;
                                 }
+                                let saved =
+                                    save(core, &candidate.layout, version).map_err(|error| {
+                                        format!("Workspace save not confirmed: {error:?}")
+                                    })?;
+                                record_created_terminals(
+                                    &mut created_vessels,
+                                    &layout,
+                                    &candidate.layout,
+                                );
+                                layout = Arc::new(candidate.layout);
+                                version = saved;
+                                if let Some(owner) = content.as_mut() {
+                                    owner.refresh_views();
+                                }
+                                if let Some(listener) = &workspace_listener {
+                                    let _ = listener.try_send(WorkspaceNotice {
+                                        close_revision: closing.revision,
+                                        revision: version,
+                                        package_revision: published_packages
+                                            .load(Ordering::Relaxed),
+                                        activity_revision: core.activity_revision(),
+                                    });
+                                }
+                                Ok(())
+                            })();
+                            if let Err(error) = completion {
+                                response.status = WorktreeStatus::Uncertain;
+                                response.message = Some(format!(
+                                    "Git completed, but updating its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
+                                ));
                             }
-                            let answer = Arc::new(response);
-                            *result = Some(Arc::clone(&answer));
-                            let _ = reply.send(answer);
                         }
+                        let answer = Arc::new(response);
+                        door.settle(&request.request_id, Receipt::Worktree(Arc::clone(&answer)));
+                        let _ = reply.send(answer);
                         continue;
                     }
                     Message::Worktree {
@@ -1104,64 +1151,37 @@ impl Client {
                                 checkouts: Vec::new(),
                             })
                         };
-                        if let Some((previous_scope, previous, result)) = worktree_requests
-                            .iter()
-                            .find(|(_, prior, _)| prior.request_id == request.request_id)
-                        {
-                            let answer = if previous != &request || previous_scope != &scope {
-                                rejected("Worktree request identity was reused with different arguments or scope".into())
-                            } else {
-                                result.clone().unwrap_or_else(|| {
-                                    Arc::new(WorktreeResponse {
-                                        request_id: request.request_id.clone(),
-                                        status: WorktreeStatus::Uncertain,
-                                        message: Some(
-                                            "Worktree request is still pending; do not repeat"
-                                                .into(),
-                                        ),
-                                        checkouts: Vec::new(),
-                                    })
-                                })
-                            };
-                            let _ = reply.send(answer);
-                            continue;
-                        }
+                        let ticket = match door.admit(
+                            &Envelope::worktree(scope.as_ref(), &request),
+                            &request,
+                            Receipt::worktree,
+                        ) {
+                            Admission::New(ticket) => ticket,
+                            Admission::Repeat(first) => {
+                                let _ = reply.send(first);
+                                continue;
+                            }
+                            Admission::Pending(message) => {
+                                let _ = reply.send(Arc::new(WorktreeResponse {
+                                    request_id: request.request_id.clone(),
+                                    status: WorktreeStatus::Uncertain,
+                                    message: Some(message),
+                                    checkouts: Vec::new(),
+                                }));
+                                continue;
+                            }
+                            Admission::Refused(message) => {
+                                let _ = reply.send(rejected(message));
+                                continue;
+                            }
+                        };
                         let prepared = (|| -> Result<(String, Vec<String>), String> {
-                            if request.request_id.is_empty() || request.request_id.len() > 128 {
-                                return Err("Invalid worktree request identity".into());
-                            }
-                            if quit_result.is_some() {
-                                return Err(
-                                    "Voyager is quitting; no worktree operation was dispatched"
-                                        .into(),
-                                );
-                            }
-                            if worktree_requests
-                                .iter()
-                                .any(|(_, _, result)| result.is_none())
-                            {
+                            if door.pending(Kind::Worktree) > 0 {
                                 return Err("A worktree operation is already pending".into());
                             }
                             if !fresh || version != request.expected_version {
                                 return Err(
                                     "Inspect the current workspace before using worktrees".into()
-                                );
-                            }
-                            if receipts
-                                .iter()
-                                .any(|(prior, _, _)| prior.request_id == request.request_id)
-                                || content_requests
-                                    .iter()
-                                    .any(|prior| prior.request_id == request.request_id)
-                                || process_requests
-                                    .iter()
-                                    .any(|(_, prior, _)| prior.request_id == request.request_id)
-                                || terminal_requests
-                                    .iter()
-                                    .any(|(prior, _)| prior.request_id == request.request_id)
-                            {
-                                return Err(
-                                    "This request identity belongs to another operation".into()
                                 );
                             }
                             if !matches!(&scope, None | Some(Context::Workspace))
@@ -1207,19 +1227,14 @@ impl Client {
                         })();
                         match prepared {
                             Err(message) => {
-                                let _ = reply.send(rejected(message));
+                                let answer = rejected(message);
+                                door.record(ticket, Receipt::Worktree(Arc::clone(&answer)));
+                                let _ = reply.send(answer);
                             }
                             Ok((directory, live)) => {
-                                let task_request = request.clone();
+                                door.open(ticket);
+                                let task_request = request;
                                 let task_sender = worktree_sender.clone();
-                                worktree_requests.push_back((scope, request, None));
-                                if worktree_requests.len() > 32
-                                    && worktree_requests
-                                        .front()
-                                        .is_some_and(|(_, _, result)| result.is_some())
-                                {
-                                    worktree_requests.pop_front();
-                                }
                                 thread::spawn(move || {
                                     let result = if let WorktreeAction::Remove { path } =
                                         &task_request.action
@@ -1235,7 +1250,7 @@ impl Client {
                                                 ));
                                             }
                                             let (approval, receive) = mpsc::sync_channel(1);
-                                            task_sender.send_blocking(Message::WorktreeRemoveReady { request_id: task_request.request_id.clone(), source_directory: directory.clone(), checkout: checkout.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
+                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), checkout: checkout.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
                                             receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
                                             crate::worktrees::remove(
                                                 std::path::Path::new(&directory),
@@ -1265,7 +1280,8 @@ impl Client {
                                         checkouts,
                                     };
                                     let _ = task_sender.send_blocking(Message::WorktreeDone {
-                                        request_id: task_request.request_id,
+                                        scope,
+                                        request: task_request,
                                         source_directory: directory,
                                         response,
                                         reply,
@@ -1288,78 +1304,37 @@ impl Client {
                                 queued_at.elapsed().as_micros()
                             );
                         }
-                        let previous = process_requests
-                            .iter()
-                            .find(|(_, prior, _)| prior.request_id == request.request_id);
-                        let mut response = ProcessResponse {
-                            request_id: request.request_id.clone(),
-                            status: Status::Rejected,
-                            version,
-                            fresh,
-                            output: None,
-                            message: None,
+                        let refused = |message: String| {
+                            Arc::new(ProcessResponse {
+                                request_id: request.request_id.clone(),
+                                status: Status::Rejected,
+                                version,
+                                fresh,
+                                output: None,
+                                message: Some(message),
+                            })
                         };
-                        if let Some((prior_scope, prior, result)) = previous {
-                            let outcome = if prior != &request || prior_scope != &scope {
-                                response.message = Some("Process request identity was reused with different arguments or scope".into());
-                                Arc::new(response)
-                            } else if let Some(result) = result {
-                                Arc::clone(result)
-                            } else {
-                                response.message = Some(
-                                    "Process request is still pending; it was not repeated".into(),
-                                );
-                                Arc::new(response)
-                            };
-                            let _ = reply.send(outcome);
-                            continue;
-                        }
-                        let result = if quit_result.is_some()
+                        let ticket = match door.admit(
+                            &Envelope::process(&scope, &request),
+                            &request,
+                            Receipt::process,
+                        ) {
+                            Admission::New(ticket) => ticket,
+                            Admission::Repeat(first) => {
+                                let _ = reply.send(first);
+                                continue;
+                            }
+                            Admission::Pending(message) | Admission::Refused(message) => {
+                                let _ = reply.send(refused(message));
+                                continue;
+                            }
+                        };
+                        let result = if door.pending(Kind::Process) >= 8
                             && !matches!(
                                 request.input.action,
                                 voyager_contract::administrator::ProcessAction::List
                                     | voyager_contract::administrator::ProcessAction::Read { .. }
                             ) {
-                            Err(rejected(
-                                "Voyager is quitting; no process effect was dispatched".into(),
-                            ))
-                        } else if request.request_id.is_empty() || request.request_id.len() > 128 {
-                            Err(rejected("Invalid process request identity".into()))
-                        } else if worktree_requests
-                            .iter()
-                            .any(|(_, prior, _)| prior.request_id == request.request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to a worktree operation".into(),
-                            ))
-                        } else if content_requests
-                            .iter()
-                            .any(|prior| prior.request_id == request.request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to a content operation".into(),
-                            ))
-                        } else if receipts
-                            .iter()
-                            .any(|(prior, _, _)| prior.request_id == request.request_id)
-                            || terminal_requests
-                                .iter()
-                                .any(|(prior, _)| prior.request_id == request.request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to another operation".into(),
-                            ))
-                        } else if process_requests
-                            .iter()
-                            .filter(|(_, _, result)| result.is_none())
-                            .count()
-                            >= 8
-                            && !matches!(
-                                request.input.action,
-                                voyager_contract::administrator::ProcessAction::List
-                                    | voyager_contract::administrator::ProcessAction::Read { .. }
-                            )
-                        {
                             Err(rejected(
                                 "Process request limit reached; no effect was queued".into(),
                             ))
@@ -1370,27 +1345,20 @@ impl Client {
                             ))
                         } else {
                             match core.as_mut() {
-                                    Ok(core) => load(core, &cwd).and_then(|(current, revision, _)| {
-                                        layout = Arc::new(current);
-                                        version = revision;
-                                        if version != request.input.expected_version {
-                                            return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
-                                        }
-                                        crate::process::start(core, &layout, &scope, &request.input.action)
-                                    }),
-                                    Err(error) => Err(error.clone()),
-                                }
+                                Ok(core) => load(core, &cwd).and_then(|(current, revision, _)| {
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    if version != request.input.expected_version {
+                                        return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
+                                    }
+                                    crate::process::start(core, &layout, &scope, &request.input.action)
+                                }),
+                                Err(error) => Err(error.clone()),
+                            }
                         };
-                        if process_requests.len() >= 32
-                            && let Some(index) = process_requests
-                                .iter()
-                                .position(|(_, _, result)| result.is_some())
-                        {
-                            process_requests.remove(index);
-                        }
-                        match result {
+                        let settled = match result {
                             Ok(crate::process::Started::Waiting(effect)) => {
-                                process_requests.push_back((scope, request.clone(), None));
+                                door.open(ticket);
                                 let sender = process_sender.clone();
                                 thread::spawn(move || {
                                     let result = effect.wait();
@@ -1400,37 +1368,19 @@ impl Client {
                                         reply,
                                     });
                                 });
+                                continue;
                             }
-                            Ok(crate::process::Started::Ready(output)) => {
-                                let outcome = process_response(
-                                    request.request_id.clone(),
-                                    version,
-                                    &mut fresh,
-                                    Ok(output),
-                                );
-                                process_requests.push_back((
-                                    scope,
-                                    request,
-                                    Some(Arc::clone(&outcome)),
-                                ));
-                                let _ = reply.send(outcome);
-                            }
-                            Err(error) => {
-                                let output = Err(error);
-                                let outcome = process_response(
-                                    request.request_id.clone(),
-                                    version,
-                                    &mut fresh,
-                                    output,
-                                );
-                                process_requests.push_back((
-                                    scope,
-                                    request,
-                                    Some(Arc::clone(&outcome)),
-                                ));
-                                let _ = reply.send(outcome);
-                            }
-                        }
+                            Ok(crate::process::Started::Ready(output)) => Ok(output),
+                            Err(error) => Err(error),
+                        };
+                        let answer = process_response(
+                            request.request_id.clone(),
+                            version,
+                            &mut fresh,
+                            settled.into(),
+                        );
+                        door.record(ticket, Receipt::Process(Arc::clone(&answer)));
+                        let _ = reply.send(answer);
                         continue;
                     }
                     Message::ProcessDone {
@@ -1438,16 +1388,86 @@ impl Client {
                         result,
                         reply,
                     } => {
-                        let outcome =
-                            process_response(request_id.clone(), version, &mut fresh, result);
-                        if let Some((_, _, receipt)) = process_requests
-                            .iter_mut()
-                            .find(|(_, request, _)| request.request_id == request_id)
-                        {
-                            *receipt = Some(Arc::clone(&outcome));
-                        }
+                        let outcome = process_response(
+                            request_id.clone(),
+                            version,
+                            &mut fresh,
+                            result.into(),
+                        );
+                        door.settle(&request_id, Receipt::Process(Arc::clone(&outcome)));
                         let _ = reply.send(outcome);
                         continue;
+                    }
+                    Message::Saved { result } => {
+                        door.land();
+                        let Some(Flight {
+                            request,
+                            scope,
+                            reply,
+                            departure,
+                        }) = flight.take()
+                        else {
+                            continue;
+                        };
+                        let Departure {
+                            before,
+                            candidate,
+                            reopening,
+                            created_notes,
+                        } = *departure;
+                        landed = Some(result.map_err(|error| unbound(created_notes, error)).map(
+                            |revision| {
+                                created_vessels.extend(reopening.into_iter().map(|id| {
+                                    CreatedTerminal {
+                                        id,
+                                        launch: voyager_contract::launch::Launch::Terminal,
+                                        backend: None,
+                                        shell_intent: None,
+                                    }
+                                }));
+                                if let Action::StartNewShell {
+                                    vessel_id,
+                                    expected_backend,
+                                } = &request.action
+                                {
+                                    grant_new_shell(
+                                        &mut created_vessels,
+                                        vessel_id,
+                                        expected_backend,
+                                        &request.request_id,
+                                    );
+                                    unconfirmed.remove(&vessel_id.0);
+                                }
+                                if (scope.is_some()
+                                    || matches!(
+                                        request.action,
+                                        Action::CreateVessel { .. }
+                                            | Action::CreateVoyageFromSource { .. }
+                                            | Action::CreateFleetWithVessel { .. }
+                                    ))
+                                    && matches!(
+                                        request.action,
+                                        Action::CreateVoyage { .. }
+                                            | Action::CreateVoyageFromSource { .. }
+                                            | Action::CreateFleet { .. }
+                                            | Action::CreateFleetWithVessel { .. }
+                                            | Action::CreateVessel { .. }
+                                    )
+                                {
+                                    record_created_terminals(
+                                        &mut created_vessels,
+                                        &before,
+                                        &candidate,
+                                    );
+                                }
+                                if revision > version {
+                                    layout = Arc::new(candidate);
+                                    version = revision;
+                                }
+                                Step::Done
+                            },
+                        ));
+                        (request, scope, reply)
                     }
                     Message::Workspace {
                         request,
@@ -1480,50 +1500,26 @@ impl Client {
                         reply,
                     } => {
                         let request = TerminalRequest {
-                            request_id: request_id.clone(),
+                            request_id,
                             vessel_id: content.clone(),
                             expected_version,
                         };
-                        let previous = terminal_requests
-                            .iter()
-                            .find(|(prior, _)| prior.request_id == request_id);
-                        let result = if let Some((prior, outcome)) = previous {
-                            if prior == &request {
-                                outcome.clone().and_then(|viewer| viewer.upgrade())
-                            } else {
-                                Err(rejected(
-                                    "Terminal request identity was reused with different content"
-                                        .into(),
-                                ))
+                        let ticket = match door.admit(
+                            &Envelope::terminal(&request),
+                            &request,
+                            Receipt::terminal,
+                        ) {
+                            Admission::New(ticket) => ticket,
+                            Admission::Repeat(first) => {
+                                let _ = reply.send(first.and_then(|viewer| viewer.upgrade()));
+                                continue;
                             }
-                        } else if quit_result.is_some() {
-                            Err(rejected(
-                                "Voyager is quitting; no terminal was opened".into(),
-                            ))
-                        } else if worktree_requests
-                            .iter()
-                            .any(|(_, prior, _)| prior.request_id == request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to a worktree operation".into(),
-                            ))
-                        } else if content_requests
-                            .iter()
-                            .any(|prior| prior.request_id == request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to a content operation".into(),
-                            ))
-                        } else if process_requests
-                            .iter()
-                            .any(|(_, prior, _)| prior.request_id == request_id)
-                        {
-                            Err(rejected(
-                                "This request identity belongs to a process operation".into(),
-                            ))
-                        } else if request_id.is_empty() || request_id.len() > 128 {
-                            Err(rejected("Invalid terminal request identity".into()))
-                        } else if !fresh {
+                            Admission::Pending(message) | Admission::Refused(message) => {
+                                let _ = reply.send(Err(rejected(message)));
+                                continue;
+                            }
+                        };
+                        let result = if !fresh {
                             Err(rejected(
                                 "Inspect the workspace before opening a terminal".into(),
                             ))
@@ -1568,23 +1564,16 @@ impl Client {
                         {
                             live_bindings.push(backend);
                         }
-                        if previous.is_none() {
-                            settle_created_content(&mut created_vessels, &content, &result);
-                            terminal_requests.push_back((request, result.clone().map(Into::into)));
-                            if terminal_requests.len() > 32 {
-                                terminal_requests.pop_front();
-                            }
-                        }
+                        settle_created_content(&mut created_vessels, &content, &result);
+                        door.record(ticket, Receipt::Terminal(result.clone().map(Into::into)));
                         if reply.send(result).is_err() {
                             eprintln!("Terminal result receiver closed");
                         }
                         continue;
                     }
                 };
-                let previous_version = version;
-                let previous_close_revision = closing.revision;
-                let mut deferred_reply = false;
                 let mut package_changed = false;
+                let inspecting = matches!(request.action, Action::Inspect);
                 let mut response = Response {
                     request_id: request.request_id.clone(),
                     status: Status::Rejected,
@@ -1596,62 +1585,43 @@ impl Client {
                     message: None,
                     close_plan: closing.projected(&layout, scope.as_ref()),
                 };
-                if worktree_requests
-                    .iter()
-                    .any(|(_, prior, _)| prior.request_id == request.request_id)
-                {
-                    response.message =
-                        Some("This request identity belongs to a worktree operation".into());
-                    let _ = reply.send(response);
-                    continue;
-                }
-                if content_requests
-                    .iter()
-                    .any(|prior| prior.request_id == request.request_id)
-                {
-                    response.message =
-                        Some("This request identity belongs to a content operation".into());
-                    let _ = reply.send(response);
-                    continue;
-                }
-                if process_requests
-                    .iter()
-                    .any(|(_, prior, _)| prior.request_id == request.request_id)
-                {
-                    response.message =
-                        Some("This request identity belongs to a process operation".into());
-                    let _ = reply.send(response);
-                    continue;
-                }
-                if let Some((previous, previous_scope, result)) = receipts
-                    .iter()
-                    .find(|(r, _, _)| r.request_id == request.request_id)
-                {
-                    if previous == &request && previous_scope == &scope {
-                        response.status = result.status.clone();
-                        response.message = result.message.clone();
-                        response.created_workspace = result.created_workspace;
-                        response.close_plan = result.close_plan.clone();
+                let mut ticket = None;
+                let result = if let Some(step) = landed {
+                    step
+                } else {
+                    match door.admit(
+                        &Envelope::workspace(scope.as_ref(), &request),
+                        &request,
+                        Receipt::workspace,
+                    ) {
+                        Admission::New(admitted) => ticket = Some(admitted),
+                        Admission::Repeat(first) => {
+                            response.status = first.status;
+                            response.message = first.message;
+                            response.created_workspace = first.created_workspace;
+                            response.close_plan = first.close_plan;
+                            let _ = reply.send(response);
+                            continue;
+                        }
+                        Admission::Pending(message) => {
+                            response.status = Status::Uncertain;
+                            response.message = Some(message);
+                            let _ = reply.send(response);
+                            continue;
+                        }
+                        Admission::Refused(message) => {
+                            response.message = Some(message);
+                            let _ = reply.send(response);
+                            continue;
+                        }
+                    }
+                    if door.quitting() {
+                        response.status = Status::Applied;
+                        response.fresh = false;
                         let _ = reply.send(response);
                         continue;
                     }
-                    response.message =
-                        Some("Changed request identity; nothing was repeated".into());
-                } else if request.request_id.is_empty() || request.request_id.len() > 128 {
-                    response.message = Some("Invalid request identity".into());
-                } else if quit_result.is_some() {
-                    if matches!(request.action, Action::Inspect) {
-                        response.status = Status::Applied;
-                        response.fresh = false;
-                    } else {
-                        response.message =
-                            Some("Voyager is quitting; no workspace effect was dispatched".into());
-                    }
-                    let _ = reply.send(response);
-                    continue;
-                } else {
-                    let inspecting = matches!(request.action, Action::Inspect);
-                    let result = match core.as_mut() {
+                    match core.as_mut() {
                         Err(error) => Err(error.clone()),
                         Ok(core) => {
                             (|| {
@@ -1727,7 +1697,7 @@ impl Client {
                                     fresh = true;
                                     crate::scope::check(&layout, scope.as_ref(), &request.action)
                                         .map_err(rejected)?;
-                                    Ok(())
+                                    Ok(Step::Done)
                                 })
                                 } else if !fresh
                                     && !matches!(request.action, Action::CancelVoyageClose { .. })
@@ -1758,14 +1728,14 @@ impl Client {
                                                 "Confirm the Voyage shutdown; no work has stopped"
                                                     .into(),
                                             );
-                                            return Ok(());
+                                            return Ok(Step::Done);
                                         }
                                         Action::CancelVoyageClose { id, plan } => {
                                             if scope.is_some() {
                                                 return Err(rejected("Only the native user can cancel a Voyage confirmation".into()));
                                             }
                                             closing.cancel(id, plan)?;
-                                            return Ok(());
+                                            return Ok(Step::Done);
                                         }
                                         Action::ConfirmVoyageClose { id, plan } => {
                                             if scope.is_some() {
@@ -1793,8 +1763,7 @@ impl Client {
                                                     result,
                                                 });
                                             });
-                                            deferred_reply = true;
-                                            return Ok(());
+                                            return Ok(Step::Deferred);
                                         }
                                         _ => (),
                                     }
@@ -1857,7 +1826,7 @@ impl Client {
                                             workspace_version: version,
                                             snapshot,
                                         });
-                                        return Ok(());
+                                        return Ok(Step::Done);
                                     }
                                     if let Some(plan) = crate::content::rename::Plan::capture(
                                         &layout,
@@ -1897,8 +1866,7 @@ impl Client {
                                                     result,
                                                 });
                                         });
-                                        deferred_reply = true;
-                                        return Ok(());
+                                        return Ok(Step::Deferred);
                                     }
                                     if let Action::RemoveVesselPackage { type_id }
                                     | Action::RestoreVesselPackage { type_id } = &request.action
@@ -1935,7 +1903,7 @@ impl Client {
                                         }
                                         .map_err(rejected)?;
                                         package_changed = true;
-                                        return Ok(());
+                                        return Ok(Step::Done);
                                     }
                                     if let Action::CreateVessel { type_id, .. }
                                     | Action::CreateFleetWithVessel { type_id, .. } =
@@ -2016,51 +1984,52 @@ impl Client {
                                         } else if candidate.layout.vessels.iter().any(|item| item.type_id == crate::vessel_type::NOTES_TYPE && !layout.vessels.iter().any(|old| old.id == item.id)) {
                                             return Err(rejected("Content owner unavailable; Notes was not created".into()));
                                         } else { false };
-                                        let revision = save(core, &candidate.layout, version).map_err(|error| {
-                                            if created_notes { Error::Uncertain(format!("A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}")) } else { error }
-                                        })?;
-                                        created_vessels.extend(reopening.into_iter().map(|id| CreatedTerminal { id, launch: voyager_contract::launch::Launch::Terminal, backend: None, shell_intent: None }));
-                                        if let Action::StartNewShell { vessel_id, expected_backend } = &request.action {
-                                            grant_new_shell(&mut created_vessels, vessel_id, expected_backend, &request.request_id);
-                                            unconfirmed.remove(&vessel_id.0);
-                                        }
-                                        if (scope.is_some() || matches!(request.action, Action::CreateVessel { .. } | Action::CreateVoyageFromSource { .. } | Action::CreateFleetWithVessel { .. }))
-                                            && matches!(
-                                                request.action,
-                                                Action::CreateVoyage { .. }
-                                                    | Action::CreateVoyageFromSource { .. }
-                                                    | Action::CreateFleet { .. }
-                                                    | Action::CreateFleetWithVessel { .. }
-                                                    | Action::CreateVessel { .. }
-                                            )
-                                        {
-                                            record_created_terminals(
-                                                &mut created_vessels,
-                                                &layout,
-                                                &candidate.layout,
-                                            );
-                                        }
-                                        layout = Arc::new(candidate.layout);
-                                        version = revision;
-                                        Ok(())
+                                        let pending = begin_save(core, &candidate.layout, version)
+                                            .map_err(|error| unbound(created_notes, error))?;
+                                        post(&core_sender, pending, |result| Message::Saved {
+                                            result: result.map(|saved| saved.version),
+                                        });
+                                        Ok(Step::Save(Box::new(Departure {
+                                            before: Arc::clone(&layout),
+                                            candidate: candidate.layout,
+                                            reopening,
+                                            created_notes,
+                                        })))
                                     })
                                 }
                             })()
                         }
-                    };
-                    match result {
-                        Ok(()) => response.status = Status::Applied,
-                        Err(Error::Rejected { kind, message }) => {
-                            if inspecting || kind == "conflict" {
-                                fresh = false;
-                            }
-                            response.message = Some(format!("{kind}: {message}"))
+                    }
+                };
+                let step = match result {
+                    Ok(Step::Save(departure)) => {
+                        if let Some(ticket) = ticket {
+                            door.open(ticket);
                         }
-                        Err(Error::Uncertain(message)) => {
+                        door.depart();
+                        flight = Some(Flight {
+                            request,
+                            scope,
+                            reply,
+                            departure,
+                        });
+                        continue;
+                    }
+                    other => other,
+                };
+                let deferred = matches!(step, Ok(Step::Deferred));
+                match Outcome::from(step) {
+                    Outcome::Applied(_) => response.status = Status::Applied,
+                    Outcome::Refused { kind, message } => {
+                        if inspecting || kind == "conflict" {
                             fresh = false;
-                            response.status = Status::Uncertain;
-                            response.message = Some(message);
                         }
+                        response.message = Some(format!("{kind}: {message}"));
+                    }
+                    Outcome::Uncertain(message) => {
+                        fresh = false;
+                        response.status = Status::Uncertain;
+                        response.message = Some(message);
                     }
                 }
                 if let Ok(core) = core.as_mut() {
@@ -2074,10 +2043,6 @@ impl Client {
                 response.close_plan = closing.projected(&layout, scope.as_ref());
                 if let Some(mut release) = rename_release {
                     release.rebind = rename_rebind;
-                }
-                if deferred_reply {
-                    response.status = Status::Uncertain;
-                    response.message = Some("The workspace operation is in progress; inspect its result instead of repeating it".into());
                 }
                 if version != previous_version
                     && let Some(owner) = content.as_mut()
@@ -2107,20 +2072,18 @@ impl Client {
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
                     && response.status == Status::Applied
                     && fresh;
-                receipts.push_back((
-                    request,
-                    scope,
-                    Outcome {
-                        status: response.status.clone(),
-                        message: response.message.clone(),
-                        created_workspace: response.created_workspace,
-                        close_plan: response.close_plan.clone(),
-                    },
-                ));
-                if receipts.len() > 32 {
-                    receipts.pop_front();
+                let receipt = Receipt::Workspace(Settled {
+                    status: response.status.clone(),
+                    message: response.message.clone(),
+                    created_workspace: response.created_workspace,
+                    close_plan: response.close_plan.clone(),
+                });
+                match ticket {
+                    Some(ticket) if deferred => door.open(ticket),
+                    Some(ticket) => door.record(ticket, receipt),
+                    None => door.settle(&request.request_id, receipt),
                 }
-                if !deferred_reply {
+                if !deferred {
                     let _ = reply.send(response);
                 }
                 if prepare_dock {
@@ -4292,7 +4255,7 @@ fn process_response(
     request_id: String,
     version: u64,
     fresh: &mut bool,
-    result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+    outcome: Outcome<voyager_contract::administrator::ProcessOutput>,
 ) -> Arc<ProcessResponse> {
     use voyager_contract::administrator::ProcessOutput;
     let mut response = ProcessResponse {
@@ -4303,8 +4266,8 @@ fn process_response(
         output: None,
         message: None,
     };
-    match result {
-        Ok(output) => match serde_json::to_vec(&output) {
+    match outcome {
+        Outcome::Applied(output) => match serde_json::to_vec(&output) {
             Ok(bytes) if bytes.len() <= 24 * 1024 => {
                 response.status = Status::Applied;
                 response.output = Some(output);
@@ -4315,8 +4278,8 @@ fn process_response(
             }
             _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
         },
-        Err(Error::Rejected { message, .. }) => response.message = Some(message),
-        Err(Error::Uncertain(message)) => {
+        Outcome::Refused { message, .. } => response.message = Some(message),
+        Outcome::Uncertain(message) => {
             *fresh = false;
             response.status = Status::Uncertain;
             response.message = Some(message);

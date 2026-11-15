@@ -13,7 +13,7 @@ use std::{
 
 pub(super) type Replies = Arc<Mutex<HashMap<u64, SyncSender<Value>>>>;
 
-const PENDING_LIMIT: usize = 10;
+const PENDING_LIMIT: usize = 11;
 
 pub(crate) struct Pending<R> {
     id: u64,
@@ -97,11 +97,13 @@ mod tests {
         let replies = Replies::default();
         let link = OnceLock::new();
         let register = |id| Pending::<Value>::register(id, "terminal.send", &replies, &link);
-        let mut pending = (1..=10).map(|id| register(id).unwrap()).collect::<Vec<_>>();
-        assert!(matches!(register(11), Err(Error::Rejected { kind, .. }) if kind == "busy"));
+        let mut pending = (1..=PENDING_LIMIT as u64)
+            .map(|id| register(id).unwrap())
+            .collect::<Vec<_>>();
+        assert!(matches!(register(12), Err(Error::Rejected { kind, .. }) if kind == "busy"));
         drop(pending.remove(0));
         assert!(!replies.lock().unwrap().contains_key(&1));
-        assert_eq!(replies.lock().unwrap().len(), 9);
+        assert_eq!(replies.lock().unwrap().len(), PENDING_LIMIT - 1);
         let ready = pending.remove(0);
         replies
             .lock()
@@ -116,7 +118,7 @@ mod tests {
         assert!(matches!(abandoned.wait(), Err(Error::Uncertain(_))));
         link.set("read failed".into()).unwrap();
         assert!(
-            matches!(register(12), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
+            matches!(register(13), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
         );
     }
 }

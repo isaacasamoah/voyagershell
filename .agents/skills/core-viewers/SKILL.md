@@ -1,6 +1,6 @@
 ---
 name: core-viewers
-description: Model-check VoyagerShell's Core terminal viewer slots and output buffers with TLA+. Use when a change touches Viewer, WeakViewer or Lease in app/src/core_viewer.rs, Stream or Streams in app/src/core.rs, the terminal receipt cache in app/src/client.rs, the Core reader in app/src/core_reader.rs, the Core writer thread, terminal_attach, Core::begin, Pending::wait, install_viewer in desktop/src/host.rs or the take/credit pump in desktop/src/terminal.rs. It does not cover terminal rendering, input bytes or Herdr Core itself.
+description: Model-check VoyagerShell's Core terminal viewer slots and output buffers with TLA+. Use when a change touches Viewer, WeakViewer or Lease in app/src/core_viewer.rs, Stream or Streams in app/src/core.rs, the terminal receipt in app/src/client.rs that the front door ledger keeps, the Core reader in app/src/core_reader.rs, the Core writer thread, terminal_attach, Core::begin, Pending::wait, install_viewer in desktop/src/host.rs or the take/credit pump in desktop/src/terminal.rs. It does not cover terminal rendering, input bytes or Herdr Core itself.
 ---
 
 # Core viewer slots
@@ -70,7 +70,7 @@ path back fails the check.
 | `app/src/core.rs` | `Core::viewer` | `Install`, `InstallFails` |
 | `app/src/core_reader.rs` | `Reader::receive`, `Reader::reply`, `Reader::output`, `Reader::ended` | `Read`, `ReadReply`, `ReadData`, `ReadEnd` |
 | `app/src/core_pending.rs` | `Pending::wait` timeout and its recheck under the replies lock, `Drop for Pending` | `TimeOut`, the `waiting` check in `ReadReply` |
-| `app/src/client.rs` | `terminal_requests` receipt cache of `WeakViewer` | `InstallFails` frees the slot because no other strong `Viewer` exists |
+| `app/src/client.rs` | `Receipt::Terminal`, the terminal answer of `WeakViewer` that the front door ledger keeps | `InstallFails` frees the slot because no other strong `Viewer` exists |
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
