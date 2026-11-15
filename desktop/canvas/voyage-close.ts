@@ -133,7 +133,7 @@ export class VoyageClose {
         div()
           .text_size(12)
           .child(`${entry.typeId} · ${entry.name}`)
-          .child(Marker.new("voyage-close-entry", entry.content)),
+          .child(Marker.new("voyage-close-entry", entry.vessel)),
       );
     panel.child(inventory);
     if (

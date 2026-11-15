@@ -67,15 +67,15 @@ import type {
 } from "gpui-kit";
 import type { Action, RenameTarget } from "../../contract/generated/request";
 import type {
-  Content,
+  Vessel,
   Context as Scope,
   Fleet,
   Layout,
   Response,
-  PanelOwner,
+  PlacementOwner as Owner,
   Voyage,
   Split,
-  Vessel,
+  Placement,
 } from "../../contract/generated/response";
 import type { TerminalResponse } from "../../contract/generated/terminalResponse";
 
@@ -94,7 +94,7 @@ type Editing = {
 type Opening = {
   status: TerminalResponse["status"] | "pending" | "unbound";
   reason?: TerminalResponse["reason"];
-  intent?: Content["shellIntent"];
+  intent?: Vessel["shellIntent"];
   message?: string | null;
 };
 
@@ -111,7 +111,7 @@ type Drag = {
   side?: "left" | "right" | "top" | "bottom" | boolean;
   bounds?: { x: number; y: number; width: number; height: number };
 };
-type LayoutName = { state: NameState; owner: PanelOwner; submitted: boolean };
+type LayoutName = { state: NameState; owner: Owner; submitted: boolean };
 type PresentationAction = Extract<
   Action,
   { operation: "remove-panel" | "set-portal-presentation" }
@@ -240,9 +240,9 @@ export default class Canvas extends View {
           this.layout &&
           activeGroups(this.layout).some((group) =>
             visiblePanels(group, true).some((panel) =>
-              this.layout?.contents.some(
+              this.layout?.vessels.some(
                 (content) =>
-                  content.id === panel.content && content.typeId === "agents",
+                  content.id === panel.vessel && content.typeId === "agents",
               ),
             ),
           )
@@ -253,7 +253,7 @@ export default class Canvas extends View {
     });
   }
 
-  activePlacement(): Vessel | undefined {
+  activePlacement(): Placement | undefined {
     if (!this.layout) return;
     const shown = activeGroups(this.layout).flatMap((group) =>
       visiblePanels(group, true),
@@ -280,9 +280,9 @@ export default class Canvas extends View {
       if (
         value.panels.some(
           (panel) =>
-            !this.layout?.contents.some(
+            !this.layout?.vessels.some(
               (content) =>
-                content.id === panel.contentId &&
+                content.id === panel.vesselId &&
                 (content.backend || null) === panel.backend,
             ),
         )
@@ -320,7 +320,7 @@ export default class Canvas extends View {
       return {
         kind: "live",
         placementId: panel.placementId,
-        contentId: panel.contentId,
+        vesselId: panel.vesselId,
         backend: panel.backend,
         cwd: directory.path,
       };
@@ -328,7 +328,7 @@ export default class Canvas extends View {
       return {
         kind: "starting",
         placementId: panel.placementId,
-        contentId: panel.contentId,
+        vesselId: panel.vesselId,
         cwd: directory.path,
       };
     const voyage = this.layout && currentVoyage(this.layout);
@@ -518,7 +518,7 @@ export default class Canvas extends View {
           group.owner,
           group.root,
           group.maximizedPlacement,
-          panel.content,
+          panel.vessel,
         ])
       : null;
   }
@@ -627,13 +627,12 @@ export default class Canvas extends View {
       oldGroups
         .flatMap((group) => visiblePanels(group, true))
         .some(
-          (panel) =>
-            this.terminals.get(panel.content)?.rememberFocus() === true,
+          (panel) => this.terminals.get(panel.vessel)?.rememberFocus() === true,
         );
     this.busy = true;
     const dockEpoch = action.operation === "dock" ? window_epoch() : "";
     const previousContents = new Set(
-      this.layout?.contents?.map((item) => item.id) || [],
+      this.layout?.vessels?.map((item) => item.id) || [],
     );
     cx.spawn(async (task) => {
       let result: Response | null = null;
@@ -679,9 +678,9 @@ export default class Canvas extends View {
               "create-fleet",
               "create-content",
             ].includes(action.operation);
-            const allowed = new Set(result.createdContents);
+            const allowed = new Set(result.createdVessels);
             if (creates)
-              for (const item of result.layout.contents)
+              for (const item of result.layout.vessels)
                 if (!previousContents.has(item.id)) allowed.add(item.id);
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
@@ -692,7 +691,7 @@ export default class Canvas extends View {
                 )
               : [];
             const created = shown.find(
-              (panel) => !previousContents.has(panel.content),
+              (panel) => !previousContents.has(panel.vessel),
             );
             if (changesSelection) this.focused = shown[0]?.id || null;
             else if (creating && created) this.focused = created.id;
@@ -704,8 +703,7 @@ export default class Canvas extends View {
                   : shown[0];
               if (target && (maximization || splitMaximized))
                 this.focused = target.id;
-              if (target)
-                this.terminals.get(target.content)?.focusIfUnchanged();
+              if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
             }
           } catch (error) {
             this.status = errorMessage(error);
@@ -819,10 +817,10 @@ export default class Canvas extends View {
         group.members.some(
           (placement) =>
             placement.id === panel.placementId &&
-            placement.content === panel.contentId &&
-            result.layout.contents.some(
+            placement.vessel === panel.vesselId &&
+            result.layout.vessels.some(
               (content) =>
-                content.id === panel.contentId &&
+                content.id === panel.vesselId &&
                 (content.backend || null) === panel.backend,
             ),
         ),
@@ -857,7 +855,7 @@ export default class Canvas extends View {
         retain({ kind: "portal", id: portal.id }, this.contentName(portal));
       for (const fleet of voyage.fleets) {
         retain({ kind: "fleet", id: fleet.id }, fleet.name);
-        for (const vessel of fleet.vessels)
+        for (const vessel of fleet.placements)
           retain({ kind: "vessel", id: vessel.id }, this.contentName(vessel));
       }
     }
@@ -891,7 +889,7 @@ export default class Canvas extends View {
     }).child(shell);
   }
 
-  contentName(placement: Vessel): string {
+  contentName(placement: Placement): string {
     return (
       (placement.nameOrigin === "automatic" ? this.observedPanels : [])?.find(
         (panel) => panel.placementId === placement.id,
@@ -899,12 +897,12 @@ export default class Canvas extends View {
     );
   }
 
-  panelLabel(placement: Vessel): string {
+  panelLabel(placement: Placement): string {
     const observed = this.observedPanels?.find(
       (panel) => panel.placementId === placement.id,
     );
-    const content = this.layout?.contents.find(
-      (item) => item.id === placement.content,
+    const content = this.layout?.vessels.find(
+      (item) => item.id === placement.vessel,
     );
     const directory = observed?.directory;
     const path =
@@ -924,18 +922,18 @@ export default class Canvas extends View {
       .join(" · ");
   }
 
-  visibleVessels(fleet: Fleet | undefined): Vessel[] {
+  visibleVessels(fleet: Fleet | undefined): Placement[] {
     return fleet
-      ? visiblePanels({ root: fleet.root ?? null, members: fleet.vessels })
+      ? visiblePanels({ root: fleet.root ?? null, members: fleet.placements })
       : [];
   }
 
-  displayedVessels(fleet: Fleet | undefined): Vessel[] {
+  displayedVessels(fleet: Fleet | undefined): Placement[] {
     return fleet
       ? visiblePanels(
           {
             root: fleet.root ?? null,
-            members: fleet.vessels,
+            members: fleet.placements,
             maximizedPlacement: fleet.maximizedPlacement,
           },
           true,
@@ -963,48 +961,46 @@ export default class Canvas extends View {
     for (const vessel of activeGroups(layout).flatMap((group) =>
       visiblePanels(group, true),
     )) {
-      const content = layout.contents.find(
-        (item) => item.id === vessel.content,
-      );
+      const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (content?.typeId !== "terminal") continue;
-      const opening = this.openings.get(vessel.content);
+      const opening = this.openings.get(vessel.vessel);
       if (
-        allowed.has(vessel.content) &&
+        allowed.has(vessel.vessel) &&
         ((content.shellIntent && opening?.intent !== content.shellIntent) ||
           (!content.backend &&
             !content.startPending &&
             opening &&
             ["applied", "unbound", "rejected"].includes(opening.status)))
       ) {
-        this.openings.delete(vessel.content);
-        this.terminals.delete(vessel.content);
+        this.openings.delete(vessel.vessel);
+        this.terminals.delete(vessel.vessel);
       }
       if (
         content?.backend &&
         !content.startPending &&
-        this.openings.get(vessel.content)?.status === "unbound"
+        this.openings.get(vessel.vessel)?.status === "unbound"
       )
-        this.openings.delete(vessel.content);
+        this.openings.delete(vessel.vessel);
       if (
         existingOnly &&
         (!content?.backend || content.startPending) &&
-        !retry.has(vessel.content) &&
-        !allowed.has(vessel.content)
+        !retry.has(vessel.vessel) &&
+        !allowed.has(vessel.vessel)
       ) {
-        if (!this.openings.has(vessel.content))
-          this.openings.set(vessel.content, { status: "unbound" });
+        if (!this.openings.has(vessel.vessel))
+          this.openings.set(vessel.vessel, { status: "unbound" });
         continue;
       }
-      if (this.openings.has(vessel.content)) continue;
-      this.openings.set(vessel.content, {
+      if (this.openings.has(vessel.vessel)) continue;
+      this.openings.set(vessel.vessel, {
         status: "pending",
         intent: content.shellIntent,
       });
       let opened: TerminalResponse;
       try {
-        opened = await openTerminal(vessel.content, this.version);
+        opened = await openTerminal(vessel.vessel, this.version);
       } catch (error) {
-        this.openings.set(vessel.content, {
+        this.openings.set(vessel.vessel, {
           status: "uncertain",
           message: errorMessage(error),
           intent: content.shellIntent,
@@ -1012,12 +1008,12 @@ export default class Canvas extends View {
         this.fresh = false;
         throw error;
       }
-      this.openings.set(vessel.content, {
+      this.openings.set(vessel.vessel, {
         ...opened,
         intent: content.shellIntent,
       });
       if (opened.status === "applied")
-        this.terminals.set(vessel.content, TerminalState.new(vessel.content));
+        this.terminals.set(vessel.vessel, TerminalState.new(vessel.vessel));
       const current = await invoke({ operation: "inspect" }, this.version);
       this.acceptSnapshot(current, task);
       if (current.status !== "applied" || !current.fresh)
@@ -1035,7 +1031,7 @@ export default class Canvas extends View {
     if (errors.length) throw Error(errors[0]);
   }
 
-  terminalStatus(content: Content): string {
+  terminalStatus(content: Vessel): string {
     if (content.startPending)
       return "Terminal start is unconfirmed. Inspect before trying again.";
     const outcome = this.openings.get(content.id);
@@ -1418,7 +1414,7 @@ export default class Canvas extends View {
     return button;
   }
 
-  saveLayout(owner: PanelOwner, cx: UIContext) {
+  saveLayout(owner: Owner, cx: UIContext) {
     if (this.layoutName || this.savingLayout) return;
     const state = NameState.new("");
     const editing = { state, owner, submitted: false };
@@ -1451,7 +1447,7 @@ export default class Canvas extends View {
         choose: (_version, cx) => this.saveLayout(owner, cx),
       },
     ];
-    for (const saved of this.layout?.savedLayouts || []) {
+    for (const saved of this.layout?.arrangements || []) {
       if (JSON.stringify(saved.owner) !== JSON.stringify(owner)) continue;
       items.push(
         {
@@ -1734,7 +1730,7 @@ export default class Canvas extends View {
   }
 
   splitControl(
-    panel: Vessel,
+    panel: Placement,
     group: PanelGroup,
     side: "right" | "bottom",
   ): NativeElement {
@@ -1771,7 +1767,7 @@ export default class Canvas extends View {
     );
   }
 
-  splitPreview(panel: Vessel): NativeElement[] {
+  splitPreview(panel: Placement): NativeElement[] {
     const edges: NativeElement[] = [];
     const opening = this.creation?.current;
     if (
@@ -1796,7 +1792,7 @@ export default class Canvas extends View {
   }
 
   content(
-    placement: Vessel,
+    placement: Placement,
     scope: ContentScope,
     group: PanelGroup,
   ): NativeElement {

@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use voyager_contract::{
-    ContentId,
+    VesselId,
     content::{
         ConfigurationSnapshot, Notes, NotesConfiguration, Request, Response, Snapshot, Version,
     },
@@ -75,7 +75,7 @@ fn validate(schema: &serde_json::Value, data: &serde_json::Value) -> Result<(), 
 }
 
 fn finish_write(
-    id: ContentId,
+    id: VesselId,
     request_id: String,
     expected_revision: String,
     written_revision: String,
@@ -86,14 +86,14 @@ fn finish_write(
             Response::Applied {
                 version: Version::V1,
                 request_id,
-                content_id: id,
+                vessel_id: id,
                 snapshot,
             }
         }
         result => Response::Uncertain {
             version: Version::V1,
             request_id,
-            content_id: id,
+            vessel_id: id,
             expected_revision,
             message: result
                 .err()
@@ -103,10 +103,10 @@ fn finish_write(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Binding(ContentId);
+pub struct Binding(VesselId);
 
 impl Binding {
-    pub(crate) fn id(&self) -> &ContentId {
+    pub(crate) fn id(&self) -> &VesselId {
         &self.0
     }
 }
@@ -120,49 +120,49 @@ pub enum Access {
     },
 }
 
-pub fn identity(request: &Request) -> (&ContentId, &str, Option<&str>) {
+pub fn identity(request: &Request) -> (&VesselId, &str, Option<&str>) {
     match request {
         Request::Describe {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::Inspect {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::Configure {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::MigrateNote {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::ListNotes {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::NewNote {
-            content_id,
+            vessel_id,
             request_id,
             ..
         }
         | Request::OpenNote {
-            content_id,
+            vessel_id,
             request_id,
             ..
-        } => (content_id, request_id, None),
+        } => (vessel_id, request_id, None),
         Request::Update {
-            content_id,
+            vessel_id,
             request_id,
             expected_revision,
             ..
-        } => (content_id, request_id, Some(expected_revision)),
+        } => (vessel_id, request_id, Some(expected_revision)),
     }
 }
 
@@ -174,61 +174,61 @@ pub fn request(
     use voyager_contract::content::Action;
     match action {
         Action::Configure {
-            content_id,
+            vessel_id,
             configuration,
         } => Request::Configure {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             configuration,
         },
-        Action::Describe { content_id } => Request::Describe {
+        Action::Describe { vessel_id } => Request::Describe {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
         },
-        Action::Inspect { content_id } => Request::Inspect {
+        Action::Inspect { vessel_id } => Request::Inspect {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
         },
-        Action::MigrateNote { content_id } => Request::MigrateNote {
+        Action::MigrateNote { vessel_id } => Request::MigrateNote {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
         },
-        Action::ListNotes { content_id } => Request::ListNotes {
+        Action::ListNotes { vessel_id } => Request::ListNotes {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
         },
-        Action::NewNote { content_id, title } => Request::NewNote {
+        Action::NewNote { vessel_id, title } => Request::NewNote {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             title,
         },
         Action::OpenNote {
-            content_id,
+            vessel_id,
             filename,
         } => Request::OpenNote {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             filename,
         },
         Action::Update {
-            content_id,
+            vessel_id,
             expected_revision,
             data,
         } => Request::Update {
             version: Version::V1,
             request_id,
-            content_id,
+            vessel_id,
             expected_revision,
             data,
         },
@@ -240,7 +240,7 @@ pub fn reject(request: &Request, message: String) -> Response {
     Response::Rejected {
         version: Version::V1,
         request_id: request_id.into(),
-        content_id: id.clone(),
+        vessel_id: id.clone(),
         expected_revision: expected.map(str::to_owned),
         message,
     }
@@ -263,7 +263,7 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
     ) {
         let (id, request_id, expected) = identity(request);
         Response::Uncertain {
-            version: Version::V1, request_id: request_id.into(), content_id: id.clone(), expected_revision: expected.unwrap_or_default().into(),
+            version: Version::V1, request_id: request_id.into(), vessel_id: id.clone(), expected_revision: expected.unwrap_or_default().into(),
             message: "The dispatched write's complete confirmation exceeds the content envelope limit. Inspect it; do not repeat the update.".into(),
         }
     } else {
@@ -275,26 +275,26 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
             Response::Rejected { .. } => (None, true),
             _ => (None, false),
         };
-        Response::Limited { version: Version::V1, request_id: request_id.into(), content_id: id.clone(), revision, warning_present, message: "The complete read or refusal, including any warning details, exceeds the content envelope limit. No complete snapshot is supplied.".into() }
+        Response::Limited { version: Version::V1, request_id: request_id.into(), vessel_id: id.clone(), revision, warning_present, message: "The complete read or refusal, including any warning details, exceeds the content envelope limit. No complete snapshot is supplied.".into() }
     }
 }
 
 pub(crate) fn member(
     layout: &std::sync::Arc<voyager_contract::Layout>,
     scope: Option<&voyager_contract::Context>,
-    id: &ContentId,
+    id: &VesselId,
 ) -> Result<(), String> {
     let projected = crate::scope::project(layout, scope);
     if !projected
-        .contents
+        .vessels
         .iter()
         .any(|content| content.id == *id && content.type_id == NOTES_TYPE)
         || !projected.containers().any(|voyage| {
             voyage
                 .portals
                 .iter()
-                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.vessels))
-                .any(|placement| placement.content == *id)
+                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
+                .any(|placement| placement.vessel == *id)
         })
     {
         return Err("That Notes instance is outside the captured workspace scope".into());
@@ -304,10 +304,10 @@ pub(crate) fn member(
 
 pub(crate) fn notes_directory(
     layout: &voyager_contract::Layout,
-    id: &ContentId,
+    id: &VesselId,
 ) -> Result<PathBuf, String> {
     let content = layout
-        .contents
+        .vessels
         .iter()
         .find(|content| content.id == *id)
         .ok_or("Content is unavailable")?;
@@ -317,8 +317,8 @@ pub(crate) fn notes_directory(
             voyage
                 .portals
                 .iter()
-                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.vessels))
-                .any(|placement| placement.content == *id)
+                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
+                .any(|placement| placement.vessel == *id)
         })
         .collect();
     let [owner] = owners.as_slice() else {
@@ -342,10 +342,10 @@ pub(crate) fn notes_directory(
 pub(crate) fn register_content(
     owner: &mut Owner,
     layout: &voyager_contract::Layout,
-    id: &ContentId,
+    id: &VesselId,
 ) -> Result<Binding, String> {
     let content = layout
-        .contents
+        .vessels
         .iter()
         .find(|content| content.id == *id)
         .ok_or("Content is unavailable")?;
@@ -390,7 +390,7 @@ pub(crate) fn run(
             Ok(filenames) => Response::NotesList {
                 version: Version::V1,
                 request_id: request_id.into(),
-                content_id: id.clone(),
+                vessel_id: id.clone(),
                 filenames,
             },
             Err(error) => reject(&request, error),
@@ -435,7 +435,7 @@ pub(crate) fn admit(
 pub(crate) fn configuration(
     owner: &Owner,
     layout: &voyager_contract::Layout,
-    id: &ContentId,
+    id: &VesselId,
     version: u64,
 ) -> Result<Option<ConfigurationSnapshot>, String> {
     let packages = owner.root.with_file_name("vessels");
@@ -443,7 +443,7 @@ pub(crate) fn configuration(
         return Ok(None);
     }
     let content = layout
-        .contents
+        .vessels
         .iter()
         .find(|content| content.id == *id)
         .ok_or("Content is unavailable")?;
@@ -470,10 +470,10 @@ pub(crate) fn initialize_created(
     current: &mut voyager_contract::Layout,
 ) -> Result<bool, String> {
     let ids: Vec<_> = current
-        .contents
+        .vessels
         .iter()
         .filter(|item| {
-            item.type_id == NOTES_TYPE && !previous.contents.iter().any(|old| old.id == item.id)
+            item.type_id == NOTES_TYPE && !previous.vessels.iter().any(|old| old.id == item.id)
         })
         .map(|content| content.id.clone())
         .collect();
@@ -485,7 +485,7 @@ pub(crate) fn initialize_created(
             filename,
         };
         let content = current
-            .contents
+            .vessels
             .iter_mut()
             .find(|content| content.id == *id)
             .ok_or("Content is unavailable")?;
@@ -611,7 +611,7 @@ impl Owner {
         }
     }
 
-    fn path(&self, id: &ContentId) -> std::io::Result<PathBuf> {
+    fn path(&self, id: &VesselId) -> std::io::Result<PathBuf> {
         if id.0.is_empty()
             || id.0.len() > 128
             || !id
@@ -627,7 +627,7 @@ impl Owner {
         Ok(self.root.join(format!("{}.json", id.0)))
     }
 
-    pub fn initialize(&mut self, id: &ContentId) -> std::io::Result<Binding> {
+    pub fn initialize(&mut self, id: &VesselId) -> std::io::Result<Binding> {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -638,7 +638,7 @@ impl Owner {
         Ok(Binding(id.clone()))
     }
 
-    pub fn register_existing(&mut self, id: &ContentId) -> std::io::Result<Binding> {
+    pub fn register_existing(&mut self, id: &VesselId) -> std::io::Result<Binding> {
         fs::File::open(self.path(id)?)?;
         self.files.remove(&id.0);
         self.instances.insert(id.0.clone());
@@ -647,7 +647,7 @@ impl Owner {
 
     pub(crate) fn select_file(
         &mut self,
-        id: &ContentId,
+        id: &VesselId,
         file: voyager_contract::content::NotesFile,
     ) -> Result<Snapshot, String> {
         self.register_file(id, file)?;
@@ -656,7 +656,7 @@ impl Owner {
 
     pub(crate) fn migrate_file(
         &mut self,
-        id: &ContentId,
+        id: &VesselId,
         directory: &Path,
     ) -> Result<voyager_contract::content::NotesFile, String> {
         let snapshot = self.read(id)?.snapshot();
@@ -692,7 +692,7 @@ impl Owner {
 
     pub(crate) fn register_file(
         &mut self,
-        id: &ContentId,
+        id: &VesselId,
         file: voyager_contract::content::NotesFile,
     ) -> Result<Binding, String> {
         markdown::file(Path::new(&file.directory), &file.filename)?;
@@ -702,7 +702,7 @@ impl Owner {
         Ok(Binding(id.clone()))
     }
 
-    pub fn bind(&self, id: &ContentId) -> Option<Binding> {
+    pub fn bind(&self, id: &VesselId) -> Option<Binding> {
         self.instances.contains(&id.0).then(|| Binding(id.clone()))
     }
 
@@ -750,14 +750,14 @@ impl Owner {
         }
     }
 
-    fn read(&mut self, id: &ContentId) -> Result<DataRead, String> {
+    fn read(&mut self, id: &VesselId) -> Result<DataRead, String> {
         if let Some(binding) = self.files.get(&id.0) {
             let path = markdown::file(Path::new(&binding.directory), &binding.filename)?;
             let bytes = markdown::read(&path)?;
             let data = markdown::parse(&binding.filename, &bytes)?;
             let warning = self.warning(&data);
             let snapshot = Snapshot {
-                content_id: id.clone(),
+                vessel_id: id.clone(),
                 revision: format!("{:x}", Sha256::digest(&bytes)),
                 data,
                 warning,
@@ -788,7 +788,7 @@ impl Owner {
         };
         let warning = self.warning(&data);
         let snapshot = Snapshot {
-            content_id: id.clone(),
+            vessel_id: id.clone(),
             revision: format!("{:x}", Sha256::digest(&bytes)),
             data,
             warning,
@@ -804,11 +804,11 @@ impl Owner {
     }
 
     pub(crate) fn notify(&mut self, response: &Response) {
-        if let Response::Applied { content_id, .. }
-        | Response::Configured { content_id, .. }
-        | Response::NoteOpened { content_id, .. }
-        | Response::Uncertain { content_id, .. } = response
-            && let Some((version, listener)) = self.changes.get_mut(&content_id.0)
+        if let Response::Applied { vessel_id, .. }
+        | Response::Configured { vessel_id, .. }
+        | Response::NoteOpened { vessel_id, .. }
+        | Response::Uncertain { vessel_id, .. } = response
+            && let Some((version, listener)) = self.changes.get_mut(&vessel_id.0)
         {
             *version = version.saturating_add(1);
             if let Some(listener) = listener.take() {
@@ -828,7 +828,7 @@ impl Owner {
         let rejected = |message: String| Response::Rejected {
             version: Version::V1,
             request_id: request_id.clone(),
-            content_id: id.clone(),
+            vessel_id: id.clone(),
             expected_revision: expected.clone(),
             message,
         };
@@ -853,7 +853,7 @@ impl Owner {
                         Response::Described {
                             version: Version::V1,
                             request_id,
-                            content_id: id,
+                            vessel_id: id,
                             schema_declared: schema.is_some(),
                             state_schema: schema,
                             configuration: description.configuration,
@@ -866,7 +866,7 @@ impl Owner {
                 Ok(snapshot) => Response::Snapshot {
                     version: Version::V1,
                     request_id,
-                    content_id: id,
+                    vessel_id: id,
                     snapshot,
                     configuration: None,
                 },
@@ -941,7 +941,7 @@ impl Owner {
                         return Response::Uncertain {
                             version: Version::V1,
                             request_id,
-                            content_id: id,
+                            vessel_id: id,
                             expected_revision,
                             message: error.to_string(),
                         };
@@ -990,7 +990,7 @@ impl Owner {
                     return Response::Uncertain {
                         version: Version::V1,
                         request_id,
-                        content_id: id,
+                        vessel_id: id,
                         expected_revision,
                         message: error.to_string(),
                     };
@@ -1025,14 +1025,14 @@ mod tests {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Portals {
+                    owner: voyager_contract::PlacementOwner::Portals {
                         voyage: model.layout.voyages[0].id.clone(),
                     },
-                    insertion: voyager_contract::PanelInsertion::Empty,
+                    insertion: voyager_contract::PlacementInsertion::Empty,
                 },
             })
             .unwrap();
-        let content = model.layout.contents.last_mut().unwrap();
+        let content = model.layout.vessels.last_mut().unwrap();
         let id = content.id.clone();
         let expected = NotesConfiguration {
             show_heading: false,
@@ -1120,7 +1120,7 @@ mod tests {
         })));
         let stop = serde_json::json!({
             "expectedVersion": "7",
-            "action": {"operation": "stop", "contentId": "opaque-id", "terminalId": "terminal", "pid": 7}
+            "action": {"operation": "stop", "vesselId": "opaque-id", "terminalId": "terminal", "pid": 7}
         });
         assert!(
             jsonschema::validator_for(&terminal.actions.as_ref().unwrap().input_schema)
@@ -1146,10 +1146,10 @@ mod tests {
                     launch: None,
                     type_id: "unknown".into(),
                     destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals {
+                        owner: voyager_contract::PlacementOwner::Portals {
                             voyage: before_layout.voyages[0].id.clone()
                         },
-                        insertion: voyager_contract::PanelInsertion::Empty
+                        insertion: voyager_contract::PlacementInsertion::Empty
                     }
                 })
                 .is_err()
@@ -1157,12 +1157,12 @@ mod tests {
         assert_eq!(model.layout, before_layout);
         let validator =
             jsonschema::validator_for(&notes.actions.as_ref().unwrap().input_schema).unwrap();
-        let mut input = serde_json::json!({"expectedVersion":"7","action":{"operation":"update","contentId":"opaque-id","expectedRevision":"revision","data":{"title":"Title","text":"Body"}}});
+        let mut input = serde_json::json!({"expectedVersion":"7","action":{"operation":"update","vesselId":"opaque-id","expectedRevision":"revision","data":{"title":"Title","text":"Body"}}});
         assert!(validator.is_valid(&input));
         input["action"]["data"]["unsupported"] = true.into();
         assert!(!validator.is_valid(&input));
         let mut owner = Owner::open(&directory).unwrap();
-        let id = ContentId("opaque-id".into());
+        let id = VesselId("opaque-id".into());
         let binding = owner.initialize(&id).unwrap();
         let before = fs::read(directory.join("data/opaque-id.json")).unwrap();
         assert_eq!(
@@ -1174,7 +1174,7 @@ mod tests {
             Request::Describe {
                 version: Version::V1,
                 request_id: "description".into(),
-                content_id: id,
+                vessel_id: id,
             },
         );
         assert!(
@@ -1225,17 +1225,17 @@ mod tests {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
-                    insertion: voyager_contract::PanelInsertion::Beside {
-                        id: old.voyages[0].fleets[0].vessels[0].id.clone(),
+                    owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
+                    insertion: voyager_contract::PlacementInsertion::Beside {
+                        id: old.voyages[0].fleets[0].placements[0].id.clone(),
                         side: voyager_contract::Side::Right,
                     },
                 },
             })
             .unwrap();
-        let a = model.layout.contents.last().unwrap().id.clone();
+        let a = model.layout.vessels.last().unwrap().id.clone();
         let placement = model.layout.voyages[0].fleets[0]
-            .vessels
+            .placements
             .last()
             .unwrap()
             .id
@@ -1245,12 +1245,12 @@ mod tests {
                 launch: None,
                 type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Portals { voyage },
-                    insertion: voyager_contract::PanelInsertion::Empty,
+                    owner: voyager_contract::PlacementOwner::Portals { voyage },
+                    insertion: voyager_contract::PlacementInsertion::Empty,
                 },
             })
             .unwrap();
-        let b = model.layout.contents.last().unwrap().id.clone();
+        let b = model.layout.vessels.last().unwrap().id.clone();
         let blocked = directory.join("notes");
         fs::write(&blocked, b"not a directory").unwrap();
         let before = model.layout.clone();
@@ -1271,10 +1271,10 @@ mod tests {
         let changes = owner.subscribe(&binding, Some(0));
         assert!(retired.is_closed());
         let sibling = owner.subscribe(&owner.bind(&b).unwrap(), Some(0));
-        let inspect = |id: &ContentId| Request::Inspect {
+        let inspect = |id: &VesselId| Request::Inspect {
             version: Version::V1,
             request_id: "inspect".into(),
-            content_id: id.clone(),
+            vessel_id: id.clone(),
         };
         let base = match run(&mut owner, &layout, 7, &access, inspect(&a)) {
             Response::Snapshot { snapshot, .. } => snapshot,
@@ -1283,7 +1283,7 @@ mod tests {
         let update = Request::Update {
             version: Version::V1,
             request_id: "update".into(),
-            content_id: a.clone(),
+            vessel_id: a.clone(),
             expected_revision: base.revision,
             data: Notes {
                 title: "Agent updated".into(),
@@ -1328,7 +1328,7 @@ mod tests {
             Response::Snapshot { .. }
         ));
         model.layout.voyages[0].fleets[0]
-            .vessels
+            .placements
             .retain(|vessel| vessel.id != placement);
         assert!(matches!(
             run(&mut owner, &Arc::new(model.layout), 7, &access, update),
@@ -1362,7 +1362,7 @@ mod tests {
         fs::write(&file, b"# Private\n\nBefore").unwrap();
         fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
         let mut owner = Owner::open(&directory).unwrap();
-        let id = ContentId("private".into());
+        let id = VesselId("private".into());
         let binding = owner
             .register_file(
                 &id,
@@ -1377,7 +1377,7 @@ mod tests {
             Request::Inspect {
                 version: Version::V1,
                 request_id: "read".into(),
-                content_id: id.clone(),
+                vessel_id: id.clone(),
             },
         ) {
             Response::Snapshot { snapshot, .. } => snapshot,
@@ -1388,7 +1388,7 @@ mod tests {
             Request::Update {
                 version: Version::V1,
                 request_id: "save".into(),
-                content_id: id,
+                vessel_id: id,
                 expected_revision: snapshot.revision,
                 data: Notes {
                     title: "Private".into(),
@@ -1411,7 +1411,7 @@ mod tests {
             std::env::temp_dir().join(format!("voyager-binding-test-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
         let mut owner = Owner::open(&directory).unwrap();
-        let id = ContentId("hidden-notes".into());
+        let id = VesselId("hidden-notes".into());
         assert!(owner.register_existing(&id).is_err());
         assert!(!directory.join("data/hidden-notes.json").exists());
         owner.initialize(&id).unwrap();
@@ -1427,7 +1427,7 @@ mod tests {
         assert!(!directory.join("data/hidden-notes.json").exists());
         assert!(
             owner
-                .register_existing(&ContentId("../outside".into()))
+                .register_existing(&VesselId("../outside".into()))
                 .is_err()
         );
         fs::remove_dir_all(directory).unwrap();
@@ -1444,7 +1444,7 @@ mod tests {
         )
         .unwrap();
         let mut owner = Owner::open(&directory).unwrap();
-        let id = ContentId("notes-a".into());
+        let id = VesselId("notes-a".into());
         let binding = owner.initialize(&id).unwrap();
         let fresh = owner.read(&id).unwrap();
         let revision = match &fresh {
@@ -1472,7 +1472,7 @@ mod tests {
             Request::Inspect {
                 version: Version::V1,
                 request_id: "inspect".into(),
-                content_id: id,
+                vessel_id: id,
             },
         );
         fs::remove_dir_all(directory).unwrap();
@@ -1480,7 +1480,7 @@ mod tests {
             matches!(fresh_reply, Response::Applied { snapshot, .. } if snapshot.warning.as_deref() == Some("No state schema declared"))
         );
         assert!(
-            matches!(fallback_reply, Response::Uncertain { content_id, request_id, expected_revision, .. } if content_id.0 == "notes-a" && request_id == "fallback" && expected_revision == "before")
+            matches!(fallback_reply, Response::Uncertain { vessel_id, request_id, expected_revision, .. } if vessel_id.0 == "notes-a" && request_id == "fallback" && expected_revision == "before")
         );
         assert!(
             matches!(inspected, Response::Snapshot { snapshot, .. } if snapshot.warning.as_deref().is_some_and(|warning| warning.starts_with("Data edit is invalid:")))
@@ -1500,11 +1500,11 @@ mod tests {
         fs::rename(temp, &path).unwrap();
         assert_eq!(fs::read(&path).unwrap(), bytes);
         fs::remove_file(path).unwrap();
-        let binding = Binding(ContentId("notes-a".into()));
+        let binding = Binding(VesselId("notes-a".into()));
         let changes = owner.subscribe(&binding, Some(0));
-        let result = owner.read(&ContentId("notes-a".into()));
+        let result = owner.read(&VesselId("notes-a".into()));
         let reply = finish_write(
-            ContentId("notes-a".into()),
+            VesselId("notes-a".into()),
             "request".into(),
             "before".into(),
             format!("{:x}", Sha256::digest(bytes)),
@@ -1514,7 +1514,7 @@ mod tests {
         assert_eq!(changes.try_recv().unwrap(), 1);
         fs::remove_dir_all(directory).unwrap();
         assert!(
-            matches!(reply, Response::Uncertain { content_id, request_id, expected_revision, .. } if content_id.0 == "notes-a" && request_id == "request" && expected_revision == "before")
+            matches!(reply, Response::Uncertain { vessel_id, request_id, expected_revision, .. } if vessel_id.0 == "notes-a" && request_id == "request" && expected_revision == "before")
         );
     }
 }

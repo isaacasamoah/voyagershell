@@ -4,7 +4,7 @@ use crate::native::Seen;
 use serde::Serialize;
 use voyager_contract::inspection::{Element, Rect, Role};
 use voyager_contract::{
-    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Vessel, Voyage,
+    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Placement, Voyage,
     VoyageId,
 };
 
@@ -58,7 +58,7 @@ pub struct Placed {
 pub struct Tab {
     pub id: FleetId,
     pub name: String,
-    pub vessels: Vec<Placed>,
+    pub placements: Vec<Placed>,
     pub arrangement: Option<Arrangement>,
 }
 
@@ -67,7 +67,7 @@ impl Tab {
         Self {
             id: fleet.id.clone(),
             name: fleet.name.clone(),
-            vessels: fleet.vessels.iter().map(placed).collect(),
+            placements: fleet.placements.iter().map(placed).collect(),
             arrangement: fleet.root.as_ref().map(Arrangement::saved),
         }
     }
@@ -121,9 +121,9 @@ impl Model {
         self.voyages.iter_mut().find(|voyage| &voyage.id == id)
     }
 
-    pub fn split_right(&mut self, fleet: &FleetId, left: &PlacementId, right: &Vessel) {
+    pub fn split_right(&mut self, fleet: &FleetId, left: &PlacementId, right: &Placement) {
         if let Some(tab) = self.tab(fleet) {
-            tab.vessels.push(placed(right));
+            tab.placements.push(placed(right));
             tab.arrangement = Some(Arrangement::Branch {
                 axis: Axis::Horizontal,
                 first: Box::new(Arrangement::Leaf(left.clone())),
@@ -150,7 +150,7 @@ impl Model {
                     .voyages
                     .iter_mut()
                     .flat_map(|voyage| &mut voyage.fleets)
-                    .flat_map(|fleet| &mut fleet.vessels);
+                    .flat_map(|fleet| &mut fleet.placements);
                 for placed in vessels.filter(|placed| &placed.id == id) {
                     placed.name.clone_from(&name);
                     placed.given = true;
@@ -185,7 +185,7 @@ impl Model {
             .voyages
             .iter()
             .flat_map(|voyage| &voyage.fleets)
-            .flat_map(|fleet| &fleet.vessels)
+            .flat_map(|fleet| &fleet.placements)
             .filter(|placed| placed.hidden)
         {
             found.push(format!("Vessel {} is saved hidden", placed.id.0));
@@ -242,7 +242,7 @@ impl Model {
         let named = tabs.iter().map(|tab| (&tab.id.0, &tab.name));
         compare_labels("Fleet tab", named, &drawn_tabs, found);
         let shown = tabs.iter().find(|tab| tab.id == self.fleet);
-        let vessels = shown.map(|tab| tab.vessels.as_slice()).unwrap_or_default();
+        let vessels = shown.map(|tab| tab.placements.as_slice()).unwrap_or_default();
         let titles = drawn(Role::VesselName);
         let terminals = drawn(Role::Terminal);
         for placed in vessels {
@@ -307,7 +307,7 @@ impl Model {
     }
 }
 
-fn placed(vessel: &Vessel) -> Placed {
+fn placed(vessel: &Placement) -> Placed {
     Placed {
         id: vessel.id.clone(),
         name: vessel.name.clone(),
@@ -360,12 +360,12 @@ fn compare_tabs(voyage: &VoyageId, made: &[Tab], saved: &[Tab], found: &mut Vec<
                 .map(|placed| (placed.id.0.clone(), placed.name.clone()))
                 .collect()
         };
-        if named(&made.vessels) != named(&saved.vessels) {
+        if named(&made.placements) != named(&saved.placements) {
             found.push(format!(
                 "Fleet {} saves the Vessels {:?}, the journey made {:?}",
                 made.id.0,
-                named(&saved.vessels),
-                named(&made.vessels)
+                named(&saved.placements),
+                named(&made.placements)
             ));
         }
         if made.arrangement != saved.arrangement {

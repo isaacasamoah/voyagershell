@@ -16,7 +16,7 @@ use std::{
 };
 use voyager_contract::administrator::{ProcessRequest, ProcessResponse};
 use voyager_contract::{
-    Action, ContentId, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest,
+    Action, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest, VesselId,
 };
 
 #[path = "client_core.rs"]
@@ -80,7 +80,7 @@ enum Message {
         reply: async_channel::Sender<async_channel::Receiver<WorkspaceNotice>>,
     },
     BindContent {
-        id: ContentId,
+        id: VesselId,
         reply: async_channel::Sender<Result<crate::content::Binding, String>>,
     },
     ContentChanges {
@@ -142,7 +142,7 @@ enum Message {
         result: Result<Option<String>, CallError>,
     },
     Terminal {
-        content: ContentId,
+        content: VesselId,
         request_id: String,
         expected_version: u64,
         reply: SyncSender<Result<Viewer, Error>>,
@@ -176,14 +176,14 @@ struct Outcome {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CreatedTerminal {
-    id: ContentId,
+    id: VesselId,
     launch: voyager_contract::launch::Launch,
     backend: Option<CoreTerminalId>,
     shell_intent: Option<String>,
 }
 
 impl CreatedTerminal {
-    fn matches(&self, content: &voyager_contract::Content) -> bool {
+    fn matches(&self, content: &voyager_contract::Vessel) -> bool {
         self.id == content.id
             && self.backend == content.backend
             && self.shell_intent == content.shell_intent
@@ -194,7 +194,7 @@ impl CreatedTerminal {
                     .unwrap_or(&voyager_contract::launch::Launch::Terminal)
     }
 
-    fn eligible(&self, content: &voyager_contract::Content) -> bool {
+    fn eligible(&self, content: &voyager_contract::Vessel) -> bool {
         self.matches(content)
             && content.type_id == "terminal"
             && (content.backend.is_none() || self.shell_intent.is_some())
@@ -337,7 +337,7 @@ impl Client {
             let mut fresh = false;
             let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             let mut unconfirmed = HashMap::<String, String>::new();
-            let mut created_contents = Vec::<CreatedTerminal>::new();
+            let mut created_vessels = Vec::<CreatedTerminal>::new();
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut listing = Listing::default();
@@ -490,10 +490,10 @@ impl Client {
                             layout: crate::scope::project(&layout, scope.as_ref()),
                             fresh,
                             created_workspace: false,
-                            created_contents: eligible_contents(
+                            created_vessels: eligible_contents(
                                 &layout,
                                 scope.as_ref(),
-                                &created_contents,
+                                &created_vessels,
                             ),
                             message: plan.as_ref().and_then(|plan| plan.message.clone()),
                             close_plan: plan.clone(),
@@ -535,7 +535,7 @@ impl Client {
                     }
                     Message::Quit { operation, reply } => {
                         let result = operation.end(&mut quit_result, &mut core);
-                        created_contents.clear();
+                        created_vessels.clear();
                         fresh = false;
                         let _ = reply.try_send(result);
                         continue;
@@ -706,7 +706,7 @@ impl Client {
                         }
                         let result = (|| {
                             if renaming.as_ref().is_some_and(|(ticket, plan, _)| {
-                                plan.contents.contains(crate::content::identity(&request).0)
+                                plan.vessels.contains(crate::content::identity(&request).0)
                                     && !matches!(
                                         request,
                                         voyager_contract::content::Request::Inspect { .. }
@@ -1053,7 +1053,7 @@ impl Client {
                                         |error| format!("Workspace save not confirmed: {error:?}"),
                                     )?;
                                     record_created_terminals(
-                                        &mut created_contents,
+                                        &mut created_vessels,
                                         &layout,
                                         &candidate.layout,
                                     );
@@ -1480,7 +1480,7 @@ impl Client {
                     } => {
                         let request = TerminalRequest {
                             request_id: request_id.clone(),
-                            content_id: content.clone(),
+                            vessel_id: content.clone(),
                             expected_version,
                         };
                         let previous = terminal_requests
@@ -1536,7 +1536,7 @@ impl Client {
                             ))
                         } else if let Some(message) = unconfirmed.get(&content.0) {
                             Err(Error::Uncertain(message.clone()))
-                        } else if created_contents.iter().any(|pending| pending.id == content)
+                        } else if created_vessels.iter().any(|pending| pending.id == content)
                             && !visible_content(&layout, &content)
                         {
                             Err(rejected(
@@ -1551,7 +1551,7 @@ impl Client {
                                     &mut version,
                                     &mut fresh,
                                     &mut unconfirmed,
-                                    &mut created_contents,
+                                    &mut created_vessels,
                                     &request,
                                 ),
                                 Err(error) => Err(error.clone()),
@@ -1559,7 +1559,7 @@ impl Client {
                         };
                         if result.is_ok()
                             && let Some(backend) = layout
-                                .contents
+                                .vessels
                                 .iter()
                                 .find(|item| item.id == content)
                                 .and_then(|item| item.backend.clone())
@@ -1568,7 +1568,7 @@ impl Client {
                             live_bindings.push(backend);
                         }
                         if previous.is_none() {
-                            settle_created_content(&mut created_contents, &content, &result);
+                            settle_created_content(&mut created_vessels, &content, &result);
                             terminal_requests.push_back((request, result.clone().map(Into::into)));
                             if terminal_requests.len() > 32 {
                                 terminal_requests.pop_front();
@@ -1591,7 +1591,7 @@ impl Client {
                     layout: crate::scope::project(&layout, scope.as_ref()),
                     fresh,
                     created_workspace: false,
-                    created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
+                    created_vessels: eligible_contents(&layout, scope.as_ref(), &created_vessels),
                     message: None,
                     close_plan: closing.projected(&layout, scope.as_ref()),
                 };
@@ -1669,7 +1669,7 @@ impl Client {
                                         voyager_contract::content::Request::Inspect {
                                             version: voyager_contract::content::Version::V1,
                                             request_id: format!("{}-read", request.request_id),
-                                            content_id: view.binding.id().clone(),
+                                            vessel_id: view.binding.id().clone(),
                                         },
                                     );
                                     if !matches!(observed, voyager_contract::content::Response::Snapshot { snapshot, .. } if &snapshot.revision == revision)
@@ -1699,7 +1699,7 @@ impl Client {
                                         let ready = crate::terminal_lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
                                         if !ready.is_empty() {
                                             revision = save(core, &candidate.layout, revision)?;
-                                            created_contents.extend(ready.into_iter().map(|id| CreatedTerminal {
+                                            created_vessels.extend(ready.into_iter().map(|id| CreatedTerminal {
                                                 id, launch: voyager_contract::launch::Launch::Terminal,
                                                 backend: None, shell_intent: None,
                                             }));
@@ -1709,12 +1709,12 @@ impl Client {
                                         reopened = true;
                                     }
                                     unconfirmed.retain(|id, _| {
-                                        candidate.layout.contents.iter().any(|item| {
+                                        candidate.layout.vessels.iter().any(|item| {
                                             &item.id.0 == id && item.start_pending.is_some()
                                         })
                                     });
-                                    created_contents.retain(|pending| {
-                                        candidate.layout.contents.iter().any(|item| {
+                                    created_vessels.retain(|pending| {
+                                        candidate.layout.vessels.iter().any(|item| {
                                             item.id == pending.id
                                                 && (item.backend.is_none()
                                                     || pending.shell_intent.is_some())
@@ -1833,7 +1833,7 @@ impl Client {
                                         )
                                         .map_err(rejected)?;
                                         let moved = plan.moved_file();
-                                        let snapshot = plan.snapshot(plan.contents[0].clone()).map_err(|error| Error::Uncertain(format!("The file moved to {}/{} but reading it failed: {error}. Inspect before another rename.", moved.directory, moved.filename)))?;
+                                        let snapshot = plan.snapshot(plan.vessels[0].clone()).map_err(|error| Error::Uncertain(format!("The file moved to {}/{} but reading it failed: {error}. Inspect before another rename.", moved.directory, moved.filename)))?;
                                         if snapshot.revision != expected {
                                             return Err(Error::Uncertain(format!(
                                                 "The file moved to {}/{} but its bytes changed during rename. Inspect both paths; do not repeat the rename.",
@@ -1844,7 +1844,7 @@ impl Client {
                                         layout = Arc::new(candidate);
                                         version = saved;
                                         if let Some(owner) = content.as_mut() {
-                                            for id in &plan.contents {
+                                            for id in &plan.vessels {
                                                 crate::content::register_content(
                                                     owner, &layout, id,
                                                 )
@@ -1875,11 +1875,11 @@ impl Client {
                                             &request.request_id,
                                         );
                                         let (ready, waiting) = async_channel::bounded(1);
-                                        saves.try_send(crate::voyage_close::SaveRequest::PrepareRename { ticket: ticket.clone(), contents: plan.contents.clone(), files: plan.files.clone(), reply: ready }).map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
+                                        saves.try_send(crate::voyage_close::SaveRequest::PrepareRename { ticket: ticket.clone(), vessels: plan.vessels.clone(), files: plan.files.clone(), reply: ready }).map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
                                         let release = crate::voyage_close::RenameRelease::new(
                                             saves.clone(),
                                             ticket.clone(),
-                                            plan.contents.clone(),
+                                            plan.vessels.clone(),
                                         );
                                         renaming = Some((ticket, plan, release));
                                         let sender = close_sender.clone();
@@ -1916,7 +1916,7 @@ impl Client {
                                         )
                                         .map_err(rejected)?;
                                         if type_id == crate::content_type::NOTES_TYPE
-                                            && layout.contents.iter().any(|item| {
+                                            && layout.vessels.iter().any(|item| {
                                                 item.type_id == *type_id
                                                     && closing.blocks_terminal(&item.id)
                                             })
@@ -1988,8 +1988,8 @@ impl Client {
                                         layout: (*layout).clone(),
                                     };
                                     match &request.action {
-                                    Action::StartNewShell { content_id, expected_backend } => {
-                                        candidate.start_new_shell(content_id, expected_backend, &request.request_id)
+                                    Action::StartNewShell { vessel_id, expected_backend } => {
+                                        candidate.start_new_shell(vessel_id, expected_backend, &request.request_id)
                                     }
                                     _ => candidate.apply(request.action.clone()),
                                 }
@@ -2011,16 +2011,16 @@ impl Client {
                                             }
                                         let created_notes = if let Some(owner) = content.as_mut() {
                                             crate::content::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
-                                        } else if candidate.layout.contents.iter().any(|item| item.type_id == crate::content_type::NOTES_TYPE && !layout.contents.iter().any(|old| old.id == item.id)) {
+                                        } else if candidate.layout.vessels.iter().any(|item| item.type_id == crate::content_type::NOTES_TYPE && !layout.vessels.iter().any(|old| old.id == item.id)) {
                                             return Err(rejected("Content owner unavailable; Notes was not created".into()));
                                         } else { false };
                                         let revision = save(core, &candidate.layout, version).map_err(|error| {
                                             if created_notes { Error::Uncertain(format!("A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}")) } else { error }
                                         })?;
-                                        created_contents.extend(reopening.into_iter().map(|id| CreatedTerminal { id, launch: voyager_contract::launch::Launch::Terminal, backend: None, shell_intent: None }));
-                                        if let Action::StartNewShell { content_id, expected_backend } = &request.action {
-                                            grant_new_shell(&mut created_contents, content_id, expected_backend, &request.request_id);
-                                            unconfirmed.remove(&content_id.0);
+                                        created_vessels.extend(reopening.into_iter().map(|id| CreatedTerminal { id, launch: voyager_contract::launch::Launch::Terminal, backend: None, shell_intent: None }));
+                                        if let Action::StartNewShell { vessel_id, expected_backend } = &request.action {
+                                            grant_new_shell(&mut created_vessels, vessel_id, expected_backend, &request.request_id);
+                                            unconfirmed.remove(&vessel_id.0);
                                         }
                                         if (scope.is_some() || matches!(request.action, Action::CreateContent { .. } | Action::CreateVoyageFromSource { .. } | Action::CreateFleetWithContent { .. }))
                                             && matches!(
@@ -2033,7 +2033,7 @@ impl Client {
                                             )
                                         {
                                             record_created_terminals(
-                                                &mut created_contents,
+                                                &mut created_vessels,
                                                 &layout,
                                                 &candidate.layout,
                                             );
@@ -2063,8 +2063,8 @@ impl Client {
                 }
                 response.version = version;
                 response.layout = crate::scope::project(&layout, scope.as_ref());
-                response.created_contents =
-                    eligible_contents(&layout, scope.as_ref(), &created_contents);
+                response.created_vessels =
+                    eligible_contents(&layout, scope.as_ref(), &created_vessels);
                 response.fresh = fresh;
                 response.close_plan = closing.projected(&layout, scope.as_ref());
                 if let Some(mut release) = rename_release {
@@ -2137,7 +2137,7 @@ impl Client {
         client
     }
 
-    pub async fn bind_content(&self, id: ContentId) -> Result<crate::content::Binding, String> {
+    pub async fn bind_content(&self, id: VesselId) -> Result<crate::content::Binding, String> {
         let (reply, receive) = async_channel::bounded(1);
         self.sender
             .send(Message::BindContent { id, reply })
@@ -2189,7 +2189,7 @@ impl Client {
 
     pub async fn bind_content_view(
         &self,
-        id: ContentId,
+        id: VesselId,
     ) -> Result<crate::content::ViewBinding, String> {
         let binding = self.bind_content(id).await?;
         let (reply, receive) = async_channel::bounded(1);
@@ -2627,7 +2627,7 @@ impl Client {
 
     pub fn terminal(
         &self,
-        content: ContentId,
+        content: VesselId,
         request_id: String,
         expected_version: u64,
     ) -> Result<Viewer, Error> {
@@ -2650,10 +2650,10 @@ impl Client {
 
 fn note_exit_target(
     layout: &Layout,
-    content: &ContentId,
+    content: &VesselId,
 ) -> Result<voyager_contract::PlacementId, String> {
     if !layout
-        .contents
+        .vessels
         .iter()
         .any(|item| &item.id == content && item.type_id == crate::content_type::NOTES_TYPE)
     {
@@ -2668,7 +2668,7 @@ fn note_exit_target(
                 .iter()
                 .filter(|fleet| !fleet.closed)
                 .flat_map(|fleet| {
-                    fleet.vessels.iter().filter(|panel| {
+                    fleet.placements.iter().filter(|panel| {
                         !panel.hidden && crate::panels::contains(&fleet.root, &panel.id)
                     })
                 })
@@ -2680,7 +2680,7 @@ fn note_exit_target(
                             .is_some_and(|column| crate::panels::contains(&column.root, &panel.id))
                 }))
         })
-        .filter(|panel| &panel.content == content);
+        .filter(|panel| &panel.vessel == content);
     let id = targets
         .next()
         .ok_or("The Notes placement is closed")?
@@ -2719,24 +2719,26 @@ mod voice_scope_tests {
             })
             .unwrap();
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let shell = model.layout.voyages[0].fleets[0].vessels[0].content.clone();
+        let shell = model.layout.voyages[0].fleets[0].placements[0]
+            .vessel
+            .clone();
         assert!(note_exit_target(&model.layout, &shell).is_err());
         model
             .apply(Action::CreateContent {
                 type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                    insertion: voyager_contract::PanelInsertion::Beside {
-                        id: model.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                    owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                    insertion: voyager_contract::PlacementInsertion::Beside {
+                        id: model.layout.voyages[0].fleets[0].placements[0].id.clone(),
                         side: voyager_contract::Side::Right,
                     },
                 },
                 launch: None,
             })
             .unwrap();
-        let note = model.layout.voyages[0].fleets[0].vessels[1].clone();
+        let note = model.layout.voyages[0].fleets[0].placements[1].clone();
         assert_eq!(
-            note_exit_target(&model.layout, &note.content).unwrap(),
+            note_exit_target(&model.layout, &note.vessel).unwrap(),
             note.id
         );
         let mut duplicate = note.clone();
@@ -2750,13 +2752,13 @@ mod voice_scope_tests {
                 placement: duplicate.id.clone(),
             }),
         });
-        fleet.vessels.push(duplicate.clone());
-        assert!(note_exit_target(&model.layout, &note.content).is_err());
+        fleet.placements.push(duplicate.clone());
+        assert!(note_exit_target(&model.layout, &note.vessel).is_err());
         model
             .apply(Action::RemovePanel { id: duplicate.id })
             .unwrap();
         model.apply(Action::RemovePanel { id: note.id }).unwrap();
-        assert!(note_exit_target(&model.layout, &note.content).is_err());
+        assert!(note_exit_target(&model.layout, &note.vessel).is_err());
     }
 
     #[test]
@@ -2798,7 +2800,7 @@ mod voice_scope_tests {
 
 fn settle_created_content(
     pending: &mut Vec<CreatedTerminal>,
-    content: &ContentId,
+    content: &VesselId,
     result: &Result<Viewer, Error>,
 ) {
     if matches!(result, Err(Error::Uncertain(_))) {
@@ -2806,7 +2808,7 @@ fn settle_created_content(
     }
 }
 
-fn visible_content(layout: &Layout, content: &ContentId) -> bool {
+fn visible_content(layout: &Layout, content: &VesselId) -> bool {
     let voyage = if layout.view == voyager_contract::WorkspaceView::Home {
         layout.home.as_ref()
     } else {
@@ -2823,7 +2825,7 @@ fn visible_content(layout: &Layout, content: &ContentId) -> bool {
     {
         let root = crate::panels::visible(&column.root, &voyage.portals);
         if voyage.portals.iter().any(|panel| {
-            &panel.content == content
+            &panel.vessel == content
                 && crate::panels::contains(&root, &panel.id)
                 && column
                     .maximized_placement
@@ -2842,9 +2844,9 @@ fn visible_content(layout: &Layout, content: &ContentId) -> bool {
             .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
     };
     fleet.is_some_and(|fleet| {
-        let root = crate::panels::visible(&fleet.root, &fleet.vessels);
-        fleet.vessels.iter().any(|panel| {
-            &panel.content == content
+        let root = crate::panels::visible(&fleet.root, &fleet.placements);
+        fleet.placements.iter().any(|panel| {
+            &panel.vessel == content
                 && crate::panels::contains(&root, &panel.id)
                 && fleet
                     .maximized_placement
@@ -2878,9 +2880,9 @@ fn reopen_backend<'a>(
         .find(|panel| &panel.id == id)
         .ok_or("Panel not found")?;
     let content = layout
-        .contents
+        .vessels
         .iter()
-        .find(|item| item.id == panel.content)
+        .find(|item| item.id == panel.vessel)
         .ok_or("Panel content not found")?;
     if content.type_id != "terminal" {
         return Ok(None);
@@ -2916,7 +2918,7 @@ fn require_live(
 
 fn grant_new_shell(
     pending: &mut Vec<CreatedTerminal>,
-    content: &ContentId,
+    content: &VesselId,
     backend: &CoreTerminalId,
     intent: &str,
 ) {
@@ -2969,10 +2971,10 @@ fn record_created_terminals(
 ) {
     pending.extend(
         current
-            .contents
+            .vessels
             .iter()
             .filter(|item| {
-                item.type_id == "terminal" && !previous.contents.iter().any(|old| old.id == item.id)
+                item.type_id == "terminal" && !previous.vessels.iter().any(|old| old.id == item.id)
             })
             .map(|item| CreatedTerminal {
                 id: item.id.clone(),
@@ -2987,16 +2989,11 @@ fn eligible_contents(
     layout: &Arc<Layout>,
     scope: Option<&Context>,
     pending: &[CreatedTerminal],
-) -> Vec<ContentId> {
+) -> Vec<VesselId> {
     let projection = crate::scope::project(layout, scope);
     pending
         .iter()
-        .filter(|pending| {
-            projection
-                .contents
-                .iter()
-                .any(|item| pending.eligible(item))
-        })
+        .filter(|pending| projection.vessels.iter().any(|item| pending.eligible(item)))
         .map(|pending| pending.id.clone())
         .collect()
 }
@@ -3007,13 +3004,13 @@ fn open_terminal(
     version: &mut u64,
     fresh: &mut bool,
     unconfirmed: &mut HashMap<String, String>,
-    created_contents: &mut Vec<CreatedTerminal>,
+    created_vessels: &mut Vec<CreatedTerminal>,
     request: &TerminalRequest,
 ) -> Result<Viewer, Error> {
-    let content = &request.content_id;
+    let content = &request.vessel_id;
     let request_id = &request.request_id;
     let target = layout
-        .contents
+        .vessels
         .iter()
         .find(|item| &item.id == content)
         .ok_or_else(|| rejected("Terminal content not found".into()))?;
@@ -3027,7 +3024,7 @@ fn open_terminal(
     }
     let cwd = target.cwd.clone();
     let launch = target.launch.clone().unwrap_or_default();
-    let accepted = created_contents
+    let accepted = created_vessels
         .iter()
         .find(|pending| &pending.id == content);
     let new_shell = target.shell_intent.is_some() && accepted.is_some();
@@ -3061,7 +3058,7 @@ fn open_terminal(
         let operation = format!("voyager-start-{request_id}");
         let mut pending = (**layout).clone();
         let item = pending
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| &item.id == content)
             .ok_or_else(|| rejected("Terminal content disappeared".into()))?;
@@ -3098,7 +3095,7 @@ fn open_terminal(
                 })
             });
         if !matches!(run, Err(Error::Rejected { .. })) {
-            created_contents.retain(|item| &item.id != content);
+            created_vessels.retain(|item| &item.id != content);
         }
         let started = match run {
             Ok(result) => result,
@@ -3111,7 +3108,7 @@ fn open_terminal(
             }
             Err(error) => {
                 let mut cleared = (**layout).clone();
-                if let Some(item) = cleared.contents.iter_mut().find(|item| &item.id == content) {
+                if let Some(item) = cleared.vessels.iter_mut().find(|item| &item.id == content) {
                     item.start_pending = None;
                 }
                 match save(core, &cleared, *version) {
@@ -3139,7 +3136,7 @@ fn open_terminal(
         }
         let mut candidate = (**layout).clone();
         let item = candidate
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| &item.id == content)
             .ok_or_else(|| Error::Uncertain("Terminal content disappeared after start".into()))?;
@@ -3193,7 +3190,7 @@ fn attach_failure(error: Error, created: bool, address: &str) -> Error {
 }
 
 fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
-    let doc = core.document_get("voyager-layout-v1")?;
+    let doc = core.document_get("voyager-layout-v2")?;
     let version = doc.version;
     let value = doc.value;
     if value.is_null() {
@@ -3209,7 +3206,7 @@ fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
 
 fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
     Ok(core
-        .document_set("voyager-layout-v1", layout, version)?
+        .document_set("voyager-layout-v2", layout, version)?
         .version)
 }
 
@@ -3223,25 +3220,25 @@ fn select_note(
     request: &voyager_contract::content::Request,
 ) -> voyager_contract::content::Response {
     use voyager_contract::content::{NotesConfiguration, NotesFile, Request, Response, Version};
-    let (request_id, content_id, expected_version) = match request {
+    let (request_id, vessel_id, expected_version) = match request {
         Request::MigrateNote {
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             ..
         }
         | Request::NewNote {
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             ..
         }
         | Request::OpenNote {
             request_id,
-            content_id,
+            vessel_id,
             expected_version,
             ..
-        } => (request_id, content_id, expected_version),
+        } => (request_id, vessel_id, expected_version),
         _ => return crate::content::reject(request, "Expected a note selection".into()),
     };
     let mut created = None;
@@ -3250,21 +3247,21 @@ fn select_note(
         if expected_version != version {
             return Err("Workspace changed; inspect before selecting a note".to_owned());
         }
-        let directory = crate::content::notes_directory(layout, content_id)?;
+        let directory = crate::content::notes_directory(layout, vessel_id)?;
         if matches!(request, Request::MigrateNote { .. }) {
-            let current = crate::content::configuration(owner, layout, content_id, *version)?
+            let current = crate::content::configuration(owner, layout, vessel_id, *version)?
                 .ok_or("Notes configuration is unavailable")?;
             if current.configuration.notes_file.is_some() {
                 return Err("This note already has a Markdown file".into());
             }
-            let file = owner.migrate_file(content_id, &directory)?;
+            let file = owner.migrate_file(vessel_id, &directory)?;
             created = Some(directory.join(&file.filename));
-            let snapshot = owner.select_file(content_id, file.clone())?;
+            let snapshot = owner.select_file(vessel_id, file.clone())?;
             let mut candidate = (**layout).clone();
             let content = candidate
-                .contents
+                .vessels
                 .iter_mut()
-                .find(|item| item.id == *content_id)
+                .find(|item| item.id == *vessel_id)
                 .ok_or("Content is unavailable")?;
             let mut configuration = current.configuration;
             configuration.notes_file = Some(file.clone());
@@ -3275,7 +3272,7 @@ fn select_note(
                     .ok_or("Invalid Notes configuration")?
                     .clone(),
             );
-            crate::content::rename::label(&mut candidate, content_id, &file.filename);
+            crate::content::rename::label(&mut candidate, vessel_id, &file.filename);
             return Ok((candidate, configuration, snapshot));
         }
         let filename = match request {
@@ -3291,12 +3288,12 @@ fn select_note(
             directory: directory.to_string_lossy().into_owned(),
             filename,
         };
-        let snapshot = owner.select_file(content_id, file.clone())?;
+        let snapshot = owner.select_file(vessel_id, file.clone())?;
         let mut candidate = (**layout).clone();
         let content = candidate
-            .contents
+            .vessels
             .iter_mut()
-            .find(|item| item.id == *content_id)
+            .find(|item| item.id == *vessel_id)
             .ok_or("Content is unavailable")?;
         let mut configuration = content
             .configuration
@@ -3317,7 +3314,7 @@ fn select_note(
                 .ok_or("Invalid Notes configuration")?
                 .clone(),
         );
-        crate::content::rename::label(&mut candidate, content_id, &file.filename);
+        crate::content::rename::label(&mut candidate, vessel_id, &file.filename);
         Ok((candidate, configuration, snapshot))
     })();
     let (candidate, configuration, snapshot) = match selected {
@@ -3328,7 +3325,7 @@ fn select_note(
                 return Response::Uncertain {
                     version: Version::V1,
                     request_id: request_id.clone(),
-                    content_id: content_id.clone(),
+                    vessel_id: vessel_id.clone(),
                     expected_revision: expected_version.to_string(),
                     message: format!(
                         "Note creation or selection is unconfirmed at {created:?}: {error}; inspect before retry"
@@ -3345,7 +3342,7 @@ fn select_note(
             Response::NoteOpened {
                 version: Version::V1,
                 request_id: request_id.clone(),
-                content_id: content_id.clone(),
+                vessel_id: vessel_id.clone(),
                 snapshot,
                 configuration,
                 workspace_version: revision,
@@ -3356,7 +3353,7 @@ fn select_note(
             Response::Uncertain {
                 version: Version::V1,
                 request_id: request_id.clone(),
-                content_id: content_id.clone(),
+                vessel_id: vessel_id.clone(),
                 expected_revision: expected_version.to_string(),
                 message: format!(
                     "Note selection or creation was not confirmed; inspect the selected file and workspace before another attempt: {error:?}"
@@ -3378,7 +3375,7 @@ fn configure(
     use voyager_contract::content::{Request, Response, Version};
     let Request::Configure {
         request_id,
-        content_id,
+        vessel_id,
         expected_version,
         configuration,
         ..
@@ -3392,16 +3389,16 @@ fn configure(
             return Err("Workspace changed; inspect before configuring content".into());
         }
         owner.require_configure()?;
-        let current = crate::content::configuration(owner, layout, content_id, *version)?
+        let current = crate::content::configuration(owner, layout, vessel_id, *version)?
             .ok_or("Notes configuration is unavailable")?;
         if configuration.notes_file != current.configuration.notes_file {
             return Err("Use a note selection action to change the selected file".into());
         }
         let mut candidate = (**layout).clone();
         candidate
-            .contents
+            .vessels
             .iter_mut()
-            .find(|content| content.id == *content_id)
+            .find(|content| content.id == *vessel_id)
             .ok_or("Content is unavailable")?
             .configuration = Some(
             serde_json::to_value(configuration)
@@ -3423,7 +3420,7 @@ fn configure(
             Response::Configured {
                 version: Version::V1,
                 request_id: request_id.clone(),
-                content_id: content_id.clone(),
+                vessel_id: vessel_id.clone(),
                 configuration: configuration.clone(),
                 workspace_version: revision,
             }
@@ -3437,7 +3434,7 @@ fn configure(
             Response::Uncertain {
                 version: Version::V1,
                 request_id: request_id.clone(),
-                content_id: content_id.clone(),
+                vessel_id: vessel_id.clone(),
                 expected_revision: expected_version.to_string(),
                 message,
             }
@@ -3594,7 +3591,7 @@ mod terminal_outcome_tests {
 
     #[test]
     fn reopen_uses_live_core_identity_and_refuses_stale_or_ended_programs() {
-        use voyager_contract::{ContentDestination, PanelInsertion, PanelOwner};
+        use voyager_contract::{ContentDestination, PlacementInsertion, PlacementOwner};
         for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
             assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
         }
@@ -3615,9 +3612,9 @@ mod terminal_outcome_tests {
             };
             let initial = client.call(request(0, Action::Inspect)).unwrap();
             assert_eq!(initial.status, Status::Applied, "{:?}", initial.message);
-            let panel = initial.layout.voyages[0].fleets[0].vessels[0].clone();
+            let panel = initial.layout.voyages[0].fleets[0].placements[0].clone();
             let _viewer = client
-                .terminal(panel.content.clone(), client.request_id(), initial.version)
+                .terminal(panel.vessel.clone(), client.request_id(), initial.version)
                 .unwrap();
             let bound = client.call(request(0, Action::Inspect)).unwrap();
             let created = client
@@ -3633,7 +3630,7 @@ mod terminal_outcome_tests {
             let target = created.layout.voyages[0].fleets[1].clone();
             let _other_viewer = client
                 .terminal(
-                    target.vessels[0].content.clone(),
+                    target.placements[0].vessel.clone(),
                     client.request_id(),
                     created.version,
                 )
@@ -3641,9 +3638,9 @@ mod terminal_outcome_tests {
             let bound = client.call(request(0, Action::Inspect)).unwrap();
             let backend = bound
                 .layout
-                .contents
+                .vessels
                 .iter()
-                .find(|item| item.id == panel.content)
+                .find(|item| item.id == panel.vessel)
                 .unwrap()
                 .backend
                 .clone()
@@ -3659,9 +3656,9 @@ mod terminal_outcome_tests {
             assert!(require_live(&live, &CoreTerminalId("other".into())).is_err());
             let mut uncertain = (*bound.layout).clone();
             uncertain
-                .contents
+                .vessels
                 .iter_mut()
-                .find(|item| item.id == panel.content)
+                .find(|item| item.id == panel.vessel)
                 .unwrap()
                 .start_pending = Some("pending".into());
             assert!(reopen_backend(&uncertain, &panel.id, &HashMap::new()).is_err());
@@ -3669,7 +3666,7 @@ mod terminal_outcome_tests {
                 reopen_backend(
                     &bound.layout,
                     &panel.id,
-                    &HashMap::from([(panel.content.0.clone(), "uncertain".into())])
+                    &HashMap::from([(panel.vessel.0.clone(), "uncertain".into())])
                 )
                 .is_err()
             );
@@ -3685,17 +3682,17 @@ mod terminal_outcome_tests {
             let action = Action::ReopenPanel {
                 id: panel.id.clone(),
                 destination: ContentDestination::Panel {
-                    owner: PanelOwner::Fleet {
+                    owner: PlacementOwner::Fleet {
                         id: target.id.clone(),
                     },
-                    insertion: PanelInsertion::Beside {
-                        id: target.vessels[0].id.clone(),
+                    insertion: PlacementInsertion::Beside {
+                        id: target.placements[0].id.clone(),
                         side: voyager_contract::Side::Right,
                     },
                 },
             };
             let external = core
-                .document_set("voyager-layout-v1", &closed.layout, closed.version)
+                .document_set("voyager-layout-v2", &closed.layout, closed.version)
                 .unwrap();
             let stale = client
                 .call(request(closed.version, action.clone()))
@@ -3708,10 +3705,10 @@ mod terminal_outcome_tests {
             let opened = client.call(reopen.clone()).unwrap();
             assert_eq!(opened.status, Status::Applied);
             assert_eq!(client.call(reopen).unwrap(), opened);
-            assert_eq!(opened.layout.contents, bound.layout.contents);
-            assert!(opened.layout.voyages[0].fleets[0].vessels.is_empty());
-            let placed = &opened.layout.voyages[0].fleets[1].vessels;
-            assert_eq!(placed[0], target.vessels[0]);
+            assert_eq!(opened.layout.vessels, bound.layout.vessels);
+            assert!(opened.layout.voyages[0].fleets[0].placements.is_empty());
+            let placed = &opened.layout.voyages[0].fleets[1].placements;
+            assert_eq!(placed[0], target.placements[0]);
             assert_eq!(placed[1], panel);
             assert_eq!(placed[0].name, placed[1].name);
             assert_ne!(placed[0].id, placed[1].id);
@@ -3757,18 +3754,18 @@ mod terminal_outcome_tests {
             .apply(Action::CreateContent {
                 type_id: "terminal".into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Portals {
+                    owner: voyager_contract::PlacementOwner::Portals {
                         voyage: model.layout.voyages[0].id.clone(),
                     },
-                    insertion: voyager_contract::PanelInsertion::Empty,
+                    insertion: voyager_contract::PlacementInsertion::Empty,
                 },
                 launch: None,
             })
             .unwrap();
-        let id = model.layout.contents[0].id.clone();
+        let id = model.layout.vessels[0].id.clone();
         let backend = CoreTerminalId("t1".into());
-        model.layout.contents[0].backend = Some(backend.clone());
-        model.layout.contents[0].launch = Some(voyager_contract::launch::Launch::Codex {
+        model.layout.vessels[0].backend = Some(backend.clone());
+        model.layout.vessels[0].launch = Some(voyager_contract::launch::Launch::Codex {
             model: "old-worker".into(),
             effort: Default::default(),
             permissions: Default::default(),
@@ -3787,11 +3784,11 @@ mod terminal_outcome_tests {
         assert!(require_finished(&observed, &CoreTerminalId("another".into())).is_err());
         let before = model.layout.clone();
         let action = Action::StartNewShell {
-            content_id: id.clone(),
+            vessel_id: id.clone(),
             expected_backend: backend.clone(),
         };
         let scope = Context::Vessel {
-            id: model.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+            id: model.layout.voyages[0].fleets[0].placements[0].id.clone(),
         };
         crate::scope::check(&Arc::new(before.clone()), Some(&scope), &action).unwrap();
         assert!(
@@ -3810,7 +3807,7 @@ mod terminal_outcome_tests {
                 id: model.layout.voyages[0].portals[0].id.clone(),
             }),
             &Action::StartNewShell {
-                content_id: model.layout.voyages[0].portals[0].content.clone(),
+                vessel_id: model.layout.voyages[0].portals[0].vessel.clone(),
                 expected_backend: CoreTerminalId("t2".into()),
             },
         )
@@ -3821,15 +3818,15 @@ mod terminal_outcome_tests {
         assert_eq!(model.layout, before);
         model.start_new_shell(&id, &backend, "intent").unwrap();
         let mut expected = before;
-        expected.contents[0].launch = Some(voyager_contract::launch::Launch::Terminal);
-        expected.contents[0].shell_intent = Some("intent".into());
+        expected.vessels[0].launch = Some(voyager_contract::launch::Launch::Terminal);
+        expected.vessels[0].shell_intent = Some("intent".into());
         assert_eq!(model.layout, expected);
         let mut pending = Vec::new();
         assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
         grant_new_shell(&mut pending, &id, &backend, "intent");
-        model.layout.contents[0].shell_intent = Some("changed".into());
+        model.layout.vessels[0].shell_intent = Some("changed".into());
         assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
-        model.layout.contents[0].shell_intent = Some("intent".into());
+        model.layout.vessels[0].shell_intent = Some("intent".into());
         assert_eq!(
             eligible_contents(&Arc::new(model.layout), None, &pending),
             vec![id.clone()]
@@ -3848,23 +3845,23 @@ mod terminal_outcome_tests {
             })
             .unwrap();
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let after = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
-        let terminal = model.layout.contents[0].id.clone();
+        let after = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+        let terminal = model.layout.vessels[0].id.clone();
         let previous = model.layout.clone();
         model
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
-                    insertion: voyager_contract::PanelInsertion::Beside {
+                    owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
+                    insertion: voyager_contract::PlacementInsertion::Beside {
                         id: after.clone(),
                         side: voyager_contract::Side::Right,
                     },
                 },
             })
             .unwrap();
-        let notes = model.layout.contents.last().unwrap().id.clone();
+        let notes = model.layout.vessels.last().unwrap().id.clone();
         let record = |id| CreatedTerminal {
             id,
             launch: Default::default(),
@@ -3880,15 +3877,15 @@ mod terminal_outcome_tests {
                 launch: None,
                 type_id: "terminal".into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                    insertion: voyager_contract::PanelInsertion::Beside {
+                    owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                    insertion: voyager_contract::PlacementInsertion::Beside {
                         id: after,
                         side: voyager_contract::Side::Bottom,
                     },
                 },
             })
             .unwrap();
-        let new_terminal = model.layout.contents.last().unwrap().id.clone();
+        let new_terminal = model.layout.vessels.last().unwrap().id.clone();
         record_created_terminals(&mut pending, &previous, &model.layout);
         assert_eq!(
             pending,
@@ -3901,7 +3898,7 @@ mod terminal_outcome_tests {
             vec![terminal.clone(), new_terminal.clone()]
         );
         let changed = Arc::make_mut(&mut layout)
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.id == new_terminal)
             .unwrap();
@@ -3913,7 +3910,7 @@ mod terminal_outcome_tests {
             vec![terminal.clone()]
         );
         let changed = Arc::make_mut(&mut layout)
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.id == new_terminal)
             .unwrap();
@@ -3935,11 +3932,11 @@ mod terminal_outcome_tests {
                 })
                 .unwrap();
             let owner = if portals {
-                voyager_contract::PanelOwner::Portals {
+                voyager_contract::PlacementOwner::Portals {
                     voyage: model.layout.voyages[0].id.clone(),
                 }
             } else {
-                voyager_contract::PanelOwner::Fleet {
+                voyager_contract::PlacementOwner::Fleet {
                     id: model.layout.voyages[0].fleets[0].id.clone(),
                 }
             };
@@ -3950,7 +3947,7 @@ mod terminal_outcome_tests {
                         launch: None,
                         destination: voyager_contract::ContentDestination::Panel {
                             owner: owner.clone(),
-                            insertion: voyager_contract::PanelInsertion::Empty,
+                            insertion: voyager_contract::PlacementInsertion::Empty,
                         },
                     })
                     .unwrap();
@@ -3962,7 +3959,7 @@ mod terminal_outcome_tests {
                     launch: None,
                     destination: voyager_contract::ContentDestination::Panel {
                         owner: owner.clone(),
-                        insertion: voyager_contract::PanelInsertion::Beside {
+                        insertion: voyager_contract::PlacementInsertion::Beside {
                             id: first.id.clone(),
                             side: voyager_contract::Side::Right,
                         },
@@ -3971,14 +3968,14 @@ mod terminal_outcome_tests {
                 .unwrap();
             let second = crate::panels::group(&model.layout, &owner).unwrap().members[1].clone();
             let pending = vec![CreatedTerminal {
-                id: second.content.clone(),
+                id: second.vessel.clone(),
                 launch: Default::default(),
                 backend: None,
                 shell_intent: None,
             }];
             assert_eq!(
                 eligible_contents(&Arc::new(model.layout.clone()), None, &pending),
-                vec![second.content.clone()]
+                vec![second.vessel.clone()]
             );
             model
                 .apply(Action::SetPanelMaximized {
@@ -3986,10 +3983,10 @@ mod terminal_outcome_tests {
                     maximized: true,
                 })
                 .unwrap();
-            assert!(!visible_content(&model.layout, &second.content));
+            assert!(!visible_content(&model.layout, &second.vessel));
             assert_eq!(
                 eligible_contents(&Arc::new(model.layout.clone()), None, &pending),
-                vec![second.content.clone()]
+                vec![second.vessel.clone()]
             );
             model
                 .apply(Action::SetPanelMaximized {
@@ -3999,15 +3996,15 @@ mod terminal_outcome_tests {
                 .unwrap();
             assert_eq!(
                 eligible_contents(&Arc::new(model.layout), None, &pending),
-                vec![second.content]
+                vec![second.vessel]
             );
         }
     }
 
     #[test]
     fn uncertain_start_discards_only_its_automatic_eligibility() {
-        let first = ContentId("first".into());
-        let other = ContentId("other".into());
+        let first = VesselId("first".into());
+        let other = VesselId("other".into());
         let record = |id| CreatedTerminal {
             id,
             launch: Default::default(),
@@ -4098,7 +4095,7 @@ mod content_admission_tests {
         )
         .unwrap();
         let mut owner = crate::content::Owner::open(&directory).unwrap();
-        let id = ContentId("notes".into());
+        let id = VesselId("notes".into());
         owner.initialize(&id).unwrap();
         let (sender, receive) = async_channel::bounded(8);
         let client = Client {
@@ -4159,7 +4156,7 @@ mod content_admission_tests {
         let inspect = ContentRequest::Inspect {
             version: Version::V1,
             request_id: "read".into(),
-            content_id: id.clone(),
+            vessel_id: id.clone(),
         };
         let mut read =
             Box::pin(client.read_content(crate::content::Access::View(binding.clone()), inspect));
@@ -4189,7 +4186,7 @@ mod content_admission_tests {
         let update = ContentRequest::Update {
             version: Version::V1,
             request_id: "update".into(),
-            content_id: id,
+            vessel_id: id,
             expected_revision: snapshot.revision.clone(),
             data: Notes {
                 title: "Updated".into(),
@@ -4221,7 +4218,7 @@ mod content_admission_tests {
         let inspect = ContentRequest::Inspect {
             version: Version::V1,
             request_id: "retired-read".into(),
-            content_id: binding.id().clone(),
+            vessel_id: binding.id().clone(),
         };
         let mut retired = Box::pin(client.read_content_view(&view, inspect.clone()));
         assert!(retired.as_mut().poll(&mut cx).is_pending());
@@ -4244,7 +4241,7 @@ mod content_admission_tests {
                 ContentRequest::Inspect {
                     version: Version::V1,
                     request_id: "staged-effect".into(),
-                    content_id: binding.id().clone(),
+                    vessel_id: binding.id().clone(),
                 }
             ),
             Err(CallError::Rejected(_))
@@ -4279,7 +4276,7 @@ mod content_admission_tests {
         let request = ContentRequest::Update {
             version: Version::V1,
             request_id: "accepted-save".into(),
-            content_id: binding.id().clone(),
+            vessel_id: binding.id().clone(),
             expected_revision: snapshot.revision,
             data: Notes {
                 title: "Accepted".into(),

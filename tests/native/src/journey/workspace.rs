@@ -12,7 +12,7 @@ use serde::Serialize;
 use std::path::Path;
 use voyager_contract::inspection::{Rect, Role};
 use voyager_contract::{
-    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Vessel, Voyage,
+    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Placement, Voyage,
     VoyageId,
 };
 
@@ -43,7 +43,7 @@ const MODELLED: &str = "the saved and drawn workspace match the journey's model"
 struct Start {
     voyage: VoyageId,
     fleet: FleetId,
-    vessel: Vessel,
+    vessel: Placement,
 }
 
 struct Created<Id> {
@@ -168,7 +168,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let born = born(vessels(&before), vessels(&after), |vessel| &vessel.id);
         let split = fleet(&after, &start.fleet);
         let beside = split
-            .map(|fleet| fleet.vessels.as_slice())
+            .map(|fleet| fleet.placements.as_slice())
             .unwrap_or_default();
         let root = split.and_then(|fleet| fleet.root.as_ref());
         let verdict = Verdict::new()
@@ -256,7 +256,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the new Fleet is named Fleet 2 and holds one Vessel",
                 born.iter()
-                    .all(|fleet| fleet.name == "Fleet 2" && fleet.vessels.len() == 1),
+                    .all(|fleet| fleet.name == "Fleet 2" && fleet.placements.len() == 1),
             )
             .expect(
                 "the new Fleet is selected",
@@ -283,7 +283,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             }
             _ => verdict,
         };
-        let placed = born.first().and_then(|fleet| fleet.vessels.first());
+        let placed = born.first().and_then(|fleet| fleet.placements.first());
         let shell = bind(native, &verdict, placed)?;
         let made = shell.zip(born.first()).map(|(shell, fleet)| Created {
             id: fleet.id.clone(),
@@ -361,7 +361,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the new Voyage holds one Fleet with one Vessel",
                 born.iter().all(
-                    |voyage| matches!(&voyage.fleets[..], [fleet] if fleet.vessels.len() == 1),
+                    |voyage| matches!(&voyage.fleets[..], [fleet] if fleet.placements.len() == 1),
                 ),
             )
             .expect(
@@ -400,7 +400,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let placed = born
             .first()
             .and_then(|voyage| voyage.fleets.first())
-            .and_then(|fleet| fleet.vessels.first());
+            .and_then(|fleet| fleet.placements.first());
         let shell = bind(native, &verdict, placed)?;
         let made = shell.zip(born.first()).map(|(shell, voyage)| Created {
             id: voyage.id.clone(),
@@ -703,7 +703,7 @@ fn editing(seen: &Seen) -> Vec<String> {
 fn bind(
     native: &mut Native,
     verdict: &Verdict,
-    placed: Option<&Vessel>,
+    placed: Option<&Placement>,
 ) -> Result<Option<Terminal>> {
     match placed {
         Some(placed) if verdict.passed() => Terminal::bind(native, &placed.id).map(Some),
@@ -788,7 +788,7 @@ fn restored(seen: &Seen, given: &[(&RenameTarget, &'static str)]) -> Picture {
         .and_then(|id| fleet(layout, id));
     let panes = selected
         .into_iter()
-        .flat_map(|fleet| &fleet.vessels)
+        .flat_map(|fleet| &fleet.placements)
         .flat_map(|placed| {
             [
                 Target::name(&vessel(&placed.id)),
@@ -848,7 +848,7 @@ fn tab(fleet: &Fleet) -> RenameTarget {
 }
 
 fn controls(fleet: &Fleet) -> impl Iterator<Item = Target> {
-    let panes = fleet.vessels.iter().flat_map(|placed| {
+    let panes = fleet.placements.iter().flat_map(|placed| {
         [
             Target::name(&vessel(&placed.id)),
             Target::terminal(&placed.id),
@@ -883,7 +883,7 @@ fn start(layout: &Layout) -> Option<Start> {
     let [fleet] = &voyage.fleets[..] else {
         return None;
     };
-    let [vessel] = &fleet.vessels[..] else {
+    let [vessel] = &fleet.placements[..] else {
         return None;
     };
     (!voyage.closed
@@ -906,7 +906,7 @@ fn step(seen: &Seen, selected: &str) -> Step {
 
 fn shown(seen: &Seen, fleet: &Fleet) -> bool {
     fleet
-        .vessels
+        .placements
         .iter()
         .all(|placed| seen.shows(&Target::name(&vessel(&placed.id))))
 }
@@ -955,8 +955,8 @@ mod tests {
     ];
 
     fn layout(title: &str) -> Result<Layout> {
-        let vessel = |id: &str, name: &str| json!({"id": id, "content": "content-1", "name": name});
-        let fleet = |id: &str, name: &str, vessels: &[serde_json::Value]| json!({"id": id, "name": name, "root": null, "vessels": vessels});
+        let vessel = |id: &str, name: &str| json!({"id": id, "vessel": "content-1", "name": name});
+        let fleet = |id: &str, name: &str, vessels: &[serde_json::Value]| json!({"id": id, "name": name, "root": null, "placements": vessels});
         let voyage = |id: &str, name: &str, fleets: Vec<serde_json::Value>| json!({"id": id, "name": name, "fleets": fleets, "portals": []});
         Ok(serde_json::from_value(json!({
             "voyages": [
@@ -971,7 +971,7 @@ mod tests {
                     fleet("fleet-17", "Fleet 1", &[vessel("placement-16", "Terminal 1")]),
                 ]),
             ],
-            "contents": [],
+            "vessels": [],
             "selectedVoyage": "voyage-1",
             "selectedFleet": "fleet-4",
             "context": {"kind": "vessel", "id": "placement-10"},
@@ -1301,9 +1301,9 @@ mod tests {
         let found = differences(&model, &extra, &WHOLE)?;
         assert!(first(&found, "the saved Voyages are"), "{found:?}");
         let mut late = document.clone();
-        let mut placed = late.voyages[0].fleets[0].vessels[0].clone();
+        let mut placed = late.voyages[0].fleets[0].placements[0].clone();
         placed.id = PlacementId("placement-99".into());
-        late.voyages[0].fleets[0].vessels.push(placed);
+        late.voyages[0].fleets[0].placements.push(placed);
         let found = differences(&model, &late, &WHOLE)?;
         assert!(
             first(&found, "Fleet fleet-4 saves the Vessels"),
@@ -1396,7 +1396,7 @@ mod tests {
         let mut home = document.voyages[1].clone();
         home.id = VoyageId("home-voyage-5".into());
         home.fleets[0].id = FleetId("home-fleet-8".into());
-        home.fleets[0].vessels[0].id = PlacementId("placement-7".into());
+        home.fleets[0].placements[0].id = PlacementId("placement-7".into());
         document.home = Some(home);
         let started = model(&document)?;
         assert_eq!(
@@ -1406,7 +1406,7 @@ mod tests {
         let found = differences(&model(&modelled_layout()?)?, &document, &WHOLE)?;
         assert!(first(&found, "Home Voyage"), "{found:?}");
         if let Some(home) = document.home.as_mut() {
-            home.fleets[0].vessels.clear();
+            home.fleets[0].placements.clear();
         }
         let found = differences(&started, &document, &WHOLE)?;
         assert!(

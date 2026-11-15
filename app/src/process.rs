@@ -6,7 +6,7 @@ use crate::{
 };
 use std::sync::Arc;
 use voyager_contract::{
-    ContentId, Context, CoreTerminalId, Layout,
+    Context, CoreTerminalId, Layout, VesselId,
     administrator::{ProcessAction, ProcessInfo, ProcessOutput},
 };
 
@@ -17,11 +17,11 @@ fn refused(message: &str) -> Error {
     }
 }
 
-fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo {
+fn info(content: &VesselId, terminal: Terminal, layout: &Layout) -> ProcessInfo {
     let reported_activity = Some(Arc::new(Core::reported_activity(&terminal)));
     let agent_name = crate::observation::conversation_name(&terminal).or_else(|| {
         layout
-            .contents
+            .vessels
             .iter()
             .find(|item| &item.id == content)
             .and_then(|binding| {
@@ -32,7 +32,7 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
             })
     });
     let placement_names = layout
-        .contents
+        .vessels
         .iter()
         .find(|item| &item.id == content)
         .map(|binding| {
@@ -43,10 +43,10 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
                     voyage
                         .fleets
                         .iter()
-                        .flat_map(|fleet| &fleet.vessels)
+                        .flat_map(|fleet| &fleet.placements)
                         .chain(&voyage.portals)
                 })
-                .filter(|placement| &placement.content == content)
+                .filter(|placement| &placement.vessel == content)
                 .map(|placement| voyager_contract::administrator::PlacementName {
                     placement_id: placement.id.clone(),
                     effective_name: crate::observation::effective_name(
@@ -58,7 +58,7 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
         .unwrap_or_default();
     let live = terminal.is_live();
     ProcessInfo {
-        content_id: content.clone(),
+        vessel_id: content.clone(),
         terminal_id: CoreTerminalId(terminal.address),
         pid: terminal.pid,
         cwd: terminal.cwd,
@@ -129,7 +129,7 @@ impl Effect {
             }
             Self::Stop(target, pending, visible) => {
                 let observed = pending.wait()?;
-                let observed = info(&target.content_id, observed, &visible);
+                let observed = info(&target.vessel_id, observed, &visible);
                 stop_result(target, observed)
             }
         }
@@ -149,29 +149,29 @@ pub(crate) fn start(
     let target = match action {
         ProcessAction::List => None,
         ProcessAction::Read {
-            content_id,
+            vessel_id,
             terminal_id,
             ..
         }
         | ProcessAction::Send {
-            content_id,
+            vessel_id,
             terminal_id,
             ..
         }
         | ProcessAction::Interrupt {
-            content_id,
+            vessel_id,
             terminal_id,
             ..
         }
         | ProcessAction::Stop {
-            content_id,
+            vessel_id,
             terminal_id,
             ..
-        } => Some((content_id, terminal_id)),
+        } => Some((vessel_id, terminal_id)),
     };
     if let Some((content, address)) = target {
         let binding = visible
-            .contents
+            .vessels
             .iter()
             .find(|item| &item.id == content)
             .ok_or_else(|| {
@@ -262,7 +262,7 @@ pub(crate) fn start(
         let mut processes = Vec::new();
         let mut unavailable = Vec::new();
         for binding in visible
-            .contents
+            .vessels
             .iter()
             .filter(|item| item.type_id == "terminal")
         {
@@ -302,7 +302,7 @@ mod tests {
             .unwrap();
         let binding = model
             .layout
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.type_id == "terminal")
             .unwrap();
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn stop_result_distinguishes_observed_states_from_unconfirmed_results() {
         let target = ProcessInfo {
-            content_id: ContentId("content-1".into()),
+            vessel_id: VesselId("content-1".into()),
             terminal_id: CoreTerminalId("t1".into()),
             pid: Some(23),
             cwd: "/tmp".into(),

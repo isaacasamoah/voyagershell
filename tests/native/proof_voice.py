@@ -36,7 +36,7 @@ def prove(
         native("button", False)
 
     def document():
-        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
 
     try:
         ready = wait(
@@ -47,10 +47,10 @@ def prove(
         assert ready["capability"]["kind"] == "candidate", ready
         before = wait(
             document,
-            lambda doc: bool(doc["value"]["contents"][0].get("backend")),
+            lambda doc: bool(doc["value"]["vessels"][0].get("backend")),
             "initial terminal",
         )
-        address = before["value"]["contents"][0]["backend"]
+        address = before["value"]["vessels"][0]["backend"]
         original = core_rpc(session, env, "terminal.get", {"terminal": address})
         capture("voice-before-activation")
         button("Start voice")

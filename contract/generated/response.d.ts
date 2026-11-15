@@ -1,4 +1,27 @@
 export type Phase = "ready" | "saving" | "incomplete" | "closed";
+export type PlacementOwner =
+  | {
+      id: string;
+      kind: "fleet";
+    }
+  | {
+      kind: "portals";
+      voyage: string;
+    };
+export type Split =
+  | {
+      kind: "leaf";
+      placement: string;
+    }
+  | {
+      axis: Axis;
+      first: Split;
+      kind: "branch";
+      second: Split;
+      share?: SplitShare;
+    };
+export type Axis = "horizontal" | "vertical";
+export type SplitShare = number;
 export type PortalMode = "overlay" | "make-room";
 export type Node =
   | {
@@ -34,22 +57,6 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
-export type Launch =
-  | {
-      kind: "terminal";
-    }
-  | {
-      effort?: Effort & string;
-      kind: "codex";
-      model?: string;
-      permissions?: Permissions & string;
-    }
-  | {
-      argv: string[];
-      kind: "program";
-    };
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
-export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type Context =
   | {
       kind: "workspace";
@@ -70,36 +77,29 @@ export type Context =
       id: string;
       kind: "portal";
     };
-export type Split =
-  | {
-      kind: "leaf";
-      placement: string;
-    }
-  | {
-      axis: Axis;
-      first: Split;
-      kind: "branch";
-      second: Split;
-      share?: SplitShare;
-    };
-export type Axis = "horizontal" | "vertical";
-export type SplitShare = number;
 export type NameOrigin = "automatic" | "deliberate";
-export type PanelOwner =
+export type Launch =
   | {
-      id: string;
-      kind: "fleet";
+      kind: "terminal";
     }
   | {
-      kind: "portals";
-      voyage: string;
+      effort?: Effort & string;
+      kind: "codex";
+      model?: string;
+      permissions?: Permissions & string;
+    }
+  | {
+      argv: string[];
+      kind: "program";
     };
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface Response {
   closePlan?: Plan | null;
-  createdContents: string[];
+  createdVessels: string[];
   createdWorkspace: boolean;
   fresh: boolean;
   layout: Layout;
@@ -119,40 +119,33 @@ export interface Plan {
   voyage: string;
 }
 export interface Entry {
-  content: string;
   name: string;
   pid?: number | null;
   terminal?: string | null;
   typeId: string;
+  vessel: string;
 }
 export interface Layout {
+  arrangements?: Arrangement[];
   canvas?: Canvas;
-  contents: Content[];
   context: Context;
   home?: Voyage | null;
   nextId: string;
-  savedLayouts?: SavedLayout[];
   selectedFleet?: string | null;
   selectedVoyage?: string | null;
+  vessels: Vessel[];
   view?: WorkspaceView & string;
   voyages: Voyage[];
+}
+export interface Arrangement {
+  name: string;
+  owner: PlacementOwner;
+  root?: Split | null;
 }
 export interface Canvas {
   portalMode?: PortalMode & string;
   root: Node;
   sidebarCollapsed?: boolean;
-}
-export interface Content {
-  backend?: string | null;
-  configuration?: {
-    [k: string]: unknown;
-  } | null;
-  cwd: string;
-  id: string;
-  launch?: Launch | null;
-  shellIntent?: string | null;
-  startPending?: string | null;
-  typeId: string;
 }
 export interface Voyage {
   closed?: boolean;
@@ -163,23 +156,23 @@ export interface Voyage {
   name: string;
   nameOrigin?: NameOrigin & string;
   portalLayout?: PortalLayout | null;
-  portals: Vessel[];
-  primaryVessel?: string | null;
+  portals: Placement[];
+  primaryPlacement?: string | null;
 }
 export interface Fleet {
   closed?: boolean;
   id: string;
   maximizedPlacement?: string | null;
   name: string;
+  placements: Placement[];
   root?: Split | null;
-  vessels: Vessel[];
 }
-export interface Vessel {
-  content: string;
+export interface Placement {
   hidden?: boolean;
   id: string;
   name: string;
   nameOrigin?: NameOrigin;
+  vessel: string;
 }
 export interface PortalLayout {
   maximizedPlacement?: string | null;
@@ -188,8 +181,15 @@ export interface PortalLayout {
   visible: boolean;
   width: number;
 }
-export interface SavedLayout {
-  name: string;
-  owner: PanelOwner;
-  root?: Split | null;
+export interface Vessel {
+  backend?: string | null;
+  configuration?: {
+    [k: string]: unknown;
+  } | null;
+  cwd: string;
+  id: string;
+  launch?: Launch | null;
+  shellIntent?: string | null;
+  startPending?: string | null;
+  typeId: string;
 }

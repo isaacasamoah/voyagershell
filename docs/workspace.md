@@ -22,7 +22,7 @@ Browser embedding and additional provider implementations remain separate work.
 
 ## Shared panel arrangements
 
-The current owner contract uses `PanelOwner`: a Fleet ID or a Voyage's Portal
+The current owner contract uses `PlacementOwner`: a Fleet ID or a Voyage's Portal
 column. Home is one retained internal Voyage/Fleet with its own Portal column,
 kept outside the ordinary Voyage list. Entering Home preserves the selected
 ordinary Voyage/Fleet and explicit dock context. A previously absent Home starts

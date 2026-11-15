@@ -69,9 +69,6 @@
         "configuration": {
           "$ref": "#/definitions/NotesConfiguration"
         },
-        "contentId": {
-          "type": "string"
-        },
         "expectedVersion": {
           "type": "string"
         },
@@ -84,13 +81,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedVersion",
         "configuration"
       ],
@@ -99,9 +99,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "operation": {
           "const": "content.describe",
           "type": "string"
@@ -111,22 +108,22 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId"
+        "vesselId"
       ],
       "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "operation": {
           "const": "content.inspect",
           "type": "string"
@@ -136,22 +133,22 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId"
+        "vesselId"
       ],
       "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "expectedVersion": {
           "type": "string"
         },
@@ -164,13 +161,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedVersion"
       ],
       "type": "object"
@@ -178,9 +178,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "operation": {
           "const": "content.list-notes",
           "type": "string"
@@ -190,22 +187,22 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId"
+        "vesselId"
       ],
       "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "expectedVersion": {
           "type": "string"
         },
@@ -221,13 +218,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedVersion",
         "title"
       ],
@@ -236,9 +236,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "expectedVersion": {
           "type": "string"
         },
@@ -254,13 +251,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedVersion",
         "filename"
       ],
@@ -269,9 +269,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "data": {
           "$ref": "#/definitions/Notes"
         },
@@ -287,13 +284,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedRevision",
         "data"
       ],

@@ -13,17 +13,17 @@ import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
 import type { Context as UIContext, NativeElement } from "gpui-kit";
 import type { Action } from "../../contract/generated/request";
-import type { Context, Vessel } from "../../contract/generated/response";
+import type { Context, Placement } from "../../contract/generated/response";
 
 export function renderPanel(
   workspace: Canvas,
-  placement: Vessel,
+  placement: Placement,
   scope: Extract<Context, { kind: "vessel" | "portal" }>,
   group: PanelGroup,
 ): NativeElement {
   const colors = projection();
-  const content = workspace.layout?.contents.find(
-    (item) => item.id === placement.content,
+  const content = workspace.layout?.vessels.find(
+    (item) => item.id === placement.vessel,
   );
   if (!content) throw Error("Placement content is unavailable.");
   const terminal = workspace.terminals.get(content.id);
@@ -35,7 +35,7 @@ export function renderPanel(
     !content.startPending
       ? {
           operation: "start-new-shell",
-          contentId: content.id,
+          vesselId: content.id,
           expectedBackend: content.backend,
         }
       : null;
@@ -275,7 +275,7 @@ export function renderPanel(
                     group.owner,
                   )
                 : content.typeId === "notes"
-                  ? Notes.new(content.id, { contentId: content.id })
+                  ? Notes.new(content.id, { vesselId: content.id })
                   : terminal
                     ? Terminal.new(terminal).size_full()
                     : div()

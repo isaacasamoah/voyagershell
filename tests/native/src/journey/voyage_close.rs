@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use voyager_contract::inspection::Role;
 use voyager_contract::{
-    ContentId, Fleet, FleetId, Layout, PlacementId, RenameTarget, Voyage, VoyageId,
+    VesselId, Fleet, FleetId, Layout, PlacementId, RenameTarget, Voyage, VoyageId,
 };
 
 cases! {
@@ -27,7 +27,7 @@ struct Second {
     voyage: VoyageId,
     fleet: FleetId,
     placements: Vec<PlacementId>,
-    contents: Vec<ContentId>,
+    vessels: Vec<VesselId>,
     shells: Vec<Terminal>,
 }
 
@@ -35,7 +35,7 @@ struct Second {
 struct Shown {
     row: bool,
     tab: bool,
-    vessels: bool,
+    placements: bool,
     terminals: bool,
     dialog: bool,
     reopen: bool,
@@ -43,7 +43,7 @@ struct Shown {
 
 impl Shown {
     fn whole(&self) -> bool {
-        self.row && self.tab && self.vessels && self.terminals
+        self.row && self.tab && self.placements && self.terminals
     }
 
     fn gone(&self) -> bool {
@@ -65,7 +65,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             "a new Voyage with its first Vessel's terminal drawn",
             |seen| {
                 let voyage = born_voyage(&start, seen.document)?;
-                let placement = voyage.fleets.first()?.vessels.first()?.id.clone();
+                let placement = voyage.fleets.first()?.placements.first()?.id.clone();
                 seen.shows(&Target::terminal(&placement))
                     .then(|| voyage.id.clone())
             },
@@ -117,7 +117,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the new Voyage holds one Fleet with two Vessels",
                 voyage(&layout, &made).is_some_and(
-                    |voyage| matches!(&voyage.fleets[..], [fleet] if fleet.vessels.len() == 2),
+                    |voyage| matches!(&voyage.fleets[..], [fleet] if fleet.placements.len() == 2),
                 ),
             )
             .expect(
@@ -129,7 +129,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         Ok((
             verdict,
             Some(Second {
-                contents: contents_of(&layout, &made),
+                vessels: contents_of(&layout, &made),
                 voyage: made,
                 fleet,
                 placements: vec![placement, other],
@@ -146,7 +146,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let entries = native.observe("the close dialog's inventory", |seen| Some(entries(seen)))?;
         let (version_after, layout_after) = rested_now(native)?;
         let programs = programs(native, &second.shells)?;
-        let mut expected: Vec<String> = second.contents.iter().map(|id| id.0.clone()).collect();
+        let mut expected: Vec<String> = second.vessels.iter().map(|id| id.0.clone()).collect();
         expected.sort();
         let verdict = Verdict::new()
             .expect(
@@ -200,10 +200,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let Some(closed) = closed else {
         return Ok(());
     };
-    let old = backends(&closed, &second.contents);
+    let old = backends(&closed, &second.vessels);
     cases.check(native, Case::ReopenVoyage, |native| {
         let (layout, shown) = reopen(native, &second, &old)?;
-        let fresh = fresh(&layout, &second.contents, &old);
+        let fresh = fresh(&layout, &second.vessels, &old);
         let (programs, typed) = if fresh {
             second.shells = rebind(native, &second.placements)?;
             (
@@ -255,7 +255,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |_| true,
         )?;
         let live = native.live_terminals()?;
-        let running: Vec<String> = backends(&after, &second.contents)
+        let running: Vec<String> = backends(&after, &second.vessels)
             .into_iter()
             .filter(|backend| live.contains(backend))
             .collect();
@@ -281,12 +281,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let Some(restarted) = restarted else {
         return Ok(());
     };
-    let old = backends(&restarted, &second.contents);
+    let old = backends(&restarted, &second.vessels);
     cases.check(native, Case::ReopenAfterRestart, |native| {
         let (layout, shown) = reopen(native, &second, &old)?;
-        let fresh = fresh(&layout, &second.contents, &old);
+        let fresh = fresh(&layout, &second.vessels, &old);
         let live = native.live_terminals()?;
-        let on_core = backends(&layout, &second.contents)
+        let on_core = backends(&layout, &second.vessels)
             .iter()
             .all(|backend| live.contains(backend));
         let (programs, typed) = if fresh {
@@ -387,7 +387,7 @@ fn reopen(native: &Native, second: &Second, old: &[String]) -> Result<(Layout, S
         |(layout, shown)| {
             open_and_selected(layout, &second.voyage)
                 && shown.whole()
-                && fresh(layout, &second.contents, old)
+                && fresh(layout, &second.vessels, old)
         },
     )
 }
@@ -405,7 +405,7 @@ fn rested(native: &Native, second: &Second) -> Result<(u64, Layout)> {
     native.settle(
         "the second Voyage's programs bound and the workspace at rest",
         |seen| {
-            bound(seen.document, &second.contents).then(|| (seen.version, seen.document.clone()))
+            bound(seen.document, &second.vessels).then(|| (seen.version, seen.document.clone()))
         },
         |_| true,
     )
@@ -472,7 +472,7 @@ fn shown(seen: &Seen, second: &Second) -> Shown {
         tab: seen.shows(&Target::name(&RenameTarget::Fleet {
             id: second.fleet.clone(),
         })),
-        vessels: second.placements.iter().all(|placement| {
+        placements: second.placements.iter().all(|placement| {
             seen.shows(&Target::name(&RenameTarget::Vessel {
                 id: placement.clone(),
             }))
@@ -499,24 +499,24 @@ fn only_vessels(layout: &Layout, id: &VoyageId) -> Vec<PlacementId> {
     voyage(layout, id)
         .into_iter()
         .flat_map(|voyage| &voyage.fleets)
-        .flat_map(|fleet: &Fleet| &fleet.vessels)
+        .flat_map(|fleet: &Fleet| &fleet.placements)
         .map(|vessel| vessel.id.clone())
         .collect()
 }
 
-fn contents_of(layout: &Layout, id: &VoyageId) -> Vec<ContentId> {
+fn contents_of(layout: &Layout, id: &VoyageId) -> Vec<VesselId> {
     voyage(layout, id)
         .into_iter()
         .flat_map(|voyage| &voyage.fleets)
-        .flat_map(|fleet| &fleet.vessels)
-        .map(|vessel| vessel.content.clone())
+        .flat_map(|fleet| &fleet.placements)
+        .map(|vessel| vessel.vessel.clone())
         .collect()
 }
 
-fn bound(layout: &Layout, contents: &[ContentId]) -> bool {
-    !contents.is_empty()
-        && contents.iter().all(|id| {
-            layout.contents.iter().any(|content| {
+fn bound(layout: &Layout, vessels: &[VesselId]) -> bool {
+    !vessels.is_empty()
+        && vessels.iter().all(|id| {
+            layout.vessels.iter().any(|content| {
                 &content.id == id
                     && content.backend.is_some()
                     && content.start_pending.is_none()
@@ -525,19 +525,19 @@ fn bound(layout: &Layout, contents: &[ContentId]) -> bool {
         })
 }
 
-fn backends(layout: &Layout, contents: &[ContentId]) -> Vec<String> {
+fn backends(layout: &Layout, vessels: &[VesselId]) -> Vec<String> {
     layout
-        .contents
+        .vessels
         .iter()
-        .filter(|content| contents.contains(&content.id))
+        .filter(|content| vessels.contains(&content.id))
         .filter_map(|content| content.backend.as_ref())
         .map(|backend| backend.0.clone())
         .collect()
 }
 
-fn fresh(layout: &Layout, contents: &[ContentId], old: &[String]) -> bool {
-    bound(layout, contents)
-        && backends(layout, contents)
+fn fresh(layout: &Layout, vessels: &[VesselId], old: &[String]) -> bool {
+    bound(layout, vessels)
+        && backends(layout, vessels)
             .iter()
             .all(|backend| !old.contains(backend))
 }
@@ -563,7 +563,7 @@ fn same_voyage(layout: &Layout, before: &Layout, id: &VoyageId) -> bool {
                             fleet.id.clone(),
                             fleet.name.clone(),
                             fleet
-                                .vessels
+                                .placements
                                 .iter()
                                 .map(|vessel| (vessel.id.clone(), vessel.name.clone()))
                                 .collect::<Vec<_>>(),

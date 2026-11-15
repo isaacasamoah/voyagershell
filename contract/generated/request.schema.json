@@ -75,7 +75,7 @@
               "type": "string"
             },
             "owner": {
-              "$ref": "#/definitions/PanelOwner"
+              "$ref": "#/definitions/PlacementOwner"
             }
           },
           "required": [
@@ -96,7 +96,7 @@
               "type": "string"
             },
             "owner": {
-              "$ref": "#/definitions/PanelOwner"
+              "$ref": "#/definitions/PlacementOwner"
             }
           },
           "required": [
@@ -238,20 +238,20 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "expectedBackend": {
               "type": "string"
             },
             "operation": {
               "const": "start-new-shell",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "expectedBackend"
           ],
           "type": "object"
@@ -319,7 +319,7 @@
               "type": "string"
             },
             "owner": {
-              "$ref": "#/definitions/PanelOwner"
+              "$ref": "#/definitions/PlacementOwner"
             },
             "path": {
               "items": {
@@ -684,7 +684,7 @@
               "type": "string"
             },
             "owner": {
-              "$ref": "#/definitions/PanelOwner"
+              "$ref": "#/definitions/PlacementOwner"
             }
           },
           "required": [
@@ -767,14 +767,14 @@
           "additionalProperties": false,
           "properties": {
             "insertion": {
-              "$ref": "#/definitions/PanelInsertion"
+              "$ref": "#/definitions/PlacementInsertion"
             },
             "kind": {
               "const": "panel",
               "type": "string"
             },
             "owner": {
-              "$ref": "#/definitions/PanelOwner"
+              "$ref": "#/definitions/PlacementOwner"
             }
           },
           "required": [
@@ -879,9 +879,6 @@
             "backend": {
               "type": "string"
             },
-            "contentId": {
-              "type": "string"
-            },
             "cwd": {
               "type": "string"
             },
@@ -891,12 +888,15 @@
             },
             "placementId": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "kind",
             "placementId",
-            "contentId",
+            "vesselId",
             "backend",
             "cwd"
           ],
@@ -926,9 +926,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "cwd": {
               "type": "string"
             },
@@ -938,12 +935,15 @@
             },
             "placementId": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "kind",
             "placementId",
-            "contentId",
+            "vesselId",
             "cwd"
           ],
           "type": "object"
@@ -1158,7 +1158,15 @@
         }
       ]
     },
-    "PanelInsertion": {
+    "Permissions": {
+      "enum": [
+        "yolo",
+        "workspace-write",
+        "read-only"
+      ],
+      "type": "string"
+    },
+    "PlacementInsertion": {
       "oneOf": [
         {
           "additionalProperties": false,
@@ -1196,7 +1204,7 @@
         }
       ]
     },
-    "PanelOwner": {
+    "PlacementOwner": {
       "oneOf": [
         {
           "additionalProperties": false,
@@ -1233,14 +1241,6 @@
           "type": "object"
         }
       ]
-    },
-    "Permissions": {
-      "enum": [
-        "yolo",
-        "workspace-write",
-        "read-only"
-      ],
-      "type": "string"
     },
     "PortalMode": {
       "enum": [

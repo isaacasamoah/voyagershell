@@ -27,7 +27,7 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
                 .unwrap()
         };
         let initial = inspect();
-        let first = initial.layout.contents[0].id.clone();
+        let first = initial.layout.vessels[0].id.clone();
         let _viewer = client
             .terminal(first.clone(), client.request_id(), initial.version)
             .unwrap();
@@ -42,7 +42,7 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
                 },
             })
             .unwrap();
-        let sibling = split.layout.contents.last().unwrap().id.clone();
+        let sibling = split.layout.vessels.last().unwrap().id.clone();
         let _sibling = client
             .terminal(sibling.clone(), client.request_id(), split.version)
             .unwrap();
@@ -60,8 +60,8 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
         let Some(ProcessOutput::List { processes, .. }) = &listed.output else {
             panic!("The real process list is missing: {listed:?}")
         };
-        let target = processes.iter().find(|p| p.content_id == first).unwrap();
-        let survivor = processes.iter().find(|p| p.content_id == sibling).unwrap();
+        let target = processes.iter().find(|p| p.vessel_id == first).unwrap();
+        let survivor = processes.iter().find(|p| p.vessel_id == sibling).unwrap();
         let unrelated = other
             .terminal_run_with(
                 serde_json::from_value(
@@ -85,17 +85,17 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
             })
         );
         let stop = json!({
-            "operation":"stop", "contentId":first, "terminalId":target.terminal_id,
+            "operation":"stop", "vesselId":first, "terminalId":target.terminal_id,
             "pid":target.pid.unwrap()
         });
         let scope = Context::Vessel {
-            id: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+            id: initial.layout.voyages[0].fleets[0].placements[0].id.clone(),
         };
         for (field, value) in [
             ("pid", json!(0)),
             ("pid", json!(target.pid.unwrap() + 1)),
             ("terminalId", json!(survivor.terminal_id)),
-            ("contentId", json!(sibling)),
+            ("vesselId", json!(sibling)),
         ] {
             let mut wrong = stop.clone();
             wrong[field] = value;
@@ -129,7 +129,7 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
             .process(
                 Context::Workspace,
                 request(ProcessAction::Read {
-                    content_id: first,
+                    vessel_id: first,
                     terminal_id: target.terminal_id.clone(),
                     lines: 0,
                 }),
@@ -171,12 +171,12 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
                 .unwrap()
         };
         let initial = inspect();
-        let content = initial.layout.contents[0].id.clone();
+        let content = initial.layout.vessels[0].id.clone();
         let viewer = client
             .terminal(content.clone(), client.request_id(), initial.version)
             .unwrap();
         let bound = inspect();
-        let address = bound.layout.contents[0].backend.clone().unwrap();
+        let address = bound.layout.vessels[0].backend.clone().unwrap();
         let mut observer = Core::connect(&session).unwrap();
         viewer.input(b"unset HISTFILE; bash -c \"printf '\\033]7501;state=idle:app=voyager-proof\\033\\134'; read -r proposal; sleep 10\"\r".to_vec()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(8);
@@ -198,7 +198,7 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
             input: ProcessInput {
                 expected_version: current.version,
                 action: ProcessAction::Send {
-                    content_id: content,
+                    vessel_id: content,
                     terminal_id: address.clone(),
                     pid: target.pid.unwrap(),
                     text: "RESPONSIVENESS_PROBE".into(),

@@ -10,8 +10,8 @@ import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
 export function renderPanel(workspace, placement, scope, group) {
   const colors = projection();
-  const content = workspace.layout?.contents.find(
-    (item) => item.id === placement.content,
+  const content = workspace.layout?.vessels.find(
+    (item) => item.id === placement.vessel,
   );
   if (!content) throw Error("Placement content is unavailable.");
   const terminal = workspace.terminals.get(content.id);
@@ -23,7 +23,7 @@ export function renderPanel(workspace, placement, scope, group) {
     !content.startPending
       ? {
           operation: "start-new-shell",
-          contentId: content.id,
+          vesselId: content.id,
           expectedBackend: content.backend,
         }
       : null;
@@ -263,7 +263,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     group.owner,
                   )
                 : content.typeId === "notes"
-                  ? Notes.new(content.id, { contentId: content.id })
+                  ? Notes.new(content.id, { vesselId: content.id })
                   : terminal
                     ? Terminal.new(terminal).size_full()
                     : div()

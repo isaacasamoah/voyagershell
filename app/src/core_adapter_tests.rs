@@ -448,7 +448,7 @@ fn terminal_list_accepts_observed_minimal_result() {
 fn typed_document_preserves_null_and_nested_values() {
     for value in [Value::Null, json!({"nested": [1, {"name": "Voyage"}]})] {
         let params = DocSetParams {
-            name: "voyager-layout-v1".into(),
+            name: "voyager-layout-v2".into(),
             on: None,
             value: value.clone(),
             version: 9,

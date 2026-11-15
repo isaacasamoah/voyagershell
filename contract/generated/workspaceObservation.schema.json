@@ -117,7 +117,7 @@
         }
       ]
     },
-    "PanelObservation": {
+    "PlacementObservation": {
       "additionalProperties": false,
       "properties": {
         "backend": {
@@ -125,9 +125,6 @@
             "string",
             "null"
           ]
-        },
-        "contentId": {
-          "type": "string"
         },
         "conversationName": {
           "type": [
@@ -149,11 +146,14 @@
             "string",
             "null"
           ]
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "placementId",
-        "contentId",
+        "vesselId",
         "directory",
         "effectiveName"
       ],
@@ -175,7 +175,7 @@
     },
     "panels": {
       "items": {
-        "$ref": "#/definitions/PanelObservation"
+        "$ref": "#/definitions/PlacementObservation"
       },
       "type": "array"
     },

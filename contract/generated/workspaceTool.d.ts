@@ -16,12 +16,12 @@ export type Action =
   | {
       name: string;
       operation: "save-panel-layout";
-      owner: PanelOwner;
+      owner: PlacementOwner;
     }
   | {
       name: string;
       operation: "load-panel-layout";
-      owner: PanelOwner;
+      owner: PlacementOwner;
     }
   | {
       cwd: string;
@@ -52,9 +52,9 @@ export type Action =
       typeId: string;
     }
   | {
-      contentId: string;
       expectedBackend: string;
       operation: "start-new-shell";
+      vesselId: string;
     }
   | {
       operation: "remove-content-package";
@@ -71,7 +71,7 @@ export type Action =
     }
   | {
       operation: "resize-panel-split";
-      owner: PanelOwner;
+      owner: PlacementOwner;
       /**
        * @maxItems 128
        */
@@ -160,7 +160,7 @@ export type Action =
   | {
       name: string;
       operation: "remove-panel-layout";
-      owner: PanelOwner;
+      owner: PlacementOwner;
     }
   | {
       mode?: PortalMode | null;
@@ -204,7 +204,7 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
-export type PanelOwner =
+export type PlacementOwner =
   | {
       id: string;
       kind: "fleet";
@@ -216,10 +216,10 @@ export type PanelOwner =
 export type DirectorySource =
   | {
       backend: string;
-      contentId: string;
       cwd: string;
       kind: "live";
       placementId: string;
+      vesselId: string;
     }
   | {
       cwd: string;
@@ -227,10 +227,10 @@ export type DirectorySource =
       voyageId: string;
     }
   | {
-      contentId: string;
       cwd: string;
       kind: "starting";
       placementId: string;
+      vesselId: string;
     };
 export type Launch =
   | {
@@ -249,11 +249,11 @@ export type Launch =
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type ContentDestination = {
-  insertion: PanelInsertion;
+  insertion: PlacementInsertion;
   kind: "panel";
-  owner: PanelOwner;
+  owner: PlacementOwner;
 };
-export type PanelInsertion =
+export type PlacementInsertion =
   | {
       kind: "empty";
     }

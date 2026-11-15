@@ -8,7 +8,7 @@ test("new-shell intent names its current content and backend without a saved lau
     expectedVersion: "4",
     action: {
       operation: "start-new-shell",
-      contentId: "content",
+      vesselId: "content",
       expectedBackend: "t1",
     },
   };
@@ -26,7 +26,7 @@ test("new-shell intent names its current content and backend without a saved lau
   );
   const outcome = {
     requestId: "open",
-    contentId: "content",
+    vesselId: "content",
     status: "rejected",
     reason: "ended",
     message: "Finished",
@@ -41,7 +41,7 @@ test("content tools contain data and revision but no actor authority", async () 
     expectedVersion: "7",
     action: {
       operation: "update",
-      contentId: "notes-a",
+      vesselId: "notes-a",
       expectedRevision: "base",
       data: { title: "Title", text: "Body" },
     },
@@ -57,7 +57,7 @@ test("content tools contain data and revision but no actor authority", async () 
   ])
     assert.equal(contentTool({ ...input, [key]: "forged" }), false);
   assert.equal(
-    contentTool({ ...input, action: { ...input.action, contentId: 4 } }),
+    contentTool({ ...input, action: { ...input.action, vesselId: 4 } }),
     false,
   );
   assert.equal(
@@ -179,7 +179,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
     expectedVersion: "1",
     action: {
       operation: "send",
-      contentId: "content-1",
+      vesselId: "content-1",
       terminalId: "t1",
       pid: 10,
       text: "hello",
@@ -205,7 +205,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
       expectedVersion: "1",
       action: {
         operation: "read",
-        contentId: "content-1",
+        vesselId: "content-1",
         terminalId: "t1",
         lines: 160,
       },
@@ -217,7 +217,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
       expectedVersion: "1",
       action: {
         operation: "read",
-        contentId: "content-1",
+        vesselId: "content-1",
         terminalId: "t1",
         lines: 161,
       },

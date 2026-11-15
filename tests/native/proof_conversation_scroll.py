@@ -91,9 +91,9 @@ def prove(
             assert time.monotonic() < deadline, "Dedicated Core socket did not appear"
             time.sleep(0.05)
         while True:
-            before = rpc("doc.get", {"name": "voyager-layout-v1"})
-            if before["value"]["contents"] and all(
-                content.get("backend") for content in before["value"]["contents"]
+            before = rpc("doc.get", {"name": "voyager-layout-v2"})
+            if before["value"]["vessels"] and all(
+                content.get("backend") for content in before["value"]["vessels"]
             ):
                 break
             assert time.monotonic() < deadline, "Initial terminals were not bound"
@@ -138,7 +138,7 @@ def prove(
         assert observed["privateOwner"]["thread"] is None
         assert observed["privateOwner"]["turn"] is None
         assert observed["privateOwner"]["messages"] == []
-        observed["layoutAfter"] = rpc("doc.get", {"name": "voyager-layout-v1"})
+        observed["layoutAfter"] = rpc("doc.get", {"name": "voyager-layout-v2"})
         assert observed["layoutAfter"] == before
         observed["coreAfter"] = rpc("server.status", {})
         assert observed["coreAfter"]["pid"] == observed["coreBefore"]["pid"]

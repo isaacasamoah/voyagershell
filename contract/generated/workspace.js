@@ -13,15 +13,15 @@ export async function invoke(action, expectedVersion) {
     throw Error("Invalid workspace response");
   return response;
 }
-export async function openTerminal(contentId, expectedVersion) {
-  const request = { requestId: request_id(), contentId, expectedVersion };
+export async function openTerminal(vesselId, expectedVersion) {
+  const request = { requestId: request_id(), vesselId, expectedVersion };
   if (!validateTerminalRequest(request))
     throw Error("Invalid terminal request");
   const response = JSON.parse(await terminal_open(JSON.stringify(request)));
   if (
     !validateTerminalResponse(response) ||
     response.requestId !== request.requestId ||
-    response.contentId !== contentId
+    response.vesselId !== vesselId
   )
     throw Error("Terminal result unconfirmed; do not repeat the request");
   return response;

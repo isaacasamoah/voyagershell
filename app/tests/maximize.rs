@@ -23,15 +23,15 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         };
         let initial = client.call(request(0, Action::Inspect)).unwrap();
         let fleet = initial.layout.selected_fleet.clone().unwrap();
-        let first = initial.layout.voyages[0].fleets[0].vessels[0].id.clone();
+        let first = initial.layout.voyages[0].fleets[0].placements[0].id.clone();
         let split = client
             .call(request(
                 initial.version,
                 Action::CreateContent {
                     type_id: "terminal".into(),
                     destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                        insertion: voyager_contract::PanelInsertion::Beside {
+                        owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PlacementInsertion::Beside {
                             id: first.clone(),
                             side: voyager_contract::Side::Right,
                         },
@@ -41,7 +41,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
             ))
             .unwrap();
         assert_eq!(split.status, Status::Applied);
-        let second = split.layout.voyages[0].fleets[0].vessels[1].id.clone();
+        let second = split.layout.voyages[0].fleets[0].placements[1].id.clone();
         let zoom = client
             .call(request(
                 split.version,
@@ -86,7 +86,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
             .unwrap();
         assert_eq!(stale.status, Status::Rejected);
         let mut external = Core::connect(&session).unwrap();
-        let stored = external.document_get("voyager-layout-v1").unwrap();
+        let stored = external.document_get("voyager-layout-v2").unwrap();
         assert_eq!(stored.version, zoom.version);
         assert_eq!(
             stored.value["voyages"][0]["fleets"][0]["maximizedPlacement"],
@@ -95,7 +95,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let mut invalid = (*zoom.layout).clone();
         invalid.voyages[0].fleets[0].maximized_placement = Some(PlacementId("missing".into()));
         external
-            .document_set("voyager-layout-v1", &invalid, zoom.version)
+            .document_set("voyager-layout-v2", &invalid, zoom.version)
             .unwrap();
         external.close().unwrap();
         let refused = client.call(request(zoom.version, Action::Inspect)).unwrap();

@@ -58,7 +58,7 @@ def conversation_ux(
     original_clipboard = None
 
     def document():
-        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
 
     def wait(get, predicate, label, seconds=15):
         end = time.monotonic() + seconds
@@ -104,11 +104,11 @@ def conversation_ux(
     try:
         initial = wait(
             document,
-            lambda doc: bool(doc["value"]["contents"][0].get("backend")),
+            lambda doc: bool(doc["value"]["vessels"][0].get("backend")),
             "bound terminal",
         )
         fleet = initial["value"]["selectedFleet"]
-        vessel = initial["value"]["voyages"][0]["fleets"][0]["vessels"][0]["id"]
+        vessel = initial["value"]["voyages"][0]["fleets"][0]["placements"][0]["id"]
         target = wait(
             lambda: fields("Vessel dock"),
             lambda items: (
@@ -203,7 +203,7 @@ def conversation_ux(
         )
         scroll_layout = document()
         core_before = core_rpc(session, env, "server.status", {})
-        terminal_id = initial["value"]["contents"][0]["backend"]
+        terminal_id = initial["value"]["vessels"][0]["backend"]
         terminal_before = core_rpc(
             session, env, "terminal.get", {"terminal": terminal_id}
         )
@@ -323,7 +323,7 @@ def conversation_ux(
         click(*named_button(native, evidence, "Home"))
         home = wait(document, lambda doc: doc["value"].get("view") == "home", "Home")
         assert home["value"]["context"] == expanded["value"]["context"]
-        assert home["value"]["contents"] == expanded["value"]["contents"]
+        assert home["value"]["vessels"] == expanded["value"]["vessels"]
         copied_text(draft)
         home_chat = read()
         assert home_chat["messages"] == final["messages"]
@@ -474,9 +474,9 @@ def prove(
         deadline = time.monotonic() + 15
         while True:
             before_home = core_rpc(
-                session, env, "doc.get", {"name": "voyager-layout-v1"}
+                session, env, "doc.get", {"name": "voyager-layout-v2"}
             )
-            if before_home["value"]["contents"] and before_home["value"]["contents"][
+            if before_home["value"]["vessels"] and before_home["value"]["vessels"][
                 0
             ].get("backend"):
                 break
@@ -485,13 +485,13 @@ def prove(
         prior_terminals = core_rpc(session, env, "terminal.list", {"all": True})
         click(*named_button(native, evidence, "Home"))
         while True:
-            home = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+            home = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
             if home["value"].get("view") == "home":
                 break
             assert time.monotonic() < deadline, "Home did not open"
             time.sleep(0.05)
         assert home["value"]["context"] == before_home["value"]["context"]
-        assert home["value"]["contents"] == before_home["value"]["contents"]
+        assert home["value"]["vessels"] == before_home["value"]["vessels"]
         capture("administrator-home-before-turn")
     if not (evidence / "conversation-open.png").exists():
         time.sleep(0.5)
@@ -501,7 +501,7 @@ def prove(
     capture("conversation-open")
     if administrator or content_case:
         marker = token_hex(8)
-        initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
         if administrator:
             fixture = evidence / "profile/conversation/administrator-read.txt"
             fixture.parent.mkdir(parents=True, exist_ok=True)
@@ -512,8 +512,8 @@ def prove(
     if process_case or content_case:
         deadline = time.monotonic() + 15
         while True:
-            initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
-            content = initial["value"]["contents"][0]
+            initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
+            content = initial["value"]["vessels"][0]
             if content.get("backend"):
                 terminal = core_rpc(
                     session, env, "terminal.get", {"terminal": content["backend"]}
@@ -546,14 +546,14 @@ def prove(
         while native("fields", pid, ["Message Voyager"], "window")["fields"]:
             assert time.monotonic() < deadline, "Chat did not close"
             time.sleep(0.05)
-        before_effect = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        before_effect = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
         assert before_effect["value"]["voyages"] == initial["value"]["voyages"], (
             "The model acted before Chat closed; this run cannot prove closed-Chat refresh"
         )
         capture("workspace-refresh-chat-closed-before-effect")
         deadline = time.monotonic() + 90
         while True:
-            observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+            observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
             if len(observed["value"]["voyages"][0]["fleets"]) == 2:
                 break
             assert time.monotonic() < deadline, (
@@ -678,21 +678,21 @@ def prove(
             "update",
         }
         assert sum(action["operation"] == "update" for action in actions) == 2
-        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
         layout = observed["value"]
         assert len(layout["voyages"]) == len(initial["value"]["voyages"]) + 1
         voyage = next(v for v in layout["voyages"] if v["name"] == "Content trial")
         assert voyage["cwd"] == str(workspace) and len(voyage["fleets"]) == 1
         fleet = voyage["fleets"][0]
         assert (
-            len(layout["contents"]) == len(initial["value"]["contents"]) + 3
-            and len(fleet["vessels"]) == 2
+            len(layout["vessels"]) == len(initial["value"]["vessels"]) + 3
+            and len(fleet["placements"]) == 2
             and len(voyage["portals"]) == 1
         )
         assert layout["context"] == initial["value"]["context"]
         assert layout["voyages"][0] == initial["value"]["voyages"][0]
-        assert layout["contents"][:len(initial["value"]["contents"])] == initial["value"]["contents"]
-        ids = [fleet["vessels"][1]["content"], voyage["portals"][0]["content"]]
+        assert layout["vessels"][:len(initial["value"]["vessels"])] == initial["value"]["vessels"]
+        ids = [fleet["placements"][1]["vessel"], voyage["portals"][0]["vessel"]]
         expected = [
             {"title": "Fleet notes", "text": f"FLEET_{marker}"},
             {"title": "Voyage notes", "text": f"VOYAGE_{marker}"},
@@ -703,7 +703,7 @@ def prove(
                 message["tool"]
                 for message in tools
                 if message["tool"]["name"] == "voyager_content"
-                and message["tool"]["action"]["action"]["contentId"] == key
+                and message["tool"]["action"]["action"]["vesselId"] == key
             ]
             assert [call["action"]["action"]["operation"] for call in calls] == [
                 "describe",
@@ -717,14 +717,14 @@ def prove(
             assert calls[3]["version"] == calls[2]["version"] != calls[1]["version"]
         files = []
         for key, data in zip(ids, expected, strict=True):
-            content = next(item for item in layout["contents"] if item["id"] == key)
+            content = next(item for item in layout["vessels"] if item["id"] == key)
             binding = content["configuration"]["notesFile"]
             path = Path(binding["directory"]) / binding["filename"]
             assert path.parent == workspace / "notes"
             assert next(
                 panel["name"]
-                for panel in [*fleet["vessels"], *voyage["portals"]]
-                if panel["content"] == key
+                for panel in [*fleet["placements"], *voyage["portals"]]
+                if panel["vessel"] == key
             ) == path.name
             assert path.read_text() == f"# {data['title']}\n\n{data['text']}"
             files.append(str(path))
@@ -776,19 +776,19 @@ def prove(
             and message["requestId"] == users[0]["requestId"]
             for message in tools
         )
-        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
         if process_case:
             deadline = time.monotonic() + 15
             while True:
                 observed = core_rpc(
-                    session, env, "doc.get", {"name": "voyager-layout-v1"}
+                    session, env, "doc.get", {"name": "voyager-layout-v2"}
                 )
                 voyages = observed["value"]["voyages"]
                 if len(voyages[0]["fleets"]) == 2:
-                    created_id = voyages[0]["fleets"][1]["vessels"][0]["content"]
+                    created_id = voyages[0]["fleets"][1]["placements"][0]["vessel"]
                     created = next(
                         item
-                        for item in observed["value"]["contents"]
+                        for item in observed["value"]["vessels"]
                         if item["id"] == created_id
                     )
                     if created.get("backend"):
@@ -799,11 +799,11 @@ def prove(
                 time.sleep(0.05)
             old = {
                 item["id"]: item.get("backend")
-                for item in before_home["value"]["contents"]
+                for item in before_home["value"]["vessels"]
             }
             assert all(
                 next(
-                    item for item in observed["value"]["contents"] if item["id"] == key
+                    item for item in observed["value"]["vessels"] if item["id"] == key
                 ).get("backend")
                 == value
                 for key, value in old.items()
@@ -848,7 +848,7 @@ def prove(
             assert all(
                 action["operation"] == "list"
                 or (
-                    action["contentId"] == content["id"]
+                    action["vesselId"] == content["id"]
                     and action["terminalId"] == content["backend"]
                     and (
                         action["operation"] == "read"
@@ -891,7 +891,7 @@ def prove(
             deadline = time.monotonic() + 5
             while True:
                 selected = core_rpc(
-                    session, env, "doc.get", {"name": "voyager-layout-v1"}
+                    session, env, "doc.get", {"name": "voyager-layout-v2"}
                 )
                 if selected["value"]["selectedFleet"] == voyage["fleets"][0]["id"]:
                     break

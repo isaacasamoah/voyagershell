@@ -75,7 +75,7 @@ export function agentsView(
         )
         .map((fleet) => ({
           name: fleet.name,
-          placements: fleet.vessels,
+          placements: fleet.placements,
           root: fleet.root ?? null,
         })),
       ...(scope?.kind === "fleet"
@@ -90,8 +90,8 @@ export function agentsView(
     ];
     for (const group of groups)
       for (const placement of group.placements) {
-        const content = layout.contents.find(
-          (item) => item.id === placement.content,
+        const content = layout.vessels.find(
+          (item) => item.id === placement.vessel,
         );
         if (!content) continue;
         if (
@@ -104,7 +104,7 @@ export function agentsView(
         const process = content.backend
           ? processes.find(
               (item) =>
-                item.contentId === content.id &&
+                item.vesselId === content.id &&
                 item.terminalId === content.backend,
             )
           : undefined;

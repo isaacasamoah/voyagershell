@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use voyager_contract::{
-    Action, ContentDestination, Context, Fleet, Layout, PanelInsertion, PanelOwner, RenameTarget,
-    Split, Voyage,
+    Action, ContentDestination, Context, Fleet, Layout, PlacementInsertion, PlacementOwner,
+    RenameTarget, Split, Voyage,
 };
 
 pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layout> {
@@ -32,7 +32,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
             id: voyage.id.clone(),
             name: voyage.name.clone(),
             name_origin: voyage.name_origin,
-            primary_vessel: None,
+            primary_placement: None,
             closed: voyage.closed,
             closed_order: voyage.closed_order,
             fleets: Vec::new(),
@@ -45,13 +45,13 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                 selected.fleets.push(fleet.clone());
             }
             if let Context::Vessel { id } = scope
-                && let Some(vessel) = fleet.vessels.iter().find(|vessel| &vessel.id == id)
+                && let Some(vessel) = fleet.placements.iter().find(|vessel| &vessel.id == id)
             {
                 selected.fleets.push(Fleet {
                     id: fleet.id.clone(),
                     name: fleet.name.clone(),
                     closed: fleet.closed,
-                    vessels: vec![vessel.clone()],
+                    placements: vec![vessel.clone()],
                     maximized_placement: fleet
                         .maximized_placement
                         .as_ref()
@@ -63,14 +63,14 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                 });
             }
         }
-        selected.primary_vessel = voyage
-            .primary_vessel
+        selected.primary_placement = voyage
+            .primary_placement
             .as_ref()
             .filter(|id| {
                 selected
                     .fleets
                     .iter()
-                    .flat_map(|fleet| &fleet.vessels)
+                    .flat_map(|fleet| &fleet.placements)
                     .any(|panel| &panel.id == *id)
             })
             .cloned();
@@ -92,30 +92,30 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
             break;
         }
     }
-    scoped.contents = layout
-        .contents
+    scoped.vessels = layout
+        .vessels
         .iter()
         .filter(|content| {
             scoped.containers().any(|voyage| {
                 voyage
                     .fleets
                     .iter()
-                    .flat_map(|fleet| &fleet.vessels)
+                    .flat_map(|fleet| &fleet.placements)
                     .chain(&voyage.portals)
-                    .any(|vessel| vessel.content == content.id)
+                    .any(|vessel| vessel.vessel == content.id)
             })
         })
         .cloned()
         .collect();
     if matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) {
-        scoped.saved_layouts = layout
-            .saved_layouts
+        scoped.arrangements = layout
+            .arrangements
             .iter()
             .filter(|saved| match &saved.owner {
-                PanelOwner::Fleet { id } => scoped
+                PlacementOwner::Fleet { id } => scoped
                     .containers()
                     .any(|voyage| voyage.fleets.iter().any(|fleet| &fleet.id == id)),
-                PanelOwner::Portals { voyage: id } => {
+                PlacementOwner::Portals { voyage: id } => {
                     matches!(scope, Context::Voyage { id: visible } if visible == id)
                 }
             })
@@ -164,11 +164,11 @@ pub(crate) fn check(
         | Action::LoadPanelLayout { owner, .. }
         | Action::RemovePanelLayout { owner, .. }
         | Action::ResizePanelSplit { owner, .. } => match owner {
-            PanelOwner::Fleet { id } => {
+            PlacementOwner::Fleet { id } => {
                 matches!(scope, Context::Voyage { .. } | Context::Fleet { .. })
                     && fleet(id).is_some()
             }
-            PanelOwner::Portals { voyage } => {
+            PlacementOwner::Portals { voyage } => {
                 matches!(scope, Context::Voyage { id } if id == voyage)
             }
         },
@@ -178,8 +178,8 @@ pub(crate) fn check(
         Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => false,
         Action::UpdateCanvas { .. } | Action::SetSidebar { .. } => false,
         Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => false,
-        Action::StartNewShell { content_id, .. } => {
-            scoped.contents.iter().any(|item| &item.id == content_id)
+        Action::StartNewShell { vessel_id, .. } => {
+            scoped.vessels.iter().any(|item| &item.id == vessel_id)
         }
         Action::MoveVoyage { .. } => false,
         Action::CloseVoyage { id }
@@ -200,7 +200,7 @@ pub(crate) fn check(
             voyage
                 .fleets
                 .iter()
-                .map(|fleet| fleet.vessels.as_slice())
+                .map(|fleet| fleet.placements.as_slice())
                 .chain(std::iter::once(voyage.portals.as_slice()))
                 .any(|members| {
                     members.iter().any(|panel| &panel.id == id)
@@ -221,23 +221,25 @@ pub(crate) fn check(
             ..
         } => {
             let members = scoped.containers().find_map(|voyage| match owner {
-                PanelOwner::Fleet { id } => voyage
+                PlacementOwner::Fleet { id } => voyage
                     .fleets
                     .iter()
                     .find(|fleet| &fleet.id == id)
-                    .map(|fleet| fleet.vessels.as_slice()),
-                PanelOwner::Portals { voyage: id } if &voyage.id == id => {
+                    .map(|fleet| fleet.placements.as_slice()),
+                PlacementOwner::Portals { voyage: id } if &voyage.id == id => {
                     Some(voyage.portals.as_slice())
                 }
                 _ => None,
             });
             members.is_some_and(|members| match insertion {
-                PanelInsertion::Beside { id, .. } => members.iter().any(|panel| &panel.id == id),
-                PanelInsertion::Empty => match owner {
-                    PanelOwner::Fleet { .. } => {
+                PlacementInsertion::Beside { id, .. } => {
+                    members.iter().any(|panel| &panel.id == id)
+                }
+                PlacementInsertion::Empty => match owner {
+                    PlacementOwner::Fleet { .. } => {
                         matches!(scope, Context::Voyage { .. } | Context::Fleet { .. })
                     }
-                    PanelOwner::Portals { voyage } => {
+                    PlacementOwner::Portals { voyage } => {
                         matches!(scope, Context::Voyage { id } if id == voyage)
                     }
                 },
@@ -254,7 +256,7 @@ pub(crate) fn check(
             RenameTarget::Vessel { id } => scoped
                 .containers()
                 .flat_map(|voyage| &voyage.fleets)
-                .flat_map(|fleet| &fleet.vessels)
+                .flat_map(|fleet| &fleet.placements)
                 .any(|vessel| &vessel.id == id),
             RenameTarget::Portal { id } => scoped
                 .containers()
@@ -268,7 +270,7 @@ pub(crate) fn check(
             voyage
                 .fleets
                 .iter()
-                .flat_map(|fleet| &fleet.vessels)
+                .flat_map(|fleet| &fleet.placements)
                 .chain(&voyage.portals)
                 .any(|panel| &panel.id == id)
         }),
@@ -299,12 +301,12 @@ mod tests {
             .unwrap();
         let ordinary = model.layout.voyages[0].id.clone();
         let home = model.layout.home.as_ref().unwrap();
-        let owner = PanelOwner::Fleet {
+        let owner = PlacementOwner::Fleet {
             id: home.fleets[0].id.clone(),
         };
         model
             .apply(Action::RemovePanel {
-                id: home.fleets[0].vessels[0].id.clone(),
+                id: home.fleets[0].placements[0].id.clone(),
             })
             .unwrap();
         model
@@ -312,12 +314,12 @@ mod tests {
                 type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Panel {
                     owner,
-                    insertion: PanelInsertion::Empty,
+                    insertion: PlacementInsertion::Empty,
                 },
                 launch: None,
             })
             .unwrap();
-        let panel = model.layout.home.as_ref().unwrap().fleets[0].vessels[1].clone();
+        let panel = model.layout.home.as_ref().unwrap().fleets[0].placements[1].clone();
         model
             .apply(Action::Dock {
                 context: Context::Vessel {
@@ -339,9 +341,9 @@ mod tests {
         assert!(normal.home.is_none());
         assert!(
             !normal
-                .contents
+                .vessels
                 .iter()
-                .any(|content| content.id == panel.content)
+                .any(|content| content.id == panel.vessel)
         );
         let narrow = project(
             &snapshot,
@@ -350,9 +352,11 @@ mod tests {
             }),
         );
         assert!(narrow.voyages.is_empty());
-        assert_eq!(narrow.contents.len(), 1);
+        assert_eq!(narrow.vessels.len(), 1);
         assert_eq!(
-            narrow.home.as_ref().unwrap().fleets[0].vessels.as_slice(),
+            narrow.home.as_ref().unwrap().fleets[0]
+                .placements
+                .as_slice(),
             std::slice::from_ref(&panel)
         );
         assert!(

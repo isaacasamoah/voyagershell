@@ -73,7 +73,7 @@ fn move_package(_source: &Path, _destination: &Path) -> Result<(), String> {
 mod tests {
     use crate::content::{Owner, describe, discover, seed_package};
     use std::fs;
-    use voyager_contract::{ContentId, content::Availability};
+    use voyager_contract::{VesselId, content::Availability};
 
     #[test]
     fn removed_package_restores_personal_source_without_disabling_terminal() {
@@ -92,7 +92,7 @@ mod tests {
         seed_package(&active, &files).unwrap();
         fs::write(active.join("AGENTS.md"), "personal guide").unwrap();
         let mut owner = Owner::open(&profile).unwrap();
-        let binding = owner.initialize(&ContentId("stable-note".into())).unwrap();
+        let binding = owner.initialize(&VesselId("stable-note".into())).unwrap();
         let view = owner.register_view(binding.clone()).unwrap();
         view.activate().unwrap();
         let changes = owner.subscribe(&binding, Some(0));

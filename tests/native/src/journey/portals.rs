@@ -238,7 +238,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the Portal's placement and content are unchanged",
                 members(&after, &home) == members(&before, &home)
-                    && after.contents == before.contents,
+                    && after.vessels == before.vessels,
             )
             .expect(
                 "the click that saved the name gave the Portal's terminal the keyboard",
@@ -263,11 +263,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 };
                 let placed: Vec<_> = fleets(seen.document)
                     .filter(|fleet| &fleet.id == made)
-                    .flat_map(|fleet| &fleet.vessels)
-                    .map(|vessel| &vessel.content)
+                    .flat_map(|fleet| &fleet.placements)
+                    .map(|vessel| &vessel.vessel)
                     .collect();
                 let bound = !placed.is_empty()
-                    && seen.document.contents.iter().all(|content| {
+                    && seen.document.vessels.iter().all(|content| {
                         !placed.contains(&&content.id)
                             || (content.backend.is_some() && content.start_pending.is_none())
                     });
@@ -430,7 +430,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the closed Portal stays in its Voyage with the same content and backend",
                 members(&layout, &home).contains(&portal)
-                    && layout.contents == before_close.contents,
+                    && layout.vessels == before_close.vessels,
             )
             .expect(
                 "the column is hidden and empty",
@@ -479,7 +479,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                         == Some(Split::Leaf {
                             placement: portal.clone(),
                         })
-                }) && layout.contents == before_close.contents,
+                }) && layout.vessels == before_close.vessels,
             )
             .expect(
                 "the Portal's shell is the same program and Core still holds PORTAL-42",

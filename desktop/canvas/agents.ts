@@ -6,7 +6,7 @@ import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";
 import { visiblePanels } from "./panels.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type { Layout, PanelOwner } from "../../contract/generated/response";
+import type { Layout, PlacementOwner } from "../../contract/generated/response";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type {
   Projection as ActivityProjection,
@@ -81,7 +81,7 @@ export function agentsView(
   navigate: (id: string, cx: Context) => void,
   unavailable?: string,
   options?: Options,
-  owner?: PanelOwner,
+  owner?: PlacementOwner,
 ): NativeElement {
   const colors = projection();
   const scope =
@@ -104,7 +104,7 @@ export function agentsView(
         )
         .map((fleet) => ({
           name: fleet.name,
-          placements: fleet.vessels,
+          placements: fleet.placements,
           root: fleet.root ?? null,
         })),
       ...(scope?.kind === "fleet"
@@ -119,8 +119,8 @@ export function agentsView(
     ];
     for (const group of groups)
       for (const placement of group.placements) {
-        const content = layout.contents.find(
-          (item) => item.id === placement.content,
+        const content = layout.vessels.find(
+          (item) => item.id === placement.vessel,
         );
         if (!content) continue;
         if (
@@ -133,7 +133,7 @@ export function agentsView(
         const process = content.backend
           ? processes.find(
               (item) =>
-                item.contentId === content.id &&
+                item.vesselId === content.id &&
                 item.terminalId === content.backend,
             )
           : undefined;

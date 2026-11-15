@@ -202,7 +202,7 @@ def prove(
         return observe_core_exit(session, env)
 
     def state():
-        return rpc("doc.get", {"name": "voyager-layout-v1"})
+        return rpc("doc.get", {"name": "voyager-layout-v2"})
 
     def wait(predicate):
         for _ in range(50):
@@ -313,15 +313,15 @@ def arrangement(
         finally:
             native("button", False)
 
-    ready = wait(lambda layout: layout["contents"] and layout["contents"][0]["backend"])
-    address = ready["value"]["contents"][0]["backend"]
+    ready = wait(lambda layout: layout["vessels"] and layout["vessels"][0]["backend"])
+    address = ready["value"]["vessels"][0]["backend"]
     pid = rpc("terminal.get", {"terminal": address})["pid"]
     assert pid
     chord(native, "t")
     added = wait(
         lambda layout: (
             len(layout["voyages"][0]["fleets"]) == 2
-            and all(content["backend"] for content in layout["contents"])
+            and all(content["backend"] for content in layout["vessels"])
         )
     )
     first_fleet, second_fleet = [
@@ -340,12 +340,12 @@ def arrangement(
             == [second_fleet, first_fleet]
         )
     )
-    assert reordered["value"]["contents"] == added["value"]["contents"]
+    assert reordered["value"]["vessels"] == added["value"]["vessels"]
     click(*named_button(native, evidence, "Create Voyage"))
     added_voyage = wait(
         lambda layout: (
             len(layout["voyages"]) == 2
-            and all(content["backend"] for content in layout["contents"])
+            and all(content["backend"] for content in layout["vessels"])
         )
     )
     first_voyage, second_voyage = [
@@ -363,7 +363,7 @@ def arrangement(
             [item["id"] for item in layout["voyages"]] == [second_voyage, first_voyage]
         )
     )
-    assert reordered_voyages["value"]["contents"] == added_voyage["value"]["contents"]
+    assert reordered_voyages["value"]["vessels"] == added_voyage["value"]["vessels"]
     assert rpc("terminal.get", {"terminal": address})["pid"] == pid
     capture("arrangement-complete")
     (evidence / "arrangement-observed.json").write_text(
@@ -429,13 +429,13 @@ def layouts(
             item["address"] for item in rpc("terminal.list", {"all": True})["terminals"]
         )
 
-    wait(lambda layout: layout["contents"] and layout["contents"][0]["backend"])
+    wait(lambda layout: layout["vessels"] and layout["vessels"][0]["backend"])
     click(350, 190)
     chord(native, "o")
     two = wait(
         lambda layout: (
-            len(layout["contents"]) == 2
-            and all(item["backend"] for item in layout["contents"])
+            len(layout["vessels"]) == 2
+            and all(item["backend"] for item in layout["vessels"])
         )
     )
     click(width - 40, 80)
@@ -452,7 +452,7 @@ def layouts(
     wait(
         lambda layout: any(
             item["fleet"] == fleet and item["name"] == "Focus"
-            for item in layout["savedLayouts"]
+            for item in layout["arrangements"]
         )
     )
     press("Fleet layouts")
@@ -460,12 +460,12 @@ def layouts(
     chord(native, "o")
     three = wait(
         lambda layout: (
-            len(layout["contents"]) == 3
-            and all(item["backend"] for item in layout["contents"])
+            len(layout["vessels"]) == 3
+            and all(item["backend"] for item in layout["vessels"])
         )
     )
-    backends = {item["id"]: item["backend"] for item in three["value"]["contents"]}
-    stopped_address = two["value"]["contents"][0]["backend"]
+    backends = {item["id"]: item["backend"] for item in three["value"]["vessels"]}
+    stopped_address = two["value"]["vessels"][0]["backend"]
     processes = {
         address: rpc("terminal.get", {"terminal": address})["pid"]
         for address in backends.values()
@@ -491,9 +491,9 @@ def layouts(
         lambda layout: layout["voyages"][0]["fleets"][0]["root"] == saved_root
     )
     assert {
-        item["id"]: item["backend"] for item in loaded["value"]["contents"]
+        item["id"]: item["backend"] for item in loaded["value"]["vessels"]
     } == backends
-    assert len(loaded["value"]["voyages"][0]["fleets"][0]["vessels"]) == 3
+    assert len(loaded["value"]["voyages"][0]["fleets"][0]["placements"]) == 3
     assert loaded["value"]["context"] == context and ids() == terminals_before
     assert {
         address: rpc("terminal.get", {"terminal": address})["pid"]

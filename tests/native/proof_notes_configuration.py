@@ -102,7 +102,7 @@ def configuration(
     script.write_text(GATE_WAIT)
     initial_version = str(document()["version"])
     target = ids[0]
-    terminal_id = original_layout["contents"][0]["id"]
+    terminal_id = original_layout["vessels"][0]["id"]
     updated = {"title": "Agent configuration", "text": "OWNER_" + token_hex(6)}
     receipt(
         "notes-configuration-default",
@@ -163,7 +163,7 @@ def configuration(
                     lambda doc: (
                         next(
                             item
-                            for item in doc["value"]["contents"]
+                            for item in doc["value"]["vessels"]
                             if item["id"] == target
                         ).get("configuration")
                         == {"showHeading": False}
@@ -173,7 +173,7 @@ def configuration(
                 )
                 selected = next(
                     item
-                    for item in created["value"]["contents"]
+                    for item in created["value"]["vessels"]
                     if item["id"] == target
                 )
                 selected["configuration"] = {"showHeading": False}
@@ -221,13 +221,13 @@ def configuration(
             f"Do not use application tools before its output contains READY {token}. "
             "A timeout, nonzero status or absent READY requires stopping with no content effect. "
             "After READY, inspect the current workspace with voyager_workspace for its fresh expectedVersion. "
-            f"Use voyager_content describe and inspect on contentId {target}. "
+            f"Use voyager_content describe and inspect on vesselId {target}. "
         )
         if operation == "configure":
             instruction += (
                 'Configure that instance exactly once with configuration {"showHeading":false}. '
                 "Inspect the workspace again. Attempt exactly one unsupported configure using that fresh expectedVersion "
-                f"and contentId {terminal_id}, the original Terminal, "
+                f"and vesselId {terminal_id}, the original Terminal, "
                 'with configuration {"showHeading":false}; require rejection. '
                 f"Attempt exactly one stale configure with expectedVersion {initial_version} "
                 'and configuration {"showHeading":true}; require rejection. '
@@ -275,14 +275,14 @@ def configuration(
         ), effects
         actions = [tool["action"]["action"] for tool in effects]
         if operation == "configure":
-            assert [action["contentId"] for action in actions] == [
+            assert [action["vesselId"] for action in actions] == [
                 target,
                 terminal_id,
                 target,
             ]
             assert effects[0]["version"] == str(document()["version"])
         else:
-            assert actions[0]["contentId"] == target
+            assert actions[0]["vesselId"] == target
         inspections = [
             tool
             for tool in content
@@ -302,7 +302,7 @@ def configuration(
                 != inspections[0]["version"]
             )
         assert all(
-            tool["action"]["action"]["contentId"] == target
+            tool["action"]["action"]["vesselId"] == target
             for tool in content
             if tool not in effects
         )
@@ -352,7 +352,7 @@ def configuration(
             copied(name, index, note[key])
     observed = identity(cold=True)
     layout = json.loads(json.dumps(observed["layout"]["value"]))
-    next(item for item in layout["contents"] if item["id"] == target).pop(
+    next(item for item in layout["vessels"] if item["id"] == target).pop(
         "configuration"
     )
     assert layout == original_layout

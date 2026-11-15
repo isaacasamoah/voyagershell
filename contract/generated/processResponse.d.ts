@@ -44,7 +44,6 @@ export interface ProcessResponse {
 }
 export interface ProcessInfo {
   agentName?: string | null;
-  contentId: string;
   cwd: string;
   foreground?: string | null;
   pid?: number | null;
@@ -52,6 +51,7 @@ export interface ProcessInfo {
   reportedActivity?: ReportedActivity | null;
   state: string;
   terminalId: string;
+  vesselId: string;
 }
 export interface PlacementName {
   effectiveName: string;

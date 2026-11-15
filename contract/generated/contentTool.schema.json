@@ -10,17 +10,17 @@
             "configuration": {
               "$ref": "#/definitions/NotesConfiguration"
             },
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "configure",
+              "type": "string"
+            },
+            "vesselId": {
               "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "configuration"
           ],
           "type": "object"
@@ -28,88 +28,88 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "describe",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId"
+            "vesselId"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "inspect",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId"
+            "vesselId"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "migrate-note",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId"
+            "vesselId"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "list-notes",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId"
+            "vesselId"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "new-note",
               "type": "string"
             },
             "title": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "title"
           ],
           "type": "object"
@@ -117,20 +117,20 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "filename": {
               "type": "string"
             },
             "operation": {
               "const": "open-note",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "filename"
           ],
           "type": "object"
@@ -138,9 +138,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "data": {
               "$ref": "#/definitions/Notes"
             },
@@ -150,11 +147,14 @@
             "operation": {
               "const": "update",
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "expectedRevision",
             "data"
           ],

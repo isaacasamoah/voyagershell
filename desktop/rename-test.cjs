@@ -13,7 +13,7 @@ function fixture() {
       {
         id: "voyage-1",
         portals: [],
-        fleets: [{ id: target.id, name: "Original", vessels: [] }],
+        fleets: [{ id: target.id, name: "Original", placements: [] }],
       },
     ],
   };
@@ -234,7 +234,7 @@ test("missing owner references fail with explicit invariant errors", async () =>
     () => view.pane({ kind: "leaf", placement: "missing" }, { members: [] }),
     /Split placement is unavailable/,
   );
-  layout.contents = [];
+  layout.vessels = [];
   assert.throws(
     () =>
       view.content({ content: "missing" }, { kind: "vessel", id: "missing" }),

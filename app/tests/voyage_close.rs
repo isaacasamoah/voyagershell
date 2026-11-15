@@ -11,7 +11,7 @@ use voyager_app::{
     voyage_close::SaveRequest,
 };
 use voyager_contract::{
-    Action, ContentDestination, Context, PanelInsertion, PanelOwner, Request, Status,
+    Action, ContentDestination, Context, PlacementInsertion, PlacementOwner, Request, Status,
 };
 
 fn call(client: &Client, version: u64, action: Action) -> voyager_contract::Response {
@@ -60,16 +60,16 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         let mut snapshot = call(&client, 0, Action::Inspect);
         assert_eq!(snapshot.status, Status::Applied);
         let original = snapshot.layout.voyages[0].clone();
-        let first = original.fleets[0].vessels[0].clone();
+        let first = original.fleets[0].placements[0].clone();
         let viewer = client
-            .terminal(first.content.clone(), client.request_id(), snapshot.version)
+            .terminal(first.vessel.clone(), client.request_id(), snapshot.version)
             .unwrap();
         snapshot = call(&client, 0, Action::Inspect);
         let owned = snapshot
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|item| item.id == first.content)
+            .find(|item| item.id == first.vessel)
             .unwrap()
             .backend
             .clone()
@@ -82,10 +82,10 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 cwd: directory.to_string_lossy().into_owned(),
             },
         );
-        let sibling = snapshot.layout.voyages.last().unwrap().fleets[0].vessels[0].clone();
+        let sibling = snapshot.layout.voyages.last().unwrap().fleets[0].placements[0].clone();
         let other_viewer = client
             .terminal(
-                sibling.content.clone(),
+                sibling.vessel.clone(),
                 client.request_id(),
                 snapshot.version,
             )
@@ -93,9 +93,9 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         snapshot = call(&client, 0, Action::Inspect);
         let independent = snapshot
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|item| item.id == sibling.content)
+            .find(|item| item.id == sibling.vessel)
             .unwrap()
             .backend
             .clone()
@@ -106,10 +106,10 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             Action::CreateContent {
                 type_id: "notes".into(),
                 destination: ContentDestination::Panel {
-                    owner: PanelOwner::Fleet {
+                    owner: PlacementOwner::Fleet {
                         id: original.fleets[0].id.clone(),
                     },
-                    insertion: PanelInsertion::Beside {
+                    insertion: PlacementInsertion::Beside {
                         id: first.id.clone(),
                         side: voyager_contract::Side::Right,
                     },
@@ -119,7 +119,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         );
         assert_eq!(snapshot.status, Status::Applied, "{:?}", snapshot.message);
         let note = snapshot.layout.voyages[0].fleets[0]
-            .vessels
+            .placements
             .last()
             .unwrap()
             .clone();
@@ -138,13 +138,11 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             let copied = request.clone();
             let renamed = client.clone();
             let worker = std::thread::spawn(move || renamed.call(copied).unwrap());
-            let SaveRequest::PrepareRename {
-                reply, contents, ..
-            } = saves.recv_blocking().unwrap()
+            let SaveRequest::PrepareRename { reply, vessels, .. } = saves.recv_blocking().unwrap()
             else {
                 panic!("Expected Notes flush");
             };
-            assert_eq!(contents, vec![note.content.clone()]);
+            assert_eq!(vessels, vec![note.vessel.clone()]);
             reply
                 .send_blocking(if refuse {
                     Err(CallError::Rejected("Dirty draft conflict".into()))
@@ -168,7 +166,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         assert_eq!(snapshot.status, Status::Applied, "{:?}", snapshot.message);
         assert_eq!(
             snapshot.layout.voyages[0].fleets[0]
-                .vessels
+                .placements
                 .last()
                 .unwrap()
                 .name,
@@ -261,7 +259,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
         };
         let note = prepared
             .layout
-            .contents
+            .vessels
             .iter()
             .find(|item| item.type_id == "notes")
             .unwrap();
@@ -274,7 +272,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 voyager_contract::content::Request::Update {
                     version: voyager_contract::content::Version::V1,
                     request_id: client.request_id(),
-                    content_id: note.id.clone(),
+                    vessel_id: note.id.clone(),
                     expected_revision: "not-a-native-save".into(),
                     data: voyager_contract::content::Notes {
                         title: "Unexpected".into(),
@@ -315,16 +313,16 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             },
         );
         assert_eq!(reopened.status, Status::Applied);
-        assert!(reopened.created_contents.contains(&first.content));
+        assert!(reopened.created_vessels.contains(&first.vessel));
         let new_viewer = client
-            .terminal(first.content.clone(), client.request_id(), reopened.version)
+            .terminal(first.vessel.clone(), client.request_id(), reopened.version)
             .unwrap();
         let reopened = call(&client, 0, Action::Inspect);
         let new_address = reopened
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|item| item.id == first.content)
+            .find(|item| item.id == first.vessel)
             .unwrap()
             .backend
             .as_ref()

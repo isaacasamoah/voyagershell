@@ -26,38 +26,38 @@ impl Dispatch {
             Self::Process(action) => ToolAction::Process(action.clone()),
             Self::Worktree(input) => ToolAction::Worktree(input.clone()),
             Self::Content(action) => ToolAction::Content(match action {
-                Content::Configure { content_id, .. } => Receipt::Configure {
-                    content_id: content_id.clone(),
+                Content::Configure { vessel_id, .. } => Receipt::Configure {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::Describe { content_id } => Receipt::Describe {
-                    content_id: content_id.clone(),
+                Content::Describe { vessel_id } => Receipt::Describe {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::Inspect { content_id } => Receipt::Inspect {
-                    content_id: content_id.clone(),
+                Content::Inspect { vessel_id } => Receipt::Inspect {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::MigrateNote { content_id } => Receipt::MigrateNote {
-                    content_id: content_id.clone(),
+                Content::MigrateNote { vessel_id } => Receipt::MigrateNote {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::ListNotes { content_id } => Receipt::ListNotes {
-                    content_id: content_id.clone(),
+                Content::ListNotes { vessel_id } => Receipt::ListNotes {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::NewNote { content_id, title } => Receipt::NewNote {
-                    content_id: content_id.clone(),
+                Content::NewNote { vessel_id, title } => Receipt::NewNote {
+                    vessel_id: vessel_id.clone(),
                     title: title.clone(),
                 },
                 Content::OpenNote {
-                    content_id,
+                    vessel_id,
                     filename,
                 } => Receipt::OpenNote {
-                    content_id: content_id.clone(),
+                    vessel_id: vessel_id.clone(),
                     filename: filename.clone(),
                 },
                 Content::Update {
-                    content_id,
+                    vessel_id,
                     expected_revision,
                     ..
                 } => Receipt::Update {
-                    content_id: content_id.clone(),
+                    vessel_id: vessel_id.clone(),
                     expected_revision: expected_revision.clone(),
                 },
             }),
@@ -135,12 +135,12 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
         },
         ToolDefinition {
             name: "voyager_process",
-            description: "Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.",
+            description: "Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.",
             schema: process_schema,
         },
         ToolDefinition {
             name: "voyager_content",
-            description: "Describe, inspect, select files and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
+            description: "Describe, inspect, select files and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
             schema: content_schema,
         },
     ])
@@ -577,60 +577,56 @@ fn reads(action: &Dispatch) -> bool {
 fn content_result(response: &voyager_contract::content::Response) -> EffectResult {
     use voyager_contract::content::Response;
     let (status, id, revision, warning) = match response {
-        Response::Described { content_id, .. } | Response::NotesList { content_id, .. } => {
-            (Status::Applied, content_id, None, None)
+        Response::Described { vessel_id, .. } | Response::NotesList { vessel_id, .. } => {
+            (Status::Applied, vessel_id, None, None)
         }
         Response::Configured {
-            content_id,
+            vessel_id,
             workspace_version,
             ..
         } => (
             Status::Applied,
-            content_id,
+            vessel_id,
             Some(workspace_version.to_string()),
             None,
         ),
         Response::NoteOpened {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         }
         | Response::Snapshot {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         }
         | Response::Applied {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         } => (
             Status::Applied,
-            content_id,
+            vessel_id,
             Some(snapshot.revision.clone()),
             snapshot.warning.as_deref(),
         ),
         Response::Rejected {
-            content_id,
-            message,
-            ..
-        } => (Status::Rejected, content_id, None, Some(message.as_str())),
+            vessel_id, message, ..
+        } => (Status::Rejected, vessel_id, None, Some(message.as_str())),
         Response::Limited {
-            content_id,
+            vessel_id,
             revision,
             message,
             ..
         } => (
             Status::Rejected,
-            content_id,
+            vessel_id,
             revision.clone(),
             Some(message.as_str()),
         ),
         Response::Uncertain {
-            content_id,
-            message,
-            ..
-        } => (Status::Uncertain, content_id, None, Some(message.as_str())),
+            vessel_id, message, ..
+        } => (Status::Uncertain, vessel_id, None, Some(message.as_str())),
     };
     let raw = serde_json::to_string(response).expect("Content response serializes");
     let displayed_warning = warning.map(|message| {
@@ -774,10 +770,10 @@ mod tests {
         let response = ContentResponse::Snapshot {
             version: Version::V1,
             request_id: "read".into(),
-            content_id: voyager_contract::ContentId("notes".into()),
+            vessel_id: voyager_contract::VesselId("notes".into()),
             configuration: None,
             snapshot: Snapshot {
-                content_id: voyager_contract::ContentId("notes".into()),
+                vessel_id: voyager_contract::VesselId("notes".into()),
                 revision: "revision".into(),
                 data: Notes {
                     title: "Title".into(),
@@ -789,7 +785,7 @@ mod tests {
         let request = voyager_contract::content::Request::Inspect {
             version: Version::V1,
             request_id: "read".into(),
-            content_id: voyager_contract::ContentId("notes".into()),
+            vessel_id: voyager_contract::VesselId("notes".into()),
         };
         let response = crate::content::bounded_response(&request, response);
         let result = content_result(&response);
@@ -848,9 +844,9 @@ mod tests {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                        insertion: voyager_contract::PanelInsertion::Beside {
-                            id: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                        owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PlacementInsertion::Beside {
+                            id: initial.layout.voyages[0].fleets[0].placements[0].id.clone(),
                             side: voyager_contract::Side::Right,
                         },
                     },
@@ -858,9 +854,9 @@ mod tests {
                 initial.version,
             );
             assert_eq!(created.status, Status::Applied);
-            let a = created.layout.contents.last().unwrap().id.clone();
+            let a = created.layout.vessels.last().unwrap().id.clone();
             let placement = created.layout.voyages[0].fleets[0]
-                .vessels
+                .placements
                 .last()
                 .unwrap()
                 .id
@@ -870,17 +866,17 @@ mod tests {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals { voyage },
-                        insertion: voyager_contract::PanelInsertion::Empty,
+                        owner: voyager_contract::PlacementOwner::Portals { voyage },
+                        insertion: voyager_contract::PlacementInsertion::Empty,
                     },
                 },
                 created.version,
             );
-            let b = created.layout.contents.last().unwrap().id.clone();
-            let note_path = |id: &voyager_contract::ContentId| {
+            let b = created.layout.vessels.last().unwrap().id.clone();
+            let note_path = |id: &voyager_contract::VesselId| {
                 let content = created
                     .layout
-                    .contents
+                    .vessels
                     .iter()
                     .find(|content| content.id == *id)
                     .unwrap();
@@ -910,10 +906,10 @@ mod tests {
                 assert!(Instant::now() < deadline);
                 thread::sleep(Duration::from_millis(5));
             };
-            let inspect = |id: &voyager_contract::ContentId| ContentRequest::Inspect {
+            let inspect = |id: &voyager_contract::VesselId| ContentRequest::Inspect {
                 version: Version::V1,
                 request_id: workspace.request_id(),
-                content_id: id.clone(),
+                vessel_id: id.clone(),
             };
             let read = inspect(&a);
             let snapshot = workspace
@@ -949,7 +945,7 @@ mod tests {
                 preview: None,
             };
             let mut tools = Tools::default();
-            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","contentId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
+            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","vesselId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
             assert!(
                 tools
                     .callback(
@@ -1024,7 +1020,7 @@ mod tests {
                 crate::codex::encode_tool_reply(&applied.replies[0])["result"]
             );
             callback["id"] = "changed".into();
-            callback["params"]["arguments"]["action"]["contentId"] = json!(b);
+            callback["params"]["arguments"]["action"]["vesselId"] = json!(b);
             assert_eq!(
                 tools
                     .callback(
@@ -1055,11 +1051,11 @@ mod tests {
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             let mut external = Core::connect(&session).unwrap();
             let bumped = external
-                .document_set("voyager-layout-v1", &created.layout, created.version)
+                .document_set("voyager-layout-v2", &created.layout, created.version)
                 .unwrap();
             callback["id"] = "stale".into();
             callback["params"]["callId"] = "stale".into();
-            callback["params"]["arguments"]["action"]["contentId"] = json!(a);
+            callback["params"]["arguments"]["action"]["vesselId"] = json!(a);
             callback["params"]["arguments"]["action"]["expectedRevision"] = json!(applied_revision);
             assert!(
                 tools
@@ -1340,7 +1336,7 @@ mod tests {
         let mut oversized = process_callback.clone();
         oversized["id"] = "oversized-process".into();
         oversized["params"]["callId"] = "oversized-process".into();
-        oversized["params"]["arguments"] = json!({"expectedVersion":final_state.version.to_string(),"action":{"operation":"send","contentId":"none","terminalId":"t1","pid":1,"text":"x".repeat(8192)}});
+        oversized["params"]["arguments"] = json!({"expectedVersion":final_state.version.to_string(),"action":{"operation":"send","vesselId":"none","terminalId":"t1","pid":1,"text":"x".repeat(8192)}});
         let large_refusal = tools
             .callback(
                 &oversized,

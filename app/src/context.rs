@@ -28,7 +28,7 @@ fn append_preview(output: &mut String, text: &str) {
 fn portal_panels<'a>(
     layout: &Layout,
     scoped: &'a voyager_contract::Voyage,
-) -> Vec<&'a voyager_contract::Vessel> {
+) -> Vec<&'a voyager_contract::Placement> {
     let Some(original) = layout.containers().find(|voyage| voyage.id == scoped.id) else {
         return Vec::new();
     };
@@ -84,8 +84,8 @@ pub(crate) fn prepare(
             .or_else(|| voyage.fleets.iter().find(|fleet| !fleet.closed));
         let mut panels = Vec::new();
         if let Some(fleet) = fleet {
-            let root = crate::panels::visible(&fleet.root, &fleet.vessels);
-            panels.extend(fleet.vessels.iter().filter(|panel| {
+            let root = crate::panels::visible(&fleet.root, &fleet.placements);
+            panels.extend(fleet.placements.iter().filter(|panel| {
                 crate::panels::contains(&root, &panel.id)
                     && fleet
                         .maximized_placement
@@ -99,9 +99,9 @@ pub(crate) fn prepare(
                 break;
             }
             let Some(instance) = scoped
-                .contents
+                .vessels
                 .iter()
-                .find(|content| content.id == panel.content)
+                .find(|content| content.id == panel.vessel)
             else {
                 continue;
             };
@@ -124,7 +124,7 @@ pub(crate) fn prepare(
                         voyager_contract::content::Request::Inspect {
                             version: voyager_contract::content::Version::V1,
                             request_id: format!("dock-preview-{}-{version}", instance.id.0),
-                            content_id: instance.id.clone(),
+                            vessel_id: instance.id.clone(),
                         },
                     );
                     if let voyager_contract::content::Response::Snapshot { snapshot, .. } = response
@@ -162,7 +162,7 @@ pub(crate) fn capture(layout: &Arc<Layout>, version: u64) -> Result<Facts, Strin
     let focus = crate::conversation::focus(layout, version)?;
     let scoped = crate::scope::project(layout, Some(&layout.context));
     let directories: BTreeSet<_> = scoped
-        .contents
+        .vessels
         .iter()
         .map(|content| content.cwd.as_str())
         .collect();
@@ -333,10 +333,10 @@ mod tests {
             .apply(Action::CreateContent {
                 type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Portals {
+                    owner: voyager_contract::PlacementOwner::Portals {
                         voyage: voyage.clone(),
                     },
-                    insertion: voyager_contract::PanelInsertion::Empty,
+                    insertion: voyager_contract::PlacementInsertion::Empty,
                 },
                 launch: None,
             })

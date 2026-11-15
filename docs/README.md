@@ -221,7 +221,7 @@ from step 4. Open each file as you read and find the named function.
    `panels::insert` in [`app/src/panels.rs`](../app/src/panels.rs) change a
    copy of the `Layout`. They record the content and its placement separately.
 6. `Core::document_set` in [`app/src/core.rs`](../app/src/core.rs) saves the
-   whole `Layout` as the Core document `voyager-layout-v1`. Only after Core
+   whole `Layout` as the Core document `voyager-layout-v2`. Only after Core
    accepts the save does the owner adopt the new layout.
 7. The response carries a `Status` of `Applied`, `Rejected` or `Uncertain`.
    Rejected means nothing changed. Uncertain means the effect may have happened,

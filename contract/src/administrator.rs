@@ -1,4 +1,4 @@
-use crate::{Action, ContentId, CoreTerminalId, Status};
+use crate::{Action, CoreTerminalId, Status, VesselId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -37,26 +37,26 @@ pub struct ProcessInput {
 pub enum ProcessAction {
     List,
     Read {
-        content_id: ContentId,
+        vessel_id: VesselId,
         terminal_id: CoreTerminalId,
         #[schemars(range(max = 160), transform = standard_integer)]
         lines: u32,
     },
     Send {
-        content_id: ContentId,
+        vessel_id: VesselId,
         terminal_id: CoreTerminalId,
         #[schemars(transform = standard_integer)]
         pid: u32,
         text: String,
     },
     Interrupt {
-        content_id: ContentId,
+        vessel_id: VesselId,
         terminal_id: CoreTerminalId,
         #[schemars(transform = standard_integer)]
         pid: u32,
     },
     Stop {
-        content_id: ContentId,
+        vessel_id: VesselId,
         terminal_id: CoreTerminalId,
         #[schemars(transform = standard_integer)]
         pid: u32,
@@ -73,7 +73,7 @@ pub struct ProcessRequest {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessInfo {
-    pub content_id: ContentId,
+    pub vessel_id: VesselId,
     pub terminal_id: CoreTerminalId,
     #[schemars(transform = standard_integer)]
     pub pid: Option<u32>,
@@ -105,7 +105,7 @@ pub struct PlacementName {
 pub enum ProcessOutput {
     List {
         processes: Vec<ProcessInfo>,
-        unavailable: Vec<ContentId>,
+        unavailable: Vec<VesselId>,
     },
     Read {
         target: ProcessInfo,

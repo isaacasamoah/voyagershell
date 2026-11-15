@@ -84,7 +84,7 @@ test("maximization renders the selected leaf while retaining preparation of the 
   const fleet = {
     id: "fleet",
     maximizedPlacement: "second",
-    vessels: [{ id: "first" }, { id: "second" }],
+    placements: [{ id: "first" }, { id: "second" }],
     root: {
       kind: "branch",
       first: { kind: "leaf", placement: "first" },
@@ -921,10 +921,15 @@ test("hidden choices retain process-free data and require matching live backends
       },
     ).outputText,
   )(exports);
-  const panel = (id, content) => ({ id, content, name: id, hidden: false });
+  const panel = (id, content) => ({
+    id,
+    vessel: content,
+    name: id,
+    hidden: false,
+  });
   const first = {
     id: "first",
-    vessels: [
+    placements: [
       panel("visible", "shown"),
       panel("notes", "note"),
       panel("shell", "live"),
@@ -934,7 +939,7 @@ test("hidden choices retain process-free data and require matching live backends
   };
   const second = {
     id: "second",
-    vessels: [panel("other", "other-note")],
+    placements: [panel("other", "other-note")],
     root: null,
   };
   const voyage = {
@@ -951,14 +956,14 @@ test("hidden choices retain process-free data and require matching live backends
         fleets: [
           {
             id: "foreign",
-            vessels: [panel("foreign", "foreign-note")],
+            placements: [panel("foreign", "foreign-note")],
             root: null,
           },
         ],
         portals: [],
       },
     ],
-    contents: [
+    vessels: [
       ...["shown", "live", "dead"].map((id) => ({
         id,
         typeId: "terminal",
@@ -982,14 +987,14 @@ test("hidden choices retain process-free data and require matching live backends
   assert.deepEqual(choices([]), ["notes", "other"]);
   assert.deepEqual(
     choices([
-      { contentId: "live", terminalId: "wrong", state: "live", pid: 42 },
+      { vesselId: "live", terminalId: "wrong", state: "live", pid: 42 },
     ]),
     ["notes", "other"],
   );
   assert.deepEqual(
     choices([
-      { contentId: "live", terminalId: "live", state: "live", pid: 42 },
-      { contentId: "dead", terminalId: "dead", state: "finished", pid: 43 },
+      { vesselId: "live", terminalId: "live", state: "live", pid: 42 },
+      { vesselId: "dead", terminalId: "dead", state: "finished", pid: 43 },
     ]),
     ["notes", "shell", "other"],
   );
@@ -1063,7 +1068,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     },
   ];
   const layout = {
-    contents,
+    vessels: contents,
     home: {
       id: "home",
       name: "Home",
@@ -1071,7 +1076,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
         {
           id: "home-fleet",
           name: "Home",
-          vessels: [{ id: "home-agent", content: "agent", name: "Renamed" }],
+          placements: [{ id: "home-agent", vessel: "agent", name: "Renamed" }],
         },
       ],
       portals: [],
@@ -1084,33 +1089,33 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
           {
             id: "fleet",
             name: "Fleet",
-            vessels: [
-              { id: "bash", content: "shell", name: "Shell" },
-              { id: "unknown", content: "unknown", name: "Unknown" },
+            placements: [
+              { id: "bash", vessel: "shell", name: "Shell" },
+              { id: "unknown", vessel: "unknown", name: "Unknown" },
             ],
           },
         ],
-        portals: [{ id: "notes", content: "notes", name: "Notes" }],
+        portals: [{ id: "notes", vessel: "notes", name: "Notes" }],
         portalLayout: { root: { kind: "leaf", placement: "notes" } },
       },
     ],
   };
   const processes = [
     {
-      contentId: "agent",
+      vesselId: "agent",
       terminalId: "agent-terminal",
       state: "live",
       foreground: "codex",
       agentName: "folder",
     },
     {
-      contentId: "shell",
+      vesselId: "shell",
       terminalId: "shell-terminal",
       state: "live",
       foreground: "bash",
     },
     {
-      contentId: "unknown",
+      vesselId: "unknown",
       terminalId: "unknown-terminal",
       state: "live",
       foreground: "python",
@@ -1159,7 +1164,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       .calls.find(([name]) => name === "accessibility_label")[1],
     /Idle/,
   );
-  layout.voyages[0].fleets[0].vessels[0].name = "Terminal 42";
+  layout.voyages[0].fleets[0].placements[0].name = "Terminal 42";
   processes[1].cwd = "/project/my-work";
   buttons.clear();
   render();
@@ -1264,9 +1269,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   for (const state of states) {
     const id = `agent-${state}`;
     contents.push({ id, typeId: "terminal", backend: id });
-    layout.home.fleets[0].vessels.push({ id, content: id, name: id });
+    layout.home.fleets[0].placements.push({ id, vessel: id, name: id });
     processes.push({
-      contentId: id,
+      vesselId: id,
       terminalId: id,
       state: "live",
       foreground: "codex",
@@ -1286,9 +1291,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     ],
   );
   contents.push({ id: "overview", typeId: "agents" });
-  layout.home.fleets[0].vessels.push({
+  layout.home.fleets[0].placements.push({
     id: "overview",
-    content: "overview",
+    vessel: "overview",
     name: "Activity",
   });
   layout.home.fleets[0].root = { kind: "leaf", placement: "overview" };
@@ -1315,7 +1320,7 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
   });
   const view = Object.assign(new Canvas(), {
     version: "7",
-    layout: { voyages: [], contents: [] },
+    layout: { voyages: [], vessels: [] },
   });
   const pending = view.readProcesses({ notify() {} });
   const choices = view.hiddenChoices(
@@ -1456,7 +1461,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   );
   const placement = {
     id: "panel",
-    content: "content",
+    vessel: "content",
     name: "Original",
     nameOrigin: "automatic",
   };
@@ -1464,7 +1469,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     view: "fleet",
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
-    contents: [
+    vessels: [
       { id: "content", typeId: "terminal", backend: "t1", cwd: "/work" },
     ],
     voyages: [
@@ -1474,7 +1479,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
         fleets: [
           {
             id: "fleet",
-            vessels: [placement],
+            placements: [placement],
             root: { kind: "leaf", placement: "panel" },
           },
         ],
@@ -1484,7 +1489,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   };
   const panel = {
     placementId: "panel",
-    contentId: "content",
+    vesselId: "content",
     backend: "t1",
     program: "bash",
     directory: { kind: "live", path: "/work" },
@@ -1536,7 +1541,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     "Failed reads clear retained display facts",
   );
   view.observedPanels = [panel];
-  layout.contents[0].backend = "replacement";
+  layout.vessels[0].backend = "replacement";
   view.acceptSnapshot(
     { version: "3", layout, fresh: true, status: "applied" },
     cx,
@@ -1614,14 +1619,14 @@ test("late active-directory observations cannot replace newer facts", async () =
       view: "fleet",
       selectedVoyage: "voyage",
       selectedFleet: "fleet",
-      contents: [{ id: "content", backend: "t1" }],
+      vessels: [{ id: "content", backend: "t1" }],
       voyages: [
         {
           id: "voyage",
           fleets: [
             {
               id: "fleet",
-              vessels: [{ id: "panel", content: "content" }],
+              placements: [{ id: "panel", vessel: "content" }],
               root: { kind: "leaf", placement: "panel" },
             },
           ],
@@ -1636,7 +1641,7 @@ test("late active-directory observations cannot replace newer facts", async () =
     panels: [
       {
         placementId: "panel",
-        contentId: "content",
+        vesselId: "content",
         backend: "t1",
         directory: { kind: "live", path },
         program: "bash",
@@ -1957,7 +1962,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     name: "Demo",
     version: "7",
     phase: "ready",
-    entries: [{ content: "content-1", typeId: "terminal", name: "bash" }],
+    entries: [{ vessel: "content-1", typeId: "terminal", name: "bash" }],
     message: "Confirm",
     uncommittedChanges: 2,
   };

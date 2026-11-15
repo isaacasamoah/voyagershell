@@ -39,7 +39,7 @@ def prove(
         raise AssertionError(f"Timed out waiting for {label}: {value}")
 
     def document():
-        return rpc("doc.get", {"name": "voyager-layout-v1"})
+        return rpc("doc.get", {"name": "voyager-layout-v2"})
 
     def click(x, y):
         bounds = geometry()
@@ -70,10 +70,10 @@ def prove(
     try:
         initial = wait(
             document,
-            lambda item: bool(item["value"]["contents"][0].get("backend")),
+            lambda item: bool(item["value"]["vessels"][0].get("backend")),
             "the first shell",
         )
-        target = initial["value"]["contents"][0]
+        target = initial["value"]["vessels"][0]
         assert capture("stop-initial").size == (1450, 940)
         click(350, 220)
         app_pid = json.loads((evidence / "launch.json").read_text())["pid"]
@@ -87,14 +87,14 @@ def prove(
         before = wait(
             document,
             lambda item: (
-                len(item["value"]["contents"]) == 2
-                and all(content.get("backend") for content in item["value"]["contents"])
+                len(item["value"]["vessels"]) == 2
+                and all(content.get("backend") for content in item["value"]["vessels"])
             ),
             "two real split terminals",
         )
         sibling = next(
             content
-            for content in before["value"]["contents"]
+            for content in before["value"]["vessels"]
             if content["id"] != target["id"]
         )
         target_before = rpc("terminal.get", {"terminal": target["backend"]})
@@ -142,7 +142,7 @@ def prove(
         assert idle["thread"] is None
         native("focus", app_pid, "Message Voyager", 0)
         type_text(
-            f"Inspect the workspace and list processes. Explicitly Stop only the terminal {target['backend']} whose screen contains STOP_TARGET_READY. Use its inspected contentId and live PID. Read that same terminal after Stop, and list processes again to verify the other terminal is still running. Report the observed result briefly. Do not interrupt, send input, start or restart anything, change the layout or files, or repeat Stop."
+            f"Inspect the workspace and list processes. Explicitly Stop only the terminal {target['backend']} whose screen contains STOP_TARGET_READY. Use its inspected vesselId and live PID. Read that same terminal after Stop, and list processes again to verify the other terminal is still running. Report the observed result briefly. Do not interrupt, send input, start or restart anything, change the layout or files, or repeat Stop."
         )
         wait(
             conversation,
@@ -210,14 +210,14 @@ def prove(
         stop = next(item for item in actions if item["operation"] == "stop")
         assert stop == {
             "operation": "stop",
-            "contentId": target["id"],
+            "vesselId": target["id"],
             "terminalId": target["backend"],
             "pid": target_before["pid"],
         }
         following = actions[actions.index(stop) + 1 :]
         assert any(
             item["operation"] == "read"
-            and item["contentId"] == target["id"]
+            and item["vesselId"] == target["id"]
             and item["terminalId"] == target["backend"]
             for item in following
         )

@@ -18,9 +18,6 @@
     }
   },
   "properties": {
-    "contentId": {
-      "type": "string"
-    },
     "message": {
       "type": [
         "string",
@@ -42,11 +39,14 @@
     },
     "status": {
       "$ref": "#/definitions/Status"
+    },
+    "vesselId": {
+      "type": "string"
     }
   },
   "required": [
     "requestId",
-    "contentId",
+    "vesselId",
     "status"
   ],
   "title": "TerminalResponse",

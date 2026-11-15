@@ -85,7 +85,7 @@ fn overlaps(a: &Rect, b: &Rect) -> bool {
 
 pub fn without_runtime(layout: &Layout) -> Layout {
     let mut layout = layout.clone();
-    for content in &mut layout.contents {
+    for content in &mut layout.vessels {
         content.backend = None;
         content.launch = None;
         content.start_pending = None;

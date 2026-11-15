@@ -1,11 +1,11 @@
-use crate::{ContentId, CoreTerminalId, VoyageId};
+use crate::{CoreTerminalId, VesselId, VoyageId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Entry {
-    pub content: ContentId,
+    pub vessel: VesselId,
     pub name: String,
     pub type_id: String,
     pub terminal: Option<CoreTerminalId>,

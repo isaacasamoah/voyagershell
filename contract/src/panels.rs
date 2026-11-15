@@ -1,17 +1,17 @@
-use crate::{ContentId, FleetId, PlacementId, Side, Split, Vessel, VoyageId, canvas::PortalMode};
+use crate::{FleetId, Placement, PlacementId, Side, Split, VesselId, VoyageId, canvas::PortalMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum PanelOwner {
+pub enum PlacementOwner {
     Fleet { id: FleetId },
     Portals { voyage: VoyageId },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum PanelInsertion {
+pub enum PlacementInsertion {
     Empty,
     Beside { id: PlacementId, side: Side },
 }
@@ -42,19 +42,19 @@ impl Default for PortalLayout {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SavedLayout {
-    pub owner: PanelOwner,
+pub struct Arrangement {
+    pub owner: PlacementOwner,
     pub name: String,
     pub root: Option<Split>,
 }
 
-impl<'de> Deserialize<'de> for SavedLayout {
+impl<'de> Deserialize<'de> for Arrangement {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(untagged, deny_unknown_fields)]
         enum Stored {
             Current {
-                owner: PanelOwner,
+                owner: PlacementOwner,
                 name: String,
                 root: Option<Split>,
             },
@@ -67,7 +67,7 @@ impl<'de> Deserialize<'de> for SavedLayout {
         Ok(match Stored::deserialize(deserializer)? {
             Stored::Current { owner, name, root } => Self { owner, name, root },
             Stored::Fleet { fleet, name, root } => Self {
-                owner: PanelOwner::Fleet { id: fleet },
+                owner: PlacementOwner::Fleet { id: fleet },
                 name,
                 root,
             },
@@ -75,13 +75,13 @@ impl<'de> Deserialize<'de> for SavedLayout {
     }
 }
 
-impl<'de> Deserialize<'de> for Vessel {
+impl<'de> Deserialize<'de> for Placement {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Stored {
             id: PlacementId,
-            content: ContentId,
+            vessel: VesselId,
             #[serde(default)]
             name: Option<String>,
             #[serde(default, rename = "nameOrigin")]
@@ -92,7 +92,7 @@ impl<'de> Deserialize<'de> for Vessel {
         let stored = Stored::deserialize(deserializer)?;
         Ok(Self {
             id: stored.id,
-            content: stored.content,
+            vessel: stored.vessel,
             name: stored.name.unwrap_or_default(),
             name_origin: stored.name_origin,
             hidden: stored.hidden,

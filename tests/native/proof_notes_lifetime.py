@@ -89,7 +89,7 @@ def prove(
         return core_rpc(session, env, method, params)
 
     def document():
-        return rpc("doc.get", {"name": "voyager-layout-v1"})
+        return rpc("doc.get", {"name": "voyager-layout-v2"})
 
     def record(name, process):
         identity = process_identity(process, metadata_only=True)
@@ -262,10 +262,10 @@ def prove(
         ] == [frame.width * 2, frame.height * 2]
         initial = wait(
             document,
-            lambda doc: bool(doc["value"]["contents"][0].get("backend")),
+            lambda doc: bool(doc["value"]["vessels"][0].get("backend")),
             "initial terminal",
         )
-        target = initial["value"]["contents"][0]["backend"]
+        target = initial["value"]["vessels"][0]["backend"]
         terminal = wait(
             lambda: rpc("terminal.get", {"terminal": target}),
             lambda item: bool(item.get("pid")) and item["state"] == "live",
@@ -337,7 +337,7 @@ def prove(
         created = wait(
             document,
             lambda doc: (
-                len(doc["value"]["contents"]) == len(initial["value"]["contents"]) + 3
+                len(doc["value"]["vessels"]) == len(initial["value"]["vessels"]) + 3
                 and any(
                     v["cwd"] == str(workspace)
                     and v["portalLayout"]["mode"] == "make-room"
@@ -345,7 +345,7 @@ def prove(
                 )
                 and all(
                     item.get("backend") and not item.get("startPending")
-                    for item in doc["value"]["contents"]
+                    for item in doc["value"]["vessels"]
                     if item["cwd"] == str(workspace) and item["typeId"] == "terminal"
                 )
             ),
@@ -353,8 +353,8 @@ def prove(
         )
         assert len(created["value"]["voyages"]) == len(initial["value"]["voyages"]) + 1
         assert (
-            created["value"]["contents"][: len(initial["value"]["contents"])]
-            == initial["value"]["contents"]
+            created["value"]["vessels"][: len(initial["value"]["vessels"])]
+            == initial["value"]["vessels"]
         )
         assert created["value"]["voyages"][:-1] == initial["value"]["voyages"]
         voyage = next(
@@ -363,23 +363,23 @@ def prove(
         fleet = voyage["fleets"][0]
         assert (
             len(voyage["fleets"]) == 1
-            and len(fleet["vessels"]) == 2
+            and len(fleet["placements"]) == 2
             and len(voyage["portals"]) == 1
         )
-        ids = [fleet["vessels"][1]["content"], voyage["portals"][0]["content"]]
+        ids = [fleet["placements"][1]["vessel"], voyage["portals"][0]["vessel"]]
         assert ids[0] != ids[1] and created["value"]["context"] == {"kind": "workspace"}
-        assert created["value"]["contents"][0] == initial["value"]["contents"][0]
+        assert created["value"]["vessels"][0] == initial["value"]["vessels"][0]
         assert all(
             item["typeId"] == "notes"
             and not item.get("backend")
             and not item.get("startPending")
-            for item in created["value"]["contents"]
+            for item in created["value"]["vessels"]
             if item["id"] in ids
         )
         paths = []
         for id in ids:
             note = next(
-                item for item in created["value"]["contents"] if item["id"] == id
+                item for item in created["value"]["vessels"] if item["id"] == id
             )
             binding = note["configuration"]["notesFile"]
             path = Path(binding["directory"]) / binding["filename"]
@@ -388,7 +388,7 @@ def prove(
         assert paths[0] != paths[1]
         target = next(
             item["backend"]
-            for item in created["value"]["contents"]
+            for item in created["value"]["vessels"]
             if item["cwd"] == str(workspace) and item["typeId"] == "terminal"
         )
         terminal = wait(

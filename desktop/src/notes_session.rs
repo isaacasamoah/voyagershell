@@ -2,7 +2,7 @@ use gpui::{App, Context, Entity, SharedString, Subscription, Task, Window};
 use gpui_base::input::{InputEvent, InputState, TextareaState};
 use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
-    ContentId,
+    VesselId,
     content::{Notes, NotesConfiguration, Request, Response, Version},
 };
 
@@ -30,7 +30,7 @@ pub struct Session {
     pub workspace_version: u64,
     draft_file: Option<voyager_contract::content::NotesFile>,
     selection: Option<Task<()>>,
-    id: ContentId,
+    id: VesselId,
     client: Client,
     observed: [SharedString; 2],
     view: Option<ViewBinding>,
@@ -52,7 +52,7 @@ impl Drop for Session {
 }
 
 impl Session {
-    pub fn new(id: ContentId, client: Client, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(id: VesselId, client: Client, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let title = crate::notes_input::new_title(String::new(), window, cx);
         let text = crate::notes_input::new_body(String::new(), window, cx);
         let title_events = cx.subscribe(&title, |session, _, event: &InputEvent, cx| match event {
@@ -151,7 +151,7 @@ impl Session {
                 let request = Request::Inspect {
                     version: Version::V1,
                     request_id: client.request_id(),
-                    content_id: id.clone(),
+                    vessel_id: id.clone(),
                 };
                 let result = client.read_content_view(&view, request).await;
                 let updated = handle.update(cx, |_, window, cx| {
@@ -298,7 +298,7 @@ impl Session {
         let request = Request::ListNotes {
             version: Version::V1,
             request_id: self.client.request_id(),
-            content_id: self.id.clone(),
+            vessel_id: self.id.clone(),
         };
         let client = self.client.clone();
         self.selection = Some(cx.spawn(async move |session, cx| {
@@ -350,20 +350,20 @@ impl Session {
             (true, _) => Request::MigrateNote {
                 version: Version::V1,
                 request_id,
-                content_id: self.id.clone(),
+                vessel_id: self.id.clone(),
                 expected_version: self.workspace_version,
             },
             (false, Some(filename)) => Request::OpenNote {
                 version: Version::V1,
                 request_id,
-                content_id: self.id.clone(),
+                vessel_id: self.id.clone(),
                 expected_version: self.workspace_version,
                 filename,
             },
             (false, None) => Request::NewNote {
                 version: Version::V1,
                 request_id,
-                content_id: self.id.clone(),
+                vessel_id: self.id.clone(),
                 expected_version: self.workspace_version,
                 title: "Title".into(),
             },
@@ -454,7 +454,7 @@ impl Session {
         let request = Request::Update {
             version: Version::V1,
             request_id: self.client.request_id(),
-            content_id: self.id.clone(),
+            vessel_id: self.id.clone(),
             expected_revision: save.revision,
             data: self.data(cx),
         };

@@ -21,7 +21,7 @@ def prove(
         return core_rpc(session, env, method, params)
 
     def document():
-        observed["document"] = rpc("doc.get", {"name": "voyager-layout-v1"})
+        observed["document"] = rpc("doc.get", {"name": "voyager-layout-v2"})
         return observed["document"]
 
     def ready(predicate):
@@ -133,7 +133,7 @@ def prove(
         before = pick(layout)
         if before.get("nameOrigin") == "automatic":
             item = next(
-                item for item in layout["contents"] if item["id"] == before["content"]
+                item for item in layout["vessels"] if item["id"] == before["vessel"]
             )
             if item["typeId"] == "terminal":
                 source = rpc("terminal.get", {"terminal": item["backend"]})
@@ -224,17 +224,17 @@ def prove(
         return width, box
 
     try:
-        initial = ready(lambda value: bool(value["contents"][0].get("backend")))
+        initial = ready(lambda value: bool(value["vessels"][0].get("backend")))
         core = rpc("server.status", {})
         record(core["pid"])
         if (holder := core.get("holder")) and holder.get("current"):
             record(holder["pid"])
         fleet = initial["value"]["voyages"][0]["fleets"][0]
-        panel = fleet["vessels"][0]
+        panel = fleet["placements"][0]
         content = next(
             item
-            for item in initial["value"]["contents"]
-            if item["id"] == panel["content"]
+            for item in initial["value"]["vessels"]
+            if item["id"] == panel["vessel"]
         )
         terminal = rpc("terminal.get", {"terminal": content["backend"]})
         record(terminal["pid"])
@@ -257,7 +257,7 @@ def prove(
         rename(
             panel["name"],
             "Voyager Rapid 42",
-            lambda value: value["voyages"][0]["fleets"][0]["vessels"][0],
+            lambda value: value["voyages"][0]["fleets"][0]["placements"][0],
             "feedback-rename",
             dock="Vessel dock",
         )

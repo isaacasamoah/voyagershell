@@ -410,8 +410,8 @@ fn load(
                 .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             if request.request_id.is_empty()
                 || request.request_id.len() > 128
-                || request.content_id.0.is_empty()
-                || request.content_id.0.len() > 128
+                || request.vessel_id.0.is_empty()
+                || request.vessel_id.0.len() > 128
             {
                 return Err(gpui_shell::HostError::new("Invalid terminal request"));
             }
@@ -419,12 +419,12 @@ fn load(
             let viewers = terminal_viewers.clone();
             Ok(async move {
                 let result = client.terminal(
-                    request.content_id.clone(),
+                    request.vessel_id.clone(),
                     request.request_id.clone(),
                     request.expected_version,
                 );
                 let result = result
-                    .and_then(|viewer| install_viewer(&viewers, &request.content_id.0, viewer));
+                    .and_then(|viewer| install_viewer(&viewers, &request.vessel_id.0, viewer));
                 let reason = match &result {
                     Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "finished" => {
                         Some(voyager_contract::TerminalReason::Ended)
@@ -443,7 +443,7 @@ fn load(
                 };
                 let response = voyager_contract::TerminalResponse {
                     request_id: request.request_id,
-                    content_id: request.content_id,
+                    vessel_id: request.vessel_id,
                     status,
                     reason,
                     message,
@@ -966,7 +966,7 @@ mod tests {
                 .unwrap()
         };
         let first_layout = inspect();
-        let content = first_layout.layout.contents[0].id.clone();
+        let content = first_layout.layout.vessels[0].id.clone();
         let request = client.request_id();
         let first = client
             .terminal(content.clone(), request.clone(), first_layout.version)

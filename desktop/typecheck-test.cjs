@@ -49,7 +49,7 @@ RetainedTitle.new(RetainedTitleState.new()).w_full();
 RetainedBody.new(RetainedBodyState.new()).min_h(180);
 invoke("{}", "request", "");
 changed(null);
-const request: Request = { version: "1", operation: "content.update", requestId: "r", contentId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
+const request: Request = { version: "1", operation: "content.update", requestId: "r", vesselId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
 `;
   fs.writeFileSync(filename, valid);
   assert.deepEqual(
