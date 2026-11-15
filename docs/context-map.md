@@ -23,6 +23,11 @@ Owns files:
 - `app/src/core_viewer.rs`
 - `app/src/client_core.rs`
 - `app/src/wire.rs`
+- `app/src/core_adapter_tests.rs`
+- `app/src/core_slot_tests.rs`
+- `app/tests/core_slots.rs`
+- `app/tests/viewer_streams.rs`
+- `app/tests/wire.rs`
 
 Owns words: Core, Core session, Core terminal, Program.
 
@@ -42,6 +47,16 @@ Owns files:
 - `app/src/activity.rs`
 - `app/src/diagnostics.rs`
 - `app/src/observation.rs`
+- `app/src/lib.rs`
+- `app/src/terminal_lifecycle.rs`
+- `app/src/tests.rs`
+- `app/tests/exit_events.rs`
+- `app/tests/launch.rs`
+- `app/tests/quit.rs`
+- `app/tests/selected_stop.rs`
+- `contract/src/activity.rs`
+- `contract/src/launch.rs`
+- `contract/src/observation.rs`
 
 Owns words: Queue, Operation, Refusal, Uncertain effect.
 
@@ -68,6 +83,13 @@ Owns files:
 - `contract/src/context.rs`
 - `contract/src/voyage_close.rs`
 - `contract/src/worktree.rs`
+- `app/tests/canvas.rs`
+- `app/tests/maximize.rs`
+- `app/tests/shared_panels.rs`
+- `app/tests/voyage_close.rs`
+- `contract/src/bin/export.rs`
+- `contract/tests/panels.rs`
+- `contract/generated/workspace.ts`
 
 Owns words: Voyage, Fleet, Placement, Portal, Arrangement, Layout, Context, Overwatch, Region.
 
@@ -86,6 +108,7 @@ Owns files:
 - `app/src/vessel_type.rs`
 - `contract/src/content.rs`
 - `content/`
+- `app/tests/content.rs`
 
 Owns words: Vessel, Vessel type, Vessel package, Backend, Description.
 
@@ -114,6 +137,7 @@ Owns files:
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`
 - `contract/src/voice.rs`
+- `contract/generated/conversation.ts`
 
 Owns words: Administrator, Conversation, Provider.
 
@@ -129,6 +153,8 @@ Owns files:
 
 - `desktop/src/`
 - `desktop/canvas/`
+- `contract/src/avatar_animation.rs`
+- `contract/src/inspection.rs`
 
 Owns words: Canvas, Panel, Avatar, Dock, Profile.
 

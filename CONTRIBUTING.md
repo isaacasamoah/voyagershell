@@ -38,6 +38,14 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --release --locked -p voyager-desktop --bin voyager-shell
 ```
 
+`npm run architecture:check` gives every Rust and TypeScript source file under
+`app/`, `contract/`, `desktop/` and `content/` exactly one owning context in
+`tests/architecture/vocabulary.yaml`. It fails on a file in no context or in two.
+It also fails on a use or import between modules of different contexts that
+`tests/architecture/intended.yaml` does not list, and on a listed edge that is
+gone. A PR that adds an edge runs `npm run architecture:intended` and commits the
+change, so reviewers see the new dependency.
+
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
 cache, applies the reviewed native-overlay and engine-limits patches in `desktop/patches/`
 and writes a local Cargo override for the shared SDK crates. Run it before

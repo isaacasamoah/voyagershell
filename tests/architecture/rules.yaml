@@ -29,3 +29,7 @@ rules:
   - id: one-vocabulary
     check: forbid_terms
     table: vocabulary.yaml
+  - id: one-owner-per-module
+    check: one_owner
+  - id: intended-edges
+    check: intended_edges

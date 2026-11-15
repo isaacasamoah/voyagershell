@@ -131,12 +131,15 @@ for (const [file, owner] of BINARY_ROOTS)
 test("include_str! and include! of a product file still pass", () => {
   const directory = scratch();
   fs.writeFileSync(path.join(directory, "app/planted.md"), "# planted\n");
-  fs.writeFileSync(path.join(directory, "app/planted.rs"), "fn planted() {}\n");
+  fs.writeFileSync(
+    path.join(directory, "app/src/content/planted.rs"),
+    "fn planted() {}\n",
+  );
   edit(
     directory,
     "app/src/lib.rs",
     (source) =>
-      `${source}\nconst PLANTED: &str = include_str!("../planted.md");\ninclude!("../planted.rs");\n`,
+      `${source}\nconst PLANTED: &str = include_str!("../planted.md");\ninclude!("content/planted.rs");\n`,
   );
   const result = run(directory);
   assert.strictEqual(result.status, 0, result.out + result.err);
@@ -340,7 +343,7 @@ test("a new architecture tool file over the limit fails", () => {
 test("a file at the limit passes", () => {
   const directory = scratch();
   fs.writeFileSync(
-    path.join(directory, "app/src/planted.rs"),
+    path.join(directory, "app/src/content/planted.rs"),
     "fn planted() {}\n".repeat(1000),
   );
   const result = run(directory);
