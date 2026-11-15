@@ -334,7 +334,7 @@ fn held_stops(native: &Native) -> Result<Vec<Value>> {
     Ok(ledger
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter(|line| line["method"] == STOP)
+        .filter(|line| line["method"] == STOP && line["event"] == "released")
         .collect())
 }
 
