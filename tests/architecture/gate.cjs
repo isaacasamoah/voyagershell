@@ -5,6 +5,7 @@ const path = require("node:path");
 const { observe, lockReach } = require("./observe.cjs");
 const { parse } = require("./yaml.cjs");
 const vocabulary = require("./vocabulary.cjs");
+const ownersOf = require("./owners.cjs");
 
 const HERE = __dirname;
 
@@ -169,6 +170,16 @@ function violations(rule, facts) {
       limit: 0,
     }));
   }
+  if (rule.check === "one_owner") {
+    return ownersOf
+      .ownership(facts.contexts, facts.sizes)
+      .map((item) => ({ ...item, id: `${rule.id}: ${item.id}` }));
+  }
+  if (rule.check === "intended_edges") {
+    return ownersOf
+      .intendedViolations(facts.crossEdges, facts.intended)
+      .map((item) => ({ ...item, id: `${rule.id}: ${item.id}` }));
+  }
   throw new Error(`Rule ${rule.id} has unknown check ${rule.check}`);
 }
 
@@ -177,6 +188,8 @@ function gate({
   revision,
   rules = path.join(HERE, "rules.yaml"),
   known = path.join(HERE, "known-violations.yaml"),
+  intended = path.join(HERE, "intended.yaml"),
+  write = false,
 }) {
   const tree = revision ?? workingTree(repository);
   const ruleList = parse(fs.readFileSync(rules, "utf8")).rules;
@@ -200,7 +213,25 @@ function gate({
         ]),
       ),
   );
+  const contexts = parse(
+    fs.readFileSync(path.join(path.dirname(rules), "vocabulary.yaml"), "utf8"),
+  ).contexts;
+  const crossEdges = ownersOf.crossEdges(
+    contexts,
+    observation.observed.nodes,
+    observation.observed.edges,
+  );
+  if (write) {
+    fs.writeFileSync(intended, ownersOf.intendedText(crossEdges));
+    return {
+      report: `wrote ${crossEdges.length} cross-owner edges to ${path.basename(intended)}\n`,
+      ok: true,
+    };
+  }
   const facts = {
+    contexts,
+    crossEdges,
+    intended: ownersOf.loadIntended(intended),
     terms: observation.scanned,
     edges: observation.observed.edges,
     unresolved: observation.observed.unresolved,
@@ -223,9 +254,9 @@ function gate({
     const entry = recorded.get(id);
     const where = item.at ? ` (${item.at})` : "";
     if (!entry) {
-      fresh.push(
+      (item.label === "STALE" ? stale : fresh).push(
         item.count === undefined
-          ? `NEW ${id}${where}`
+          ? `${item.label ?? "NEW"} ${id}${where}`
           : `NEW ${id} has ${item.count} ${item.unit}, over the limit of ${item.limit}`,
       );
     } else if (item.count !== undefined) {
@@ -269,6 +300,8 @@ if (require.main === module) {
     revision: option("--rev"),
     rules: option("--rules") && path.resolve(option("--rules")),
     known: option("--known") && path.resolve(option("--known")),
+    intended: option("--intended") && path.resolve(option("--intended")),
+    write: args.includes("--write-intended"),
   });
   process.stdout.write(result.report);
   process.exitCode = result.ok ? 0 : 1;

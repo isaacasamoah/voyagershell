@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { parse } = require("./yaml.cjs");
+const { nested } = require("./owners.cjs");
 const { phrases, tracked, isText } = require("./vocabulary.cjs");
 
 const DOCS = {
@@ -49,6 +50,7 @@ function validate(table, repository, names = tracked(repository)) {
       claimed.set(entry, context.id);
     }
   }
+  problems.push(...nested(contexts));
   const byName = new Map();
   for (const term of terms) {
     for (const key of ["term", "context", "meaning"])
