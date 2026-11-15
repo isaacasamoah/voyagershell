@@ -1,5 +1,4 @@
-The astronaut is reused unchanged from Isaac's Voyager visual study, confirmed
-for this desktop experiment. Source: https://voyagershell.ai/images/astronaut/idle.png
+The astronaut comes from the Voyager visual study. Source: https://voyagershell.ai/images/astronaut/idle.png
 (observed in the September 20, 2026 design package).
 
 The rainbow arcs, floating motion and thin circular border follow that study.

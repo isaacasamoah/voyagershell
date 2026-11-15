@@ -17,7 +17,7 @@ LEGACY_DIV_HEADER = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320
 
 def div_control_point(label, fleets, viewport, header_sha256):
     assert header_sha256 == LEGACY_DIV_HEADER, (
-        "Measured Div controls require the inspected Header source"
+        "Measured Div controls require the inspected canvas source"
     )
     assert viewport == (2900, 1880), (
         "Measured Div controls require the observed 2900x1880 X window"
@@ -68,8 +68,8 @@ def terminal(
         return core_rpc(session, env, method, params)
 
     def workspace_control(label):
-        header = evidence / "profile/canvas/main.js"
-        digest = hashlib.sha256(header.read_bytes()).hexdigest()
+        canvas = evidence / "profile/canvas/main.js"
+        digest = hashlib.sha256(canvas.read_bytes()).hexdigest()
         if digest != LEGACY_DIV_HEADER:
             click(*named_button(native, evidence, label))
             return

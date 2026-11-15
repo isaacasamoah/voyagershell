@@ -72,24 +72,21 @@ native registration changes. Declarations come from the actual registrations.
 Personal profile JavaScript remains live-editable. Source is seeded once and is
 not silently replaced by a repository update. Keep personal edits and instance
 data during an explicit compatible update. Source reload retains the last usable
-package on error and grants no Header, process or private-conversation authority
-to a content package.
+package on error and grants no canvas, process or private-conversation authority
+to a Vessel package.
 
-The current Header declares numeric `contentConfiguration: 1` in vessel.json.
-Together with the matching Notes declaration, this enables Notes configuration
-discovery and actions. Preserve optional Content.configuration when validating
-or composing the workspace. Rust owns validation and writes. An older strict
-Header may reject newer saved data; preserve both and explicitly update or
+The canvas manifest `canvas.json` declares the `contentConfiguration` version it
+reads. Together with the matching Notes declaration, this enables Notes
+configuration discovery and actions. Preserve optional Vessel.configuration when
+validating or composing the workspace. Rust validates and writes. An older
+strict canvas may reject newer saved data; preserve both and explicitly update or
 restore compatible source.
-
-These instructions describe the current source. They do not accept the complete
-native UX revision, its appearance, input behavior or performance.
 
 
 ## Viewer controls
 
-Each panel header has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
+Each panel title bar has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
 
 The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-placement` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
 
-`processes(version)` is a fixed read-only Header binding returning the generated ProcessResponse. It runs off the UI executor. The Home Agents view uses the same snapshot and program-reported activity. Silence is not success, and an ordinary shell is not an agent.
+`processes(version)` is a fixed read-only canvas binding returning the generated ProcessResponse. It runs off the UI executor. The Home Agents view uses the same snapshot and program-reported activity. Silence is not success, and an ordinary shell is not an agent.

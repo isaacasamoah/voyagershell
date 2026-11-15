@@ -1,6 +1,6 @@
 # Building VoyagerShell
 
-This repository is the standalone successor to the core-workspace prototype in voyagershellapp. The native candidate uses Rust application code and GPUI views. The Electron workspace and its local content packages remain under experiments/electron-reference/. Herdr Core is an external dependency, not copied implementation code.
+This repository is the standalone successor to the core-workspace prototype in voyagershellapp. The native candidate uses Rust application code and GPUI views. The Electron workspace and its local Vessel packages remain under experiments/electron-reference/. Herdr Core is an external dependency, not copied implementation code.
 
 Use Node 24 and the hc command on PATH. The generated Core input is pinned to 0.1.18, the oldest supported release; see [the Core adapter](docs/terminal.md#core-adapter) for its evidence. Newer releases are tested additive upgrades, not a guarantee for every future release. Codex is needed only for real companion chat or voice. Ordinary tests do not call a model.
 

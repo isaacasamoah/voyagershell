@@ -52,7 +52,7 @@ The existing pending creation record retains that ID's accepted effective launch
 An absent launch means Terminal. Fresh inspection advertises eligibility only
 while the stored choice matches. Starting checks that same record before the
 legacy shell path, so changing Codex to Terminal cannot substitute a shell.
-Native Header creation and authorized scoped creation both record their exact
+Native canvas creation and authorized scoped creation both record their exact
 confirmed new terminal. Inspect and reopening do not create permission.
 
 The existing Client queue reads configuration away from render callbacks. It

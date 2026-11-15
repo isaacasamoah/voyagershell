@@ -18,7 +18,7 @@ an explicit type ID. The supported type IDs are `terminal` and `notes`. `NOTES_T
 Changing a placement does not change its content ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
-`app/src/content/description.rs` describes the two supported content types through
+`app/src/content/description.rs` describes the two supported Vessel types through
 the generated `contentCatalog` contract. Each description names its current
 GPUI Shell host version, registered native view, supported placement scopes,
 generated action input and owner-result schemas, and optional Core terminal
@@ -43,14 +43,14 @@ same Rust owner used by the native menu. Direct `configure` refuses a changed
 file binding. The file must belong to the owning directory's Notes folder;
 selection does not change content identity or an independent Note's draft.
 
-The shipped Notes and Header declare numeric `contentConfiguration: 2`.
+The shipped Notes and canvas declare numeric `contentConfiguration: 2`.
 Versions 1 and 2 support selected-file configuration metadata. Notes version 2
 omits configure from Describe and refuses direct configure writes at the owner.
 Its Markdown interface has no NOTES eyebrow or writable presentation setting.
 
 The legacy `showHeading` Boolean defaults to true and remains readable by personal
 packages through `show_heading()`. Notes version 1 retains legacy configure when
-Header supports metadata version 1 or 2. The current renderer ignores that value.
+Canvas supports metadata version 1 or 2. The current renderer ignores that value.
 An unsupported or missing capability version omits metadata and configure. No
 stored value or personal package is rewritten, reseeded or silently upgraded.
 Removing metadata support would also remove the file binding from Snapshot.
@@ -73,8 +73,8 @@ Inspect returns optional configuration metadata beside the data snapshot. The
 metadata comes from the fresh workspace, independently of last-good Notes data.
 Title/text revisions and dirty drafts remain separate. Missing stored configuration
 means the default. Unknown fields and non-Boolean values refuse at the typed
-content boundary. The current compatible Header/Notes bundle is required after
-saving configuration. Loading an older strict Header may expose its own validation
+content boundary. The current compatible canvas/Notes bundle is required after
+saving configuration. Loading an older strict canvas may expose its own validation
 or load error; source, data and configuration remain preserved until an explicit
 compatible package update or restore. There is no migration, reseeding or response
 stripping.
@@ -85,7 +85,7 @@ fresh configuration over last-good data. They do not establish current native
 file selection, dirty-editor behavior or lost Core confirmation. New/Open,
 retained draft and sibling isolation require their actual integrated journey.
 
-The Header-only `voyager_content_view.descriptions()` binding returns typed
+The canvas-only `voyager_content_view.descriptions()` binding returns typed
 contract data as JSON from background host work, within the existing content
 envelope limit. It does not extend the private Notes registry. The catalogue and
 bound Describe use the same owner. The creation picker reads this catalogue to
@@ -115,12 +115,12 @@ keeps personal source, assets, guides and configuration available for restore.
 Workspace notices carry the genuine Core document revision and a separate
 package revision. The package revision advances only for successful package
 operations; a filesystem-only operation does not save a layout or invent a CAS
-revision. The native Header keeps its single subscription and the script consumes
+revision. The native canvas keeps its single subscription and the script consumes
 the notice before queuing a coalesced read. A document notice already reflected
 in the view does not trigger another read or prepare. Automatic notice reads still
 prepare newly authorized content, but do not clear and retry known-refused
 terminal openings. Deliberate Refresh retains that retry. Uncertain starts are
-never replayed. The prior revision() read remains available for personal Header
+never replayed. The prior revision() read remains available for personal canvas
 source; new composition uses notice().
 
 The filesystem/availability and notice changes have source tests and a separately
@@ -198,7 +198,7 @@ establish only that supported legacy behavior. They do not establish the fresh
 native session or a new native lifecycle journey.
 
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
-Header policy. Its native factory retains one view per content ID. Before opening
+Canvas policy. Its native factory retains one view per content ID. Before opening
 data, background work asks the existing Client worker for a binding. That worker
 reads the authoritative workspace and checks the exact Notes placement before
 binding existing data. It never creates a missing file while binding or inspecting.
@@ -208,7 +208,7 @@ not retry initialization. Requests cannot supply their own binding or path.
 
 Each Notes candidate loads in its own isolated QuickJS VM with the private
 voyager_input registry, under the limits in
-[Vessel engine limits](#vessel-engine-limits). Candidates cannot import Header
+[Vessel engine limits](#vessel-engine-limits). Candidates cannot import canvas
 Terminal, Name or workspace modules. Each candidate has its captured
 voyager_vessel module and application generation.
 The host renders the published ScriptView beneath the existing single window
@@ -238,13 +238,13 @@ the owner confirms an update. Schema warnings and last-good data remain visible.
 Packages are seeded once into the selected profile. Personal JavaScript is not
 overwritten. The shipped Notes composition is authored in `content/notes/main.ts` and emitted
 to the same `main.js` by the existing strict TypeScript pipeline. The gate checks
-Header and Notes separately using the same compiler/configuration: Notes receives
-its actual `export-script-types --notes` declarations, not the Header's broader
+Canvas and Notes separately using the same compiler/configuration: Notes receives
+its actual `export-script-types --notes` declarations, not the canvas's broader
 registry. Native Title/Body signatures and the content request/result types come
 from the actual registry exporter and generated Rust contract. Each scope records
 its declaration hash/modules in `desktop/script-types.json`. Wrong native calls,
 unknown builder properties, missing invoke arguments, invalid data types and
-Header-only imports fail the maintained control.
+Canvas-only imports fail the maintained control.
 
 The small host function declarations remain in desktop/src/script_types.rs.
 The gate checks that exported ABI, not an inferred Rust callback signature. The
@@ -261,7 +261,7 @@ The earlier artifact's native journey covers save/reopen, stale and forged refus
 hydration, uncertain confirmation without replay, body resizing and independent
 draft/focus retention. Switching Fleets retains the same Portal and data. Native
 input still reaches the original Core terminal afterward. The sibling pixel checks
-cover its measured title, body and status area, not the whole Portal header or
+cover its measured title, body and status area, not the whole Portal title bar or
 desktop. Earlier failed fixture attempts remain recorded separately.
 
 The N3 source candidate adds generated voyager_vessel describe/inspect/update to
@@ -379,7 +379,7 @@ Invariants:
   path. A failed load keeps the published candidate, as live authoring requires.
 - Window control is denied by default. Notes loads with no window grant, so
   `set_rem_size`, `bind_keys`, actions, focus movement, dialogs, sheets and toasts
-  are refused. Window reads stay allowed. Only the first-party Header policy in
+  are refused. Window reads stay allowed. Only the first-party canvas policy in
   `desktop/src/host.rs` grants window control, because it opens dialogs.
 - `LoadedApplication` holds its engine, so dropping an engine while a loaded
   handle lives cannot abort the process.
@@ -417,7 +417,7 @@ Known gaps, outside these limits:
   strike limit of 1.
 - The placeholder appears at the Note's next render. Nothing notifies the Note
   when its engine retires inside a timer or task.
-- No native journey opens the header's worktrees dialog, which uses the same
+- No native journey opens the canvas's worktrees dialog, which uses the same
   gated calls as the voyage-close dialog.
 - Long native operations that do not poll the interrupt handler, such as large
   string or JSON calls, escape refusal. The E1 verifier ran 12 such
@@ -464,7 +464,7 @@ filename. Rename normalizes the .md suffix and moves the file through the same
 application owner. The Markdown heading and body do not change. All bindings
 of that path are collected by resolved directory and filename, while each
 binding keeps its original directory spelling. A scoped caller must have access
-to every affected content instance.
+to every affected Vessel.
 
 The existing native save bridge freezes those instances and checks their exact
 selected and draft file bindings before saving. More than one dirty view of the

@@ -47,7 +47,7 @@ function fixture() {
     WorkspaceMenu: vm.runInNewContext(
       `${workspaceSource("VOYAGER_MENU_SOURCE", "class", "menu.js")}\nWorkspaceMenu`,
     ),
-    request_id: () => "header-generation",
+    request_id: () => "canvas-generation",
     div,
     Button: {
       new() {

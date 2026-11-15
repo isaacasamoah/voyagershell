@@ -159,8 +159,8 @@ injection from PR #42 remain outside this implementation.
 Application responses still refresh context through the existing owner path.
 Navigation and terminal output do not themselves start avatar animation. Only a
 validated applied dock receipt starts its dock clip. Animation files cannot run
-code or invoke application operations. This trigger policy supersedes continuous
-idle motion by Isaac's 9 November decision. Actual native motion, alpha, input and
+code or invoke application operations. The avatar has no continuous idle
+motion. Only these triggers start a clip. Actual native motion, alpha, input and
 resource evidence must accompany the release; source checks alone prove none of
 those outcomes.
 
@@ -178,7 +178,7 @@ results remain historical limits. This integration does not establish terminal,
 conversation, full foundation or performance acceptance.
 
 The candidate restores the previous native demo's unchanged brand bitmap and
-two-stop Home and non-Home circle gradients, as selected by Isaac. The current
+two-stop Home and non-Home circle gradients. The current
 GPUI public element API does not supply the Electron reference's live backdrop
 blur and saturation. The restored gradient does not establish that material
 parity. The travelling popup completed the bounded native cross-window docking
@@ -217,7 +217,7 @@ absent; connection and capability failures remain in the control's accessible
 description and bounded hover hint. This placement does not establish working
 provider audio or another platform's microphone behavior.
 
-Only the 38-pixel Voyage/Fleet avatar omits its fixed green dot. Header places that
+Only the 38-pixel Voyage/Fleet avatar omits its fixed green dot. Canvas places that
 same decorative indicator beside its existing primary voice/chat controls. The
 full-size dot and other fallback presentations retain their existing behavior;
 the dot does not establish service readiness.

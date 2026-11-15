@@ -1,12 +1,11 @@
 # Build constraints
 
-Isaac requested this trial on 24 October 2026. Apply it to the next voice-handoff
-build and the small git-graph trial.
+Apply these constraints to every change.
 
 ## Effective tests
 
-On 13 November 2026 Isaac removed the earlier limit on test and proving-code
-lines. Shared verification code is maintained as its own product.
+Test and proving code has no line limit. Maintain shared verification code as
+its own product.
 
 Every changed behavior needs a test that first fails for the missing behavior,
 or a known-different comparison where a deterministic regression is unsuitable.
@@ -40,7 +39,7 @@ behavior and minimal effective tests, use a native GitHub PR stack with separate
 reviewable slices. Do not use Graphite. Verify current GitHub stack support and
 the repository's merge rules before creating the stack.
 
-For the approved voice run, each vertical slice receives a fresh-context review
+For each vertical slice receives a fresh-context review
 using the code-review skill. It may have one corrective product build after that
 review, followed by re-review. If Required issues remain, stop and report them.
 Do not start a dependent slice or another corrective build. Finishing a task needs

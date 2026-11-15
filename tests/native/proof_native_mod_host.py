@@ -80,7 +80,7 @@ def run():
         parser.error("Working directory must be an existing absolute directory")
     binary = args.binary.resolve()
     if args.launch and not binary.is_file():
-        raise RuntimeError("Native header capability has not been built")
+        raise RuntimeError("Native canvas capability has not been built")
     evidence = args.evidence.resolve()
     if args.launch:
         evidence.mkdir(parents=True, exist_ok=False)
@@ -460,41 +460,41 @@ def run():
             ))
         else:
             time.sleep(0.5)
-            initial = capture("header-initial")
+            initial = capture("canvas-initial")
             package = profile / "canvas/main.js"
             source = package.read_text()
             changed = source.replace('.child("Voyager")', '.child("Voyager Live")')
-            assert changed != source, "Expected shipped native header source"
-            valid = edit(package, changed, "header-live", initial)
-            passed.append("live-header-pixels")
-            invalid = edit(package, "export default class {\n", "header-invalid", valid)
+            assert changed != source, "Expected shipped native canvas source"
+            valid = edit(package, changed, "canvas-live", initial)
+            passed.append("live-canvas-pixels")
+            invalid = edit(package, "export default class {\n", "canvas-invalid", valid)
             passed.append("broken-source-visible-result")
-            corrected = edit(package, changed, "header-corrected", invalid)
+            corrected = edit(package, changed, "canvas-corrected", invalid)
             theme_path = profile / "themes/voyager.json"
             theme = json.loads(theme_path.read_text())
             theme["background"] = "#14202b"
-            themed = edit(theme_path, json.dumps(theme), "header-theme", corrected)
-            bad_theme = edit(theme_path, "{", "header-theme-invalid", themed)
-            edit(theme_path, json.dumps(theme), "header-theme-corrected", bad_theme)
+            themed = edit(theme_path, json.dumps(theme), "canvas-theme", corrected)
+            bad_theme = edit(theme_path, "{", "canvas-theme-invalid", themed)
+            edit(theme_path, json.dumps(theme), "canvas-theme-corrected", bad_theme)
             close()
-            start_frame("header-reopened")
+            start_frame("canvas-reopened")
             assert package.read_text() == changed and json.loads(theme_path.read_text()) == theme
             close()
             save(package, "export default class {\n")
-            first_error = start_frame("header-first-load-invalid")
-            edit(package, changed, "header-first-load-corrected", first_error)
+            first_error = start_frame("canvas-first-load-invalid")
+            edit(package, changed, "canvas-first-load-corrected", first_error)
             close()
             save(theme_path, "{")
-            first_theme_error = start_frame("header-first-theme-invalid")
-            edit(theme_path, json.dumps(theme), "header-first-theme-corrected", first_theme_error)
+            first_theme_error = start_frame("canvas-first-theme-invalid")
+            edit(theme_path, json.dumps(theme), "canvas-first-theme-corrected", first_theme_error)
             close()
             hoisted = changed.replace(
                 "export default", "const chrome = projection();\n\nexport default"
             ).replace("    const chrome = projection();\n", "")
             save(package, hoisted)
             save(theme_path, "{")
-            module_error = start_frame("header-module-theme-invalid")
-            edit(theme_path, json.dumps(theme), "header-module-theme-corrected", module_error)
+            module_error = start_frame("canvas-module-theme-invalid")
+            edit(theme_path, json.dumps(theme), "canvas-module-theme-corrected", module_error)
             close()
             imported = "import { heading } from './heading.js';\n" + changed.replace(
                 '.child("Voyager Live")', '.child(heading)'
@@ -502,8 +502,8 @@ def run():
             save(package, imported)
             helper = package.with_name("heading.js")
             save(helper, "export const heading = ;\n")
-            import_error = start_frame("header-import-invalid")
-            edit(helper, "export const heading = 'Voyager Live';\n", "header-import-corrected", import_error)
+            import_error = start_frame("canvas-import-invalid")
+            edit(helper, "export const heading = 'Voyager Live';\n", "canvas-import-corrected", import_error)
             passed.extend([
                 "theme-and-error-captures", "native-quit",
                 "personal-source-preserved-on-reopen", "first-load-error-and-recovery",

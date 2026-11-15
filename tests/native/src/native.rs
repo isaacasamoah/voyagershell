@@ -1204,7 +1204,7 @@ pub(crate) mod tests {
                 seen(Some(&preparing), Some(&document), Some(7)),
                 Glance::Preparing
             ),
-            "An outcome counted while the header reported a pending workspace request"
+            "An outcome counted while the canvas reported a pending workspace request"
         );
         ensure!(
             matches!(

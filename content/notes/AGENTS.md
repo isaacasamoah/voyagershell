@@ -1,6 +1,6 @@
 # Notes
 
-Notes is one content type. A Vessel places an instance inside a Fleet. A Portal
+Notes is one Vessel type. A Vessel places an instance inside a Fleet. A Portal
 places an instance across its Voyage. Content identity, placement and the
 selected Markdown file are separate.
 

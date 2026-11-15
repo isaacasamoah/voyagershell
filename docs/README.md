@@ -117,7 +117,7 @@ lifecycle](terminal.md) describes that split.
 A Notes Vessel opens beside the terminal and shows **Title**. In your second
 terminal, `ls /var/tmp/voyager-try/project/notes` prints `Title.md`.
 
-Both Vessels belong to Fleet 1. A Vessel places content inside one Fleet.
+Both Vessels belong to Fleet 1. A Vessel sits inside one Fleet.
 
 ## Step 5. Add a Fleet and a Portal
 
@@ -127,9 +127,9 @@ Both Vessels belong to Fleet 1. A Vessel places content inside one Fleet.
    column opens on the right.
 3. Click the **Fleet 1** tab.
 
-The Portal stays on screen when you change Fleets. A Portal places content
-across a whole Voyage. Vessels and Portals use the same content model. Only the
-placement differs.
+The Portal stays on screen when you change Fleets. A Portal is a Vessel placed
+across a whole Voyage. A Vessel in a Fleet and a Portal use the same Vessel
+type. Only the placement differs.
 
 ## Step 6. Dock the avatar
 
@@ -302,7 +302,7 @@ procedure.
   [Script authoring](workspace.md#script-authoring-and-checking).
 - **A native view.** Start at `native_registry` in `desktop/src/lib.rs`. See
   [Workspace](workspace.md).
-- **A content type.** Start at `IMPLEMENTATIONS` in
+- **A Vessel type.** Start at `IMPLEMENTATIONS` in
   `app/src/content/description.rs`. See [Notes and content
   ownership](content.md).
 - **An assistant tool.** Start at the tool catalog in

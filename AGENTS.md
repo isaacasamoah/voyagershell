@@ -20,7 +20,7 @@ This is an application for extensible content, not only a terminal manager. A te
 - Keep changed source comment-free. Put mechanisms and invariants in the owning technical document.
 - Prefer explicit types and a small number of modules. Add a dependency only for a primitive required now.
 - Keep runtime profiles, transcripts, credentials, private task documents and evidence out of Git.
-- Preserve the selected vocabulary: Voyage is a space, Fleet is a tab, Vessel places content in a Fleet, and Portal places content across a Voyage. Legacy storage/API names remain until deliberately migrated.
+- Preserve the selected vocabulary: a Voyage is a space, a Fleet is a tab, a Vessel is one piece of content of a Vessel type, and it is placed in a Fleet or as a Portal across a Voyage. Use these words in code, docs and UI.
 - The native candidate uses Rust application code and GPUI rendering. Electron remains the preserved UX reference. The native candidate is not an accepted replacement until equivalent UX and increasing-load performance are demonstrated.
 - Use Rust best practices for Rust changes and Rust review alongside general review. Preserve the project's toolchain and lint rules.
 
@@ -30,7 +30,7 @@ The native candidate's application queue is `app/src/client.rs`. Placement and e
 
 The retained Electron reference in `experiments/electron-reference/` composes its application in `main.cjs`. Its `workspace.cjs`, `portal-library.cjs`, `portal-host.cjs` and `core.cjs` remain reference owners, not the native product's implementation locations.
 
-A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. The same content type and instance interface serves both placements. Keep content identity, placement and any backend terminal address separate. The native candidate retains Portal content across Fleet changes. Portal placement and presentation must belong to the shared canvas definition and Rust owner, with overlay as the default and make-room also supported. Native evidence is still required for the current composition; legacy `realm`, `dimension` and `portal` storage/API names alone prove no behavior.
+A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. The same content type and instance interface serves both placements. Keep content identity, placement and any backend terminal address separate. The native candidate retains Portal content across Fleet changes. Portal placement and presentation must belong to the shared canvas definition and Rust owner, with overlay as the default and make-room also supported. Native evidence is still required for the current composition.
 
 The avatar represents its user's authority while its dock selects context. Workspace, Voyage, Fleet, Vessel and Portal context must remain explicit and separate from keyboard focus, visual selection and delegated assignment. Fleet membership and Core parentage do not grant instruction rights. Do not claim the prototype enforces delegated ranks where it does not.
 

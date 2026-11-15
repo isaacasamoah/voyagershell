@@ -1,7 +1,7 @@
 # Native terminal candidate
 
 Herdr Core owns the shell process and canonical terminal state. Voyager stores a
-Core terminal address on a content instance, separate from its placement. Its
+Core terminal address on a Vessel, separate from its placement. Its
 single framed Core connection carries RPC, viewer data, input, focus and credit.
 Closing a viewer sends CLOSE; it does not stop the terminal. Quitting closes
 viewers and private assistant resources while Core programs remain running.
@@ -118,23 +118,22 @@ refused with kind `quitting`, because the connection is already released. After
 either operation the owner refuses new workspace, process, content-update and
 terminal-open effects, and cached Inspect remains available.
 
-The Stop session entry and its dialog are a proposal for Isaac's review. The
-entry sits in the Home button's context menu because Home stands for the whole
-session and the header's commands already live in context menus. The dialog
+The Stop session entry sits in the Home button's context menu because Home stands for the whole
+session and the canvas's commands already live in context menus. The dialog
 costs one extra click. It earns that click because a stop cannot be undone. It
 ends every program Core started in the session, and the dialog says that
 Ctrl+Q keeps them instead.
 
-The entry and dialog are in the header package, which seeds into a profile
-once. A profile seeded before this change keeps its old header and has no Stop
-session entry until the header package is updated by fingerprint, the
+The entry and dialog are in the canvas package, which seeds into a profile
+once. A profile seeded before this change keeps its old canvas and has no Stop
+session entry until the canvas package is updated by fingerprint, the
 compatibility step planned after this one.
 
 ## Program-reported activity
 
 The source candidate adds optional OSC 7501 observation on the existing framed
 Core connection. Its native protocol journey is pending. Existing Vessel and
-Portal headers show the program's reported working, blocked, idle, done or error
+Portal title bars show the program's reported working, blocked, idle, done or error
 word. Unknown has an explicit reason. The ever-reported flag is the exact Core
 true/false when observed, and null when its source is unavailable. Reported done
 is not process exit or a verified task result. Private conversation progress remains separate.
@@ -159,7 +158,7 @@ transient parsing, script/result copies and the existing 16 MiB frame are
 separate from that 2.25 MiB retained observation budget. Oversized observation
 becomes limited/unknown and does not limit workspace creation or terminal input.
 The projection carries a cache-limit reason when bound addresses exceed the
-cache allowance. Uncovered headers show unknown with a limit label. A terminal
+cache allowance. Uncovered Portal title bars show unknown with a limit label. A terminal
 absent from a snapshot remains unknown with a null reported flag; a present
 terminal's explicit false remains false.
 
@@ -176,7 +175,7 @@ observed-at time is not substituted for Core's source timestamp. See the pinned 
 
 `desktop/src/quit.rs` runs both lifecycle operations. One request remains
 pending, and its final result is retained. Repeating the same operation does
-not issue another stop. Errors remain visible in the native Header.
+not issue another stop. Errors remain visible in the native canvas.
 
 The workspace queue stops accepting new workspace, process, content-update and
 terminal-open effects after either lifecycle operation. Existing receipts retain their
@@ -422,9 +421,9 @@ filtered stream would read as gaps. `Activity` keeps only events for terminals
 that a placement records as its backend. A `finished` event for such a terminal
 marks an exit check. At its next message the owner lists Core's terminals and
 closes each retained panel whose terminal exited while bound as live, saves the
-layout and notifies the header. When Core refuses the list as busy, the check
+layout and notifies the canvas. When Core refuses the list as busy, the check
 stays marked and starts at the next message. A program's exit therefore shows without the
-header's 3 s observation. That observation remains: it renames Voyages, refreshes
+canvas's 3 s observation. That observation remains: it renames Voyages, refreshes
 live bindings and recovers an exit missed in a sequence gap or a refused
 `terminal.list`. A foreign program in the same session produces events that match
 no placement and change nothing. The VT
@@ -493,7 +492,7 @@ makes its launch or intent ineligible. The opening owner needs that record to
 reject a changed launch instead of treating it as an ordinary unbound shell.
 Advertising eligibility still requires the exact current tuple to match.
 
-The updated Header treats the typed ended reason as a neutral condition and
+The updated canvas treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
 content ID, name, tree and avatar context stay unchanged. The new program always
 uses the ordinary shell launch. A fresh intent can replace the old opening;
@@ -501,9 +500,9 @@ an automatic owner notice cannot retry a refusal for the same intent. Refresh
 does not gain start permission merely from an old ended response. Existing
 explicit repair of a known refused opening retains its separate behavior.
 
-Personal Header source and validators are not overwritten. Existing workspace
+Personal canvas source and validators are not overwritten. Existing workspace
 documents omit the new optional `shellIntent` field and continue to load. The
-new button and typed ended response require the updated Header/generated API;
+new button and typed ended response require the updated canvas/generated API;
 an older copied strict validator can reject new fields rather than understand
 the new operation. Upgrade such a personal package deliberately. No automatic
 package migration or source merge is implemented here.

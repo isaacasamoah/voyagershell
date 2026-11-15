@@ -46,11 +46,3 @@ known:
   - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'
-  - id: 'one-vocabulary: canvas-package'
-    limit: 120
-    owner: isaac
-    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
-  - id: 'one-vocabulary: legacy-names'
-    limit: 1
-    owner: isaac
-    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'

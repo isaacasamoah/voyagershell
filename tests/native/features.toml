@@ -1,7 +1,7 @@
 [[feature]]
 id = "voyages"
 name = "Voyages"
-path = "Create a Voyage from the header, switch between Voyages and rename one."
+path = "Create a Voyage from the canvas, switch between Voyages and rename one."
 sources = ["desktop/canvas/main.*", "desktop/canvas/navigation-view.*", "desktop/canvas/voyage-colours.ts", "app/src/workspace.rs", "app/src/content/rename.rs", "app/src/scope.rs"]
 journeys = ["workspace"]
 platforms = ["linux"]
@@ -235,7 +235,7 @@ debug = "covered"
 [[feature]]
 id = "scripts-live-edit"
 name = "Scripts live edit"
-path = "Edit a header script and see the change appear live."
+path = "Edit a canvas script and see the change appear live."
 sources = ["desktop/canvas/main.ts", "desktop/src/script_types.rs", "desktop/script-types.json"]
 journeys = []
 platforms = ["linux"]

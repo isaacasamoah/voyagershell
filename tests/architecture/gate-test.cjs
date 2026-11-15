@@ -489,7 +489,7 @@ test("a new TypeScript import cycle fails", () => {
   );
 });
 
-test("the recorded header cycle that is not recorded fails", () => {
+test("the recorded canvas cycle that is not recorded fails", () => {
   expectFailure(
     run(scratch(), ["--known", without(/no-script-cycles/)]),
     "NEW no-script-cycles: ts:desktop/canvas/main.ts",
