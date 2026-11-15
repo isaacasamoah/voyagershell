@@ -144,6 +144,15 @@ five seconds. `Native::drawn_label` waits for a control to draw a label that
 the journey accepts. Its `after` argument is added to the usual deadline, for a
 label that the app draws only once a deadline of its own has passed.
 
+The `core-events` journey proves that Core's reports reach the app. It shows
+an Agents Vessel beside the first terminal. `foreground-reaches-agents-list`
+runs a program three times and stops it each time. Each change must show in the
+terminal's `agents-row` within 1 s of the driver reading it from Core.
+`exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After
+Core runs again and reports the program finished, the layout must hold the
+Vessel closed within 1 s. The pause does not make Core send a `missed`
+snapshot, so no journey covers one.
+
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result shows as uncertain and is not sent again. It declares
 `terminal.kill=21000` for its last case and refuses a run that holds that
@@ -502,16 +511,17 @@ stretched the `workspace` journey from about 24 s to between 70 s and 100 s. Of
 five such runs, three passed, one failed `switch-voyage` on its 12 s observation
 deadline, and one ended `inconclusive` with an operating system error 11 in
 `split-vessel` that no delay run explained. With `terminal.list=2000`, the
-`terminal-scrolling` journey fails `exit-closes`, because the app learns of an
-exit through that reply. A journey that holds a method this long therefore
+`terminal-scrolling` journey still passes `exit-closes`, because the app closes
+an exited Vessel from Core's report and not from that reply. A build that
+learns of an exit through the list fails it. A journey that holds a method this long therefore
 measures the app's tolerance for the delay, and a failure under it is the
 journey's finding about the app, not a defect of the relay.
 
 A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
-on the command line replaces it. `slow-save` declares `doc.set=1500` and `outcomes` declares
-`terminal.kill=21000`.
+on the command line replaces it. `slow-save` declares `doc.set=1500`, `outcomes` declares
+`terminal.kill=21000` and `slow-list` declares `terminal.list=2000`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can
@@ -544,6 +554,26 @@ the app's owner, so each case waits for that terminal before it ends. It plays
 one scripted call during each held save, so it does not fill the app's list of
 waiting effects and does not reach the busy refusal. It does not quit during a
 held save.
+
+The `slow-list` journey proves what the app does while Core's reply to a
+terminal list is held. It opens the chat, starts a turn and shows an Agents
+Vessel beside the first terminal, so the canvas asks the app for the process
+list every few seconds and each of Core's replies is held.
+
+- `inspect-answered-during-held-list` plays 16 scripted workspace inspects,
+  500 ms apart. It passes when every one returned Applied and every round trip
+  was under a quarter of the hold. It reads `core-relay.jsonl` and ends the run
+  `inconclusive`, blamed on the verifier, when no inspect was sent while a
+  `terminal.list` reply was held.
+- `exit-closes-during-held-list` lets the shell exit. It passes when Core holds
+  the layout with the Vessel closed in under half of the hold.
+
+Limits. Both the Agents list's process read and the canvas's workspace
+observation are `terminal.list`, so the ledger cannot tell them apart. The
+script spans 8 s, which is longer than one canvas loop under the hold, so an
+inspect is sent during a process read. That is inferred from the loop's timing.
+The journey does not hold a process Read, the list before a worktree removal,
+the plan of a Voyage close or a create from a live directory.
 
 #### Scripted tool calls
 
@@ -663,6 +693,15 @@ The `slow-save` patch makes the app's owner wait for Core's reply to a layout
 save before it takes the next request. `inspect-answered-during-held-save` then
 fails on the expectation `the inspect was answered before Core's held reply to
 the Fleet's save was released`.
+
+The `core-events` patch stops a foreground report from moving the activity
+counter. `foreground-reaches-agents-list` then fails, because the Agents row
+names a new program only after the canvas's 3 s loop.
+
+The `slow-list` patch makes a `finished` event never report an exit.
+`exit-closes-during-held-list` then fails on the expectation `the exited
+shell's Vessel was saved closed in under half of the hold on Core's terminal
+list replies`, because the Vessel closes only when a held list lands.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

@@ -1,5 +1,6 @@
 mod arrangement;
 mod chat;
+mod core_events;
 mod input;
 mod layout;
 mod layout_compat;
@@ -11,6 +12,7 @@ mod profile;
 mod profile_updates;
 mod quit_restore;
 mod scrolling;
+mod slow_list;
 mod slow_save;
 mod voyage_close;
 mod workspace;
@@ -119,6 +121,8 @@ journeys! {
     LayoutCorrupt => "layout-corrupt" in layout_corrupt, sidebar: None, window: None;
     SlowSave => "slow-save" in slow_save, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Outcomes => "outcomes" in outcomes, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    CoreEvents => "core-events" in core_events, sidebar: None, window: None;
+    SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -140,6 +144,7 @@ impl Journey {
         match self {
             Self::SlowSave => Some(slow_save::HOLD),
             Self::Outcomes => Some(outcomes::HOLD),
+            Self::SlowList => Some(slow_list::HOLD),
             _ => None,
         }
     }

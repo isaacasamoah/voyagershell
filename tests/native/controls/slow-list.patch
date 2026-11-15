@@ -1,0 +1,18 @@
+diff --git a/app/src/activity.rs b/app/src/activity.rs
+index ee584f0..d562e96 100644
+--- a/app/src/activity.rs
++++ b/app/src/activity.rs
+@@ -506,12 +506,7 @@ impl Activity {
+             "created" | "restarted" => Report::Seen(observed(fact(notice.data)?, None)),
+             "foreground" => Report::Foreground,
+             "lost" => Report::Lost,
+-            "finished" => Report::Finished {
+-                exited: crate::core_state::exited(
+-                    Some("finished"),
+-                    notice.data.get("reason").and_then(Value::as_str),
+-                ),
+-            },
++            "finished" => Report::Finished { exited: false },
+             "removed" => Report::Removed,
+             "doc" => Report::Document,
+             _ => return Ok(None),

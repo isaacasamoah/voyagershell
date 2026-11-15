@@ -8,7 +8,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use voyager_contract::inspection::Frame;
 use voyager_contract::{CoreTerminalId, Layout, PlacementId, VesselId};
 
@@ -445,6 +445,37 @@ impl Terminal {
                     .system
                     .watch("terminal.get", json!({"terminal":self.address}))?;
                 Ok(foreground_name(&reported))
+            },
+        )
+    }
+
+    pub fn runs(&self, native: &Native, program: &str) -> Result<Instant> {
+        until(
+            &format!(
+                "Core naming {program} as the foreground program of {}",
+                self.target()
+            ),
+            || {
+                let reported = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":self.address}))?;
+                Ok((foreground_name(&reported).as_deref() == Some(program)).then(Instant::now))
+            },
+        )
+    }
+
+    pub fn exited(&self) -> bool {
+        self.shell.verify().is_err()
+    }
+
+    pub fn ended(&self, native: &Native) -> Result<Instant> {
+        until(
+            &format!("Core reporting the program of {} finished", self.target()),
+            || {
+                let reported = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":self.address}))?;
+                Ok((reported["state"] == "finished").then(Instant::now))
             },
         )
     }

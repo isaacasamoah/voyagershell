@@ -28,6 +28,23 @@ pub fn split_right(
     )
 }
 
+pub fn agents_beside(native: &Native, vessel: &PlacementId) -> Result<PlacementId> {
+    let (_, before) = native
+        .document()?
+        .ok_or_else(|| anyhow::anyhow!("The layout document is missing"))?;
+    native.hover(&Target::name(&RenameTarget::Vessel { id: vessel.clone() }))?;
+    native.click(&Target::split_right(vessel))?;
+    native.click(&Target::CREATE_AGENTS)?;
+    native.observe("a new Agents Vessel drawn beside the terminal", |seen| {
+        let made = born(vessels(&before), vessels(seen.document), |vessel| {
+            &vessel.id
+        });
+        let agents = made.first()?.id.clone();
+        seen.shows(&Target::name(&RenameTarget::Vessel { id: agents.clone() }))
+            .then_some(agents)
+    })
+}
+
 pub fn born<'a, T, I: PartialEq + 'a>(
     before: impl Iterator<Item = &'a T>,
     after: impl Iterator<Item = &'a T>,
