@@ -12,7 +12,7 @@ known:
     owner: isaac
     reason: 'voyage_close uses client while client uses voyage_close. Removing the use clears it.'
   - id: 'file-size: app/src/administrator.rs'
-    limit: 1480
+    limit: 1476
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
@@ -28,11 +28,11 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/tests.rs'
-    limit: 1551
+    limit: 1550
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'file-size: desktop/mods/header/main.ts'
-    limit: 2119
+  - id: 'file-size: desktop/canvas/main.ts'
+    limit: 2118
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/src/avatar.rs'
@@ -43,6 +43,6 @@ known:
     limit: 1028
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'no-script-cycles: ts:desktop/mods/header/main.ts <-> ts:desktop/mods/header/navigation-view.ts <-> ts:desktop/mods/header/panel-view.ts'
+  - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'

@@ -128,14 +128,14 @@ impl Draft {
 mod tests {
     use super::*;
     use voyager_contract::{
-        ContentId,
+        VesselId,
         content::{Notes, Version},
     };
 
     #[test]
     fn retained_draft_keeps_original_base_and_never_replays_unknown_save() {
         let mut snapshot = Snapshot {
-            content_id: ContentId("note".into()),
+            vessel_id: VesselId("note".into()),
             revision: "original".into(),
             data: Notes {
                 title: "Title".into(),
@@ -161,7 +161,7 @@ mod tests {
         let rejected = Response::Rejected {
             version: Version::V1,
             request_id: "save".into(),
-            content_id: snapshot.content_id.clone(),
+            vessel_id: snapshot.vessel_id.clone(),
             expected_revision: Some(save.revision.clone()),
             message: "Known refusal".into(),
         };
@@ -184,7 +184,7 @@ mod tests {
         let applied = Response::Applied {
             version: Version::V1,
             request_id: "new-save".into(),
-            content_id: snapshot.content_id.clone(),
+            vessel_id: snapshot.vessel_id.clone(),
             snapshot,
         };
         assert!(!draft.finish(new_save.generation, Ok(&applied)));

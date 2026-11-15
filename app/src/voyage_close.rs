@@ -7,7 +7,7 @@ use crate::{
 use async_channel::{Receiver, Sender};
 use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest};
 use voyager_contract::voyage_close::{Entry, Phase, Plan};
-use voyager_contract::{Action, ContentId, Context, CoreTerminalId, Layout, Status, VoyageId};
+use voyager_contract::{Action, Context, CoreTerminalId, Layout, Status, VesselId, VoyageId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SaveTicket(String);
@@ -21,28 +21,28 @@ impl SaveTicket {
 pub enum SaveRequest {
     Prepare {
         ticket: SaveTicket,
-        contents: Vec<ContentId>,
+        vessels: Vec<VesselId>,
         reply: Sender<Result<(), CallError>>,
     },
     Release {
         ticket: SaveTicket,
-        contents: Vec<ContentId>,
+        vessels: Vec<VesselId>,
     },
     PrepareRename {
         ticket: SaveTicket,
-        contents: Vec<ContentId>,
-        files: Vec<(ContentId, voyager_contract::content::NotesFile)>,
+        vessels: Vec<VesselId>,
+        files: Vec<(VesselId, voyager_contract::content::NotesFile)>,
         reply: Sender<Result<Option<String>, CallError>>,
     },
     ReleaseRename {
         ticket: SaveTicket,
-        contents: Vec<ContentId>,
+        vessels: Vec<VesselId>,
         rebind: Option<RenamedNotes>,
     },
 }
 
 pub struct RenamedNotes {
-    pub files: Vec<(ContentId, voyager_contract::content::NotesFile)>,
+    pub files: Vec<(VesselId, voyager_contract::content::NotesFile)>,
     pub workspace_version: u64,
     pub snapshot: voyager_contract::content::Snapshot,
 }
@@ -51,15 +51,15 @@ pub(crate) struct RenameRelease {
     pub rebind: Option<RenamedNotes>,
     sender: Sender<SaveRequest>,
     ticket: SaveTicket,
-    contents: Vec<ContentId>,
+    vessels: Vec<VesselId>,
 }
 
 impl RenameRelease {
-    pub fn new(sender: Sender<SaveRequest>, ticket: SaveTicket, contents: Vec<ContentId>) -> Self {
+    pub fn new(sender: Sender<SaveRequest>, ticket: SaveTicket, vessels: Vec<VesselId>) -> Self {
         Self {
             sender,
             ticket,
-            contents,
+            vessels,
             rebind: None,
         }
     }
@@ -71,7 +71,7 @@ impl Drop for RenameRelease {
             .sender
             .try_send(SaveRequest::ReleaseRename {
                 ticket: self.ticket.clone(),
-                contents: std::mem::take(&mut self.contents),
+                vessels: std::mem::take(&mut self.vessels),
                 rebind: self.rebind.take(),
             })
             .is_err()
@@ -84,7 +84,7 @@ impl Drop for RenameRelease {
 #[derive(Clone)]
 pub(crate) struct Target {
     voyage: voyager_contract::Voyage,
-    contents: Vec<voyager_contract::Content>,
+    vessels: Vec<voyager_contract::Vessel>,
 }
 
 impl Target {
@@ -94,8 +94,8 @@ impl Target {
             .iter()
             .find(|voyage| voyage.id == self.voyage.id)
             != Some(&self.voyage)
-            || self.contents.iter().any(|content| {
-                layout.contents.iter().find(|item| item.id == content.id) != Some(content)
+            || self.vessels.iter().any(|content| {
+                layout.vessels.iter().find(|item| item.id == content.id) != Some(content)
             })
         {
             return Err(refused(
@@ -118,7 +118,7 @@ pub(crate) struct Closing {
     pub revision: u64,
     pub saves: Option<Sender<SaveRequest>>,
     ticket: Option<SaveTicket>,
-    notes: Vec<ContentId>,
+    notes: Vec<VesselId>,
     target: Option<Target>,
 }
 
@@ -188,15 +188,15 @@ impl Closing {
         let placements: Vec<_> = voyage
             .fleets
             .iter()
-            .flat_map(|fleet| fleet.vessels.iter())
+            .flat_map(|fleet| fleet.placements.iter())
             .chain(voyage.portals.iter())
             .collect();
         self.notes.clear();
         let mut entries = Vec::new();
         for content in layout
-            .contents
+            .vessels
             .iter()
-            .filter(|content| placements.iter().any(|panel| panel.content == content.id))
+            .filter(|content| placements.iter().any(|panel| panel.vessel == content.id))
         {
             if content.start_pending.is_some() || content.shell_intent.is_some() {
                 return Err(refused(
@@ -219,15 +219,15 @@ impl Closing {
                     .iter()
                     .filter(|fleet| !fleet.closed)
                     .any(|fleet| {
-                        let root = panels::visible(&fleet.root, &fleet.vessels);
-                        fleet.vessels.iter().any(|panel| {
-                            panel.content == content.id && panels::contains(&root, &panel.id)
+                        let root = panels::visible(&fleet.root, &fleet.placements);
+                        fleet.placements.iter().any(|panel| {
+                            panel.vessel == content.id && panels::contains(&root, &panel.id)
                         })
                     })
                     || voyage.portal_layout.as_ref().is_some_and(|column| {
                         let root = panels::visible(&column.root, &voyage.portals);
                         voyage.portals.iter().any(|panel| {
-                            panel.content == content.id && panels::contains(&root, &panel.id)
+                            panel.vessel == content.id && panels::contains(&root, &panel.id)
                         })
                     }));
             if live.is_none() && !visible_note {
@@ -238,10 +238,10 @@ impl Closing {
             }
             let panel = placements
                 .iter()
-                .find(|panel| panel.content == content.id)
+                .find(|panel| panel.vessel == content.id)
                 .ok_or_else(|| refused("Placement is unavailable"))?;
             entries.push(Entry {
-                content: content.id.clone(),
+                vessel: content.id.clone(),
                 name: panel.name.clone(),
                 type_id: content.type_id.clone(),
                 terminal: live.map(|terminal| CoreTerminalId(terminal.address.clone())),
@@ -250,10 +250,10 @@ impl Closing {
         }
         self.target = Some(Target {
             voyage: voyage.clone(),
-            contents: layout
-                .contents
+            vessels: layout
+                .vessels
                 .iter()
-                .filter(|content| placements.iter().any(|panel| panel.content == content.id))
+                .filter(|content| placements.iter().any(|panel| panel.vessel == content.id))
                 .cloned()
                 .collect(),
         });
@@ -301,7 +301,7 @@ impl Closing {
             saves
                 .try_send(SaveRequest::Prepare {
                     ticket: ticket.clone(),
-                    contents: self.notes.clone(),
+                    vessels: self.notes.clone(),
                     reply,
                 })
                 .map_err(|_| refused("Notes save could not be requested; nothing was stopped"))?;
@@ -342,7 +342,7 @@ impl Closing {
 
     pub fn blocks_content(
         &self,
-        id: &ContentId,
+        id: &VesselId,
         ticket: Option<&SaveTicket>,
         native_save: bool,
     ) -> bool {
@@ -360,12 +360,12 @@ impl Closing {
         Ok(())
     }
 
-    pub fn blocks_terminal(&self, id: &ContentId) -> bool {
+    pub fn blocks_terminal(&self, id: &VesselId) -> bool {
         self.ticket.is_some()
             && self
                 .target
                 .as_ref()
-                .is_some_and(|target| target.contents.iter().any(|content| &content.id == id))
+                .is_some_and(|target| target.vessels.iter().any(|content| &content.id == id))
     }
 
     pub fn owns_terminal(&self, address: &CoreTerminalId) -> bool {
@@ -404,7 +404,7 @@ impl Closing {
         {
             let _ = saves.try_send(SaveRequest::Release {
                 ticket,
-                contents: self.notes.clone(),
+                vessels: self.notes.clone(),
             });
         }
     }
@@ -451,7 +451,7 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
                         expected_version: current.version,
                         action: ProcessAction::Stop {
                             terminal_id: address.clone(),
-                            content_id: entry.content.clone(),
+                            vessel_id: entry.vessel.clone(),
                             pid,
                         },
                     },

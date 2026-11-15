@@ -35,7 +35,7 @@ pub(super) fn next_message(
     if let Ok(mut activity) = activity.lock() {
         activity.bind(
             layout
-                .contents
+                .vessels
                 .iter()
                 .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.as_str())),
         );
@@ -224,7 +224,7 @@ mod activity_notice_tests {
                 cwd: "/tmp".into(),
             })
             .unwrap();
-        model.layout.contents[0].backend = Some(CoreTerminalId("t1".into()));
+        model.layout.vessels[0].backend = Some(CoreTerminalId("t1".into()));
         {
             let mut facts = activity.lock().unwrap();
             facts.bind(["t1"]);

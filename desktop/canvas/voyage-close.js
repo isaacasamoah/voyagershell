@@ -2,18 +2,14 @@ import { div } from "gpui-kit";
 import { Marker } from "voyager_native";
 import { invoke } from "./workspace.js";
 import { actionButton, dialogActions } from "./ui.js";
-import type { Context, NativeElement } from "gpui-kit";
-import type { Response } from "../../../contract/generated/response";
-
-type Plan = NonNullable<Response["closePlan"]>;
-
 export class VoyageClose {
-  private current: Plan | null = null;
-  private pending = false;
-  private message = "";
-  private inspection = false;
-
-  observe(plan: Plan | null | undefined): void {
+  constructor() {
+    this.current = null;
+    this.pending = false;
+    this.message = "";
+    this.inspection = false;
+  }
+  observe(plan) {
     if (!plan || plan.phase === "closed") {
       if (this.current) window.close_dialog();
       this.current = null;
@@ -32,8 +28,7 @@ export class VoyageClose {
       });
     window.refresh();
   }
-
-  private act(confirm: boolean, cx: Context): void {
+  act(confirm, cx) {
     const plan = this.current;
     if (!plan || this.pending) return;
     this.pending = true;
@@ -68,8 +63,7 @@ export class VoyageClose {
     window.refresh();
     cx.notify();
   }
-
-  private inspect(cx: Context): void {
+  inspect(cx) {
     this.inspection = false;
     cx.spawn(async (task) => {
       try {
@@ -89,8 +83,7 @@ export class VoyageClose {
     });
     cx.notify();
   }
-
-  render(): NativeElement | null {
+  render() {
     const plan = this.current;
     if (!plan) return null;
     const panel = div()
@@ -133,7 +126,7 @@ export class VoyageClose {
         div()
           .text_size(12)
           .child(`${entry.typeId} · ${entry.name}`)
-          .child(Marker.new("voyage-close-entry", entry.content)),
+          .child(Marker.new("voyage-close-entry", entry.vessel)),
       );
     panel.child(inventory);
     if (

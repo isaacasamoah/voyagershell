@@ -42,7 +42,7 @@ function observeSizes(snapshot) {
   return sizes;
 }
 
-function observe(repository, revision, config = defaults) {
+function observe(repository, revision, config = defaults, scan) {
   const snapshot = new Snapshot(repository, revision);
   try {
     const graph = new Graph(snapshot);
@@ -109,6 +109,7 @@ function observe(repository, revision, config = defaults) {
     };
     return {
       observed,
+      scanned: scan ? scan(snapshot) : new Map(),
       sizes: observeSizes(snapshot),
       lock: snapshot.has("Cargo.lock") ? snapshot.read("Cargo.lock") : "",
     };

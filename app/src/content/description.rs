@@ -55,7 +55,7 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         module: "voyager_content_view",
         component: "Notes",
         backend: None,
-        tool: "voyager_content",
+        tool: "voyager_vessel",
         input: include_str!("../../../contract/generated/contentTool.schema.json"),
         output: include_str!("../../../contract/generated/contentResponse.schema.json"),
         action_definition: "Action",
@@ -70,7 +70,7 @@ fn implementation(type_id: &str) -> Result<&'static Implementation, String> {
     IMPLEMENTATIONS
         .iter()
         .find(|kind| kind.type_id == type_id)
-        .ok_or_else(|| "Unsupported content type".into())
+        .ok_or_else(|| "Unsupported Vessel type".into())
 }
 
 pub(crate) fn supports_type(type_id: &str) -> bool {
@@ -87,13 +87,13 @@ pub(crate) fn package_name(type_id: &str) -> Result<Option<&'static str>, String
 pub(crate) fn require_ready(description: &Description) -> Result<(), String> {
     match &description.availability {
         Availability::Ready => Ok(()),
-        Availability::Removed => Err("Content package is removed".into()),
+        Availability::Removed => Err("Vessel package is removed".into()),
         Availability::Unavailable { reason } => Err(reason.clone()),
     }
 }
 
-fn installed_schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
-    let manifest = manifest(package)?;
+fn installed_schema(package: &Path, file: &str) -> Result<Option<serde_json::Value>, String> {
+    let manifest = manifest(package, file)?;
     let entry = manifest
         .get("entry")
         .and_then(serde_json::Value::as_str)
@@ -105,19 +105,25 @@ fn installed_schema(package: &Path) -> Result<Option<serde_json::Value>, String>
             .is_none_or(str::is_empty)
         || !package.join(entry).is_file()
     {
-        return Err("Content package requires a name, version 1 and an existing entry file".into());
+        return Err("Vessel package requires a name, version 1 and an existing entry file".into());
     }
     state_schema(&manifest)
 }
 
 pub(crate) fn configuration(packages: &Path) -> Result<Option<DataDescription>, String> {
-    for package in ["notes", "header"] {
-        let path = packages.join(package);
-        if installed_schema(&path).is_err() {
+    let canvas = packages
+        .parent()
+        .ok_or("Vessel packages have no profile")?
+        .join("canvas");
+    for (path, file) in [
+        (packages.join("notes"), "vessel.json"),
+        (canvas, "canvas.json"),
+    ] {
+        if installed_schema(&path, file).is_err() {
             return Ok(None);
         }
         if !matches!(
-            manifest(&path)?
+            manifest(&path, file)?
                 .get("contentConfiguration")
                 .and_then(serde_json::Value::as_u64),
             Some(1 | 2)
@@ -146,7 +152,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
         .transpose()?
         .flatten();
     let configurable = configuration.is_some()
-        && manifest(&packages.join("notes"))?
+        && manifest(&packages.join("notes"), "vessel.json")?
             .get("contentConfiguration")
             .and_then(serde_json::Value::as_u64)
             == Some(1);
@@ -177,7 +183,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
             if super::package::removed_path(&path).exists() && !path.exists() {
                 (Availability::Removed, None)
             } else {
-                match installed_schema(&path) {
+                match installed_schema(&path, "vessel.json") {
                     Ok(schema) => (
                         Availability::Ready,
                         Some(DataDescription {
@@ -260,7 +266,7 @@ pub fn require_action(description: &Description, name: &str) -> Result<(), Strin
         Ok(())
     } else {
         Err(format!(
-            "Content type {} does not support action {name}",
+            "Vessel type {} does not support action {name}",
             description.type_id
         ))
     }

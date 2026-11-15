@@ -1,7 +1,7 @@
-pub const HEADER_MODULE: &str = "voyager_header";
+pub const THEME_MODULE: &str = "voyager_theme";
 pub const WORKSPACE_MODULE: &str = "voyager_workspace";
 
-pub const HEADER: &str = r#"
+pub const THEME: &str = r#"
 export function projection(): {
     background: import("gpui-kit").Color;
     foreground: import("gpui-kit").Color;
@@ -37,11 +37,11 @@ export function snapshot(after: string | null): Promise<string>;
 
 pub const CONTENT_VIEW_MODULE: &str = "voyager_content_view";
 pub const CONTENT_VIEW: &str = r#"
-export const Notes: { new: (id: string, props: { contentId: string }) => import("gpui-kit").NativeElement };
+export const Notes: { new: (id: string, props: { vesselId: string }) => import("gpui-kit").NativeElement };
 export function descriptions(): Promise<string>;
 "#;
 
-pub const CONTENT_MODULE: &str = "voyager_content";
+pub const CONTENT_MODULE: &str = "voyager_vessel";
 pub const CONTENT: &str = r#"
 export function identity(): string;
 export function request_id(): string;

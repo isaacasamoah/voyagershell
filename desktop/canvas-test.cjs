@@ -55,7 +55,7 @@ function menuModule(Button) {
     "require",
     ts.transpileModule(
       fs.readFileSync(
-        process.env.VOYAGER_MENU_SOURCE || `${__dirname}/mods/header/menu.ts`,
+        process.env.VOYAGER_MENU_SOURCE || `${__dirname}/canvas/menu.ts`,
         "utf8",
       ),
       {
@@ -76,7 +76,7 @@ function menuModule(Button) {
 }
 
 test("maximization renders the selected leaf while retaining preparation of the whole tree", () => {
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
@@ -84,7 +84,7 @@ test("maximization renders the selected leaf while retaining preparation of the 
   const fleet = {
     id: "fleet",
     maximizedPlacement: "second",
-    vessels: [{ id: "first" }, { id: "second" }],
+    placements: [{ id: "first" }, { id: "second" }],
     root: {
       kind: "branch",
       first: { kind: "leaf", placement: "first" },
@@ -92,7 +92,7 @@ test("maximization renders the selected leaf while retaining preparation of the 
     },
   };
   const rendered = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     pane(tree) {
       rendered.push(tree);
       return element();
@@ -124,8 +124,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
     await import("../contract/generated/validate.js");
   const source = ts.transpileModule(
     fs.readFileSync(
-      process.env.VOYAGER_CREATION_SOURCE ||
-        `${__dirname}/mods/header/creation.ts`,
+      process.env.VOYAGER_CREATION_SOURCE || `${__dirname}/canvas/creation.ts`,
       "utf8",
     ),
     {
@@ -172,7 +171,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   });
   const picker = new exports.CreationPicker();
   const destination = {
-    kind: "panel",
+    kind: "placement",
     owner: { kind: "fleet", id: "fleet" },
     insertion: { kind: "beside", id: "original", side: "right" },
   };
@@ -284,7 +283,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   choose({}, cx);
   assert.equal(actions.length, 1);
   assert.deepEqual(actions[0], [
-    { operation: "create-content", typeId: "terminal", destination, launch },
+    { operation: "create-vessel", typeId: "terminal", destination, launch },
     "7",
     cx,
   ]);
@@ -332,7 +331,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   buttons.clear();
   picker.render("original", destination, "7", create);
   assert.deepEqual(markers(buttons.get("reopen-hidden-1")), [
-    ["reopen-panel", "hidden-1"],
+    ["reopen-placement", "hidden-1"],
   ]);
   picker.current = null;
   buttons.clear();
@@ -349,7 +348,7 @@ test("inspection markers name each control by its role and id and report the tex
       return node;
     },
   };
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Button",
@@ -383,7 +382,7 @@ test("inspection markers name each control by its role and id and report the tex
   );
   const menus = new Map();
   let dockVisible = false;
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     sidebar: true,
     names: new Map(),
     chat: { toggleView: element, render: element },
@@ -553,12 +552,12 @@ test("a context menu keeps the marker of each item and draws it inside the entry
 });
 
 test("the workspace context menu passes each item's marker to the menu", () => {
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {});
   let passed;
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "5",
     editing: null,
     layoutName: null,
@@ -579,7 +578,7 @@ test("the workspace context menu passes each item's marker to the menu", () => {
 test("the actual canvas composes a retained right column through native presentation", () => {
   const exports = {};
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/regions.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -589,7 +588,7 @@ test("the actual canvas composes a retained right column through native presenta
   ).outputText;
   new Function("exports", "require", source)(exports, () => ({ div: element }));
   const columnCalls = [];
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Column",
@@ -602,7 +601,7 @@ test("the actual canvas composes a retained right column through native presenta
     },
   });
   const actions = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "7",
     splitSession: "test",
     splitReset: 0,
@@ -622,7 +621,7 @@ test("the actual canvas composes a retained right column through native presenta
       id: "voyage",
       portalLayout: { mode, width: 340, visible: true },
     };
-    const rendered = exports.composeCanvas(
+    const rendered = exports.composeRegions(
       {
         ...canvas,
         sidebarCollapsed: true,
@@ -688,13 +687,13 @@ test("context metadata rejects a late different dock and notifies only changed f
   const { contextFacts: validateFacts } =
     await import("../contract/generated/validate.js");
   let result;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "context_facts",
     "validateFacts",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {}, async () => result, validateFacts);
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "2",
     layout: { context: { kind: "workspace" }, voyages: [] },
     contextFacts: null,
@@ -753,7 +752,7 @@ test("context metadata rejects a late different dock and notifies only changed f
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
   const buttons = new Map();
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Button",
@@ -791,7 +790,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
       return panel;
     },
   };
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     sidebar: true,
     chat,
     target: (_id, _scope, child) => child,
@@ -843,11 +842,11 @@ test("right-click actions retain their opening revision and dismiss before actin
       return node;
     },
   }).WorkspaceMenu;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {});
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     menus: new Menu(),
     version: "7",
   });
@@ -913,7 +912,7 @@ test("hidden choices retain process-free data and require matching live backends
   new Function(
     "exports",
     ts.transpileModule(
-      fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+      fs.readFileSync(`${__dirname}/canvas/panels.ts`, "utf8"),
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,
@@ -922,10 +921,15 @@ test("hidden choices retain process-free data and require matching live backends
       },
     ).outputText,
   )(exports);
-  const panel = (id, content) => ({ id, content, name: id, hidden: false });
+  const panel = (id, content) => ({
+    id,
+    vessel: content,
+    name: id,
+    hidden: false,
+  });
   const first = {
     id: "first",
-    vessels: [
+    placements: [
       panel("visible", "shown"),
       panel("notes", "note"),
       panel("shell", "live"),
@@ -935,7 +939,7 @@ test("hidden choices retain process-free data and require matching live backends
   };
   const second = {
     id: "second",
-    vessels: [panel("other", "other-note")],
+    placements: [panel("other", "other-note")],
     root: null,
   };
   const voyage = {
@@ -952,14 +956,14 @@ test("hidden choices retain process-free data and require matching live backends
         fleets: [
           {
             id: "foreign",
-            vessels: [panel("foreign", "foreign-note")],
+            placements: [panel("foreign", "foreign-note")],
             root: null,
           },
         ],
         portals: [],
       },
     ],
-    contents: [
+    vessels: [
       ...["shown", "live", "dead"].map((id) => ({
         id,
         typeId: "terminal",
@@ -972,7 +976,7 @@ test("hidden choices retain process-free data and require matching live backends
     ],
   };
   const destination = {
-    kind: "panel",
+    kind: "placement",
     owner: { kind: "fleet", id: "first" },
     insertion: { kind: "beside", id: "visible", side: "right" },
   };
@@ -983,14 +987,14 @@ test("hidden choices retain process-free data and require matching live backends
   assert.deepEqual(choices([]), ["notes", "other"]);
   assert.deepEqual(
     choices([
-      { contentId: "live", terminalId: "wrong", state: "live", pid: 42 },
+      { vesselId: "live", terminalId: "wrong", state: "live", pid: 42 },
     ]),
     ["notes", "other"],
   );
   assert.deepEqual(
     choices([
-      { contentId: "live", terminalId: "live", state: "live", pid: 42 },
-      { contentId: "dead", terminalId: "dead", state: "finished", pid: 43 },
+      { vesselId: "live", terminalId: "live", state: "live", pid: 42 },
+      { vesselId: "dead", terminalId: "dead", state: "finished", pid: 43 },
     ]),
     ["notes", "shell", "other"],
   );
@@ -999,12 +1003,12 @@ test("hidden choices retain process-free data and require matching live backends
 });
 
 test("Activity scopes live work, orders status rows and preserves navigation", async () => {
-  const { activityBadge } = await import("./mods/header/activity.js");
+  const { activityBadge } = await import("./canvas/activity.js");
   const buttons = new Map();
   const icons = [];
   const exports = {};
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/agents.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/agents.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -1024,7 +1028,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
           },
         },
       };
-    if (name === "voyager_header") return { projection: () => ({}) };
+    if (name === "voyager_theme") return { projection: () => ({}) };
     if (name === "./process-icons.js")
       return {
         processIcon: (program) => {
@@ -1039,7 +1043,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       new Function(
         "exports",
         ts.transpileModule(
-          fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+          fs.readFileSync(`${__dirname}/canvas/panels.ts`, "utf8"),
           { compilerOptions: { module: ts.ModuleKind.CommonJS } },
         ).outputText,
       )(panels);
@@ -1064,7 +1068,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     },
   ];
   const layout = {
-    contents,
+    vessels: contents,
     home: {
       id: "home",
       name: "Home",
@@ -1072,7 +1076,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
         {
           id: "home-fleet",
           name: "Home",
-          vessels: [{ id: "home-agent", content: "agent", name: "Renamed" }],
+          placements: [{ id: "home-agent", vessel: "agent", name: "Renamed" }],
         },
       ],
       portals: [],
@@ -1085,33 +1089,33 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
           {
             id: "fleet",
             name: "Fleet",
-            vessels: [
-              { id: "bash", content: "shell", name: "Shell" },
-              { id: "unknown", content: "unknown", name: "Unknown" },
+            placements: [
+              { id: "bash", vessel: "shell", name: "Shell" },
+              { id: "unknown", vessel: "unknown", name: "Unknown" },
             ],
           },
         ],
-        portals: [{ id: "notes", content: "notes", name: "Notes" }],
+        portals: [{ id: "notes", vessel: "notes", name: "Notes" }],
         portalLayout: { root: { kind: "leaf", placement: "notes" } },
       },
     ],
   };
   const processes = [
     {
-      contentId: "agent",
+      vesselId: "agent",
       terminalId: "agent-terminal",
       state: "live",
       foreground: "codex",
       agentName: "folder",
     },
     {
-      contentId: "shell",
+      vesselId: "shell",
       terminalId: "shell-terminal",
       state: "live",
       foreground: "bash",
     },
     {
-      contentId: "unknown",
+      vesselId: "unknown",
       terminalId: "unknown-terminal",
       state: "live",
       foreground: "python",
@@ -1160,7 +1164,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       .calls.find(([name]) => name === "accessibility_label")[1],
     /Idle/,
   );
-  layout.voyages[0].fleets[0].vessels[0].name = "Terminal 42";
+  layout.voyages[0].fleets[0].placements[0].name = "Terminal 42";
   processes[1].cwd = "/project/my-work";
   buttons.clear();
   render();
@@ -1265,9 +1269,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   for (const state of states) {
     const id = `agent-${state}`;
     contents.push({ id, typeId: "terminal", backend: id });
-    layout.home.fleets[0].vessels.push({ id, content: id, name: id });
+    layout.home.fleets[0].placements.push({ id, vessel: id, name: id });
     processes.push({
-      contentId: id,
+      vesselId: id,
       terminalId: id,
       state: "live",
       foreground: "codex",
@@ -1287,9 +1291,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     ],
   );
   contents.push({ id: "overview", typeId: "agents" });
-  layout.home.fleets[0].vessels.push({
+  layout.home.fleets[0].placements.push({
     id: "overview",
-    content: "overview",
+    vessel: "overview",
     name: "Activity",
   });
   layout.home.fleets[0].root = { kind: "leaf", placement: "overview" };
@@ -1304,7 +1308,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
 test("Activity refresh and hidden choices share an in-flight process snapshot", async () => {
   let reads = 0,
     finish;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "inspectProcesses",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
@@ -1314,14 +1318,14 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
       finish = done;
     });
   });
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "7",
-    layout: { voyages: [], contents: [] },
+    layout: { voyages: [], vessels: [] },
   });
   const pending = view.readProcesses({ notify() {} });
   const choices = view.hiddenChoices(
     {
-      kind: "panel",
+      kind: "placement",
       owner: { kind: "fleet", id: "f" },
       insertion: { kind: "empty" },
     },
@@ -1443,7 +1447,7 @@ test("chat marks its toggle, messages, composer, send control, status and error 
 
 test("dock snapshots retain only identity-matched display labels", async () => {
   let dialog = false;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "workspace_observation",
     "window",
@@ -1457,7 +1461,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   );
   const placement = {
     id: "panel",
-    content: "content",
+    vessel: "content",
     name: "Original",
     nameOrigin: "automatic",
   };
@@ -1465,7 +1469,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     view: "fleet",
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
-    contents: [
+    vessels: [
       { id: "content", typeId: "terminal", backend: "t1", cwd: "/work" },
     ],
     voyages: [
@@ -1475,7 +1479,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
         fleets: [
           {
             id: "fleet",
-            vessels: [placement],
+            placements: [placement],
             root: { kind: "leaf", placement: "panel" },
           },
         ],
@@ -1485,7 +1489,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   };
   const panel = {
     placementId: "panel",
-    contentId: "content",
+    vesselId: "content",
     backend: "t1",
     program: "bash",
     directory: { kind: "live", path: "/work" },
@@ -1499,7 +1503,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     portals: [],
   });
   const inspected = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "1",
     layout,
     names: new Map(),
@@ -1537,7 +1541,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     "Failed reads clear retained display facts",
   );
   view.observedPanels = [panel];
-  layout.contents[0].backend = "replacement";
+  layout.vessels[0].backend = "replacement";
   view.acceptSnapshot(
     { version: "3", layout, fresh: true, status: "applied" },
     cx,
@@ -1596,7 +1600,7 @@ test("late active-directory observations cannot replace newer facts", async () =
   const { workspaceObservation: validateObservation } =
     await import("../contract/generated/validate.js");
   const responses = [];
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "workspace_observation",
     "validateObservation",
@@ -1606,7 +1610,7 @@ test("late active-directory observations cannot replace newer facts", async () =
     () => new Promise((resolve) => responses.push(resolve)),
     validateObservation,
   );
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "1",
     focused: "panel",
     observationRead: 0,
@@ -1615,14 +1619,14 @@ test("late active-directory observations cannot replace newer facts", async () =
       view: "fleet",
       selectedVoyage: "voyage",
       selectedFleet: "fleet",
-      contents: [{ id: "content", backend: "t1" }],
+      vessels: [{ id: "content", backend: "t1" }],
       voyages: [
         {
           id: "voyage",
           fleets: [
             {
               id: "fleet",
-              vessels: [{ id: "panel", content: "content" }],
+              placements: [{ id: "panel", vessel: "content" }],
               root: { kind: "leaf", placement: "panel" },
             },
           ],
@@ -1637,7 +1641,7 @@ test("late active-directory observations cannot replace newer facts", async () =
     panels: [
       {
         placementId: "panel",
-        contentId: "content",
+        vesselId: "content",
         backend: "t1",
         directory: { kind: "live", path },
         program: "bash",
@@ -1705,7 +1709,7 @@ test("worktree controller groups identified checkouts and preserves request iden
     return node;
   };
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/worktrees.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/worktrees.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -1896,7 +1900,7 @@ test("Notes keeps file actions together and preview leaves its draft unchanged",
         },
         TextView: { markdown: element },
       };
-    if (name === "voyager_content")
+    if (name === "voyager_vessel")
       return {
         theme: () => ({
           foreground: "#ffffff",
@@ -1958,7 +1962,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     name: "Demo",
     version: "7",
     phase: "ready",
-    entries: [{ content: "content-1", typeId: "terminal", name: "bash" }],
+    entries: [{ vessel: "content-1", typeId: "terminal", name: "bash" }],
     message: "Confirm",
     uncommittedChanges: 2,
   };
@@ -1967,7 +1971,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     "require",
     "window",
     ts.transpileModule(
-      fs.readFileSync(`${__dirname}/mods/header/voyage-close.ts`, "utf8"),
+      fs.readFileSync(`${__dirname}/canvas/voyage-close.ts`, "utf8"),
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,

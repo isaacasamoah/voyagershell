@@ -14,7 +14,7 @@ running app. A component registration therefore has one owner for both runtime
 presentation and generated script definitions. The Notes registry remains its
 own supported component set.
 
-`desktop/mods/` and `content/` provide configurable presentation through those
+`desktop/canvas/` and `content/` provide configurable presentation through those
 native components and the generated application contract. Moving a placement
 does not change its content identity or backend. These layers implement the
 architecture's ownership rules; they do not require a file for every diagram box.
@@ -22,7 +22,7 @@ Browser embedding and additional provider implementations remain separate work.
 
 ## Shared panel arrangements
 
-The current owner contract uses `PanelOwner`: a Fleet ID or a Voyage's Portal
+The current owner contract uses `PlacementOwner`: a Fleet ID or a Voyage's Portal
 column. Home is one retained internal Voyage/Fleet with its own Portal column,
 kept outside the ordinary Voyage list. Entering Home preserves the selected
 ordinary Voyage/Fleet and explicit dock context. A previously absent Home starts
@@ -30,11 +30,11 @@ with an ordinary Agents 1 panel. Every stored Home, including an empty or
 customized arrangement, remains unchanged. Closing that panel does not seed it
 again. New ordinary Voyages and Fleets keep their initial plain shell.
 
-`create-content` names the chosen content type and a panel destination. Insertion
+`create-vessel` names the chosen Vessel type and a placement destination. Insertion
 is either `empty` or `beside` a captured placement with a left, right, top or
 bottom side. Split controls choose content before dispatch. Cancellation creates
 nothing. Old default-terminal split and Fleet-only action aliases are removed;
-the current Header, agent declarations and generated validators use the common
+the current canvas, agent declarations and generated validators use the common
 create, resize, move, maximize, visibility, reveal and saved-layout actions.
 
 Roots may be empty. Hiding retains a panel's leaf and proportions; removing its
@@ -45,8 +45,8 @@ visible panel. Hidden-leaf pruning preserves original accepted resize paths.
 Save captures the visible arrangement; load shows its included retained panels.
 Neither operation stops or restarts a program or changes explicit context.
 
-`reopen-panel` takes a retained placement ID and the same destination as
-`create-content`. It inserts that instance into the chosen empty or beside slot,
+`reopen-placement` takes a retained placement ID and the same destination as
+`create-vessel`. It inserts that instance into the chosen empty or beside slot,
 preserving its content, data, name and Core binding. A closed Fleet panel may
 transfer between Fleets in the same Voyage. A Portal stays in its column, and
 Home stays separate. A transfer prunes only that leaf from source saved layouts,
@@ -85,7 +85,7 @@ Core checks do not establish the separate integrated native UX journey.
 ## Pane maximize and restore
 
 Each Fleet and Portal arrangement optionally records `maximizedPlacement` in the
-existing workspace document. `set-panel-maximized` names one placement and an
+existing workspace document. `set-placement-maximized` names one placement and an
 explicit Boolean.
 The Rust owner checks scope, accepted tree membership and the existing version
 before saving. A restore for another placement refuses unchanged. Stored invalid
@@ -139,7 +139,7 @@ above and below it. Left, top, bottom and middle Portal placement refuses unchan
 Intrinsic/content overlay size is also refused. Legacy canvas mode and fixed
 width supply defaults when older data has no Portal presentation. The current
 owner projects `portalLayout` per Voyage, with visibility, overlay/make-room mode
-and pixel width. Home has its own settings. The Header uses that projection and
+and pixel width. Home has its own settings. The canvas uses that projection and
 the native `Column` control for the full-height right column.
 
 A Stack stores a selected child index and alternative arrangements of the same
@@ -158,7 +158,7 @@ persists selection and arrangement together. Legacy Portal width migration
 traverses only the selected alternative. No human JSON editor or additional
 selector style is introduced by this contract.
 
-`desktop/mods/header/main.ts` controls retained preparation and versioned actions.
+`desktop/canvas/main.ts` controls retained preparation and versioned actions.
 `panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
 renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
 visible members from the Rust projection. `canvas.ts` composes the saved outer
@@ -172,7 +172,7 @@ Humans arrange panels through gestures, keyboard shortcuts and context menus.
 Split captures its destination and revision before offering content choice;
 cancelling creates nothing. Fleet context menus expose saved arrangements.
 Authorized agents use the generated JSON actions, including `update-canvas`,
-through the same owner. The current Header exposes no raw layout JSON editor.
+through the same owner. The current canvas exposes no raw layout JSON editor.
 
 The earlier Workspace layout-editor trial and the separate Home overview have
 been removed from source. Their recorded evidence remains historical, and
@@ -181,7 +181,7 @@ original avatar trial's Home pose and rectangular preview are also historical;
 current source has a circular primary landing preview. These source changes do not complete the full native UX checkpoint or
 establish matched appearance, input behavior or performance.
 
-The pinned ShellRoot and Header bypass their content cache while native
+The pinned ShellRoot and canvas bypass their content cache while native
 accessibility is active. GPUI's current cached prepaint/paint path does not
 replay accessibility nodes after each frame clears them. An avatar-only frame
 would otherwise publish the overlay controls without the workspace controls.
@@ -194,7 +194,7 @@ measurement and is not covered by ordinary cached-rendering results.
 ## Native overlay input
 
 The PortalArea native module owns its full-size flex column and measured
-occlusion. Its Header composition uses an ordinary script div for the opaque
+occlusion. Its canvas composition uses an ordinary script div for the opaque
 theme background. The pinned module host does not apply script style refinement
 to the native component returned by its callback. Keep the native layout and
 ordinary wrapper aligned so the visible column matches the blocked input area.
@@ -245,12 +245,12 @@ tracker. It does not use the selected pane as a substitute.
 `app/src/context.rs` resolves the captured directory outside rendering by reading
 bounded Git marker and HEAD files. It supports Git worktree marker files without
 starting Git or reading account configuration. Multiple directories, unavailable
-metadata and detached HEAD remain distinct typed results. One Header-owned task
+metadata and detached HEAD remain distinct typed results. One canvas-owned task
 refreshes these facts at the named `CONTEXT_REFRESH_MS` default of 3000 ms. It
 notifies only changed facts, checks their captured revision and scope, and never
 polls Core or reloads the workspace snapshot.
 
-The Header receives this read through `voyager_workspace.context_facts`. Late
+The canvas receives this read through `voyager_workspace.context_facts`. Late
 metadata is bound to the captured workspace revision and scope. This read does
 not change the document, publish an effect or query Core terminal state.
 
@@ -271,7 +271,7 @@ integrated acceptance have not been established yet.
 The SDK owns the pointer drag and local preview. A non-consuming public window
 observer captures the original revision and group configuration on left-down.
 Only the SDK's actual resize-completion callback may submit a resize. A changed
-configuration retires that gesture. The Header passes the captured revision to
+configuration retires that gesture. The canvas passes the captured revision to
 the existing generated owner call and sends no per-motion document writes.
 Known refusal restores the owner projection through a read, without retrying
 the resize. Uncertainty retains its original request and is not resubmitted.
@@ -313,14 +313,14 @@ connection carries document RPC and terminal viewer channels together. The
 terminal's start and attachment boundary is described in [terminal.md](terminal.md).
 
 The application owner publishes confirmed change notices directly to one
-bounded native Header subscription. Its Rust task survives script reload and
-is canceled with Header. It invalidates the retained script description and
+bounded native canvas subscription. Its Rust task survives script reload and
+is canceled with canvas. It invalidates the retained script description and
 exposes only a small read-only revision projection to JavaScript. Retired scripts
 cannot register or replace this subscription.
 
 Each notice carries the actual Core document revision and a separate package
 revision. Package remove/restore advances only the package revision without
-saving a layout or changing its CAS revision. The Header reads the latest snapshot
+saving a layout or changing its CAS revision. The canvas reads the latest snapshot
 for a new notice, even with Chat closed,
 and coalesces it behind the current action. It records the notice before queuing
 the read, so a failed read does not retry from every render. A newer revision or
@@ -328,7 +328,7 @@ explicit Refresh can request another read. Unchanged reads, refused requests and
 receipt replays do not publish another change. A confirmed layout save still
 publishes when subsequent content initialization makes the overall result
 uncertain. Its original uncertain receipt remains unchanged and is not replayed.
-A replacement native Header retires the previous subscription. The next
+A replacement native canvas retires the previous subscription. The next
 subscription compares its last revision pair with the owner's current pair, so a
 full bounded notification cannot hide the final accepted state. This is a view
 notification, not another writer or effect retry. A caught-up document notice
@@ -339,7 +339,7 @@ do not retry known-refused terminal starts. Explicit Refresh retains that retry;
 uncertain starts are never replayed. The package filesystem/availability source
 and its remaining native-lifetime requirements are described in [content.md](content.md).
 
-Header keeps application requests and terminal preparation serialized. While
+Canvas keeps application requests and terminal preparation serialized. While
 preparing, it can retain one unsent Close or discrete Portal visibility/mode
 intent. The slot stores the original callback and an immutable signature of
 the displayed panel/content/owner and arrangement, or the Voyage's Portal
@@ -348,9 +348,7 @@ use the existing reset/refusal path. The slot is removed before dispatch and
 drains only after an accepted, fresh applied result and successful required
 preparation. Its target must still match before a new request uses the current
 version. Failed or uncertain preparation cancels it visibly. This is an unsent
-UI intent, not replay of an application request. The additional corrective build
-was approved on 7 November. Native acceptance remains open, and the correction
-is not yet in the owner preview.
+UI intent, not replay of an application request.
 
 The channel holds at most eight pending calls. A client timeout reports an
 unconfirmed result and never retries it. The actor keeps the accepted request
@@ -364,11 +362,11 @@ revision. An uncertain Core result requires inspection before another change.
 
 The `voyager_workspace` host module is installed only in the workspace chrome's
 policy. A caller cannot grant itself a role through its request. The host limits
-request JSON to 64 KiB before dispatching asynchronous work. Content packages
+request JSON to 64 KiB before dispatching asynchronous work. Vessel packages
 do not receive this module. Additional agent/content entry points must bind
 their caller at the host boundary before reaching the same owner.
 
-`desktop/mods/header/main.js` is retained presentation and interaction binding.
+`desktop/canvas/main.js` is retained presentation and interaction binding.
 It receives confirmed snapshots and uses the generated wrapper for operations.
 Switching a Voyage or Fleet changes navigation, not the explicit avatar context.
 The scope controls in this checkpoint set that context; they are not the final
@@ -398,7 +396,7 @@ Source basis: Core 0.1.16 at
 including its document schema and plain/framed protocol; GPUI Shell at
 [`9448039`](https://github.com/longbridge/gpui-kit/tree/944803984cf0ba3111861d6e1aa9d6265c109ff9),
 including asynchronous host functions and retained views. The accepted native
-header supplies hosting and last-good reload behavior. This checkpoint does not
+canvas supplies hosting and last-good reload behavior. This checkpoint does not
 claim new platform support or a measured performance improvement.
 
 ## Script authoring and checking
@@ -429,7 +427,7 @@ the raw declaration hash and the transitive imported-module slice. The slice is
 checked without skipping library declarations. The pinned Shell's invalid
 `ElementBounds` extension is converted to an equivalent intersection only when
 its expected exact form appears. Missing or changed declarations fail the check.
-The Header declaration slice also withholds `id` from the registered Occluding
+The canvas declaration slice also withholds `id` from the registered Occluding
 element, including after style calls. The pinned Shell advertises that method
 but rejects it at runtime. This exact-form adjustment changes no runtime method.
 The Shell's separate profile editor hints still contain the upstream declaration;
@@ -437,12 +435,12 @@ they do not provide the repository's corrected strict authoring check.
 
 The shipped Notes package is also authored in TypeScript and emitted by this
 same gate. Its compilation uses the actual `export-script-types --notes` private
-input/host declarations in a separate scope, so Header/Terminal imports remain
+input/host declarations in a separate scope, so canvas/Terminal imports remain
 unavailable. The profile's seeded JavaScript stays editable and is preserved;
 repository checks do not automatically validate later personal edits. See
 [native Notes](content.md) for remaining owner, signature and lifecycle limits.
 
-Go there sends `reveal-panel` with a retained Vessel or Portal placement ID. The
+Go there sends `reveal-placement` with a retained Vessel or Portal placement ID. The
 owner selects its original arrangement, clears hidden state and reinserts its
 leaf only when absent. A Portal reveal also opens its own Voyage's column. This
 preserves content, backend and explicit dock context. Unknown placements refuse
@@ -497,7 +495,7 @@ New worktrees use the main checkout's `.worktrees/` folder, with a local Git exc
 
 The layout and Git operation owners remain distinct. The script cannot grant deletion or launch authority. Dialog observations keep their captured request identity/version. Async list and text changes explicitly refresh the separate native dialog. The dialog handles Escape and Cancel itself, and waits for a dispatched operation before dismissal.
 
-Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates Header, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task: closing a dialog cancels that view's continuations and can strand the workspace busy flag.
+Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates canvas, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task: closing a dialog cancels that view's continuations and can strand the workspace busy flag.
 
 Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Notes and other content without processes remain present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
 
@@ -512,8 +510,8 @@ Those operations detach views and retain programs. Existing closed Voyages are
 not stopped by migration or inspection. An administrator can request the same
 confirmation but cannot confirm or cancel it through a scoped tool call.
 
-The application owns one close plan. Its separate close revision wakes Header
-even when no layout changed. Header displays the plan and uses compact shared
+The application owns one close plan. Its separate close revision wakes canvas
+even when no layout changed. Canvas displays the plan and uses compact shared
 controls from content/ui.ts. Confirm and Cancel bind the exact plan identity;
 Cancel remains available after unrelated revisions or an uncertain observation.
 A lost invocation offers Inspect, which reads state and never repeats shutdown.
@@ -555,7 +553,7 @@ presentation fallback for other or absent reports. Raw reports and diagnostic
 reasons remain distinct. Confirmed-ended programs and closed Voyages are absent.
 Voyage headings remain expandable, and Home uses its Home icon.
 
-RemovePanel retains the placement, content and backend. Removing the last
+RemovePlacement retains the placement, content and backend. Removing the last
 visible Portal panel also collapses that Voyage's column. Opening an empty
 column shows new types and hidden Portals. Dismissing that empty chooser
 collapses it; restoring a hidden Portal keeps its existing identity and backend.

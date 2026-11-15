@@ -1,76 +1,76 @@
 export type Response =
   | {
-      contentId: string;
       message: string;
       requestId: string;
       revision?: string | null;
       status: "limited";
       version: Version;
+      vesselId: string;
       warningPresent: boolean;
     }
   | {
       configuration?: DataDescription | null;
-      contentId: string;
       requestId: string;
       schemaDeclared: boolean;
       stateSchema?: unknown;
       status: "described";
       version: Version;
+      vesselId: string;
     }
   | {
       configuration?: ConfigurationSnapshot | null;
-      contentId: string;
       requestId: string;
       snapshot: Snapshot;
       status: "snapshot";
       version: Version;
+      vesselId: string;
     }
   | {
-      contentId: string;
       filenames: string[];
       requestId: string;
       status: "notes-list";
       version: Version;
+      vesselId: string;
     }
   | {
       configuration: NotesConfiguration;
-      contentId: string;
       requestId: string;
       snapshot: Snapshot;
       status: "note-opened";
       version: Version;
+      vesselId: string;
       workspaceVersion: string;
     }
   | {
       configuration: NotesConfiguration;
-      contentId: string;
       requestId: string;
       status: "configured";
       version: Version;
+      vesselId: string;
       workspaceVersion: string;
     }
   | {
-      contentId: string;
       requestId: string;
       snapshot: Snapshot;
       status: "applied";
       version: Version;
+      vesselId: string;
     }
   | {
-      contentId: string;
       expectedRevision?: string | null;
       message: string;
       requestId: string;
       status: "rejected";
       version: Version;
+      vesselId: string;
     }
   | {
-      contentId: string;
       expectedRevision: string;
       message: string;
       requestId: string;
       status: "uncertain";
       version: Version;
+      vesselId: string;
     };
 export type Version = "1";
 
@@ -91,9 +91,9 @@ export interface NotesFile {
   filename: string;
 }
 export interface Snapshot {
-  contentId: string;
   data: Notes;
   revision: string;
+  vesselId: string;
   warning?: string | null;
 }
 export interface Notes {

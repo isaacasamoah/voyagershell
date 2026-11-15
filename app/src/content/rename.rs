@@ -1,11 +1,11 @@
 use sha2::{Digest as _, Sha256};
 use voyager_contract::content::{NotesConfiguration, NotesFile, Snapshot};
-use voyager_contract::{Action, ContentId, Context, Layout, NameOrigin, RenameTarget};
+use voyager_contract::{Action, Context, Layout, NameOrigin, RenameTarget, VesselId};
 
 pub(crate) struct Plan {
     pub file: NotesFile,
-    pub contents: Vec<ContentId>,
-    pub files: Vec<(ContentId, NotesFile)>,
+    pub vessels: Vec<VesselId>,
+    pub files: Vec<(VesselId, NotesFile)>,
     pub filename: String,
     pub revision: String,
 }
@@ -29,20 +29,20 @@ impl Plan {
                 voyage
                     .portals
                     .iter()
-                    .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.vessels))
+                    .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
             })
             .find(|panel| panel.id == *id)
             .ok_or("Panel not found")?;
         let selected = layout
-            .contents
+            .vessels
             .iter()
-            .find(|content| content.id == placement.content)
+            .find(|content| content.id == placement.vessel)
             .ok_or("Content not found")?;
         if selected.type_id != crate::content_type::NOTES_TYPE {
             return Ok(None);
         }
         let configuration =
-            |content: &voyager_contract::Content| -> Result<NotesConfiguration, String> {
+            |content: &voyager_contract::Vessel| -> Result<NotesConfiguration, String> {
                 serde_json::from_value(serde_json::Value::Object(
                     content.configuration.clone().unwrap_or_default(),
                 ))
@@ -65,11 +65,11 @@ impl Plan {
         {
             return Err("Choose a Markdown filename with 1 to 125 bytes before .md".into());
         }
-        let mut contents = Vec::new();
+        let mut vessels = Vec::new();
         let mut files = Vec::new();
         let directory =
             std::fs::canonicalize(&file.directory).map_err(|error| error.to_string())?;
-        for content in &layout.contents {
+        for content in &layout.vessels {
             if content.type_id != crate::content_type::NOTES_TYPE {
                 continue;
             }
@@ -80,14 +80,14 @@ impl Plan {
                 && std::fs::canonicalize(&bound.directory).ok().as_ref() == Some(&directory)
             {
                 super::member(layout, scope, &content.id)?;
-                contents.push(content.id.clone());
+                vessels.push(content.id.clone());
                 files.push((content.id.clone(), bound));
             }
         }
         let revision = revision(&file)?;
         Ok(Some(Self {
             file,
-            contents,
+            vessels,
             files,
             filename,
             revision,
@@ -96,7 +96,7 @@ impl Plan {
 
     pub fn layout(&self, layout: &Layout) -> Result<Layout, String> {
         let mut candidate = layout.clone();
-        for content in &mut candidate.contents {
+        for content in &mut candidate.vessels {
             if let Some((_, file)) = self.files.iter().find(|(id, _)| *id == content.id) {
                 let mut file = file.clone();
                 file.filename = self.filename.clone();
@@ -106,7 +106,7 @@ impl Plan {
                 );
             }
         }
-        for id in &self.contents {
+        for id in &self.vessels {
             label(&mut candidate, id, &self.filename);
         }
         Ok(candidate)
@@ -119,7 +119,7 @@ impl Plan {
         }
     }
 
-    pub fn moved_files(&self) -> Vec<(ContentId, NotesFile)> {
+    pub fn moved_files(&self) -> Vec<(VesselId, NotesFile)> {
         self.files
             .iter()
             .map(|(id, file)| {
@@ -130,11 +130,11 @@ impl Plan {
             .collect()
     }
 
-    pub fn snapshot(&self, id: ContentId) -> Result<Snapshot, String> {
+    pub fn snapshot(&self, id: VesselId) -> Result<Snapshot, String> {
         let file = self.moved_file();
         let bytes = read(&file)?;
         Ok(Snapshot {
-            content_id: id,
+            vessel_id: id,
             revision: format!("{:x}", Sha256::digest(&bytes)),
             data: super::markdown::parse(&file.filename, &bytes)?,
             warning: None,
@@ -142,15 +142,15 @@ impl Plan {
     }
 }
 
-pub(crate) fn label(layout: &mut Layout, id: &ContentId, filename: &str) {
+pub(crate) fn label(layout: &mut Layout, id: &VesselId, filename: &str) {
     for voyage in layout.containers_mut() {
         for panel in voyage.portals.iter_mut().chain(
             voyage
                 .fleets
                 .iter_mut()
-                .flat_map(|fleet| &mut fleet.vessels),
+                .flat_map(|fleet| &mut fleet.placements),
         ) {
-            if panel.content == *id {
+            if panel.vessel == *id {
                 panel.name = filename.into();
                 panel.name_origin = NameOrigin::Deliberate;
             }
@@ -160,7 +160,7 @@ pub(crate) fn label(layout: &mut Layout, id: &ContentId, filename: &str) {
 
 pub(crate) fn synchronize_labels(layout: &mut Layout) {
     let files: Vec<_> = layout
-        .contents
+        .vessels
         .iter()
         .filter(|content| content.type_id == crate::content_type::NOTES_TYPE)
         .filter_map(|content| {
@@ -262,7 +262,7 @@ pub(crate) fn move_file(_: &NotesFile, _: &str, _: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voyager_contract::{ContentDestination, PanelInsertion, PanelOwner};
+    use voyager_contract::{ContentDestination, PlacementInsertion, PlacementOwner};
 
     #[test]
     fn aliases_keep_their_original_directory_spelling_and_share_the_new_filename() {
@@ -278,13 +278,13 @@ mod tests {
             })
             .unwrap();
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let beside = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+        let beside = model.layout.voyages[0].fleets[0].placements[0].id.clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Panel {
-                    owner: PanelOwner::Fleet { id: fleet },
-                    insertion: PanelInsertion::Beside {
+                destination: ContentDestination::Placement {
+                    owner: PlacementOwner::Fleet { id: fleet },
+                    insertion: PlacementInsertion::Beside {
                         id: beside,
                         side: voyager_contract::Side::Right,
                     },
@@ -293,28 +293,28 @@ mod tests {
             })
             .unwrap();
         let panel = model.layout.voyages[0].fleets[0]
-            .vessels
+            .placements
             .last()
             .unwrap()
             .clone();
         let index = model
             .layout
-            .contents
+            .vessels
             .iter()
-            .position(|content| content.id == panel.content)
+            .position(|content| content.id == panel.vessel)
             .unwrap();
         let file = NotesFile {
             directory: directory.to_string_lossy().into(),
             filename: "Before.md".into(),
         };
-        model.layout.contents[index].configuration = Some(
+        model.layout.vessels[index].configuration = Some(
             serde_json::json!({"showHeading":true,"notesFile":file})
                 .as_object()
                 .unwrap()
                 .clone(),
         );
-        let mut alias = model.layout.contents[index].clone();
-        alias.id = ContentId("alias".into());
+        let mut alias = model.layout.vessels[index].clone();
+        alias.id = VesselId("alias".into());
         let spelled = NotesFile {
             directory: format!("{}/.", file.directory),
             filename: file.filename.clone(),
@@ -325,11 +325,11 @@ mod tests {
                 .unwrap()
                 .clone(),
         );
-        model.layout.contents.push(alias.clone());
+        model.layout.vessels.push(alias.clone());
         let mut placement = panel.clone();
         placement.id.0 = "alias-panel".into();
-        placement.content = alias.id;
-        model.layout.voyages[0].fleets[0].vessels.push(placement);
+        placement.vessel = alias.id;
+        model.layout.voyages[0].fleets[0].placements.push(placement);
         let plan = Plan::capture(
             &std::sync::Arc::new(model.layout.clone()),
             None,
@@ -340,13 +340,13 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(plan.contents.len(), 2);
+        assert_eq!(plan.vessels.len(), 2);
         let result = plan.layout(&model.layout).unwrap();
         assert!(
             result.voyages[0].fleets[0]
-                .vessels
+                .placements
                 .iter()
-                .filter(|panel| plan.contents.contains(&panel.content))
+                .filter(|panel| plan.vessels.contains(&panel.vessel))
                 .all(|panel| panel.name == "After.md")
         );
         assert_eq!(plan.moved_files()[1].1.directory, spelled.directory);

@@ -23,7 +23,7 @@ when the human requests it, but cannot retarget an already accepted request.
 The private provider cannot supply a different owner, scope or request identity.
 The current process-integration candidate adds voyager_process alongside the
 accepted workspace catalogue. Its source and owned-Core checks are under review;
-the combined native/account journey is not yet accepted. The N3 source candidate adds the generated voyager_content tool through the same
+the combined native/account journey is not yet accepted. The N3 source candidate adds the generated voyager_vessel tool through the same
 callback/receipt path and one Client-owned Notes writer. It admits only fresh
 captured Notes membership, preserves revisions/warnings and does not recreate
 missing data. Content bodies stay out of public tool-history summaries. Its larger
@@ -111,8 +111,8 @@ tool/call/callback/request/action/status/revision metadata in the same snapshot.
 Callback IDs use a tagged string or integer reference. String values remain
 literal strings; integer values use decimal strings to preserve their original
 type and full numeric precision through the script layer. The workspace owner
-publishes confirmed workspace changes directly to Header. Chat observes only its
-conversation. Closing it cannot suppress a workspace refresh. Header queues a
+publishes confirmed workspace changes directly to canvas. Chat observes only its
+conversation. Closing it cannot suppress a workspace refresh. Canvas queues a
 read behind its current UI operation without repeating an effect or polling the
 conversation for layout changes.
 
@@ -236,7 +236,7 @@ nor levels establish intelligible sound.
 
 The native `voyager_conversation.Speech` component retains one application-issued
 audio lease in an application-lived GPUI entity. A script can place the component
-with `Speech.new("voyager-speech", {})`; a payload cannot grant a lease. Header
+with `Speech.new("voyager-speech", {})`; a payload cannot grant a lease. Canvas
 reload or movement among full, compact and floating views reuses that entity.
 The component observes only the small audio state while connecting, active or
 stopping. It does not continuously read the full conversation while idle.
@@ -272,8 +272,7 @@ writes. It contains bounded peaks, status and nonsecret thread/session/turn
 references. It contains no audio samples or session description. This integration
 has compile and pure source checks only. Real account readiness, audible
 full-duplex speech, interruption, scoped tools and lease loss still require the
-serialized native journey in the approved
-[conversation plan](/home/isaac/voyagershell/.worktrees/feature-foundation-design/tasks/plan-native-conversation.md#complete-real-native-voice).
+serialized native conversation journey.
 
 ## Messaging and dock-context investigation
 

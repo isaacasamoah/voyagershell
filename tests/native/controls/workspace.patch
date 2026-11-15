@@ -1,7 +1,7 @@
-diff --git a/desktop/mods/header/main.js b/desktop/mods/header/main.js
+diff --git a/desktop/canvas/main.js b/desktop/canvas/main.js
 index 5f63541..f7ed296 100644
---- a/desktop/mods/header/main.js
-+++ b/desktop/mods/header/main.js
+--- a/desktop/canvas/main.js
++++ b/desktop/canvas/main.js
 @@ -913,7 +913,7 @@ export default class Workspace extends View {
      this.editing = editing;
      const finish = (_event, cx) => {
@@ -11,10 +11,10 @@ index 5f63541..f7ed296 100644
        const retained = this.names.get(JSON.stringify(target));
        if (!retained) throw Error("Rename target has no retained name.");
        const current = retained.name;
-diff --git a/desktop/mods/header/main.ts b/desktop/mods/header/main.ts
+diff --git a/desktop/canvas/main.ts b/desktop/canvas/main.ts
 index 5eb5a9b..3c86574 100644
---- a/desktop/mods/header/main.ts
-+++ b/desktop/mods/header/main.ts
+--- a/desktop/canvas/main.ts
++++ b/desktop/canvas/main.ts
 @@ -1079,7 +1079,7 @@ export default class Workspace extends View {
      this.editing = editing;
      const finish: Parameters<NameState["on"]>[1] = (_event, cx) => {

@@ -1,42 +1,42 @@
 use std::collections::BTreeSet;
 use voyager_contract::{
-    Axis, Content, Layout, PanelInsertion, PanelOwner, PlacementId, PortalLayout, Side, Split,
-    SplitShare, Vessel,
+    Axis, Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, Side,
+    Split, SplitShare, Vessel,
 };
 
 pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Result<(), String> {
-    use voyager_contract::{Action, SavedLayout, SplitChild, WorkspaceView};
+    use voyager_contract::{Action, Arrangement, SplitChild, WorkspaceView};
     match action {
-        Action::SavePanelLayout { owner, name } => {
+        Action::SaveArrangement { owner, name } => {
             let name = name.trim().to_owned();
             if name.is_empty() || name.len() > 128 {
                 return Err("A layout name must contain 1 to 128 bytes".into());
             }
             let current = group(layout, &owner)?;
-            let saved = SavedLayout {
+            let saved = Arrangement {
                 owner: owner.clone(),
                 name: name.clone(),
                 root: visible(current.root, current.members),
             };
             if let Some(existing) = layout
-                .saved_layouts
+                .arrangements
                 .iter_mut()
                 .find(|item| item.owner == owner && item.name == name)
             {
                 *existing = saved;
             } else {
-                layout.saved_layouts.push(saved);
+                layout.arrangements.push(saved);
             }
         }
-        Action::LoadPanelLayout { owner, name } => {
+        Action::LoadArrangement { owner, name } => {
             let root = layout
-                .saved_layouts
+                .arrangements
                 .iter()
                 .find(|item| item.owner == owner && item.name == name.trim())
                 .ok_or("Saved layout not found for this arrangement")?
                 .root
                 .clone();
-            validate_tree(&root, group(layout, &owner)?.members, &layout.contents)?;
+            validate_tree(&root, group(layout, &owner)?.members, &layout.vessels)?;
             let current = group_mut(layout, &owner)?;
             for panel in current.members.iter_mut() {
                 if contains(&root, &panel.id) {
@@ -46,16 +46,16 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = root;
             repair_maximized(current);
         }
-        Action::RemovePanelLayout { owner, name } => {
+        Action::RemoveArrangement { owner, name } => {
             group(layout, &owner)?;
             let index = layout
-                .saved_layouts
+                .arrangements
                 .iter()
                 .position(|saved| saved.owner == owner && saved.name == name.trim())
                 .ok_or("Saved layout not found for this arrangement")?;
-            layout.saved_layouts.remove(index);
+            layout.arrangements.remove(index);
         }
-        Action::ResizePanelSplit { owner, path, share } => {
+        Action::ResizePlacementSplit { owner, path, share } => {
             if path.len() > 128 {
                 return Err("Split path exceeds 128 steps".into());
             }
@@ -75,7 +75,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             };
             *current = share;
         }
-        Action::SetPanelMaximized { id, maximized } => {
+        Action::SetPlacementMaximized { id, maximized } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             let shown = visible(current.root, current.members);
@@ -87,7 +87,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             }
             *current.maximized = maximized.then_some(id);
         }
-        Action::SetPanelHidden { id, hidden } => {
+        Action::SetPlacementHidden { id, hidden } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             if !contains(current.root, &id) {
@@ -101,7 +101,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 .hidden = hidden;
             repair_maximized(current);
         }
-        Action::RemovePanel { id } => {
+        Action::RemovePlacement { id } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             if !contains(current.root, &id) {
@@ -111,7 +111,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = remove_leaf(root, &id).0;
             let empty = visible(current.root, current.members).is_none();
             repair_maximized(current);
-            if let PanelOwner::Portals { voyage } = owner
+            if let PlacementOwner::Portals { voyage } = owner
                 && empty
                 && let Some(column) = layout
                     .containers_mut()
@@ -121,7 +121,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 column.visible = false;
             }
         }
-        Action::MovePanel { id, target, side } => {
+        Action::MovePlacement { id, target, side } => {
             let owner = owner_of(layout, &id)?;
             if owner_of(layout, &target)? != owner {
                 return Err("Panels must belong to the same arrangement".into());
@@ -143,14 +143,14 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = Some(root);
             repair_maximized(current);
         }
-        Action::ReopenPanel {
+        Action::ReopenPlacement {
             id,
-            destination: voyager_contract::ContentDestination::Panel { owner, insertion },
+            destination: voyager_contract::ContentDestination::Placement { owner, insertion },
         } => {
             let source = owner_of(layout, &id)?;
             if source != owner {
                 let same_voyage = matches!((&source, &owner),
-                    (PanelOwner::Fleet { id: source }, PanelOwner::Fleet { id: target })
+                    (PlacementOwner::Fleet { id: source }, PlacementOwner::Fleet { id: target })
                         if layout.containers().any(|voyage|
                             voyage.fleets.iter().any(|fleet| &fleet.id == source)
                                 && voyage.fleets.iter().any(|fleet| &fleet.id == target)));
@@ -177,7 +177,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             repair_maximized(current);
             if source != owner {
                 for saved in layout
-                    .saved_layouts
+                    .arrangements
                     .iter_mut()
                     .filter(|saved| saved.owner == source)
                 {
@@ -188,7 +188,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             }
             insert(group_mut(layout, &owner)?, &owner, insertion, panel)?;
         }
-        Action::RevealPanel { id } => {
+        Action::RevealPlacement { id } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
             current
@@ -204,7 +204,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 *current.root = Some(match current.root.take() {
                     None => leaf,
                     Some(root) => Split::Branch {
-                        axis: if matches!(owner, PanelOwner::Fleet { .. }) {
+                        axis: if matches!(owner, PlacementOwner::Fleet { .. }) {
                             Axis::Horizontal
                         } else {
                             Axis::Vertical
@@ -222,14 +222,16 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             let voyage = layout
                 .containers()
                 .find(|voyage| match &owner {
-                    PanelOwner::Fleet { id } => voyage.fleets.iter().any(|fleet| &fleet.id == id),
-                    PanelOwner::Portals { voyage: id } => &voyage.id == id,
+                    PlacementOwner::Fleet { id } => {
+                        voyage.fleets.iter().any(|fleet| &fleet.id == id)
+                    }
+                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
                 })
                 .ok_or("Panel owner not found")?;
             let voyage_id = voyage.id.clone();
             let fleet_id = match &owner {
-                PanelOwner::Fleet { id } => Some(id.clone()),
-                PanelOwner::Portals { .. } => layout
+                PlacementOwner::Fleet { id } => Some(id.clone()),
+                PlacementOwner::Portals { .. } => layout
                     .selected_fleet
                     .clone()
                     .filter(|id| {
@@ -263,7 +265,7 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                     fleet.closed = false;
                 }
             }
-            if matches!(owner, PanelOwner::Portals { .. }) {
+            if matches!(owner, PlacementOwner::Portals { .. }) {
                 layout
                     .containers_mut()
                     .find(|voyage| voyage.id == voyage_id)
@@ -312,30 +314,30 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
 }
 
 pub(crate) struct Group<'a> {
-    pub members: &'a [Vessel],
+    pub members: &'a [Placement],
     pub root: &'a Option<Split>,
     pub maximized: &'a Option<PlacementId>,
 }
 
 pub(crate) struct GroupMut<'a> {
-    pub members: &'a mut Vec<Vessel>,
+    pub members: &'a mut Vec<Placement>,
     pub root: &'a mut Option<Split>,
     pub maximized: &'a mut Option<PlacementId>,
 }
 
-pub(crate) fn group<'a>(layout: &'a Layout, owner: &PanelOwner) -> Result<Group<'a>, String> {
+pub(crate) fn group<'a>(layout: &'a Layout, owner: &PlacementOwner) -> Result<Group<'a>, String> {
     for voyage in layout.containers() {
         match owner {
-            PanelOwner::Fleet { id } => {
+            PlacementOwner::Fleet { id } => {
                 if let Some(fleet) = voyage.fleets.iter().find(|fleet| &fleet.id == id) {
                     return Ok(Group {
-                        members: &fleet.vessels,
+                        members: &fleet.placements,
                         root: &fleet.root,
                         maximized: &fleet.maximized_placement,
                     });
                 }
             }
-            PanelOwner::Portals { voyage: id } if &voyage.id == id => {
+            PlacementOwner::Portals { voyage: id } if &voyage.id == id => {
                 let presentation = voyage
                     .portal_layout
                     .as_ref()
@@ -354,20 +356,20 @@ pub(crate) fn group<'a>(layout: &'a Layout, owner: &PanelOwner) -> Result<Group<
 
 pub(crate) fn group_mut<'a>(
     layout: &'a mut Layout,
-    owner: &PanelOwner,
+    owner: &PlacementOwner,
 ) -> Result<GroupMut<'a>, String> {
     for voyage in layout.containers_mut() {
         match owner {
-            PanelOwner::Fleet { id } => {
+            PlacementOwner::Fleet { id } => {
                 if let Some(fleet) = voyage.fleets.iter_mut().find(|fleet| &fleet.id == id) {
                     return Ok(GroupMut {
-                        members: &mut fleet.vessels,
+                        members: &mut fleet.placements,
                         root: &mut fleet.root,
                         maximized: &mut fleet.maximized_placement,
                     });
                 }
             }
-            PanelOwner::Portals { voyage: id } if &voyage.id == id => {
+            PlacementOwner::Portals { voyage: id } if &voyage.id == id => {
                 let presentation = voyage
                     .portal_layout
                     .as_mut()
@@ -384,17 +386,17 @@ pub(crate) fn group_mut<'a>(
     Err("Panel arrangement not found".into())
 }
 
-pub(crate) fn owner_of(layout: &Layout, id: &PlacementId) -> Result<PanelOwner, String> {
+pub(crate) fn owner_of(layout: &Layout, id: &PlacementId) -> Result<PlacementOwner, String> {
     for voyage in layout.containers() {
         for fleet in &voyage.fleets {
-            if fleet.vessels.iter().any(|panel| &panel.id == id) {
-                return Ok(PanelOwner::Fleet {
+            if fleet.placements.iter().any(|panel| &panel.id == id) {
+                return Ok(PlacementOwner::Fleet {
                     id: fleet.id.clone(),
                 });
             }
         }
         if voyage.portals.iter().any(|panel| &panel.id == id) {
-            return Ok(PanelOwner::Portals {
+            return Ok(PlacementOwner::Portals {
                 voyage: voyage.id.clone(),
             });
         }
@@ -402,17 +404,17 @@ pub(crate) fn owner_of(layout: &Layout, id: &PlacementId) -> Result<PanelOwner, 
     Err("Panel not found".into())
 }
 
-pub(crate) fn owners(layout: &Layout) -> Vec<PanelOwner> {
+pub(crate) fn owners(layout: &Layout) -> Vec<PlacementOwner> {
     layout
         .containers()
         .flat_map(|voyage| {
             voyage
                 .fleets
                 .iter()
-                .map(|fleet| PanelOwner::Fleet {
+                .map(|fleet| PlacementOwner::Fleet {
                     id: fleet.id.clone(),
                 })
-                .chain(std::iter::once(PanelOwner::Portals {
+                .chain(std::iter::once(PlacementOwner::Portals {
                     voyage: voyage.id.clone(),
                 }))
         })
@@ -432,8 +434,8 @@ fn contains_leaf(root: &Split, id: &PlacementId) -> bool {
     }
 }
 
-pub(crate) fn visible(root: &Option<Split>, members: &[Vessel]) -> Option<Split> {
-    fn prune(root: &Split, members: &[Vessel]) -> Option<Split> {
+pub(crate) fn visible(root: &Option<Split>, members: &[Placement]) -> Option<Split> {
+    fn prune(root: &Split, members: &[Placement]) -> Option<Split> {
         match root {
             Split::Leaf { placement } => members
                 .iter()
@@ -472,23 +474,23 @@ pub(crate) fn repair_maximized(group: GroupMut<'_>) {
 
 pub(crate) fn insertion_cwd(
     layout: &Layout,
-    owner: &PanelOwner,
-    insertion: &PanelInsertion,
+    owner: &PlacementOwner,
+    insertion: &PlacementInsertion,
 ) -> Result<String, String> {
     let target = group(layout, owner)?;
     let shown = visible(target.root, target.members);
     match insertion {
-        PanelInsertion::Empty if shown.is_none() => (),
-        PanelInsertion::Beside { id, .. } if contains(&shown, id) => {
+        PlacementInsertion::Empty if shown.is_none() => (),
+        PlacementInsertion::Beside { id, .. } if contains(&shown, id) => {
             let content = target
                 .members
                 .iter()
                 .find(|panel| &panel.id == id)
                 .and_then(|panel| {
                     layout
-                        .contents
+                        .vessels
                         .iter()
-                        .find(|content| content.id == panel.content)
+                        .find(|content| content.id == panel.vessel)
                 })
                 .ok_or("Panel content not found")?;
             return Ok(content.cwd.clone());
@@ -498,8 +500,8 @@ pub(crate) fn insertion_cwd(
     let voyage = layout
         .containers()
         .find(|voyage| match owner {
-            PanelOwner::Fleet { id } => voyage.fleets.iter().any(|fleet| &fleet.id == id),
-            PanelOwner::Portals { voyage: id } => &voyage.id == id,
+            PlacementOwner::Fleet { id } => voyage.fleets.iter().any(|fleet| &fleet.id == id),
+            PlacementOwner::Portals { voyage: id } => &voyage.id == id,
         })
         .ok_or("Panel owner not found")?;
     voyage
@@ -509,13 +511,13 @@ pub(crate) fn insertion_cwd(
             voyage
                 .fleets
                 .iter()
-                .flat_map(|fleet| &fleet.vessels)
+                .flat_map(|fleet| &fleet.placements)
                 .chain(&voyage.portals)
                 .find_map(|panel| {
                     layout
-                        .contents
+                        .vessels
                         .iter()
-                        .find(|content| content.id == panel.content)
+                        .find(|content| content.id == panel.vessel)
                         .map(|content| content.cwd.clone())
                 })
         })
@@ -524,12 +526,12 @@ pub(crate) fn insertion_cwd(
 
 pub(crate) fn insert(
     group: GroupMut<'_>,
-    owner: &PanelOwner,
-    insertion: PanelInsertion,
-    panel: Vessel,
+    owner: &PlacementOwner,
+    insertion: PlacementInsertion,
+    panel: Placement,
 ) -> Result<(), String> {
     match insertion {
-        PanelInsertion::Beside { id, side } => {
+        PlacementInsertion::Beside { id, side } => {
             if !group
                 .root
                 .as_mut()
@@ -538,14 +540,14 @@ pub(crate) fn insert(
                 return Err("Panel insertion target changed".into());
             }
         }
-        PanelInsertion::Empty => {
+        PlacementInsertion::Empty => {
             let leaf = Split::Leaf {
                 placement: panel.id.clone(),
             };
             *group.root = Some(match group.root.take() {
                 None => leaf,
                 Some(root) => Split::Branch {
-                    axis: if matches!(owner, PanelOwner::Fleet { .. }) {
+                    axis: if matches!(owner, PlacementOwner::Fleet { .. }) {
                         Axis::Horizontal
                     } else {
                         Axis::Vertical
@@ -562,7 +564,7 @@ pub(crate) fn insert(
     Ok(())
 }
 
-pub(crate) fn default_name(members: &[Vessel], type_id: &str) -> String {
+pub(crate) fn default_name(members: &[Placement], type_id: &str) -> String {
     let base = match type_id {
         crate::content_type::NOTES_TYPE => "Notes",
         "agents" => "Agents",
@@ -579,7 +581,7 @@ pub(crate) fn default_name(members: &[Vessel], type_id: &str) -> String {
 }
 
 pub(crate) fn normalize(layout: &mut Layout) -> Result<(), String> {
-    let contents = layout.contents.clone();
+    let contents = layout.vessels.clone();
     let mode = layout.canvas.portal_mode;
     fn width(node: &voyager_contract::canvas::Node) -> Option<u16> {
         use voyager_contract::canvas::{Node, Region, Size};
@@ -634,14 +636,14 @@ pub(crate) fn normalize(layout: &mut Layout) -> Result<(), String> {
         for members in voyage
             .fleets
             .iter_mut()
-            .map(|fleet| &mut fleet.vessels)
+            .map(|fleet| &mut fleet.placements)
             .chain(std::iter::once(&mut voyage.portals))
         {
             for index in 0..members.len() {
                 if members[index].name.is_empty() {
                     let content = contents
                         .iter()
-                        .find(|content| content.id == members[index].content)
+                        .find(|content| content.id == members[index].vessel)
                         .ok_or("Stored panel content is missing")?;
                     members[index].name = default_name(members, &content.type_id);
                 }
@@ -657,11 +659,11 @@ pub(crate) fn validate(layout: &Layout) -> Result<(), String> {
     for owner in owners(layout) {
         let current = group(layout, &owner)?;
         for panel in current.members {
-            if !placements.insert(&panel.id.0) || !content_ids.insert(&panel.content.0) {
+            if !placements.insert(&panel.id.0) || !content_ids.insert(&panel.vessel.0) {
                 return Err("Stored panel belongs to multiple arrangements".into());
             }
         }
-        validate_tree(current.root, current.members, &layout.contents)?;
+        validate_tree(current.root, current.members, &layout.vessels)?;
         let shown = visible(current.root, current.members);
         if current
             .maximized
@@ -685,13 +687,13 @@ pub(crate) fn validate(layout: &Layout) -> Result<(), String> {
 
 pub(crate) fn validate_tree(
     root: &Option<Split>,
-    members: &[Vessel],
-    contents: &[Content],
+    members: &[Placement],
+    contents: &[Vessel],
 ) -> Result<(), String> {
     fn check(
         root: &Split,
-        members: &[Vessel],
-        contents: &[Content],
+        members: &[Placement],
+        contents: &[Vessel],
         seen: &mut BTreeSet<String>,
     ) -> Result<(), String> {
         match root {
@@ -701,7 +703,7 @@ pub(crate) fn validate_tree(
                     .find(|panel| &panel.id == placement)
                     .ok_or("Stored panel is outside its arrangement")?;
                 if !seen.insert(placement.0.clone())
-                    || !contents.iter().any(|content| content.id == panel.content)
+                    || !contents.iter().any(|content| content.id == panel.vessel)
                 {
                     return Err("Stored panel is duplicated or its content is missing".into());
                 }
@@ -808,15 +810,15 @@ mod tests {
             })
             .unwrap();
         let voyage = model.layout.voyages[0].id.clone();
-        let first = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        let first = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: crate::content_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Panel {
-                    owner: PanelOwner::Fleet {
+                destination: ContentDestination::Placement {
+                    owner: PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),
                     },
-                    insertion: PanelInsertion::Beside {
+                    insertion: PlacementInsertion::Beside {
                         id: first.id.clone(),
                         side: Side::Right,
                     },
@@ -825,18 +827,18 @@ mod tests {
             })
             .unwrap();
         let source = model.layout.voyages[0].fleets[0].clone();
-        let panel = source.vessels[0].clone();
-        let retained = source.vessels[1].clone();
+        let panel = source.placements[0].clone();
+        let retained = source.placements[1].clone();
         model
-            .apply(Action::SavePanelLayout {
-                owner: PanelOwner::Fleet {
+            .apply(Action::SaveArrangement {
+                owner: PlacementOwner::Fleet {
                     id: source.id.clone(),
                 },
                 name: "Original".into(),
             })
             .unwrap();
         model
-            .apply(Action::RemovePanel {
+            .apply(Action::RemovePlacement {
                 id: panel.id.clone(),
             })
             .unwrap();
@@ -847,16 +849,16 @@ mod tests {
             })
             .unwrap();
         let target = &mut model.layout.voyages[0].fleets[1];
-        let owner = PanelOwner::Fleet {
+        let owner = PlacementOwner::Fleet {
             id: target.id.clone(),
         };
-        let insertion = PanelInsertion::Beside {
-            id: target.vessels[0].id.clone(),
+        let insertion = PlacementInsertion::Beside {
+            id: target.placements[0].id.clone(),
             side: Side::Left,
         };
-        let action = Action::ReopenPanel {
+        let action = Action::ReopenPlacement {
             id: panel.id.clone(),
-            destination: ContentDestination::Panel {
+            destination: ContentDestination::Placement {
                 owner: owner.clone(),
                 insertion: insertion.clone(),
             },
@@ -884,36 +886,36 @@ mod tests {
             assert!(crate::scope::check(&snapshot, Some(&scope), &action).is_err());
         }
         for destination in [
-            PanelOwner::Portals {
+            PlacementOwner::Portals {
                 voyage: model.layout.voyages[0].id.clone(),
             },
-            PanelOwner::Fleet {
+            PlacementOwner::Fleet {
                 id: model.layout.home.as_ref().unwrap().fleets[0].id.clone(),
             },
         ] {
             let before = model.layout.clone();
             assert!(
                 model
-                    .apply(Action::ReopenPanel {
+                    .apply(Action::ReopenPlacement {
                         id: panel.id.clone(),
-                        destination: ContentDestination::Panel {
+                        destination: ContentDestination::Placement {
                             owner: destination,
-                            insertion: PanelInsertion::Empty
+                            insertion: PlacementInsertion::Empty
                         }
                     })
                     .is_err()
             );
             assert_eq!(model.layout, before);
         }
-        let contents = model.layout.contents.clone();
+        let contents = model.layout.vessels.clone();
         let context = model.layout.context.clone();
         let selected = model.layout.selected_fleet.clone();
         model.apply(action).unwrap();
-        assert_eq!(model.layout.contents, contents);
+        assert_eq!(model.layout.vessels, contents);
         assert_eq!(model.layout.context, context);
         assert_eq!(model.layout.selected_fleet, selected);
         assert_eq!(
-            model.layout.voyages[0].fleets[0].vessels.as_slice(),
+            model.layout.voyages[0].fleets[0].placements.as_slice(),
             std::slice::from_ref(&retained)
         );
         let target = group(&model.layout, &owner).unwrap();
@@ -929,7 +931,7 @@ mod tests {
             &panel.id
         ));
         assert_eq!(
-            model.layout.saved_layouts[0].root,
+            model.layout.arrangements[0].root,
             Some(Split::Leaf {
                 placement: retained.id
             })
@@ -937,9 +939,9 @@ mod tests {
         let before = model.layout.clone();
         assert!(
             model
-                .apply(Action::ReopenPanel {
+                .apply(Action::ReopenPlacement {
                     id: panel.id.clone(),
-                    destination: ContentDestination::Panel { owner, insertion }
+                    destination: ContentDestination::Placement { owner, insertion }
                 })
                 .is_err()
         );

@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::time::Instant;
 use voyager_contract::inspection::{Frame, Role};
-use voyager_contract::{Context, Layout, Vessel};
+use voyager_contract::{Context, Layout, Placement};
 
 cases! {
     QuitAndKeep => "quit-and-keep",
@@ -37,7 +37,7 @@ struct Before {
 struct Drawn {
     tabs: Vec<String>,
     expected_tabs: Vec<String>,
-    vessels: Vec<String>,
+    placements: Vec<String>,
     terminals: Vec<String>,
     expected_vessels: Vec<String>,
     backends: Vec<Option<String>>,
@@ -50,7 +50,7 @@ impl Drawn {
         !self.expected_tabs.is_empty()
             && self.tabs == self.expected_tabs
             && !self.expected_vessels.is_empty()
-            && self.vessels == self.expected_vessels
+            && self.placements == self.expected_vessels
             && self.terminals == self.expected_vessels
     }
 
@@ -368,34 +368,34 @@ fn answering_core(native: &Native) -> Result<Option<Identity>> {
     Ok(Some(Identity::read(crate::native::pid(&status)?)?))
 }
 
-fn selected(layout: &Layout) -> Vec<&Vessel> {
+fn selected(layout: &Layout) -> Vec<&Placement> {
     voyages(layout)
         .filter(|voyage| layout.selected_voyage.as_ref() == Some(&voyage.id))
         .flat_map(|voyage| &voyage.fleets)
         .filter(|fleet| layout.selected_fleet.as_ref() == Some(&fleet.id))
-        .flat_map(|fleet| &fleet.vessels)
+        .flat_map(|fleet| &fleet.placements)
         .collect()
 }
 
-fn backend_of(layout: &Layout, vessel: &Vessel) -> Option<String> {
+fn backend_of(layout: &Layout, vessel: &Placement) -> Option<String> {
     layout
-        .contents
+        .vessels
         .iter()
-        .find(|content| content.id == vessel.content)
+        .find(|content| content.id == vessel.vessel)
         .and_then(|content| content.backend.as_ref())
         .map(|backend| backend.0.clone())
 }
 
 fn backends(layout: &Layout) -> Vec<String> {
     layout
-        .contents
+        .vessels
         .iter()
         .filter_map(|content| content.backend.as_ref())
         .map(|backend| backend.0.clone())
         .collect()
 }
 
-fn shell_of(native: &Native, layout: &Layout, vessel: &Vessel) -> Result<Value> {
+fn shell_of(native: &Native, layout: &Layout, vessel: &Placement) -> Result<Value> {
     match backend_of(layout, vessel) {
         Some(backend) => native
             .system
@@ -413,14 +413,14 @@ fn drawn(seen: &Seen) -> Drawn {
     let shown = selected(layout);
     let starting = shown.iter().any(|vessel| {
         layout
-            .contents
+            .vessels
             .iter()
-            .any(|content| content.id == vessel.content && content.start_pending.is_some())
+            .any(|content| content.id == vessel.vessel && content.start_pending.is_some())
     });
     Drawn {
         tabs: keys(seen.frame, Role::FleetName),
         expected_tabs: sorted(tabs),
-        vessels: keys(seen.frame, Role::VesselName),
+        placements: keys(seen.frame, Role::VesselName),
         terminals: keys(seen.frame, Role::Terminal),
         expected_vessels: sorted(shown.iter().map(|vessel| vessel.id.0.clone())),
         backends: shown

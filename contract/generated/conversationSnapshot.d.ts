@@ -53,13 +53,13 @@ export type Action =
     }
   | {
       name: string;
-      operation: "save-panel-layout";
-      owner: PanelOwner;
+      operation: "save-arrangement";
+      owner: PlacementOwner;
     }
   | {
       name: string;
-      operation: "load-panel-layout";
-      owner: PanelOwner;
+      operation: "load-arrangement";
+      owner: PlacementOwner;
     }
   | {
       cwd: string;
@@ -78,7 +78,7 @@ export type Action =
   | {
       launch?: Launch | null;
       name: string;
-      operation: "create-fleet-with-content";
+      operation: "create-fleet-with-vessel";
       source: DirectorySource;
       typeId: string;
       voyage: string;
@@ -86,20 +86,20 @@ export type Action =
   | {
       destination: ContentDestination;
       launch?: Launch | null;
-      operation: "create-content";
+      operation: "create-vessel";
       typeId: string;
     }
   | {
-      contentId: string;
       expectedBackend: string;
       operation: "start-new-shell";
+      vesselId: string;
     }
   | {
-      operation: "remove-content-package";
+      operation: "remove-vessel-package";
       typeId: string;
     }
   | {
-      operation: "restore-content-package";
+      operation: "restore-vessel-package";
       typeId: string;
     }
   | {
@@ -108,8 +108,8 @@ export type Action =
       target: RenameTarget;
     }
   | {
-      operation: "resize-panel-split";
-      owner: PanelOwner;
+      operation: "resize-placement-split";
+      owner: PlacementOwner;
       /**
        * @maxItems 128
        */
@@ -118,7 +118,7 @@ export type Action =
     }
   | {
       id: string;
-      operation: "move-panel";
+      operation: "move-placement";
       side: Side;
       target: string;
     }
@@ -170,12 +170,12 @@ export type Action =
     }
   | {
       id: string;
-      operation: "reveal-panel";
+      operation: "reveal-placement";
     }
   | {
       destination: ContentDestination;
       id: string;
-      operation: "reopen-panel";
+      operation: "reopen-placement";
     }
   | {
       context: Context;
@@ -184,21 +184,21 @@ export type Action =
   | {
       id: string;
       maximized: boolean;
-      operation: "set-panel-maximized";
+      operation: "set-placement-maximized";
     }
   | {
       hidden: boolean;
       id: string;
-      operation: "set-panel-hidden";
+      operation: "set-placement-hidden";
     }
   | {
       id: string;
-      operation: "remove-panel";
+      operation: "remove-placement";
     }
   | {
       name: string;
-      operation: "remove-panel-layout";
-      owner: PanelOwner;
+      operation: "remove-arrangement";
+      owner: PlacementOwner;
     }
   | {
       mode?: PortalMode | null;
@@ -242,7 +242,7 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
-export type PanelOwner =
+export type PlacementOwner =
   | {
       id: string;
       kind: "fleet";
@@ -254,10 +254,10 @@ export type PanelOwner =
 export type DirectorySource =
   | {
       backend: string;
-      contentId: string;
       cwd: string;
       kind: "live";
       placementId: string;
+      vesselId: string;
     }
   | {
       cwd: string;
@@ -265,10 +265,10 @@ export type DirectorySource =
       voyageId: string;
     }
   | {
-      contentId: string;
       cwd: string;
       kind: "starting";
       placementId: string;
+      vesselId: string;
     };
 export type Launch =
   | {
@@ -287,11 +287,11 @@ export type Launch =
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type ContentDestination = {
-  insertion: PanelInsertion;
-  kind: "panel";
-  owner: PanelOwner;
+  insertion: PlacementInsertion;
+  kind: "placement";
+  owner: PlacementOwner;
 };
-export type PanelInsertion =
+export type PlacementInsertion =
   | {
       kind: "empty";
     }
@@ -325,65 +325,65 @@ export type ProcessAction =
       operation: "list";
     }
   | {
-      contentId: string;
       lines: number;
       operation: "read";
       terminalId: string;
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "send";
       pid: number;
       terminalId: string;
       text: string;
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "interrupt";
       pid: number;
       terminalId: string;
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "stop";
       pid: number;
       terminalId: string;
+      vesselId: string;
     };
 export type Receipt =
   | {
-      contentId: string;
       operation: "configure";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "describe";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "inspect";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "migrate-note";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "list-notes";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "new-note";
       title: string;
+      vesselId: string;
     }
   | {
-      contentId: string;
       filename: string;
       operation: "open-note";
+      vesselId: string;
     }
   | {
-      contentId: string;
       expectedRevision: string;
       operation: "update";
+      vesselId: string;
     };
 export type Action2 =
   | {

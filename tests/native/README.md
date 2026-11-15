@@ -172,7 +172,7 @@ no longer applies to the current tree. The verifier never applies a patch.
 To run a control, use a checkout that you can discard:
 
 1. Apply the patch: `git apply tests/native/controls/terminal-scrolling.patch`.
-   A patch that changes a header script changes its compiled `.js` file too,
+   A patch that changes a canvas script changes its compiled `.js` file too,
    so no generation step is needed.
 2. Build the candidate with the release command in Build and inspect below.
 3. Run the journey against that candidate with a new evidence directory.
@@ -412,11 +412,11 @@ of 20 runs on a loaded machine then failed `the new Fleet's tab and Vessel are
 drawn`, on a frame from before the click. A candidate that publishes every
 frame 700 ms late fails the same way on a quiet machine.
 
-A launch ends with `observe`. The header sends no workspace action while a
+A launch ends with `observe`. The canvas sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
 first preparation is lost. In 5 of 10 runs at `--window 1180x820 --sidebar
 collapsed`, a driver that clicked the toggle as soon as the toggle was drawn
-never saw the sidebar collapse. The header reports that state itself, as
+never saw the sidebar collapse. The canvas reports that state itself, as
 `prepared` in each frame (see
 [the inspection endpoint](../../docs/inspection.md)), and the driver waits for
 that report. The driver does not guess it from the drawn terminals.
@@ -521,7 +521,7 @@ still prevents a pass.
 
 The verifier's clipboard owner (`Clipboard` in `src/x11/clipboard.rs`) is a
 second X client with its own connection, an unmapped window and one thread.
-Isaac chose this exception to the one connection. The owner must answer the
+The clipboard owner is the one exception to the single X connection. It must answer the
 app's request for the clipboard while the journey waits in `settle` on the
 first connection. On one connection the app would wait out its 4 s timeout.
 The owner also lets a journey read what the app copied as another X client
@@ -724,15 +724,15 @@ shell, so a program outside the app starts in the run's Core session, and waits
 until Core reports it finished. The saved layout version must
 stay the same and the placed terminal must stay shown with no new Vessel.
 `exit-closes` then proves that the placed shell's exit closes its Vessel
-through Core's finished event, not through the header's observation. The
-header observes the workspace, waits 3 s and observes again, and an observation
+through Core's finished event, not through the canvas's observation. The
+canvas observes the workspace, waits 3 s and observes again, and an observation
 also closes an exited panel. The case writes a loop to `~/tick` in the run's
 home and types only `. ~/tick` into the placed shell, because under heavy load
 the app can refuse a keystroke as busy and a long typed line then loses a
 character. Every 50 ms the loop writes the wall-clock time to `exit-ticks/at-N` and then changes
-into `exit-ticks/tick-N`. The header's Vessel label names the folder that its
+into `exit-ticks/tick-N`. The canvas's Vessel label names the folder that its
 last observation listed, so the first label that names `tick-N` shows that an
-observation listed Core's terminals after the time in `at-N`. The header's next
+observation listed Core's terminals after the time in `at-N`. The canvas's next
 observation cannot start until 3 s after that. The case then creates
 `exit-ticks/stop`; the loop ends and the shell exits. A newer layout must be saved
 before the time in `at-N` plus 3 s, and the Vessel must then leave the drawn
@@ -788,7 +788,7 @@ Select one route explicitly:
 
 - `--foundation` reproduces retained native product journeys with this launcher and these helpers.
 - `--reference` runs the retained Electron fixture.
-- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained header/Notes journeys.
+- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained canvas/Notes journeys.
 - `--native-avatar` runs the original avatar experiment's own historical driver.
 
 Root help lists the choices. Route help lists that driver's options:

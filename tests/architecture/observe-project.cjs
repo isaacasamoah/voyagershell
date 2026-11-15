@@ -3,7 +3,11 @@ const { analyse, call } = require("./rust.cjs");
 
 function observePackages(snapshot, graph, config) {
   for (const root of config.packageRoots) {
-    for (const manifest of snapshot.files(`${root}/**/mod.json`)) {
+    const manifests = ["vessel.json", "canvas.json"].flatMap((name) =>
+      snapshot.files(`${root}/**/${name}`),
+    );
+    for (const manifest of manifests) {
+      const name = path.posix.basename(manifest);
       const directory = path.posix.dirname(manifest);
       let parsed = {};
       try {
@@ -12,7 +16,7 @@ function observePackages(snapshot, graph, config) {
         graph.leave(`manifest@${manifest}`, {
           kind: "manifest",
           subject: manifest,
-          reason: "mod.json is not valid JSON",
+          reason: `${name} is not valid JSON`,
         });
       }
       const lines = snapshot.read(manifest).split("\n");
@@ -27,7 +31,7 @@ function observePackages(snapshot, graph, config) {
           file: manifest,
           entry: parsed.entry,
           basis: "declared",
-          extract_by: "manifest:mod.json",
+          extract_by: `manifest:${name}`,
           files: snapshot.files(`${directory}/**`).length,
         },
         graph.evidence(manifest, entryLine || 1),

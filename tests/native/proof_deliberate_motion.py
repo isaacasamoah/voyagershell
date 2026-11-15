@@ -133,7 +133,7 @@ def prove(item, driver, expected, packs=False):
         assert command('xdotool', 'getactivewindow') == record['window']
 
     def context():
-        return driver.rpc(record['session'], 'doc.get', {'name': 'voyager-layout-v1'})['value']['context']
+        return driver.rpc(record['session'], 'doc.get', {'name': 'voyager-layout-v2'})['value']['context']
 
     def drag(target, cancel=False):
         before = context()

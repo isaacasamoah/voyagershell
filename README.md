@@ -12,8 +12,9 @@ There are no releases yet. Build from source.
 ## Docking
 
 The workspace has four kinds of place. A **Voyage** is a space for one project.
-A **Fleet** is a tab in a Voyage. A **Vessel** is a panel in a Fleet. A
-**Portal** is a panel that stays on screen across every Fleet in its Voyage.
+A **Fleet** is a tab in a Voyage. A **Vessel** is one piece of content, such as a
+terminal or a note, of a Vessel type. A Vessel sits in a Fleet. A **Portal** is a
+Vessel that stays on screen across every Fleet in its Voyage.
 
 The **Voyager avatar** is the assistant you dock. Drag it onto any of those
 places to dock it there. The status bar shows the dock, such as **Voyager / Design notes.md** for
@@ -109,7 +110,7 @@ interface uses.
 | [contract/](contract/) | Shared operations, identities and results, with generated types.          |
 | [app/](app/)           | Workspace, content and dock owners, plus the Core and Codex connectors.   |
 | [desktop/](desktop/)   | Native views, the terminal, the Voyager avatar and the interface scripts. |
-| [content/](content/)   | Content packages that ship with the app, such as Notes.                   |
+| [content/](content/)   | Vessel packages that ship with the app, such as Notes.                    |
 | [tests/](tests/)       | The native verification environment and the architecture checks.          |
 
 ## Documentation
@@ -123,7 +124,7 @@ Design notes for contributors:
 - [Terminal](docs/terminal.md) covers input, scrolling and program lifetime.
 - [Agent launch](docs/agent-launch.md) covers `launches.json`, which adds
   agents beyond Codex and Claude Code.
-- [Notes and content](docs/content.md) covers content types and their data.
+- [Notes and content](docs/content.md) covers Vessel types and their data.
 - [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
   tools.
 - [Avatar](docs/avatar.md) covers docking and motion.

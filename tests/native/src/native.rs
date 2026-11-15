@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
-use voyager_contract::{Fleet, Layout, Vessel, Voyage};
+use voyager_contract::{Fleet, Layout, Placement, Voyage};
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -143,11 +143,11 @@ pub fn fleets(layout: &Layout) -> impl Iterator<Item = &Fleet> {
     voyages(layout).flat_map(|voyage| &voyage.fleets)
 }
 
-pub fn vessels(layout: &Layout) -> impl Iterator<Item = &Vessel> {
-    fleets(layout).flat_map(|fleet| &fleet.vessels)
+pub fn vessels(layout: &Layout) -> impl Iterator<Item = &Placement> {
+    fleets(layout).flat_map(|fleet| &fleet.placements)
 }
 
-fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
+fn placed(layout: &Layout) -> impl Iterator<Item = &Placement> {
     vessels(layout).chain(voyages(layout).flat_map(|voyage| &voyage.portals))
 }
 
@@ -527,7 +527,7 @@ impl Native {
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {
         let reply = self
             .system
-            .watch("doc.get", json!({"name":"voyager-layout-v1"}))?;
+            .watch("doc.get", json!({"name":"voyager-layout-v2"}))?;
         if reply["value"].is_null() {
             return Ok(None);
         }
@@ -1189,7 +1189,7 @@ pub(crate) mod tests {
         let (preparing, prepared) = (frame(false)?, frame(true)?);
         let layout: Layout = serde_json::from_value(json!({
             "voyages": [],
-            "contents": [],
+            "vessels": [],
             "selectedVoyage": null,
             "selectedFleet": null,
             "context": {"kind": "workspace"},
@@ -1204,7 +1204,7 @@ pub(crate) mod tests {
                 seen(Some(&preparing), Some(&document), Some(7)),
                 Glance::Preparing
             ),
-            "An outcome counted while the header reported a pending workspace request"
+            "An outcome counted while the canvas reported a pending workspace request"
         );
         ensure!(
             matches!(

@@ -137,18 +137,20 @@ mod linux {
             let client = Client::open(session.clone(), "/tmp".into());
             let mut snapshot = call(&client, 0, Action::Inspect);
             let fleet = snapshot.layout.voyages[0].fleets[0].id.clone();
-            let after = snapshot.layout.voyages[0].fleets[0].vessels[0].id.clone();
+            let after = snapshot.layout.voyages[0].fleets[0].placements[0]
+                .id
+                .clone();
             let mut viewers = Vec::new();
             let mut addresses = Vec::new();
             for _ in 0..2 {
                 snapshot = call(
                     &client,
                     snapshot.version,
-                    Action::CreateContent {
+                    Action::CreateVessel {
                         type_id: "terminal".into(),
-                        destination: voyager_contract::ContentDestination::Panel {
-                            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
-                            insertion: voyager_contract::PanelInsertion::Beside {
+                        destination: voyager_contract::ContentDestination::Placement {
+                            owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
+                            insertion: voyager_contract::PlacementInsertion::Beside {
                                 id: after.clone(),
                                 side: match Axis::Horizontal {
                                     voyager_contract::Axis::Horizontal => {
@@ -165,7 +167,7 @@ mod linux {
                         }),
                     },
                 );
-                let id = snapshot.layout.contents.last().unwrap().id.clone();
+                let id = snapshot.layout.vessels.last().unwrap().id.clone();
                 viewers.push(
                     client
                         .terminal(id, client.request_id(), snapshot.version)
@@ -174,7 +176,7 @@ mod linux {
                 snapshot = call(&client, 0, Action::Inspect);
                 let address = snapshot
                     .layout
-                    .contents
+                    .vessels
                     .last()
                     .unwrap()
                     .backend
@@ -241,7 +243,7 @@ mod linux {
                 .unwrap();
             assert_eq!(rejected.status, Status::Rejected);
             assert!(rejected.message.unwrap().contains("quitting"));
-            let retained = snapshot.layout.contents.last().unwrap();
+            let retained = snapshot.layout.vessels.last().unwrap();
             let refused =
                 client.terminal(retained.id.clone(), client.request_id(), snapshot.version);
             assert!(
@@ -265,7 +267,7 @@ mod linux {
             let restored = call(&cold, 0, Action::Inspect);
             let mut expected = (*layout).clone();
             for item in expected
-                .contents
+                .vessels
                 .iter_mut()
                 .filter(|item| item.backend.is_some())
             {
@@ -273,7 +275,7 @@ mod linux {
                 item.launch = Some(voyager_contract::launch::Launch::Terminal);
             }
             assert_eq!(*restored.layout, expected);
-            assert_eq!(restored.created_contents.len(), addresses.len());
+            assert_eq!(restored.created_vessels.len(), addresses.len());
             reopened = Some(Core::connect(&session).unwrap());
             let core = reopened.as_mut().unwrap();
             let status = core.server_status().unwrap();
@@ -288,14 +290,14 @@ mod linux {
                 let terminal = core.terminal_get(address).unwrap();
                 assert_eq!(terminal.state, "finished");
             }
-            let retained = restored.created_contents.first().unwrap();
+            let retained = restored.created_vessels.first().unwrap();
             let _viewer = cold
                 .terminal(retained.clone(), cold.request_id(), restored.version)
                 .unwrap();
             let after = call(&cold, 0, Action::Inspect);
             let address = &after
                 .layout
-                .contents
+                .vessels
                 .iter()
                 .find(|content| &content.id == retained)
                 .unwrap()
@@ -381,15 +383,17 @@ mod linux {
             let client = Client::open(session.clone(), "/tmp".into());
             let snapshot = call(&client, 0, Action::Inspect);
             let fleet = snapshot.layout.voyages[0].fleets[0].id.clone();
-            let after = snapshot.layout.voyages[0].fleets[0].vessels[0].id.clone();
+            let after = snapshot.layout.voyages[0].fleets[0].placements[0]
+                .id
+                .clone();
             let snapshot = call(
                 &client,
                 snapshot.version,
-                Action::CreateContent {
+                Action::CreateVessel {
                     type_id: "terminal".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                        insertion: voyager_contract::PanelInsertion::Beside {
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PlacementInsertion::Beside {
                             id: after,
                             side: voyager_contract::Side::Right,
                         },
@@ -399,14 +403,14 @@ mod linux {
                     }),
                 },
             );
-            let id = snapshot.layout.contents.last().unwrap().id.clone();
+            let id = snapshot.layout.vessels.last().unwrap().id.clone();
             let viewer = client
                 .terminal(id, client.request_id(), snapshot.version)
                 .unwrap();
             let snapshot = call(&client, 0, Action::Inspect);
             let address = snapshot
                 .layout
-                .contents
+                .vessels
                 .last()
                 .unwrap()
                 .backend

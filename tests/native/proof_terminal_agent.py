@@ -127,16 +127,16 @@ def prove(
             }
         )
         document = wait(
-            lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+            lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda record: (
-                bool((record.get("value") or {}).get("contents"))
-                and bool(record["value"]["contents"][0].get("backend"))
+                bool((record.get("value") or {}).get("vessels"))
+                and bool(record["value"]["vessels"][0].get("backend"))
             ),
             "the initial bound terminal",
         )
         layout = document["value"]
-        assert layout["view"] == "fleet" and len(layout["contents"]) == 1
-        content = layout["contents"][0]
+        assert layout["view"] == "fleet" and len(layout["vessels"]) == 1
+        content = layout["vessels"][0]
         address = content["backend"]
         original = rpc("terminal.get", {"terminal": address})
         assert original["state"] == "live" and original["pid"]
@@ -155,27 +155,27 @@ def prove(
             capture("terminal-agent-creation-picker")
             button("Create Codex Vessel")
             created = wait(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda doc: (
-                    len(doc["value"]["contents"]) == 2
-                    and bool(doc["value"]["contents"][1].get("backend"))
+                    len(doc["value"]["vessels"]) == 2
+                    and bool(doc["value"]["vessels"][1].get("backend"))
                 ),
                 "direct worker backend",
                 45,
             )
             layout = created["value"]
             assert layout["context"] == document["value"]["context"]
-            assert layout["contents"][0] == content
-            assert layout["contents"][1]["launch"] == {
+            assert layout["vessels"][0] == content
+            assert layout["vessels"][1]["launch"] == {
                 "kind": "codex",
                 "model": "gpt-6.1-sol",
                 "effort": "high",
                 "permissions": "yolo",
             }
-            address = layout["contents"][1]["backend"]
+            address = layout["vessels"][1]["backend"]
             button("Expand sidebar")
             expanded = wait(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda doc: not doc["value"]["canvas"]["sidebarCollapsed"],
                 "restored sidebar",
             )
@@ -277,7 +277,7 @@ def prove(
         ) == pid
         assert process_record(pid) == identity
         assert process_record(original["pid"]) == shell
-        final = rpc("doc.get", {"name": "voyager-layout-v1"})
+        final = rpc("doc.get", {"name": "voyager-layout-v2"})
         assert final["value"] == layout, (
             "The agent interaction changed workspace identity"
         )

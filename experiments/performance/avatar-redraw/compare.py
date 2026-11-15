@@ -323,7 +323,7 @@ def measure(record):
             > 0
         ), "Avatar did not render"
         if config.get("terminalCrop"):
-            for name in ("terminal_renders", "header_renders"):
+            for name in ("terminal_renders", "canvas_renders"):
                 assert sum(row["counts"].get(name, 0) for row in observed[len(before):]) == 0, (
                     f"Quiet cached-scene condition failed: {name}"
                 )

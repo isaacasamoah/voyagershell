@@ -471,7 +471,7 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
             "the cached script view was prepainted again"
         );
         assert_eq!(bounds(&reused, Role::Avatar, ""), at(460., 20., 94., 94.));
-        let header = |frame: &Frame| {
+        let canvas = |frame: &Frame| {
             frame
                 .elements
                 .iter()
@@ -479,7 +479,7 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
                 .cloned()
                 .collect::<Vec<Element>>()
         };
-        assert_eq!(header(&reused), header(&open));
+        assert_eq!(canvas(&reused), canvas(&open));
 
         scene.probe.collapsed.set(true);
         scene.probe.menu.set(false);

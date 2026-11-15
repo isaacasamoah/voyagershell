@@ -1,4 +1,4 @@
-import type { ReportedActivity } from "../../../contract/generated/reportedActivity";
+import type { ReportedActivity } from "../../contract/generated/reportedActivity";
 
 export function activityBadge(
   activity: ReportedActivity | undefined,

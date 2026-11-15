@@ -9,24 +9,24 @@ const root = path.join(__dirname, "..");
 const directory = path.join(root, "target/script-types");
 const entries = [
   "content/ui.ts",
-  "desktop/mods/header/main.ts",
-  "desktop/mods/header/canvas.ts",
-  "desktop/mods/header/creation.ts",
-  "desktop/mods/header/activity.ts",
-  "desktop/mods/header/agents.ts",
-  "desktop/mods/header/voyage-colours.ts",
-  "desktop/mods/header/process-icons.ts",
-  "desktop/mods/header/worktrees.ts",
-  "desktop/mods/header/voyage-close.ts",
-  "desktop/mods/header/stop-session.ts",
-  "desktop/mods/header/processes.ts",
-  "desktop/mods/header/menu.ts",
-  "desktop/mods/header/panels.ts",
-  "desktop/mods/header/panel-view.ts",
-  "desktop/mods/header/navigation-view.ts",
+  "desktop/canvas/main.ts",
+  "desktop/canvas/regions.ts",
+  "desktop/canvas/creation.ts",
+  "desktop/canvas/activity.ts",
+  "desktop/canvas/agents.ts",
+  "desktop/canvas/voyage-colours.ts",
+  "desktop/canvas/process-icons.ts",
+  "desktop/canvas/worktrees.ts",
+  "desktop/canvas/voyage-close.ts",
+  "desktop/canvas/stop-session.ts",
+  "desktop/canvas/processes.ts",
+  "desktop/canvas/menu.ts",
+  "desktop/canvas/panels.ts",
+  "desktop/canvas/panel-view.ts",
+  "desktop/canvas/navigation-view.ts",
   "contract/generated/workspace.ts",
   "contract/generated/conversation.ts",
-  "desktop/mods/header/chat.ts",
+  "desktop/canvas/chat.ts",
 ];
 
 const notesEntries = ["content/notes/main.ts", "content/ui.ts"];
@@ -120,8 +120,8 @@ function selectDeclarations(raw, sources) {
   };
 }
 
-function compile(extra = [], scope = "header") {
-  if (!["header", "notes"].includes(scope)) throw Error("Unknown script scope");
+function compile(extra = [], scope = "canvas") {
+  if (!["canvas", "notes"].includes(scope)) throw Error("Unknown script scope");
   const filename = path.join(__dirname, "tsconfig.json");
   const config = ts.readConfigFile(filename, ts.sys.readFile);
   if (config.error)
@@ -154,7 +154,7 @@ async function check(mode) {
     throw Error("Expected --write or --check");
   fs.mkdirSync(directory, { recursive: true });
   const metadata = {};
-  for (const scope of ["header", "notes"]) {
+  for (const scope of ["canvas", "notes"]) {
     const notes = scope === "notes";
     const raw = execFileSync(
       "cargo",

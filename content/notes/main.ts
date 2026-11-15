@@ -14,7 +14,7 @@ import {
   RetainedBodyState as BodyState,
   RetainedBody as Body,
 } from "voyager_input";
-import { theme } from "voyager_content";
+import { theme } from "voyager_vessel";
 import type { NativeElement } from "gpui-kit";
 
 export default class Notes extends View {

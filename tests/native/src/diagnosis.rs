@@ -29,7 +29,7 @@ pub fn snapshot(native: &mut Native) -> Vec<String> {
         (
             "core-doc.json",
             "doc.get",
-            json!({"name":"voyager-layout-v1"}),
+            json!({"name":"voyager-layout-v2"}),
         ),
         ("core-terminals.json", "terminal.list", json!({})),
     ] {

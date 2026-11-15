@@ -3,15 +3,15 @@ import { Button } from "gpui-base";
 import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
 import { Notes } from "voyager_content_view";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
-import { vesselFrame } from "./canvas.js";
+import { panelFrame } from "./regions.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
 export function renderPanel(workspace, placement, scope, group) {
   const colors = projection();
-  const content = workspace.layout?.contents.find(
-    (item) => item.id === placement.content,
+  const content = workspace.layout?.vessels.find(
+    (item) => item.id === placement.vessel,
   );
   if (!content) throw Error("Placement content is unavailable.");
   const terminal = workspace.terminals.get(content.id);
@@ -23,7 +23,7 @@ export function renderPanel(workspace, placement, scope, group) {
     !content.startPending
       ? {
           operation: "start-new-shell",
-          contentId: content.id,
+          vesselId: content.id,
           expectedBackend: content.backend,
         }
       : null;
@@ -64,7 +64,7 @@ export function renderPanel(workspace, placement, scope, group) {
               workspace.focused = placement.id;
               workspace.run(
                 {
-                  operation: "set-panel-maximized",
+                  operation: "set-placement-maximized",
                   id: placement.id,
                   maximized: !maximized,
                 },
@@ -80,7 +80,7 @@ export function renderPanel(workspace, placement, scope, group) {
       label: `Close ${entity}`,
       choose: (version, cx) =>
         workspace.run(
-          { operation: "remove-panel", id: placement.id },
+          { operation: "remove-placement", id: placement.id },
           cx,
           undefined,
           version,
@@ -91,7 +91,7 @@ export function renderPanel(workspace, placement, scope, group) {
   return workspace.target(
     `${scope.kind}-${placement.id}`,
     scope,
-    vesselFrame(
+    panelFrame(
       div()
         .relative()
         .flex()
@@ -201,7 +201,7 @@ export function renderPanel(workspace, placement, scope, group) {
                       workspace.focused = placement.id;
                       workspace.run(
                         {
-                          operation: "set-panel-maximized",
+                          operation: "set-placement-maximized",
                           id: placement.id,
                           maximized: !maximized,
                         },
@@ -227,7 +227,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     .child(Marker.new("close-panel", placement.id))
                     .on_click((_event, cx) =>
                       workspace.run(
-                        { operation: "remove-panel", id: placement.id },
+                        { operation: "remove-placement", id: placement.id },
                         cx,
                       ),
                     ),
@@ -250,7 +250,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     workspace.processes,
                     workspace.reportedActivity,
                     (id, cx) =>
-                      workspace.run({ operation: "reveal-panel", id }, cx),
+                      workspace.run({ operation: "reveal-placement", id }, cx),
                     workspace.processError,
                     {
                       collapsed: workspace.collapsedGroups,
@@ -263,7 +263,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     group.owner,
                   )
                 : content.typeId === "notes"
-                  ? Notes.new(content.id, { contentId: content.id })
+                  ? Notes.new(content.id, { vesselId: content.id })
                   : terminal
                     ? Terminal.new(terminal).size_full()
                     : div()

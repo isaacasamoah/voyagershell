@@ -20,9 +20,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "lines": {
               "maximum": 160,
               "minimum": 0,
@@ -34,11 +31,14 @@
             },
             "terminalId": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "terminalId",
             "lines"
           ],
@@ -47,9 +47,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "send",
               "type": "string"
@@ -64,11 +61,14 @@
             },
             "text": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "terminalId",
             "pid",
             "text"
@@ -78,9 +78,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "interrupt",
               "type": "string"
@@ -92,11 +89,14 @@
             },
             "terminalId": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "terminalId",
             "pid"
           ],
@@ -105,9 +105,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "contentId": {
-              "type": "string"
-            },
             "operation": {
               "const": "stop",
               "type": "string"
@@ -119,11 +116,14 @@
             },
             "terminalId": {
               "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
             }
           },
           "required": [
             "operation",
-            "contentId",
+            "vesselId",
             "terminalId",
             "pid"
           ],

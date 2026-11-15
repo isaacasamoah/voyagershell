@@ -39,7 +39,7 @@ test("Notes checks its actual private native and content signatures", () => {
     "../target/script-types/notes-signatures.ts",
   );
   const valid = `import { Title, TitleState, Body, BodyState, SessionState, RetainedTitleState, RetainedTitle, RetainedBodyState, RetainedBody } from "voyager_input";
-import { invoke, changed } from "voyager_content";
+import { invoke, changed } from "voyager_vessel";
 import type { Request } from "../../contract/generated/contentRequest";
 Title.new(TitleState.new("")).w_full();
 Body.new(BodyState.new("")).min_h(180);
@@ -49,7 +49,7 @@ RetainedTitle.new(RetainedTitleState.new()).w_full();
 RetainedBody.new(RetainedBodyState.new()).min_h(180);
 invoke("{}", "request", "");
 changed(null);
-const request: Request = { version: "1", operation: "content.update", requestId: "r", contentId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
+const request: Request = { version: "1", operation: "content.update", requestId: "r", vesselId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
 `;
   fs.writeFileSync(filename, valid);
   assert.deepEqual(

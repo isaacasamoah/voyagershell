@@ -14,7 +14,7 @@ import {
   RetainedBodyState as BodyState,
   RetainedBody as Body,
 } from "voyager_input";
-import { theme } from "voyager_content";
+import { theme } from "voyager_vessel";
 export default class Notes extends View {
   init() {
     this.session = SessionState.new();

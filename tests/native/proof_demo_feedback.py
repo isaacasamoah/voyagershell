@@ -23,7 +23,7 @@ def prove(
         return core_rpc(session, env, method, params or {})
 
     def document():
-        return rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
+        return rpc("doc.get", {"name": "voyager-layout-v2"})["value"]
 
     def pid():
         return json.loads((evidence / "launch.json").read_text())["pid"]
@@ -44,8 +44,8 @@ def prove(
             layout = document()
             voyage = next(v for v in layout["voyages"] if v["id"] == layout["selectedVoyage"])
             fleet = next(f for f in voyage["fleets"] if f["id"] == layout["selectedFleet"])
-            assert len(fleet["vessels"]) == 1
-            return next(c for c in layout["contents"] if c["id"] == fleet["vessels"][0]["content"])["backend"]
+            assert len(fleet["placements"]) == 1
+            return next(c for c in layout["vessels"] if c["id"] == fleet["placements"][0]["vessel"])["backend"]
 
         address = wait(binding, bool, "selected shell binding")
         wait(lambda: rpc("terminal.get", {"terminal": address}), lambda value: value["state"] == "live", "selected shell")
@@ -68,8 +68,8 @@ def prove(
         selected = wait(document, lambda value: any(v["portals"] for v in value["voyages"] if v["id"] == voyage_id), "terminal Portal placement")
         voyage = next(v for v in selected["voyages"] if v["id"] == voyage_id)
         portal = voyage["portals"][0]
-        bound = wait(document, lambda value: next(c for c in value["contents"] if c["id"] == portal["content"]).get("backend"), "terminal Portal backend")
-        backend = next(c for c in bound["contents"] if c["id"] == portal["content"])["backend"]
+        bound = wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == portal["vessel"]).get("backend"), "terminal Portal backend")
+        backend = next(c for c in bound["vessels"] if c["id"] == portal["vessel"])["backend"]
         terminal = rpc("terminal.get", {"terminal": backend})
         click("Close Portal " + portal["name"])
         wait(document, lambda value: not next(v for v in value["voyages"] if v["id"] == voyage_id)["portalLayout"]["visible"], "empty Portal collapse")
@@ -105,13 +105,13 @@ def prove(
         repo.mkdir()
         git("init", "-q")
         git("-c", "user.name=Voyager trial", "-c", "user.email=trial@example.invalid", "commit", "--allow-empty", "-qm", "Initial")
-        wait(document, lambda value: value and value.get("contents") and value["contents"][0].get("backend"), "initial shell")
+        wait(document, lambda value: value and value.get("vessels") and value["vessels"][0].get("backend"), "initial shell")
         observed["accessibilityBefore"] = native("accessibility-state")["enabled"]
         native("accessibility-state", False)
         native("accessibility-state", True)
         focus_terminal()
         type_text("cd " + shlex.quote(str(repo)) + "\n")
-        address = document()["contents"][0]["backend"]
+        address = document()["vessels"][0]["backend"]
         wait(lambda: rpc("terminal.get", {"terminal": address}), lambda value: (value.get("foreground") or {}).get("cwd") == str(repo), "shell directory")
         click("Create Voyage")
         wait(document, lambda value: any(v.get("cwd") == str(repo) for v in value["voyages"]), "directory-backed Voyage")
@@ -150,8 +150,8 @@ def prove(
         focus_terminal()
         chord(native, "o" if resize_window else "e")
         click("Create Notes Vessel")
-        wait(document, lambda value: any(c["typeId"] == "notes" and c.get("configuration", {}).get("notesFile") for c in value["contents"]), "Notes file binding")
-        note = next(c for c in document()["contents"] if c["typeId"] == "notes")
+        wait(document, lambda value: any(c["typeId"] == "notes" and c.get("configuration", {}).get("notesFile") for c in value["vessels"]), "Notes file binding")
+        note = next(c for c in document()["vessels"] if c["typeId"] == "notes")
         filename = note["configuration"]["notesFile"]["filename"]
         if resize_window:
             layout = document()
@@ -159,13 +159,13 @@ def prove(
                 f
                 for v in layout["voyages"]
                 for f in v["fleets"]
-                if any(p["content"] == note["id"] for p in f["vessels"])
+                if any(p["vessel"] == note["id"] for p in f["placements"])
             )
             terminals = [
                 c
-                for c in layout["contents"]
+                for c in layout["vessels"]
                 if c["typeId"] == "terminal"
-                and any(p["content"] == c["id"] for p in fleet["vessels"])
+                and any(p["vessel"] == c["id"] for p in fleet["placements"])
             ]
             assert len(terminals) == 1
             terminal = terminals[0]
@@ -203,12 +203,12 @@ def prove(
         click("Edit note")
         click("Note files")
         click("New note")
-        wait(document, lambda value: next(c for c in value["contents"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] != filename, "new blank note")
+        wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] != filename, "new blank note")
         click("Note files")
         click("Open note")
         capture("notes-file-picker")
         click("Open " + filename)
-        wait(document, lambda value: next(c for c in value["contents"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] == filename, "opened saved note")
+        wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] == filename, "opened saved note")
         capture("notes-reopened-file")
         record("notes-new-open-edit-preview-real-file")
         click("Home")
@@ -216,7 +216,7 @@ def prove(
         record("home-voyage-groups-captured")
         if journey == "activity-refinement":
             selected = next(v for v in document()["voyages"] if v.get("cwd") == str(repo))
-            placement = next(p for f in selected["fleets"] for p in f["vessels"] if p["content"] == note["id"])
+            placement = next(p for f in selected["fleets"] for p in f["placements"] if p["vessel"] == note["id"])
             click("demo-repo")
             clean = path.read_bytes()
             click("Note text")
@@ -233,27 +233,27 @@ def prove(
             assert "Exit draft" in path.read_text()
             capture("notes-exited")
             record("notes-save-exit-and-conflict-refusal")
-            before_notes = {c["id"] for c in document()["contents"] if c["typeId"] == "notes"}
+            before_notes = {c["id"] for c in document()["vessels"] if c["typeId"] == "notes"}
             chord(native, "e")
             click("Create Notes Vessel")
-            created = wait(document, lambda value: any(c["typeId"] == "notes" and c["id"] not in before_notes for c in value["contents"]), "new Notes instance after Exit")
-            reopened = next(c for c in created["contents"] if c["typeId"] == "notes" and c["id"] not in before_notes)
-            assert any(p["content"] == reopened["id"] and p["id"] in leaf_ids(f["root"]) for v in created["voyages"] if v["id"] == selected["id"] for f in v["fleets"] for p in f["vessels"])
+            created = wait(document, lambda value: any(c["typeId"] == "notes" and c["id"] not in before_notes for c in value["vessels"]), "new Notes instance after Exit")
+            reopened = next(c for c in created["vessels"] if c["typeId"] == "notes" and c["id"] not in before_notes)
+            assert any(p["vessel"] == reopened["id"] and p["id"] in leaf_ids(f["root"]) for v in created["voyages"] if v["id"] == selected["id"] for f in v["fleets"] for p in f["placements"])
             click("Note files")
             click("Open note")
             click("Open " + filename)
-            wait(document, lambda value: next(c for c in value["contents"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == filename, "saved file selected after Exit")
+            wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == filename, "saved file selected after Exit")
             review_frame("Reopened Notes must display Exit draft and **Voyager**", "notes-reopen-after-exit")
             record("notes-open-saved-file-after-exit")
             click(filename, 273)
             click("Rename")
             type_text("Review")
             key(65293)
-            renamed = wait(document, lambda value: next(c for c in value["contents"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == "Review.md", "Notes file rename")
+            renamed = wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == "Review.md", "Notes file rename")
             assert not path.exists()
             path = path.with_name("Review.md")
             assert "Exit draft" in path.read_text() and "**Voyager**" in path.read_text()
-            assert all(p["name"] == "Review.md" for v in renamed["voyages"] for f in v["fleets"] for p in f["vessels"] if p["content"] == reopened["id"])
+            assert all(p["name"] == "Review.md" for v in renamed["voyages"] for f in v["fleets"] for p in f["placements"] if p["vessel"] == reopened["id"])
             click("Note text")
             type_text(" After rename")
             click("Preview note")
@@ -263,8 +263,8 @@ def prove(
             record("notes-rename-keeps-draft-and-editing-on-the-new-file")
             voyage, portal = portal_lifetime()
             note_placement = next(
-                p["id"] for f in voyage["fleets"] for p in f["vessels"]
-                if p["content"] == reopened["id"]
+                p["id"] for f in voyage["fleets"] for p in f["placements"]
+                if p["vessel"] == reopened["id"]
             )
             for label, target in [
                 ("portal", {"kind": "portal", "id": portal["id"]}),
@@ -322,9 +322,9 @@ def prove(
         native("accessibility-state", False)
         native("accessibility-state", True)
         click("demo-repo")
-        old_backends = {c["backend"] for c in before["contents"] if c.get("backend")}
-        current = wait(document, lambda value: value and any(c["typeId"] == "terminal" and c.get("backend") and c["backend"] not in old_backends and c["id"] in {old["id"] for old in before["contents"] if old["cwd"] == str(repo)} for c in value["contents"]), "fresh retained shell")
-        shell = next(c for c in current["contents"] if c["typeId"] == "terminal" and c["cwd"] == str(repo) and c.get("backend"))
+        old_backends = {c["backend"] for c in before["vessels"] if c.get("backend")}
+        current = wait(document, lambda value: value and any(c["typeId"] == "terminal" and c.get("backend") and c["backend"] not in old_backends and c["id"] in {old["id"] for old in before["vessels"] if old["cwd"] == str(repo)} for c in value["vessels"]), "fresh retained shell")
+        shell = next(c for c in current["vessels"] if c["typeId"] == "terminal" and c["cwd"] == str(repo) and c.get("backend"))
         actual = rpc("terminal.get", {"terminal": shell["backend"]})
         assert actual["state"] == "live" and actual["argv"] == ["/bin/bash"]
         capture("feedback-fresh-bash")

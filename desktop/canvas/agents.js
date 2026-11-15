@@ -1,19 +1,11 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";
 import { visiblePanels } from "./panels.js";
-import type { Context, NativeElement } from "gpui-kit";
-import type { Layout, PanelOwner } from "../../../contract/generated/response";
-import type { ProcessInfo } from "../../../contract/generated/processResponse";
-import type {
-  Projection as ActivityProjection,
-  ReportedActivity,
-} from "../../../contract/generated/reportedActivity";
-
-const AGENT_NAMES: Record<string, string> = {
+const AGENT_NAMES = {
   codex: "Codex",
   claude: "Claude",
   "claude-code": "Claude",
@@ -26,8 +18,7 @@ const AGENT_NAMES: Record<string, string> = {
   gemini: "Gemini",
   grok: "Grok",
 };
-
-function programName(value: string | null | undefined): string | undefined {
+function programName(value) {
   return (
     value
       ?.split(/[\\/]/)
@@ -36,16 +27,13 @@ function programName(value: string | null | undefined): string | undefined {
       .replace(/\.exe$/, "") || undefined
   );
 }
-
 const STATES = {
   "Needs attention": { rank: 0, symbol: "!", color: "#edb478" },
   Working: { rank: 1, symbol: "●", color: "#8fc6a1" },
   Done: { rank: 2, symbol: "✓", color: "#94bfff" },
   Idle: { rank: 3, symbol: "○", color: "#a4a9b5" },
-} as const;
-function statusGroup(
-  activity: ReportedActivity | undefined,
-): keyof typeof STATES {
+};
+function statusGroup(activity) {
   switch (activity?.state) {
     case "blocked":
     case "error":
@@ -57,39 +45,22 @@ function statusGroup(
   }
   return "Idle";
 }
-
-type Options = {
-  collapsed: Set<string>;
-  toggle: (id: string, cx: Context) => void;
-};
-type Row = {
-  id: string;
-  voyage: string;
-  name: string;
-  program: string;
-  detail: string;
-  hint: string;
-  agent: boolean;
-  group: string;
-  status: keyof typeof STATES;
-};
-
 export function agentsView(
-  layout: Layout,
-  processes: ProcessInfo[],
-  reported: ActivityProjection["terminals"],
-  navigate: (id: string, cx: Context) => void,
-  unavailable?: string,
-  options?: Options,
-  owner?: PanelOwner,
-): NativeElement {
+  layout,
+  processes,
+  reported,
+  navigate,
+  unavailable,
+  options,
+  owner,
+) {
   const colors = projection();
   const scope =
     owner?.kind === "fleet" &&
     layout.home?.fleets.some((fleet) => fleet.id === owner.id)
       ? undefined
       : owner;
-  const rows: Row[] = [];
+  const rows = [];
   for (const voyage of [
     ...(layout.home ? [layout.home] : []),
     ...layout.voyages,
@@ -104,7 +75,7 @@ export function agentsView(
         )
         .map((fleet) => ({
           name: fleet.name,
-          placements: fleet.vessels,
+          placements: fleet.placements,
           root: fleet.root ?? null,
         })),
       ...(scope?.kind === "fleet"
@@ -119,8 +90,8 @@ export function agentsView(
     ];
     for (const group of groups)
       for (const placement of group.placements) {
-        const content = layout.contents.find(
-          (item) => item.id === placement.content,
+        const content = layout.vessels.find(
+          (item) => item.id === placement.vessel,
         );
         if (!content) continue;
         if (
@@ -133,7 +104,7 @@ export function agentsView(
         const process = content.backend
           ? processes.find(
               (item) =>
-                item.contentId === content.id &&
+                item.vesselId === content.id &&
                 item.terminalId === content.backend,
             )
           : undefined;
@@ -210,7 +181,7 @@ export function agentsView(
         });
       }
   }
-  const row = (item: Row): NativeElement =>
+  const row = (item) =>
     Button.new(`vessel-${item.id}`)
       .accessibility_label(
         [item.name, item.program, item.detail].filter(Boolean).join(", "),
@@ -261,7 +232,7 @@ export function agentsView(
               : [],
           ),
       );
-  const section = (id: string, title: string, items: Row[]): NativeElement => {
+  const section = (id, title, items) => {
     const collapsed = options?.collapsed.has(id) || false;
     return div()
       .flex()
@@ -281,7 +252,7 @@ export function agentsView(
       )
       .children(collapsed ? [] : items.map(row));
   };
-  const children: NativeElement[] = [
+  const children = [
     div()
       .flex()
       .items_center()

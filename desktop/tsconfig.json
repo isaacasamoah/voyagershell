@@ -11,7 +11,7 @@
     "rootDir": "..",
     "outDir": "../target/script-types/emitted",
     "rootDirs": [
-      "mods/header",
+      "canvas",
       "../content/notes",
       "../content",
       "../contract/generated"
@@ -19,12 +19,12 @@
     "types": []
   },
   "files": [
-    "mods/header/main.ts",
-    "mods/header/canvas.ts",
-    "mods/header/creation.ts",
+    "canvas/main.ts",
+    "canvas/regions.ts",
+    "canvas/creation.ts",
     "../contract/generated/workspace.ts",
     "../contract/generated/conversation.ts",
-    "mods/header/chat.ts",
+    "canvas/chat.ts",
     "../target/script-types/gpui-kit.d.ts"
   ]
 }

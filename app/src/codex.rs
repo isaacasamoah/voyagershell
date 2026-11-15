@@ -26,7 +26,7 @@ fn decode(bytes: &[u8]) -> Result<Value, String> {
     }
     let value: Value = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
     if bytes.len() > 1024 * 1024
-        && (value["method"] != "item/tool/call" || value["params"]["tool"] != "voyager_content")
+        && (value["method"] != "item/tool/call" || value["params"]["tool"] != "voyager_vessel")
     {
         return Err(
             "Private Codex non-content frame exceeded 1 MiB; nothing was resubmitted".into(),
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn content_frames_do_not_raise_other_request_limits() {
-        let value = json!({"id":"callback","method":"item/tool/call","params":{"tool":"voyager_content","arguments":{"text":"x".repeat(crate::content::ENVELOPE_LIMIT - 256)}}});
+        let value = json!({"id":"callback","method":"item/tool/call","params":{"tool":"voyager_vessel","arguments":{"text":"x".repeat(crate::content::ENVELOPE_LIMIT - 256)}}});
         let bytes = encode(&value, CONTENT_FRAME_LIMIT).unwrap();
         assert!(bytes.len() > 1024 * 1024);
         assert_eq!(decode(&bytes).unwrap(), value);

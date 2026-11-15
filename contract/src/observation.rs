@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{ContentId, CoreTerminalId, PlacementId, context::Branch};
+use crate::{CoreTerminalId, PlacementId, VesselId, context::Branch};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -14,9 +14,9 @@ pub enum Directory {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PanelObservation {
+pub struct PlacementObservation {
     pub placement_id: PlacementId,
-    pub content_id: ContentId,
+    pub vessel_id: VesselId,
     pub backend: Option<CoreTerminalId>,
     pub directory: Directory,
     pub program: Option<String>,
@@ -32,6 +32,6 @@ pub struct WorkspaceObservation {
     pub version: u64,
     pub active: Option<PlacementId>,
     pub directory: Directory,
-    pub panels: Vec<PanelObservation>,
+    pub panels: Vec<PlacementObservation>,
     pub branch: Branch,
 }

@@ -1,7 +1,7 @@
 use crate::provider::Visible;
 use std::collections::VecDeque;
 use voyager_contract::conversation::{Focus, Message, Phase, Role, Snapshot};
-use voyager_contract::{Context, Layout, Vessel};
+use voyager_contract::{Context, Layout, Placement};
 
 pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
     let mut focus = Focus {
@@ -31,7 +31,7 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
                 voyage
                     .fleets
                     .iter()
-                    .flat_map(|fleet| fleet.vessels.iter())
+                    .flat_map(|fleet| fleet.placements.iter())
                     .chain(voyage.portals.iter()),
             );
             return Ok(focus);
@@ -42,18 +42,18 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
                 if !home {
                     focus.path.push(fleet.name.clone());
                 }
-                focus.cwd = directory(layout, fleet.vessels.iter());
+                focus.cwd = directory(layout, fleet.placements.iter());
                 return Ok(focus);
             }
             if let Some(placement) = fleet
-                .vessels
+                .placements
                 .iter()
                 .find(|p| matches!(&layout.context, Context::Vessel { id } if id == &p.id))
             {
                 let content = layout
-                    .contents
+                    .vessels
                     .iter()
-                    .find(|c| c.id == placement.content)
+                    .find(|c| c.id == placement.vessel)
                     .ok_or("Focused content is missing")?;
                 focus.path = prefix.clone();
                 if !home {
@@ -70,9 +70,9 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
             .find(|p| matches!(&layout.context, Context::Portal { id } if id == &p.id))
         {
             let content = layout
-                .contents
+                .vessels
                 .iter()
-                .find(|c| c.id == placement.content)
+                .find(|c| c.id == placement.vessel)
                 .ok_or("Focused content is missing")?;
             focus.path = prefix;
             focus.path.push(placement.name.clone());
@@ -83,9 +83,12 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
     Err("Focused workspace target is missing".into())
 }
 
-fn directory<'a>(layout: &Layout, placements: impl Iterator<Item = &'a Vessel>) -> Option<String> {
-    let mut dirs = placements
-        .filter_map(|placement| layout.contents.iter().find(|c| c.id == placement.content));
+fn directory<'a>(
+    layout: &Layout,
+    placements: impl Iterator<Item = &'a Placement>,
+) -> Option<String> {
+    let mut dirs =
+        placements.filter_map(|placement| layout.vessels.iter().find(|c| c.id == placement.vessel));
     let first = &dirs.next()?.cwd;
     dirs.all(|content| &content.cwd == first)
         .then(|| first.clone())
@@ -248,7 +251,7 @@ mod tests {
             .unwrap();
         let voyage = model.layout.voyages[0].id.clone();
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let placement = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        let placement = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
             .apply(voyager_contract::Action::CreateVoyage {
                 name: "Beta".into(),
@@ -280,9 +283,9 @@ mod tests {
             focus(&model.layout, 44).unwrap().cwd.as_deref(),
             Some("/alpha")
         );
-        model.layout.voyages[0].portals.push(Vessel {
+        model.layout.voyages[0].portals.push(Placement {
             id: voyager_contract::PlacementId("portal".into()),
-            content: placement.content,
+            vessel: placement.vessel,
             name: "Portal test".into(),
             name_origin: voyager_contract::NameOrigin::Deliberate,
             hidden: false,

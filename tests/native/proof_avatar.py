@@ -100,7 +100,7 @@ def prove(
         return core_rpc(session, env, method, params)
 
     def state():
-        return rpc("doc.get", {"name": "voyager-layout-v1"})
+        return rpc("doc.get", {"name": "voyager-layout-v2"})
 
     moves = []
     pointer_deliveries = []
@@ -682,7 +682,7 @@ def prove(
             )
             return next(item for item in current["fleets"] if item["id"] == fleet["id"])
 
-        assert len(fleet["vessels"]) == 1, (
+        assert len(fleet["placements"]) == 1, (
             "Reveal journey requires its initial one-Vessel Fleet"
         )
         menu(fleet["name"], "Save layout")
@@ -701,7 +701,7 @@ def prove(
             if any(
                 item["owner"] == {"kind": "fleet", "id": fleet["id"]}
                 and item["name"] == "avatar"
-                for item in saved["savedLayouts"]
+                for item in saved["arrangements"]
             ):
                 break
             time.sleep(0.1)
@@ -713,12 +713,12 @@ def prove(
         for _ in range(100):
             split = state()["value"]
             current_fleet = original_fleet(split)
-            if len(current_fleet["vessels"]) == 2:
-                vessel = current_fleet["vessels"][1]
+            if len(current_fleet["placements"]) == 2:
+                vessel = current_fleet["placements"][1]
                 content = next(
                     item
-                    for item in split["contents"]
-                    if item["id"] == vessel["content"]
+                    for item in split["vessels"]
+                    if item["id"] == vessel["vessel"]
                 )
                 if content.get("backend"):
                     break
@@ -774,7 +774,7 @@ def prove(
             raise AssertionError("Saved Fleet tree was not loaded")
         assert loaded["context"] == focused["context"]
         assert (
-            next(item for item in loaded["contents"] if item["id"] == content["id"])
+            next(item for item in loaded["vessels"] if item["id"] == content["id"])
             == content
         )
         capture("avatar-hidden-vessel")
@@ -799,12 +799,12 @@ def prove(
         assert revealed["context"] == focused["context"]
         assert (
             next(
-                item for item in current_fleet["vessels"] if item["id"] == vessel["id"]
+                item for item in current_fleet["placements"] if item["id"] == vessel["id"]
             )
             == vessel
         )
         assert (
-            next(item for item in revealed["contents"] if item["id"] == content["id"])
+            next(item for item in revealed["vessels"] if item["id"] == content["id"])
             == content
         )
         process_after = rpc("terminal.get", {"terminal": content["backend"]})
@@ -837,9 +837,9 @@ def prove(
             lambda doc: (
                 len(doc["value"]["voyages"][0]["portals"]) == 1
                 and any(
-                    item["id"] == doc["value"]["voyages"][0]["portals"][0]["content"]
+                    item["id"] == doc["value"]["voyages"][0]["portals"][0]["vessel"]
                     and item.get("backend")
-                    for item in doc["value"]["contents"]
+                    for item in doc["value"]["vessels"]
                 )
             ),
             "chosen Portal terminal backend",
@@ -853,8 +853,8 @@ def prove(
         capture("avatar-real-portal")
         content = next(
             item
-            for item in focused_portal["value"]["contents"]
-            if item["id"] == portal["content"]
+            for item in focused_portal["value"]["vessels"]
+            if item["id"] == portal["vessel"]
         )
         process = rpc("terminal.get", {"terminal": content["backend"]})
         process_before = process_identity(process["pid"], metadata_only=True)
@@ -863,7 +863,7 @@ def prove(
             assert (
                 next(
                     item
-                    for item in document["value"]["contents"]
+                    for item in document["value"]["vessels"]
                     if item["id"] == content["id"]
                 )
                 == content

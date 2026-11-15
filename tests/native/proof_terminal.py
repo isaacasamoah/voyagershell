@@ -17,7 +17,7 @@ LEGACY_DIV_HEADER = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320
 
 def div_control_point(label, fleets, viewport, header_sha256):
     assert header_sha256 == LEGACY_DIV_HEADER, (
-        "Measured Div controls require the inspected Header source"
+        "Measured Div controls require the inspected canvas source"
     )
     assert viewport == (2900, 1880), (
         "Measured Div controls require the observed 2900x1880 X window"
@@ -68,12 +68,12 @@ def terminal(
         return core_rpc(session, env, method, params)
 
     def workspace_control(label):
-        header = evidence / "profile/mods/header/main.js"
-        digest = hashlib.sha256(header.read_bytes()).hexdigest()
+        canvas = evidence / "profile/canvas/main.js"
+        digest = hashlib.sha256(canvas.read_bytes()).hexdigest()
         if digest != LEGACY_DIV_HEADER:
             click(*named_button(native, evidence, label))
             return
-        layout = rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
+        layout = rpc("doc.get", {"name": "voyager-layout-v2"})["value"]
         assert layout.get("view", "fleet") == "fleet"
         assert layout["context"] == {"kind": "workspace"}
         assert len(layout["voyages"]) == 1
@@ -98,7 +98,7 @@ def terminal(
                 reference=(
                     "native-01/terminal-output.png"
                     if label == "Create Fleet"
-                    else "desktop/mods/header/main.ts:statusView"
+                    else "desktop/canvas/main.ts:statusView"
                 ),
             )
         )
@@ -151,15 +151,15 @@ def terminal(
         if reported:
             wait_for(socket.is_socket, bool, "the dedicated Core socket")
         document = wait_for(
-            lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+            lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda value: (
-                bool((value.get("value") or {}).get("contents", []))
-                and bool(value["value"]["contents"][0].get("backend"))
+                bool((value.get("value") or {}).get("vessels", []))
+                and bool(value["value"]["vessels"][0].get("backend"))
             ),
             "bound terminal",
         )
         original_fleet_name = document["value"]["voyages"][0]["fleets"][0]["name"]
-        address = document["value"]["contents"][0]["backend"]
+        address = document["value"]["vessels"][0]["backend"]
         original = (
             wait_for(
                 lambda: rpc("terminal.get", {"terminal": address}),
@@ -297,14 +297,14 @@ def terminal(
             observations["originalOutput"] = output(address, "ORIGINAL")
             workspace_control("Create Fleet")
             second_document = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda item: (
-                    len(item["value"]["contents"]) == 2
-                    and bool(item["value"]["contents"][1].get("backend"))
+                    len(item["value"]["vessels"]) == 2
+                    and bool(item["value"]["vessels"][1].get("backend"))
                 ),
                 "one second Fleet shell binding",
             )
-            sibling = second_document["value"]["contents"][1]["backend"]
+            sibling = second_document["value"]["vessels"][1]["backend"]
             assert sibling != address and second_document["value"]["context"] == context
             second = wait_for(
                 lambda: rpc("terminal.get", {"terminal": sibling}),
@@ -333,14 +333,14 @@ def terminal(
             visible(sibling, "unknown", "reported-nonreporting-quiet")
             workspace_control(original_fleet_name)
             wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda item: (
                     item["value"]["selectedFleet"] == document["value"]["selectedFleet"]
                 ),
                 "the original Fleet selection",
             )
             focus_terminal()
-            baseline = rpc("doc.get", {"name": "voyager-layout-v1"})
+            baseline = rpc("doc.get", {"name": "voyager-layout-v2"})
             observations["baseline"] = baseline
             for word in ("working", "blocked", "idle", "done", "error"):
                 observations[word] = report(word)
@@ -349,7 +349,7 @@ def terminal(
                     and observations[word]["pid"] == original_identity["pid"]
                 )
                 observations[word + "Output"] = output(address, "REPORTED")
-                assert rpc("doc.get", {"name": "voyager-layout-v1"}) == baseline
+                assert rpc("doc.get", {"name": "voyager-layout-v2"}) == baseline
                 visible(address, word, "reported-" + word)
             cleared = report("clear")
             assert cleared["reported"] is True
@@ -365,7 +365,7 @@ def terminal(
                 "child-only report",
             )
             visible(address, "unknown", "reported-child-only")
-            assert rpc("doc.get", {"name": "voyager-layout-v1"}) == baseline
+            assert rpc("doc.get", {"name": "voyager-layout-v2"}) == baseline
             suffix = token_hex(8)
             type_text(
                 f"(sleep 6; printf '\\033]7501;state=blocked:kind=question:app=voyager-proof\\033\\\\'; printf '\\nHIDDEN_%s\\n' {suffix}) &\nprintf 'READY_%s\\n' {suffix}\n"
@@ -377,7 +377,7 @@ def terminal(
             )
             workspace_control(second_fleet_name)
             hidden = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda item: (
                     item["value"]["selectedFleet"] != baseline["value"]["selectedFleet"]
                 ),
@@ -397,11 +397,11 @@ def terminal(
                 lambda item: f"HIDDEN_{suffix}" in item["text"].splitlines(),
                 "hidden constructed output",
             )
-            assert rpc("doc.get", {"name": "voyager-layout-v1"}) == hidden
+            assert rpc("doc.get", {"name": "voyager-layout-v2"}) == hidden
             visible(sibling, "unknown", "reported-hidden-sibling")
             workspace_control(original_fleet_name)
             wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda item: (
                     item["value"]["selectedFleet"] == baseline["value"]["selectedFleet"]
                 ),
@@ -420,9 +420,9 @@ def terminal(
                     for key, value in identity.items()
                     if key not in ("pid", "role")
                 }
-            final = rpc("doc.get", {"name": "voyager-layout-v1"})
+            final = rpc("doc.get", {"name": "voyager-layout-v2"})
             assert final["value"]["context"] == context
-            assert final["value"]["contents"] == baseline["value"]["contents"]
+            assert final["value"]["vessels"] == baseline["value"]["vessels"]
             final_runtime = runtime()
             assert final_runtime["core"]["id"] == first_runtime["core"]["id"]
             assert final_runtime["pid"] == first_runtime["pid"]
@@ -562,14 +562,14 @@ def terminal(
             )
             click(367, 30)
             switched = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
-                    len(value["value"]["contents"]) == 2
-                    and value["value"]["contents"][1].get("backend")
+                    len(value["value"]["vessels"]) == 2
+                    and value["value"]["vessels"][1].get("backend")
                 ),
                 "second Fleet terminal",
             )
-            other = switched["value"]["contents"][1]["backend"]
+            other = switched["value"]["vessels"][1]["backend"]
             wait_for(
                 lambda: rpc("terminal.get", {"terminal": other}),
                 lambda value: (
@@ -603,7 +603,7 @@ def terminal(
             )
             click(275, 30)
             wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     value["value"]["selectedFleet"]
                     == document["value"]["selectedFleet"]
@@ -625,14 +625,14 @@ def terminal(
             width, height = int(current["WIDTH"]) / 2, int(current["HEIGHT"]) / 2
             click(width - 30, height - 30)
             split = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
-                    len(value["value"]["contents"]) == 3
-                    and value["value"]["contents"][2].get("backend")
+                    len(value["value"]["vessels"]) == 3
+                    and value["value"]["vessels"][2].get("backend")
                 ),
                 "split terminal bound",
             )
-            sibling = split["value"]["contents"][2]["backend"]
+            sibling = split["value"]["vessels"][2]["backend"]
             click(350, 190)
             split_size = size("GRIDSPLIT-")
             assert split_size[1] < after[1], (split_size, after)
@@ -692,11 +692,11 @@ def terminal(
         missing = evidence / "repaired-working-directory"
         assert not missing.exists()
         changed = document["value"]
-        changed["contents"][0]["cwd"] = str(missing)
+        changed["vessels"][0]["cwd"] = str(missing)
         external = rpc(
             "doc.set",
             {
-                "name": "voyager-layout-v1",
+                "name": "voyager-layout-v2",
                 "version": document["version"],
                 "value": changed,
             },
@@ -704,7 +704,7 @@ def terminal(
         workspace_control("Create Fleet")
         time.sleep(0.4)
         assert (
-            rpc("doc.get", {"name": "voyager-layout-v1"})["version"]
+            rpc("doc.get", {"name": "voyager-layout-v2"})["version"]
             == external["version"]
         )
         capture("terminal-stale-refused")
@@ -712,12 +712,12 @@ def terminal(
         time.sleep(0.4)
         workspace_control("Create Fleet")
         rejected = wait_for(
-            lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+            lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda value: (
-                len(value["value"]["contents"]) == 2
+                len(value["value"]["vessels"]) == 2
                 and value["version"] >= external["version"] + 3
-                and value["value"]["contents"][1].get("backend") is None
-                and value["value"]["contents"][1].get("startPending") is None
+                and value["value"]["vessels"][1].get("backend") is None
+                and value["value"]["vessels"][1].get("startPending") is None
             ),
             "known terminal refusal",
         )
@@ -725,11 +725,11 @@ def terminal(
         missing.mkdir()
         workspace_control("Refresh")
         recovered = wait_for(
-            lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
-            lambda value: value["value"]["contents"][1].get("backend") is not None,
+            lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
+            lambda value: value["value"]["vessels"][1].get("backend") is not None,
             "terminal after explicit Refresh",
         )
-        restored_address = recovered["value"]["contents"][1]["backend"]
+        restored_address = recovered["value"]["vessels"][1]["backend"]
         restored = rpc("terminal.get", {"terminal": restored_address})
         assert restored["pid"] and restored["address"] != address
         assert rpc("terminal.get", {"terminal": address})["pid"] == original["pid"]
@@ -777,19 +777,19 @@ def terminal(
         if portals:
             click(*named_button(native, evidence, "Open Portal"))
             layout = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     bool(value["value"]["voyages"][0]["portals"])
                     and any(
                         content.get("backend")
-                        for content in value["value"]["contents"][2:]
+                        for content in value["value"]["vessels"][2:]
                     )
                 ),
                 "bound Voyage Portal",
             )["value"]
             portal = layout["voyages"][0]["portals"][0]
             content = next(
-                item for item in layout["contents"] if item["id"] == portal["content"]
+                item for item in layout["vessels"] if item["id"] == portal["vessel"]
             )
             program = rpc("terminal.get", {"terminal": content["backend"]})
             width = int(geometry()["WIDTH"]) / 2
@@ -814,7 +814,7 @@ def terminal(
             click(width - 180, 190)
             type_text("echo voyagerportalafterblur\n")
             renamed = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     value["value"]["voyages"][0]["portals"][0].get("name")
                     == "Live Portal"
@@ -823,7 +823,7 @@ def terminal(
             )["value"]["voyages"][0]["portals"][0]
             assert (
                 renamed["id"] == portal["id"]
-                and renamed["content"] == portal["content"]
+                and renamed["vessel"] == portal["vessel"]
             )
             portal = renamed
             wait_for(
@@ -834,7 +834,7 @@ def terminal(
             capture("portal-terminal-name-blur-focus")
             click(*named_button(native, evidence, "Fleet 2"))
             switched = wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     value["value"]["selectedFleet"]
                     == layout["voyages"][0]["fleets"][1]["id"]
@@ -845,8 +845,8 @@ def terminal(
             assert (
                 next(
                     item
-                    for item in switched["contents"]
-                    if item["id"] == portal["content"]
+                    for item in switched["vessels"]
+                    if item["id"] == portal["vessel"]
                 )
                 == content
             )
@@ -873,18 +873,18 @@ def terminal(
                     indent=2,
                 )
             )
-            before_refusal = rpc("doc.get", {"name": "voyager-layout-v1"})
+            before_refusal = rpc("doc.get", {"name": "voyager-layout-v2"})
             missing.rmdir()
             workspace_control("Create Fleet")
             wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     len(value["value"]["voyages"][0]["fleets"]) == 3
                     and value["version"] >= before_refusal["version"] + 3
                 ),
                 "third Fleet with unresolved refusal",
             )
-            source_path = evidence / "profile/mods/header/main.js"
+            source_path = evidence / "profile/canvas/main.js"
             source_path.write_text(source_path.read_text() + "\n")
             time.sleep(1)
             capture("portal-terminal-refused-sibling")
@@ -897,7 +897,7 @@ def terminal(
             )
             click(*named_button(native, evidence, "Fleet 2"))
             wait_for(
-                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
                 lambda value: (
                     value["value"]["selectedFleet"]
                     == layout["voyages"][0]["fleets"][1]["id"]

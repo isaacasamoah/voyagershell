@@ -92,11 +92,11 @@ export async function invoke(action: Request["action"], expectedVersion: Request
     throw Error("Invalid workspace response");
   return response;
 }
-export async function openTerminal(contentId: string, expectedVersion: string): Promise<TerminalResponse> {
-  const request: TerminalRequest = { requestId: request_id(), contentId, expectedVersion };
+export async function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse> {
+  const request: TerminalRequest = { requestId: request_id(), vesselId, expectedVersion };
   if (!validateTerminalRequest(request)) throw Error("Invalid terminal request");
   const response: unknown = JSON.parse(await terminal_open(JSON.stringify(request)));
-  if (!validateTerminalResponse(response) || response.requestId !== request.requestId || response.contentId !== contentId)
+  if (!validateTerminalResponse(response) || response.requestId !== request.requestId || response.vesselId !== vesselId)
     throw Error("Terminal result unconfirmed; do not repeat the request");
   return response;
 }
@@ -112,7 +112,7 @@ export async function openTerminal(contentId: string, expectedVersion: string): 
     { parser: "babel" },
   );
   files["workspace.d.ts"] =
-    'import type { Request } from "./request";\nimport type { Response } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\nexport function openTerminal(contentId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
+    'import type { Request } from "./request";\nimport type { Response } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\nexport function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
   files["conversation.ts"] =
     `import { call, request_id, snapshot } from "voyager_conversation";
 import { conversationRequest, conversationReply, conversationSnapshot } from "./validate.js";

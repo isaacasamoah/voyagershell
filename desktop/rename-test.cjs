@@ -13,7 +13,7 @@ function fixture() {
       {
         id: "voyage-1",
         portals: [],
-        fleets: [{ id: target.id, name: "Original", vessels: [] }],
+        fleets: [{ id: target.id, name: "Original", placements: [] }],
       },
     ],
   };
@@ -42,12 +42,12 @@ function fixture() {
     release() {},
   });
   const source = workspaceSource("VOYAGER_RENAME_SOURCE");
-  const Workspace = vm.runInNewContext(`${source}\nWorkspace`, {
+  const Canvas = vm.runInNewContext(`${source}\nCanvas`, {
     View: class {},
     WorkspaceMenu: vm.runInNewContext(
       `${workspaceSource("VOYAGER_MENU_SOURCE", "class", "menu.js")}\nWorkspaceMenu`,
     ),
-    request_id: () => "header-generation",
+    request_id: () => "canvas-generation",
     div,
     Button: {
       new() {
@@ -78,7 +78,7 @@ function fixture() {
       tasks.push(body(cx));
     },
   };
-  const view = new Workspace();
+  const view = new Canvas();
   view.startContext = () => {};
   view.init(null, cx);
   async function reply(status = "applied", fresh = true) {
@@ -234,7 +234,7 @@ test("missing owner references fail with explicit invariant errors", async () =>
     () => view.pane({ kind: "leaf", placement: "missing" }, { members: [] }),
     /Split placement is unavailable/,
   );
-  layout.contents = [];
+  layout.vessels = [];
   assert.throws(
     () =>
       view.content({ content: "missing" }, { kind: "vessel", id: "missing" }),

@@ -5,7 +5,7 @@ use std::{
 };
 use voyager_app::{client::Client, core::Core};
 use voyager_contract::{
-    Action, ContentId, Context, Layout, PlacementId, Request, Split, Status,
+    Action, Context, Layout, PlacementId, Request, Split, Status, VesselId,
     administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
 };
 
@@ -16,14 +16,14 @@ fn leaf(split: &Split, placement: &PlacementId) -> bool {
     }
 }
 
-fn placed(layout: &Layout, content: &ContentId) -> bool {
+fn placed(layout: &Layout, content: &VesselId) -> bool {
     layout
         .voyages
         .iter()
         .flat_map(|voyage| &voyage.fleets)
         .any(|fleet| {
-            fleet.vessels.iter().any(|vessel| {
-                &vessel.content == content
+            fleet.placements.iter().any(|vessel| {
+                &vessel.vessel == content
                     && fleet
                         .root
                         .as_ref()
@@ -51,7 +51,7 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
                 .unwrap()
         };
         let initial = inspect();
-        let content = initial.layout.contents[0].id.clone();
+        let content = initial.layout.vessels[0].id.clone();
         let _viewer = client
             .terminal(content.clone(), client.request_id(), initial.version)
             .unwrap();
@@ -72,7 +72,7 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
         };
         let target = processes
             .iter()
-            .find(|process| process.content_id == content)
+            .find(|process| process.vessel_id == content)
             .unwrap()
             .clone();
         let mut foreign = Core::connect(&session).unwrap();
@@ -98,7 +98,7 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
             .process(
                 Context::Workspace,
                 request(ProcessAction::Send {
-                    content_id: content.clone(),
+                    vessel_id: content.clone(),
                     terminal_id: target.terminal_id.clone(),
                     pid: target.pid.unwrap(),
                     text: "exit".into(),
@@ -127,7 +127,7 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
                     input: ProcessInput {
                         expected_version: closed.version,
                         action: ProcessAction::Send {
-                            content_id: content.clone(),
+                            vessel_id: content.clone(),
                             terminal_id: target.terminal_id.clone(),
                             pid: target.pid.unwrap(),
                             text: "printf 'AFTER%s\\n' EXIT".into(),

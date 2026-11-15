@@ -29,7 +29,7 @@ pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {
 pub(crate) fn remove(package: &Path) -> Result<(), String> {
     let removed = removed_path(package);
     if !package.exists() || removed.exists() {
-        return Err("Content package is missing or already removed".into());
+        return Err("Vessel package is missing or already removed".into());
     }
     move_package(package, &removed)
 }
@@ -73,23 +73,26 @@ fn move_package(_source: &Path, _destination: &Path) -> Result<(), String> {
 mod tests {
     use crate::content::{Owner, describe, discover, seed_package};
     use std::fs;
-    use voyager_contract::{ContentId, content::Availability};
+    use voyager_contract::{VesselId, content::Availability};
 
     #[test]
     fn removed_package_restores_personal_source_without_disabling_terminal() {
         let profile = std::env::temp_dir().join(format!("voyager-package-{}", std::process::id()));
-        let packages = profile.join("mods");
+        let packages = profile.join("vessels");
         let active = packages.join("notes");
         let removed = packages.join(".notes.removed");
         fs::create_dir_all(&packages).unwrap();
         let files = [
             ("main.js", "personal notes source"),
-            ("mod.json", include_str!("../../../content/notes/mod.json")),
+            (
+                "vessel.json",
+                include_str!("../../../content/notes/vessel.json"),
+            ),
         ];
         seed_package(&active, &files).unwrap();
         fs::write(active.join("AGENTS.md"), "personal guide").unwrap();
         let mut owner = Owner::open(&profile).unwrap();
-        let binding = owner.initialize(&ContentId("stable-note".into())).unwrap();
+        let binding = owner.initialize(&VesselId("stable-note".into())).unwrap();
         let view = owner.register_view(binding.clone()).unwrap();
         view.activate().unwrap();
         let changes = owner.subscribe(&binding, Some(0));
@@ -162,7 +165,11 @@ mod tests {
         fs::write(active.join("main.js"), files[0].1).unwrap();
         let huge = serde_json::json!({"name":"Notes", "entry":"main.js", "version":1, "stateSchema":{"description":"x".repeat(crate::content::ENVELOPE_LIMIT - 256), "type":"object"}});
         assert!(serde_json::to_vec(&huge).unwrap().len() <= crate::content::ENVELOPE_LIMIT);
-        fs::write(active.join("mod.json"), serde_json::to_vec(&huge).unwrap()).unwrap();
+        fs::write(
+            active.join("vessel.json"),
+            serde_json::to_vec(&huge).unwrap(),
+        )
+        .unwrap();
         let catalog = discover(&packages).unwrap();
         assert!(serde_json::to_vec(&catalog).unwrap().len() <= crate::content::ENVELOPE_LIMIT);
         assert!(
@@ -171,7 +178,7 @@ mod tests {
                 .is_err()
         );
         assert!(owner.require_available("terminal").is_ok());
-        fs::write(active.join("mod.json"), "invalid personal metadata").unwrap();
+        fs::write(active.join("vessel.json"), "invalid personal metadata").unwrap();
         let catalog = discover(&packages).unwrap();
         assert!(matches!(
             catalog
@@ -188,7 +195,7 @@ mod tests {
         );
         seed_package(&active, &files).unwrap();
         assert_eq!(
-            fs::read(active.join("mod.json")).unwrap(),
+            fs::read(active.join("vessel.json")).unwrap(),
             b"invalid personal metadata"
         );
         owner

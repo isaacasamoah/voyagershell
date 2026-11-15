@@ -19,7 +19,7 @@ def prove(
         return json.loads((evidence / "launch.json").read_text())
 
     def document():
-        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
 
     def click(name):
         click_control(
@@ -62,7 +62,7 @@ def prove(
 
     initial = wait(
         document,
-        lambda doc: bool(doc["value"]["contents"][0].get("backend")),
+        lambda doc: bool(doc["value"]["vessels"][0].get("backend")),
         "initial shell",
     )
     core = core_rpc(session, env, "server.status", {})
@@ -71,7 +71,7 @@ def prove(
         session,
         env,
         "terminal.get",
-        {"terminal": initial["value"]["contents"][0]["backend"]},
+        {"terminal": initial["value"]["vessels"][0]["backend"]},
     )
     initial_identity = process_identity(initial_shell["pid"], metadata_only=True)
     workspace = evidence / "workspace"
@@ -89,7 +89,7 @@ def prove(
         tool["status"] == "applied"
         or (
             tool["status"] == "rejected"
-            and tool["action"]["action"]["operation"] == "create-content"
+            and tool["action"]["action"]["operation"] == "create-vessel"
             and tool["text"]
             == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
         )
@@ -103,31 +103,31 @@ def prove(
     ]
     assert (
         applied.count("create-voyage")
-        == applied.count("create-content")
+        == applied.count("create-vessel")
         == applied.count("update")
         == 1
     )
     before = document()["value"]
-    assert before["contents"][0] == initial["value"]["contents"][0]
+    assert before["vessels"][0] == initial["value"]["vessels"][0]
     assert len(before["voyages"]) == len(initial["value"]["voyages"]) + 1
     assert before["context"] == initial["value"]["context"]
     voyage = next(v for v in before["voyages"] if v["name"] == "Stack trial")
     fleet = voyage["fleets"][0]
-    assert len(fleet["vessels"]) == 2
-    contents = {item["id"]: item for item in before["contents"]}
+    assert len(fleet["placements"]) == 2
+    contents = {item["id"]: item for item in before["vessels"]}
     note = next(
-        contents[v["content"]]
-        for v in fleet["vessels"]
-        if contents[v["content"]]["typeId"] == "notes"
+        contents[v["vessel"]]
+        for v in fleet["placements"]
+        if contents[v["vessel"]]["typeId"] == "notes"
     )
     binding = note["configuration"]["notesFile"]
     note_path = Path(binding["directory"]) / binding["filename"]
     assert note_path.is_relative_to(workspace) and marker in note_path.read_text()
     note_bytes = note_path.read_bytes()
     address = next(
-        contents[v["content"]]["backend"]
-        for v in fleet["vessels"]
-        if contents[v["content"]]["typeId"] == "terminal"
+        contents[v["vessel"]]["backend"]
+        for v in fleet["placements"]
+        if contents[v["vessel"]]["typeId"] == "terminal"
     )
     shell = core_rpc(session, env, "terminal.get", {"terminal": address})
     assert shell["foreground"]["cwd"] == str(workspace)
@@ -180,7 +180,7 @@ def prove(
         current = document()["value"]
         assert current["canvas"] == (prior["canvas"] if invalid else proposed)
         for key in (
-            "contents",
+            "vessels",
             "voyages",
             "context",
             "selectedVoyage",

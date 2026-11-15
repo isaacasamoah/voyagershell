@@ -1,7 +1,8 @@
 use crate::panels;
 use voyager_contract::{
-    Action, Content, ContentDestination, ContentId, Context, Fleet, FleetId, Layout, PanelOwner,
-    PlacementId, PortalLayout, RenameTarget, Split, Vessel, Voyage, VoyageId, WorkspaceView,
+    Action, ContentDestination, Context, Fleet, FleetId, Layout, Placement, PlacementId,
+    PlacementOwner, PortalLayout, RenameTarget, Split, Vessel, VesselId, Voyage, VoyageId,
+    WorkspaceView,
 };
 
 #[derive(Default)]
@@ -21,14 +22,14 @@ impl Model {
                 root: Some(Split::Leaf {
                     placement: panel.id.clone(),
                 }),
-                vessels: vec![panel],
+                placements: vec![panel],
                 maximized_placement: None,
             };
             self.layout.home = Some(Voyage {
                 id,
                 name: "Home".into(),
                 name_origin: voyager_contract::NameOrigin::Deliberate,
-                primary_vessel: None,
+                primary_placement: None,
                 closed: false,
                 closed_order: 0,
                 fleets: vec![fleet],
@@ -70,10 +71,10 @@ impl Model {
         type_id: String,
         name: String,
         launch: Option<voyager_contract::launch::Launch>,
-    ) -> Result<Vessel, String> {
-        let content = ContentId(self.id("content")?);
+    ) -> Result<Placement, String> {
+        let content = VesselId(self.id("content")?);
         let placement = PlacementId(self.id("placement")?);
-        self.layout.contents.push(Content {
+        self.layout.vessels.push(Vessel {
             id: content.clone(),
             type_id,
             cwd,
@@ -83,9 +84,9 @@ impl Model {
             launch,
             shell_intent: None,
         });
-        Ok(Vessel {
+        Ok(Placement {
             id: placement,
-            content,
+            vessel: content,
             name,
             name_origin: voyager_contract::NameOrigin::Automatic,
             hidden: false,
@@ -101,7 +102,7 @@ impl Model {
             root: Some(Split::Leaf {
                 placement: placement.id.clone(),
             }),
-            vessels: vec![placement],
+            placements: vec![placement],
             maximized_placement: None,
         })
     }
@@ -122,13 +123,13 @@ impl Model {
 
     pub fn start_new_shell(
         &mut self,
-        id: &ContentId,
+        id: &VesselId,
         backend: &voyager_contract::CoreTerminalId,
         intent: &str,
     ) -> Result<(), String> {
         let content = self
             .layout
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| &item.id == id)
             .ok_or("Terminal content not found")?;
@@ -149,8 +150,8 @@ impl Model {
             Action::StartNewShell { .. } => {
                 return Err("New shell intent requires terminal owner validation".into());
             }
-            Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => {
-                return Err("Content package operations require the application owner".into());
+            Action::RemoveVesselPackage { .. } | Action::RestoreVesselPackage { .. } => {
+                return Err("Vessel package operations require the application owner".into());
             }
             Action::Home => self.layout.view = WorkspaceView::Home,
             Action::UpdateCanvas { canvas } => {
@@ -171,7 +172,7 @@ impl Model {
                     id,
                     name,
                     name_origin: voyager_contract::NameOrigin::Deliberate,
-                    primary_vessel: fleet.vessels.first().map(|panel| panel.id.clone()),
+                    primary_placement: fleet.placements.first().map(|panel| panel.id.clone()),
                     closed: false,
                     closed_order: 0,
                     fleets: vec![fleet],
@@ -210,8 +211,8 @@ impl Model {
                 let cwd = self.layout.voyages[index]
                     .fleets
                     .first()
-                    .and_then(|f| f.vessels.first())
-                    .and_then(|v| self.layout.contents.iter().find(|c| c.id == v.content))
+                    .and_then(|f| f.placements.first())
+                    .and_then(|v| self.layout.vessels.iter().find(|c| c.id == v.vessel))
                     .map(|c| c.cwd.clone())
                     .ok_or("Voyage has no working directory")?;
                 let fleet = self.fleet(name, cwd)?;
@@ -220,7 +221,7 @@ impl Model {
                 self.layout.view = WorkspaceView::Fleet;
                 self.layout.voyages[index].fleets.push(fleet);
             }
-            Action::CreateFleetWithContent {
+            Action::CreateFleetWithVessel {
                 voyage,
                 name,
                 source,
@@ -233,7 +234,7 @@ impl Model {
                     return Err("Selected Voyage changed; reopen the choice".into());
                 }
                 if name.trim().is_empty() || !crate::content::supports_type(&type_id) {
-                    return Err("Fleet name or content type is invalid".into());
+                    return Err("Fleet name or Vessel type is invalid".into());
                 }
                 if let Some(launch) = &launch {
                     if type_id != "terminal" {
@@ -258,7 +259,7 @@ impl Model {
                     root: Some(Split::Leaf {
                         placement: panel.id.clone(),
                     }),
-                    vessels: vec![panel],
+                    placements: vec![panel],
                     maximized_placement: None,
                 };
                 self.layout.selected_fleet = Some(fleet.id.clone());
@@ -390,13 +391,13 @@ impl Model {
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
-            Action::CreateContent {
+            Action::CreateVessel {
                 type_id,
-                destination: ContentDestination::Panel { owner, insertion },
+                destination: ContentDestination::Placement { owner, insertion },
                 launch,
             } => {
                 if !crate::content::supports_type(&type_id) {
-                    return Err("Unsupported content type".into());
+                    return Err("Unsupported Vessel type".into());
                 }
                 if let Some(launch) = &launch {
                     if type_id != "terminal" {
@@ -414,7 +415,7 @@ impl Model {
                     insertion,
                     panel,
                 )?;
-                if let PanelOwner::Portals { voyage } = owner {
+                if let PlacementOwner::Portals { voyage } = owner {
                     self.layout
                         .containers_mut()
                         .find(|item| item.id == voyage)
@@ -447,7 +448,7 @@ impl Model {
                             .layout
                             .containers_mut()
                             .flat_map(|voyage| &mut voyage.fleets)
-                            .flat_map(|fleet| &mut fleet.vessels)
+                            .flat_map(|fleet| &mut fleet.placements)
                             .find(|item| item.id == id)
                             .ok_or("Vessel not found")?;
                         vessel.name = name;
@@ -486,7 +487,7 @@ impl Model {
                         .layout
                         .containers()
                         .flat_map(|v| &v.fleets)
-                        .flat_map(|f| &f.vessels)
+                        .flat_map(|f| &f.placements)
                         .any(|p| &p.id == id),
                     Context::Portal { id } => self
                         .layout
@@ -499,16 +500,16 @@ impl Model {
                 }
                 self.layout.context = context;
             }
-            action @ (Action::ResizePanelSplit { .. }
-            | Action::MovePanel { .. }
-            | Action::SetPanelMaximized { .. }
-            | Action::SetPanelHidden { .. }
-            | Action::RemovePanel { .. }
-            | Action::RevealPanel { .. }
-            | Action::ReopenPanel { .. }
-            | Action::SavePanelLayout { .. }
-            | Action::LoadPanelLayout { .. }
-            | Action::RemovePanelLayout { .. }
+            action @ (Action::ResizePlacementSplit { .. }
+            | Action::MovePlacement { .. }
+            | Action::SetPlacementMaximized { .. }
+            | Action::SetPlacementHidden { .. }
+            | Action::RemovePlacement { .. }
+            | Action::RevealPlacement { .. }
+            | Action::ReopenPlacement { .. }
+            | Action::SaveArrangement { .. }
+            | Action::LoadArrangement { .. }
+            | Action::RemoveArrangement { .. }
             | Action::SetPortalPresentation { .. }) => panels::apply(&mut self.layout, action)?,
             Action::MoveVoyage { id, target, before } => {
                 let source = self
@@ -569,21 +570,21 @@ mod tests {
     fn default_agents_seed_only_a_previously_absent_home() {
         let initial = Model::prepare(Layout::default(), "/tmp").unwrap();
         let home = initial.home.as_ref().unwrap();
-        let panel = &home.fleets[0].vessels[0];
+        let panel = &home.fleets[0].placements[0];
         let content = initial
-            .contents
+            .vessels
             .iter()
-            .find(|item| item.id == panel.content)
+            .find(|item| item.id == panel.vessel)
             .unwrap();
         assert_eq!(content.type_id, "agents");
         assert_eq!(panel.name, "Agents 1");
         assert!(content.backend.is_none());
         assert!(content.launch.is_none());
         let mut model = Model { layout: initial };
-        let id = model.layout.home.as_ref().unwrap().fleets[0].vessels[0]
+        let id = model.layout.home.as_ref().unwrap().fleets[0].placements[0]
             .id
             .clone();
-        model.apply(Action::RemovePanel { id }).unwrap();
+        model.apply(Action::RemovePlacement { id }).unwrap();
         let empty = model.layout.clone();
         assert_eq!(Model::prepare(empty.clone(), "/elsewhere").unwrap(), empty);
         model.layout.home.as_mut().unwrap().fleets[0].name = "My landing".into();

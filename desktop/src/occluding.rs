@@ -43,7 +43,7 @@ mod tests {
             ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
         runtime.set_editor_files(false);
         let mut importing = false;
-        let creation = include_str!("../mods/header/creation.js")
+        let creation = include_str!("../canvas/creation.js")
             .lines()
             .filter(|line| {
                 if importing {
@@ -93,7 +93,7 @@ picker.render('pane', destination, '7', () => {}, div());"#,
         .map(|(name, expression, expected)| {
             let package = root.join(name);
             std::fs::create_dir(&package).unwrap();
-            std::fs::write(package.join("menu.js"), include_str!("../mods/header/menu.js")).unwrap();
+            std::fs::write(package.join("menu.js"), include_str!("../canvas/menu.js")).unwrap();
             std::fs::write(package.join("ui.js"), include_str!("../../content/ui.js")).unwrap();
             std::fs::write(
                 package.join("main.js"),

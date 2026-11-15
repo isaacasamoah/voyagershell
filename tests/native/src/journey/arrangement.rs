@@ -388,7 +388,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the Fleet's Vessels, every content and the dock are unchanged",
                 vessels_of(&after, &fleet) == vessels_of(&before, &fleet)
-                    && after.contents == before.contents
+                    && after.vessels == before.vessels
                     && after.context == before.context,
             )
             .expect(
@@ -651,7 +651,7 @@ fn vessels_of(layout: &Layout, id: &FleetId) -> Vec<PlacementId> {
     fleet(layout, id)
         .map(|fleet| {
             fleet
-                .vessels
+                .placements
                 .iter()
                 .map(|vessel| vessel.id.clone())
                 .collect()

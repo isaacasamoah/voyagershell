@@ -18,7 +18,7 @@ use gpui_shell::{
 };
 use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
-    ContentId,
+    VesselId,
     content::{Request, Response, Version},
 };
 
@@ -84,14 +84,14 @@ impl Host {
             while let Ok(request) = requests.recv().await {
                 match request {
                     request @ (voyager_app::voyage_close::SaveRequest::Prepare { .. } | voyager_app::voyage_close::SaveRequest::PrepareRename { .. }) => {
-                        let (ticket, contents, reply, rename_reply, files) = match request {
-                            voyager_app::voyage_close::SaveRequest::Prepare { ticket, contents, reply } => (ticket, contents, Some(reply), None, Vec::new()),
-                            voyager_app::voyage_close::SaveRequest::PrepareRename { ticket, contents, files, reply } => (ticket, contents, None, Some(reply), files),
+                        let (ticket, vessels, reply, rename_reply, files) = match request {
+                            voyager_app::voyage_close::SaveRequest::Prepare { ticket, vessels, reply } => (ticket, vessels, Some(reply), None, Vec::new()),
+                            voyager_app::voyage_close::SaveRequest::PrepareRename { ticket, vessels, files, reply } => (ticket, vessels, None, Some(reply), files),
                             _ => unreachable!(),
                         };
                         let pending = handle.update(cx, |_, _, cx| {
                             host.views.borrow_mut().retain(|_, view| !view.read(cx).session.read(cx).exited);
-                            let sessions: Vec<_> = contents.iter().filter_map(|id| host.views.borrow().get(&id.0).cloned()).map(|view| view.read(cx).session.clone()).collect();
+                            let sessions: Vec<_> = vessels.iter().filter_map(|id| host.views.borrow().get(&id.0).cloned()).map(|view| view.read(cx).session.clone()).collect();
                             for (id, file) in &files {
                                 if let Some(view) = host.views.borrow().get(&id.0)
                                     && let Err(reason) = view.read(cx).session.read(cx).check_selected_file(file) {
@@ -103,7 +103,7 @@ impl Host {
                             }
                             let revision = sessions.iter().find(|session| session.read(cx).draft.dirty).or(sessions.first()).cloned();
                             let mut pending = Vec::new();
-                            for id in &contents {
+                            for id in &vessels {
                                 let view = host.views.borrow().get(&id.0).cloned();
                                 let Some(view) = view else { continue; };
                                 if view.read(cx).current.as_ref().is_some_and(|current| !current.retained) {
@@ -132,9 +132,9 @@ impl Host {
                         if let Some(reply) = reply { let _ = reply.send(result.map(|_| ())).await; }
                         else if let Some(reply) = rename_reply { let _ = reply.send(result).await; }
                     }
-                    voyager_app::voyage_close::SaveRequest::Release { ticket, contents } => {
+                    voyager_app::voyage_close::SaveRequest::Release { ticket, vessels } => {
                         let _ = handle.update(cx, |_, _, cx| {
-                            for id in &contents {
+                            for id in &vessels {
                                 let view = host.views.borrow().get(&id.0).cloned();
                                 if let Some(view) = view {
                                     let session = view.read(cx).session.clone();
@@ -143,9 +143,9 @@ impl Host {
                             }
                         });
                     }
-                    voyager_app::voyage_close::SaveRequest::ReleaseRename { ticket, contents, rebind } => {
+                    voyager_app::voyage_close::SaveRequest::ReleaseRename { ticket, vessels, rebind } => {
                         let _ = handle.update(cx, |_, window, cx| {
-                            for id in &contents {
+                            for id in &vessels {
                                 let view = host.views.borrow().get(&id.0).cloned();
                                 if let Some(view) = view {
                                     let session = view.read(cx).session.clone();
@@ -209,7 +209,7 @@ impl Host {
                 let runtime_error = runtime_error.clone();
                 Ok(async move {
                     let packages = packages
-                        .ok_or_else(|| HostError::new("Content package root is unavailable"))?;
+                        .ok_or_else(|| HostError::new("Vessel package root is unavailable"))?;
                     let mut catalog =
                         voyager_app::content::discover(&packages).map_err(HostError::new)?;
                     if let Some(reason) = runtime_error {
@@ -247,7 +247,7 @@ impl Host {
                 host.watch(window, cx);
                 let id = match args.props() {
                     HostValue::Object(fields) => fields.iter().find_map(|(key, value)| {
-                        (key == "contentId")
+                        (key == "vesselId")
                             .then(|| value.as_str())
                             .flatten()
                             .map(str::to_owned)
@@ -268,7 +268,7 @@ impl Host {
                 }
                 let view = cx.new(|cx| {
                     Note::new(
-                        ContentId(id.clone()),
+                        VesselId(id.clone()),
                         host.client.clone(),
                         colors.clone(),
                         window,
@@ -328,7 +328,7 @@ impl Host {
                 let targets: Vec<_> = views
                     .borrow()
                     .iter()
-                    .map(|(id, view)| (ContentId(id.clone()), view.clone()))
+                    .map(|(id, view)| (VesselId(id.clone()), view.clone()))
                     .collect();
                 let Ok(paths) = handle.update(cx, |_, _, cx| {
                     targets
@@ -449,7 +449,7 @@ struct Source {
 fn signature(package: &Path) -> Result<Source> {
     let files = crate::host::source_snapshot(package)?;
     let mut bytes = Vec::new();
-    std::fs::File::open(package.join("mod.json"))?
+    std::fs::File::open(package.join("vessel.json"))?
         .take(voyager_app::content::ENVELOPE_LIMIT as u64 + 1)
         .read_to_end(&mut bytes)?;
     anyhow::ensure!(
@@ -493,7 +493,7 @@ impl Loader {
         &self,
         binding: ViewBinding,
         note: &Note,
-        id: ContentId,
+        id: VesselId,
         entry: &str,
         window: &mut Window,
         cx: &mut App,
@@ -557,7 +557,7 @@ impl Loader {
                     .map(|permit| (raw.to_owned(), permit));
                 let client = client.clone();
                 let binding = invoked.clone();
-                let content_id = id.clone();
+                let vessel_id = id.clone();
                 Ok(async move {
                     let (response, permit) = match admitted {
                         Some((raw, permit)) => {
@@ -589,7 +589,7 @@ impl Loader {
                             Response::Rejected {
                                 version: Version::V1,
                                 request_id,
-                                content_id,
+                                vessel_id,
                                 expected_revision,
                                 message: if oversized {
                                     "Request exceeds limit"
@@ -657,7 +657,7 @@ struct Note {
 
 impl Note {
     fn new(
-        id: ContentId,
+        id: VesselId,
         client: Client,
         colors: Colors,
         window: &mut Window,

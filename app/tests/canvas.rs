@@ -14,7 +14,7 @@ fn outer_canvas_preserves_the_fleet_tree_and_rejects_invalid_replacement() {
         })
         .unwrap();
     assert_eq!(model.layout.voyages[0].fleets[0].name, "Fleet 1");
-    let placement = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    let placement = model.layout.voyages[0].fleets[0].placements[0].id.clone();
     model
         .apply(Action::Dock {
             context: Context::Vessel { id: placement },
@@ -30,7 +30,7 @@ fn outer_canvas_preserves_the_fleet_tree_and_rejects_invalid_replacement() {
         .unwrap();
     assert_eq!(model.layout.canvas, canvas);
     assert_eq!(model.layout.voyages, original.voyages);
-    assert_eq!(model.layout.contents, original.contents);
+    assert_eq!(model.layout.vessels, original.vessels);
     assert_eq!(model.layout.context, original.context);
     model
         .apply(Action::SetSidebar { collapsed: false })

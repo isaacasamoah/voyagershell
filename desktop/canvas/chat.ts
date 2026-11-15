@@ -10,9 +10,9 @@ import {
 } from "voyager_native";
 import { observe, send } from "./conversation.js";
 import type { AsyncContext, Context, NativeElement } from "gpui-kit";
-import type { Context as Scope } from "../../../contract/generated/response";
-import type { Snapshot } from "../../../contract/generated/conversationSnapshot";
-import type { projection } from "voyager_header";
+import type { Context as DockContext } from "../../contract/generated/response";
+import type { Snapshot } from "../../contract/generated/conversationSnapshot";
+import type { projection } from "voyager_theme";
 
 export class Chat {
   open: boolean;
@@ -136,7 +136,7 @@ export class Chat {
 
   render(
     colors: ReturnType<typeof projection>,
-    _context: Scope,
+    _context: DockContext,
     compact = false,
   ): NativeElement | null {
     const panel = div()

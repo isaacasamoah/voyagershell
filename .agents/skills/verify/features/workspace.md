@@ -102,8 +102,8 @@ Fleet's tab shows its saved name`.
 differ when the Voyage is created. The focused terminal is in
 `/voyager/home/second-project`. The first Vessel's shell, the folder that
 each terminal started in and the first Voyage's folder are all
-`/voyager/home/project`. The header takes the folder from the shell of the
-focused Vessel (`directorySource` in `desktop/mods/header/main.ts`).
+`/voyager/home/project`. The canvas takes the folder from the shell of the
+focused Vessel (`directorySource` in `desktop/canvas/main.ts`).
 
 Every rename case waits for `name-editor` to replace the name control. After
 it types, it reads the editor's draft from the frame until the draft is the
@@ -169,14 +169,14 @@ name is never drawn.
 ## Negative control
 
 tests/native/controls/workspace.patch upper-cases a submitted name in
-desktop/mods/header/main.ts and in the compiled main.js. A candidate built
+desktop/canvas/main.ts and in the compiled main.js. A candidate built
 with it must fail `rename-fleet-enter` on the expectation `the saved name is
 the typed text`, and `firstFailingCheck.observed.rename.after` must read
 `NATIVE FLEET`.
 
 ## Gaps
 
-Isaac approved dropping two checks on 13 November 2026.
+Two checks are not driven.
 
 - The refusal of a stale layout version is not driven here, because the
   verifier never writes to Core. `app/tests/maximize.rs` asserts
@@ -198,7 +198,7 @@ These deleted checks are out of date.
 - The app's Quit ends Core. Quit shows "Programs keep running", and the
   app deliberately leaves Core running.
 - Refresh after a refused stale layout. It depends on the stale-layout
-  refusal that Isaac approved dropping.
+  refusal, which the verifier does not drive because it never writes to Core.
 
 These deleted checks are current behavior that no journey drives yet.
 
@@ -210,9 +210,9 @@ These deleted checks are current behavior that no journey drives yet.
 - The Ctrl+Shift+O split shortcut. The arrangement journey is to cover it.
   The native journey splits through the chooser.
 
-These gaps are open. Nobody has approved them.
+No journey covers these yet.
 
-- A `label` is the string that the header gives a name control. The journey
+- A `label` is the string that the canvas gives a name control. The journey
   does not read the pixels back. A candidate that draws other text than the
   label, or a narrow control that cuts the text short, passes. Reading the
   drawn pixels belongs to the visual tier.
@@ -242,6 +242,6 @@ These gaps are open. Nobody has approved them.
 A Fleet or Voyage name selects on a single click and opens its editor on a
 double-click, so two clicks on one name must not follow each other closely.
 A docked avatar covers part of its Vessel at two thirds of the Vessel's
-height. The driver aims beside it. The header drops a workspace action that
+height. The driver aims beside it. The canvas drops a workspace action that
 arrives while a workspace request is in progress, so every wait for an outcome
 also waits for `prepared` in the frame before the next input.

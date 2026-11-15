@@ -100,12 +100,12 @@ test("the supported legacy client distinguishes known refusal from lost confirma
       const result = {
         version: "1",
         requestId: input.requestId,
-        contentId: input.contentId,
+        vesselId: input.vesselId,
         ...(rejected && calls.length > 1
           ? {
               status: "applied",
               snapshot: {
-                contentId: input.contentId,
+                vesselId: input.vesselId,
                 revision: "after",
                 data: input.data,
               },

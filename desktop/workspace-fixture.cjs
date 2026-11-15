@@ -7,7 +7,7 @@ module.exports = function workspaceSource(
 ) {
   const source = fs
     .readFileSync(
-      process.env[environmentKey] || `${__dirname}/mods/header/${filename}`,
+      process.env[environmentKey] || `${__dirname}/canvas/${filename}`,
       "utf8",
     )
     .replace(/^import [\s\S]*?;\n/gm, "")
@@ -32,7 +32,7 @@ module.exports = function workspaceSource(
         ]
           .map((name) =>
             fs
-              .readFileSync(`${__dirname}/mods/header/${name}`, "utf8")
+              .readFileSync(`${__dirname}/canvas/${name}`, "utf8")
               .replace(/^import [\s\S]*?;\n/gm, "")
               .replace(/^export /gm, ""),
           )

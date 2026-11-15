@@ -77,7 +77,7 @@ next launch.
 | `window` | Size of the workspace window's drawable area in logical pixels, and the factor that converts logical pixels to device pixels. |
 | `dock` | The avatar's dock context, in the same form as `Context` in the application contract. |
 | `dockFocus` | The context of the dock target that holds keyboard focus, in the same form as `dock`. A fallback target never counts. The field is absent while no dock target holds focus. It names where Shift+Enter would dock the avatar, not where it is docked. |
-| `prepared` | `true` when the header script has no workspace request in progress. While it is `false`, the header drops or defers a new workspace action. It is `false` until the script first draws. |
+| `prepared` | `true` when the canvas script has no workspace request in progress. While it is `false`, the canvas drops or defers a new workspace action. It is `false` until the script first draws. |
 | `elements` | The marked controls that the latest drawn frame contains, sorted by role and key. Each `role` and `key` pair appears once. |
 | `ambiguous` | Controls that share one `role` and `key` pair. They are left out of `elements`. |
 
@@ -89,14 +89,14 @@ Read a frame by these rules:
   A key is never a display label.
 - `label` is the text that the control shows. A name control, the rename
   editor and the chat controls whose drawn text is their state report one.
-  A name control reports the text that the header gives its title, and a
+  A name control reports the text that the canvas gives its title, and a
   narrow control can cut that text short when it draws it. The rename editor
   and `chat-composer` report their current draft, which is an empty string
   after the user deletes the text. `chat-message`, `chat-status`, `chat-error`
   and `chat-send` report the string that they draw. Every other control has no
   `label`.
 - Wait for `prepared` before an input that starts a workspace action. The
-  header answers an action that arrives earlier with "Workspace preparation is
+  canvas answers an action that arrives earlier with "Workspace preparation is
   pending. This action was not sent."
 - `bounds` are logical pixels from the top left of the window's drawable area.
   Multiply by `window.scale` for device pixels, then add the window's position
@@ -147,7 +147,7 @@ union all come from that list.
 | `toggle-portals` | Voyage id | The button that shows or hides the Portals | `portalControls` in `navigation-view.ts` |
 | `close-panel` | Placement id | The close button of a Vessel or Portal, which keeps its process running | `renderPanel` in `panel-view.ts` |
 | `hidden-panels` | Empty | The Hidden Vessels or Hidden Portals entry of the creation menu | `CreationPicker.render` in `creation.ts` |
-| `reopen-panel` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
+| `reopen-placement` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
 | `workspace-dock` | Empty | The avatar's workspace dock, which wraps the brand | `renderSidebar` |
 | `portal-area` | Voyage id | The area that holds the Voyage's Portals while they are visible | `Workspace.render` in `main.ts` |
 | `go-there` | Empty | The Go there button of the context bar, drawn when the dock target is out of view | `renderContext` in `navigation-view.ts` |
@@ -199,7 +199,7 @@ package loads it without `voyager_native`.
 that `state` holds. `ComposerMarker.new(state)` marks the chat composer. It
 takes a `ComposerState`, so the state kind fixes the role and a wrong pairing
 cannot be written. It reports the draft in the same way. `Prepared.new(ready)` is drawn once, at the root of the
-header, and reports whether the header has a workspace request in progress.
+canvas, and reports whether the canvas has a workspace request in progress.
 
 ## Mechanism and invariants
 
@@ -217,11 +217,11 @@ nothing and handles no input, so the flag cannot change the layout.
 records its bounds during prepaint and keeps a slot through
 `Window::with_element_state`. GPUI keeps that state while the element is part
 of each drawn frame, and carries it forward when it reuses a cached view. The
-Header and its script view are cached, and the avatar redraws often, so most
-frames reuse every Header marker without running it. GPUI drops the state
+Canvas and its script view are cached, and the avatar redraws often, so most
+frames reuse every canvas marker without running it. GPUI drops the state
 inside the draw in which the control is no longer drawn, and the slot's `Drop`
 removes the control. A counter that marks what was prepainted in a frame would
-be wrong here. That counter would remove every Header control on a frame in
+be wrong here. That counter would remove every canvas control on a frame in
 which only the avatar changed.
 
 **One slot for each drawn marker.** A slot belongs to one marker element, not
@@ -230,15 +230,15 @@ drawn markers with one pair therefore stay two slots, and the frame lists both
 under `ambiguous`.
 
 **Preparation is a drawn fact.** `Workspace.render` in `main.ts` draws
-`Prepared.new(!this.busy)` in every header draw. The marker keeps a slot while
+`Prepared.new(!this.busy)` in every canvas draw. The marker keeps a slot while
 `busy` is false and removes the slot while `busy` is true. `prepared` in a
 frame is true when such a slot exists. Before the script draws there is no
-slot, so `prepared` is false. The header sets `busy` for the whole of a
+slot, so `prepared` is false. The canvas sets `busy` for the whole of a
 workspace request, including the preparation of the contents that the request
 creates, and it redraws each time `busy` changes.
 
 **A draft is read in every draw.** The rename editor's text changes without a
-new header draw, because the header's view is reused. `inspect::stage`
+new canvas draw, because the canvas's view is reused. `inspect::stage`
 therefore reads the draft of each drawn `EditorMarker` again in every draw of
 the workspace window, and a changed draft causes a new frame. The marker holds
 the draft weakly, so inspection does not keep a released editor alive.
@@ -282,9 +282,9 @@ The workspace is not affected.
 | A frame reports preparation, the text of a name, and the draft of an editor in a reused view | `a_frame_reports_preparation_and_the_text_a_control_shows` |
 | A reader that polls during writes parses only whole frames | `a_polling_reader_only_parses_whole_frames` |
 | Rapid changes are written at most once in each period | `rapid_changes_write_at_most_once_per_period` |
-| The header marks each control by role and id, and a name's marker carries the text that the control draws | `inspection markers name each control by its role and id and report the text it shows` in `desktop/canvas-test.cjs` |
-| The header draws `Prepared` as false while a workspace request is in progress | `Home presents the retained out-of-view avatar without docking or starting content` in `desktop/terminal-test.cjs` |
-| Each header control is marked with its role, key and label, and a menu item's marker is kept and drawn | `inspection markers name each control by its role and id and report the text it shows`, `a context menu keeps the marker of each item and draws it inside the entry` and `the workspace context menu passes each item's marker to the menu` in `desktop/canvas-test.cjs` |
+| The canvas marks each control by role and id, and a name's marker carries the text that the control draws | `inspection markers name each control by its role and id and report the text it shows` in `desktop/canvas-test.cjs` |
+| The canvas draws `Prepared` as false while a workspace request is in progress | `Home presents the retained out-of-view avatar without docking or starting content` in `desktop/terminal-test.cjs` |
+| Each canvas control is marked with its role, key and label, and a menu item's marker is kept and drawn | `inspection markers name each control by its role and id and report the text it shows`, `a context menu keeps the marker of each item and draws it inside the entry` and `the workspace context menu passes each item's marker to the menu` in `desktop/canvas-test.cjs` |
 | The chat marks its toggle, messages, composer, send control, status and error by what they draw | `chat marks its toggle, messages, composer, send control, status and error by what they draw` in `desktop/canvas-test.cjs` |
 | The close dialog marks its inventory and its two buttons | `Voyage confirmation inspects an invocation error without repeating shutdown` in `desktop/canvas-test.cjs` |
 | `ComposerMarker` reports `chat-composer` with the draft and follows a retype in a reused view | `the_composer_marker_reports_the_chat_composer_and_follows_its_draft` in `desktop/src/inspect/tests.rs` |

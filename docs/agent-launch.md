@@ -52,7 +52,7 @@ The existing pending creation record retains that ID's accepted effective launch
 An absent launch means Terminal. Fresh inspection advertises eligibility only
 while the stored choice matches. Starting checks that same record before the
 legacy shell path, so changing Codex to Terminal cannot substitute a shell.
-Native Header creation and authorized scoped creation both record their exact
+Native canvas creation and authorized scoped creation both record their exact
 confirmed new terminal. Inspect and reopening do not create permission.
 
 The existing Client queue reads configuration away from render callbacks. It
@@ -97,7 +97,7 @@ required before acceptance. Linux source checks establish no other platform.
 
 ## Agent program table
 
-`AGENT_PROGRAMS` in `app/src/launch.rs` is the one list of recognized agent programs. The launch wrapper below and `observation::conversation_name` both read it, and each keeps its own name normalisation. The Agents view's `AGENT_NAMES` in `desktop/mods/header/agents.ts` must list the same programs, and a unit test compares the two. A seeded profile keeps its own copy of `agents.js`, so a new program reaches an existing profile only through an update policy, which is not yet selected. A program named `cursor` now starts inside interactive Bash and returns to a Bash prompt when it exits.
+`AGENT_PROGRAMS` in `app/src/launch.rs` is the one list of recognized agent programs. The launch wrapper below and `observation::conversation_name` both read it, and each keeps its own name normalisation. The Agents view's `AGENT_NAMES` in `desktop/canvas/agents.ts` must list the same programs, and a unit test compares the two. A seeded profile keeps its own copy of `agents.js`, so a new program reaches an existing profile only through an update policy, which is not yet selected. A program named `cursor` now starts inside interactive Bash and returns to a Bash prompt when it exits.
 
 ## Returning from an agent
 

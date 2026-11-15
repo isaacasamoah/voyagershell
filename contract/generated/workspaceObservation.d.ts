@@ -30,15 +30,15 @@ export interface WorkspaceObservation {
   active?: string | null;
   branch: Branch;
   directory: Directory;
-  panels: PanelObservation[];
+  panels: PlacementObservation[];
   version: string;
 }
-export interface PanelObservation {
+export interface PlacementObservation {
   backend?: string | null;
-  contentId: string;
   conversationName?: string | null;
   directory: Directory;
   effectiveName: string;
   placementId: string;
   program?: string | null;
+  vesselId: string;
 }

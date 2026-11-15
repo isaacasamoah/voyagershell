@@ -85,13 +85,13 @@
     "Snapshot": {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "data": {
           "$ref": "#/definitions/Notes"
         },
         "revision": {
+          "type": "string"
+        },
+        "vesselId": {
           "type": "string"
         },
         "warning": {
@@ -102,7 +102,7 @@
         }
       },
       "required": [
-        "contentId",
+        "vesselId",
         "revision",
         "data"
       ],
@@ -119,9 +119,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "message": {
           "type": "string"
         },
@@ -141,6 +138,9 @@
         "version": {
           "$ref": "#/definitions/Version"
         },
+        "vesselId": {
+          "type": "string"
+        },
         "warningPresent": {
           "type": "boolean"
         }
@@ -149,7 +149,7 @@
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "warningPresent",
         "message"
       ],
@@ -168,9 +168,6 @@
             }
           ]
         },
-        "contentId": {
-          "type": "string"
-        },
         "requestId": {
           "type": "string"
         },
@@ -184,13 +181,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "schemaDeclared"
       ],
       "type": "object"
@@ -208,9 +208,6 @@
             }
           ]
         },
-        "contentId": {
-          "type": "string"
-        },
         "requestId": {
           "type": "string"
         },
@@ -223,13 +220,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "snapshot"
       ],
       "type": "object"
@@ -237,9 +237,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "filenames": {
           "items": {
             "type": "string"
@@ -255,13 +252,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "filenames"
       ],
       "type": "object"
@@ -271,9 +271,6 @@
       "properties": {
         "configuration": {
           "$ref": "#/definitions/NotesConfiguration"
-        },
-        "contentId": {
-          "type": "string"
         },
         "requestId": {
           "type": "string"
@@ -288,6 +285,9 @@
         "version": {
           "$ref": "#/definitions/Version"
         },
+        "vesselId": {
+          "type": "string"
+        },
         "workspaceVersion": {
           "type": "string"
         }
@@ -296,7 +296,7 @@
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "snapshot",
         "configuration",
         "workspaceVersion"
@@ -309,9 +309,6 @@
         "configuration": {
           "$ref": "#/definitions/NotesConfiguration"
         },
-        "contentId": {
-          "type": "string"
-        },
         "requestId": {
           "type": "string"
         },
@@ -322,6 +319,9 @@
         "version": {
           "$ref": "#/definitions/Version"
         },
+        "vesselId": {
+          "type": "string"
+        },
         "workspaceVersion": {
           "type": "string"
         }
@@ -330,7 +330,7 @@
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "configuration",
         "workspaceVersion"
       ],
@@ -339,9 +339,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "requestId": {
           "type": "string"
         },
@@ -354,13 +351,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "snapshot"
       ],
       "type": "object"
@@ -368,9 +368,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "expectedRevision": {
           "type": [
             "string",
@@ -389,13 +386,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "message"
       ],
       "type": "object"
@@ -403,9 +403,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "contentId": {
-          "type": "string"
-        },
         "expectedRevision": {
           "type": "string"
         },
@@ -421,13 +418,16 @@
         },
         "version": {
           "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
         "status",
         "version",
         "requestId",
-        "contentId",
+        "vesselId",
         "expectedRevision",
         "message"
       ],

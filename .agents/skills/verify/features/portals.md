@@ -25,7 +25,7 @@ Follow the exact doctor and run commands in ../SKILL.md with
 `--journey portals`. The Rust journey in tests/native/src/journey/portals.rs
 owns the recipe. Portal placement and its column belong to
 app/src/workspace.rs and app/src/panels.rs, and the toggle, the chooser and the
-Hidden Portals list to desktop/mods/header/main.ts, panels.ts and
+Hidden Portals list to desktop/canvas/main.ts, panels.ts and
 panel-view.ts.
 
 - `open-portal` creates a terminal Portal through `toggle-portals` and the
@@ -63,5 +63,5 @@ Aims dodge the Portal column, because it overlays the right of the Fleet. The
 make-room presentation, splits inside the column and Portal maximize are not
 driven. No case compares pixels. The Python `portal-terminal` journey keeps
 its checks that are not about Portals: a Fleet created in a missing folder, a
-shell's exit code, and a live edit of the header script. Linux evidence does
+shell's exit code, and a live edit of the canvas script. Linux evidence does
 not establish another platform.

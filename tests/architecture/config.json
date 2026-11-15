@@ -1,14 +1,14 @@
 {
   "repository": "https://github.com/isaacasamoah/voyagershell",
-  "packageRoots": ["content", "desktop/mods"],
+  "packageRoots": ["content", "desktop/canvas"],
   "typescript": {
     "tsconfig": "desktop/tsconfig.json",
-    "roots": ["content", "desktop/mods", "contract/generated"]
+    "roots": ["content", "desktop/canvas", "contract/generated"]
   },
   "scriptScopes": {
     "file": "desktop/script-types.json",
     "packages": {
-      "header": "desktop/mods/header",
+      "canvas": "desktop/canvas",
       "notes": "content/notes"
     }
   },
@@ -17,7 +17,7 @@
     "contract/build.cjs": ["contract/generated"],
     "desktop/typecheck.cjs": [
       "desktop/script-types.json",
-      "desktop/mods/header",
+      "desktop/canvas",
       "content/notes"
     ]
   },

@@ -12,11 +12,11 @@ export async function invoke(action: Request["action"], expectedVersion: Request
     throw Error("Invalid workspace response");
   return response;
 }
-export async function openTerminal(contentId: string, expectedVersion: string): Promise<TerminalResponse> {
-  const request: TerminalRequest = { requestId: request_id(), contentId, expectedVersion };
+export async function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse> {
+  const request: TerminalRequest = { requestId: request_id(), vesselId, expectedVersion };
   if (!validateTerminalRequest(request)) throw Error("Invalid terminal request");
   const response: unknown = JSON.parse(await terminal_open(JSON.stringify(request)));
-  if (!validateTerminalResponse(response) || response.requestId !== request.requestId || response.contentId !== contentId)
+  if (!validateTerminalResponse(response) || response.requestId !== request.requestId || response.vesselId !== vesselId)
     throw Error("Terminal result unconfirmed; do not repeat the request");
   return response;
 }

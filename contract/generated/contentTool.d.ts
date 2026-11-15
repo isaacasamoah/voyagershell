@@ -1,40 +1,40 @@
 export type Action =
   | {
       configuration: NotesConfiguration;
-      contentId: string;
       operation: "configure";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "describe";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "inspect";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "migrate-note";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "list-notes";
+      vesselId: string;
     }
   | {
-      contentId: string;
       operation: "new-note";
       title: string;
+      vesselId: string;
     }
   | {
-      contentId: string;
       filename: string;
       operation: "open-note";
+      vesselId: string;
     }
   | {
-      contentId: string;
       data: Notes;
       expectedRevision: string;
       operation: "update";
+      vesselId: string;
     };
 
 export interface Input {

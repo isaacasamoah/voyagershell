@@ -1,4 +1,4 @@
-use crate::ContentId;
+use crate::VesselId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -123,31 +123,31 @@ pub struct ConfigurationSnapshot {
 )]
 pub enum Action {
     Configure {
-        content_id: ContentId,
+        vessel_id: VesselId,
         configuration: NotesConfiguration,
     },
     Describe {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     Inspect {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     MigrateNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     ListNotes {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     NewNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
         title: String,
     },
     OpenNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
         filename: String,
     },
     Update {
-        content_id: ContentId,
+        vessel_id: VesselId,
         expected_revision: String,
         data: Notes,
     },
@@ -162,30 +162,30 @@ pub enum Action {
 )]
 pub enum Receipt {
     Configure {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     Describe {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     Inspect {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     MigrateNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     ListNotes {
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     NewNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
         title: String,
     },
     OpenNote {
-        content_id: ContentId,
+        vessel_id: VesselId,
         filename: String,
     },
     Update {
-        content_id: ContentId,
+        vessel_id: VesselId,
         expected_revision: String,
     },
 }
@@ -210,7 +210,7 @@ pub enum Request {
     Configure {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         #[serde(with = "crate::decimal")]
         #[schemars(with = "String")]
         expected_version: u64,
@@ -220,19 +220,19 @@ pub enum Request {
     Describe {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     #[serde(rename = "content.inspect")]
     Inspect {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     #[serde(rename = "content.migrate-note")]
     MigrateNote {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         #[serde(with = "crate::decimal")]
         #[schemars(with = "String")]
         expected_version: u64,
@@ -241,13 +241,13 @@ pub enum Request {
     ListNotes {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
     },
     #[serde(rename = "content.new-note")]
     NewNote {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         #[serde(with = "crate::decimal")]
         #[schemars(with = "String")]
         expected_version: u64,
@@ -257,7 +257,7 @@ pub enum Request {
     OpenNote {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         #[serde(with = "crate::decimal")]
         #[schemars(with = "String")]
         expected_version: u64,
@@ -267,7 +267,7 @@ pub enum Request {
     Update {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         expected_revision: String,
         data: Notes,
     },
@@ -282,7 +282,7 @@ pub enum Version {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Snapshot {
-    pub content_id: ContentId,
+    pub vessel_id: VesselId,
     pub revision: String,
     pub data: Notes,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -296,7 +296,7 @@ pub enum Response {
     Limited {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         revision: Option<String>,
         warning_present: bool,
         message: String,
@@ -305,7 +305,7 @@ pub enum Response {
     Described {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         schema_declared: bool,
         state_schema: Option<serde_json::Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -315,7 +315,7 @@ pub enum Response {
     Snapshot {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         snapshot: Snapshot,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         configuration: Option<ConfigurationSnapshot>,
@@ -324,14 +324,14 @@ pub enum Response {
     NotesList {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         filenames: Vec<String>,
     },
     #[serde(rename = "note-opened")]
     NoteOpened {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         snapshot: Snapshot,
         configuration: NotesConfiguration,
         #[serde(with = "crate::decimal")]
@@ -342,7 +342,7 @@ pub enum Response {
     Configured {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         configuration: NotesConfiguration,
         #[serde(with = "crate::decimal")]
         #[schemars(with = "String")]
@@ -352,14 +352,14 @@ pub enum Response {
     Applied {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         snapshot: Snapshot,
     },
     #[serde(rename = "rejected")]
     Rejected {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         expected_revision: Option<String>,
         message: String,
     },
@@ -367,7 +367,7 @@ pub enum Response {
     Uncertain {
         version: Version,
         request_id: String,
-        content_id: ContentId,
+        vessel_id: VesselId,
         expected_revision: String,
         message: String,
     },
@@ -377,7 +377,7 @@ pub enum Response {
 mod tests {
     #[test]
     fn configuration_request_requires_a_boolean_and_rejects_unknown_fields() {
-        let request = serde_json::json!({"operation":"content.configure", "version":"1", "requestId":"configure", "contentId":"note", "expectedVersion":"3", "configuration":{"showHeading":false}});
+        let request = serde_json::json!({"operation":"content.configure", "version":"1", "requestId":"configure", "vesselId":"note", "expectedVersion":"3", "configuration":{"showHeading":false}});
         assert!(serde_json::from_value::<super::Request>(request.clone()).is_ok());
         for configuration in [
             serde_json::json!({"showHeading":"false"}),

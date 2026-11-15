@@ -82,7 +82,7 @@ impl Target {
     }
 
     pub fn reopen_panel(placement: &PlacementId) -> Self {
-        Self::keyed(Role::ReopenPanel, &placement.0)
+        Self::keyed(Role::ReopenPlacement, &placement.0)
     }
 
     pub fn create_fleet(voyage: &VoyageId) -> Self {

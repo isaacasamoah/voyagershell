@@ -24,7 +24,7 @@ def prove(
 
     def document():
         return (
-            rpc("doc.get", {"name": "voyager-layout-v1"})
+            rpc("doc.get", {"name": "voyager-layout-v2"})
             if socket.is_socket()
             else None
         )
@@ -203,15 +203,15 @@ def prove(
         }
 
     try:
-        initial = ready(lambda value: bool(value["contents"][0].get("backend")))
+        initial = ready(lambda value: bool(value["vessels"][0].get("backend")))
         assert (
             len(initial["value"]["voyages"]) == 1
-            and len(fleet(initial["value"])["vessels"]) == 1
+            and len(fleet(initial["value"])["placements"]) == 1
         )
         assert capture("ux-initial").size == (1450, 940)
         core = rpc("server.status", {})
         observations["core"] = core
-        backend = initial["value"]["contents"][0]["backend"]
+        backend = initial["value"]["vessels"][0]["backend"]
         terminal = rpc("terminal.get", {"terminal": backend})
         backends = [
             item["address"] for item in rpc("terminal.list", {"all": True})["terminals"]
@@ -220,7 +220,7 @@ def prove(
         if (holder := core.get("holder")) and holder.get("current"):
             record(holder["pid"])
         record(terminal["pid"])
-        original = fleet(initial["value"])["vessels"][0]
+        original = fleet(initial["value"])["placements"][0]
         button("Close Vessel " + original["name"])
         closed = ready(lambda value: fleet(value)["root"] is None)
         assert rpc("terminal.get", {"terminal": backend})["pid"] == terminal["pid"]
@@ -228,10 +228,10 @@ def prove(
         restore_hidden(original["name"])
         reopened_viewer = ready(lambda value: fleet(value)["root"] is not None)
         assert (
-            fleet(reopened_viewer["value"])["vessels"]
-            == fleet(initial["value"])["vessels"]
+            fleet(reopened_viewer["value"])["placements"]
+            == fleet(initial["value"])["placements"]
         )
-        assert reopened_viewer["value"]["contents"] == initial["value"]["contents"]
+        assert reopened_viewer["value"]["vessels"] == initial["value"]["vessels"]
         assert rpc("terminal.get", {"terminal": backend})["pid"] == terminal["pid"]
         initial = reopened_viewer
         observations["viewerClose"] = {
@@ -242,7 +242,7 @@ def prove(
         button("Split Vessel right")
         one("Create Notes Vessel")
         capture("ux-picker-before-cancel")
-        button(fleet(initial["value"])["vessels"][0]["name"])
+        button(fleet(initial["value"])["placements"][0]["name"])
         wait(
             lambda: fields("Create Notes Vessel"),
             lambda items: not items,
@@ -254,20 +254,20 @@ def prove(
         ] == backends
         button("Split Vessel right")
         button("Create Notes Vessel")
-        split = ready(lambda value: len(fleet(value)["vessels"]) == 2)
-        vessel = fleet(split["value"])["vessels"][1]
+        split = ready(lambda value: len(fleet(value)["placements"]) == 2)
+        vessel = fleet(split["value"])["placements"][1]
         assert (
             next(
                 item
-                for item in split["value"]["contents"]
-                if item["id"] == vessel["content"]
+                for item in split["value"]["vessels"]
+                if item["id"] == vessel["vessel"]
             )["typeId"]
             == "notes"
         )
         menu(vessel["name"], "Rename")
         text(one("Name"), "UX Notes")
         tap(65293)
-        ready(lambda value: fleet(value)["vessels"][1]["name"] == "UX Notes")
+        ready(lambda value: fleet(value)["placements"][1]["name"] == "UX Notes")
         one("UX Notes")
         before_max = document()
         button("Maximize Vessel", "UX Notes")
@@ -280,7 +280,7 @@ def prove(
         assert body["height"] > 800, body
         text(body, "# Viewer proof")
         button("Preview note")
-        vessel_data = evidence / "profile/data" / (vessel["content"] + ".json")
+        vessel_data = evidence / "profile/data" / (vessel["vessel"] + ".json")
         notes_saved = wait(
             lambda: vessel_data.read_bytes() if vessel_data.exists() else None,
             lambda data: json.loads(data)["text"] == "# Viewer proof",
@@ -361,7 +361,7 @@ def prove(
         ), bounds
         text(title, "Portal retained")
         button("Embed Portals")
-        data_path = evidence / "profile/data" / (portal["content"] + ".json")
+        data_path = evidence / "profile/data" / (portal["vessel"] + ".json")
         saved = wait(
             lambda: data_path.read_bytes() if data_path.exists() else None,
             lambda data: json.loads(data)["title"] == "Portal retained",
@@ -382,13 +382,13 @@ def prove(
         changed = ready(
             lambda value: (
                 len(value["voyages"][0]["fleets"]) == 2
-                and bool(value["contents"][-1].get("backend"))
+                and bool(value["vessels"][-1].get("backend"))
             )
         )
         record(
             rpc(
                 "terminal.get",
-                {"terminal": changed["value"]["contents"][-1]["backend"]},
+                {"terminal": changed["value"]["vessels"][-1]["backend"]},
             )["pid"]
         )
         assert changed["value"]["voyages"][0]["portals"] == [portal]
@@ -407,8 +407,8 @@ def prove(
         hidden = ready(lambda value: fleet(value)["root"]["kind"] == "leaf")
         restore_hidden("UX Notes", "Split Vessel right")
         shown = ready(lambda value: fleet(value)["root"]["kind"] == "branch")
-        assert fleet(shown["value"])["vessels"][1]["id"] == vessel["id"]
-        assert fleet(shown["value"])["vessels"][1]["content"] == vessel["content"]
+        assert fleet(shown["value"])["placements"][1]["id"] == vessel["id"]
+        assert fleet(shown["value"])["placements"][1]["vessel"] == vessel["vessel"]
         assert vessel_data.read_bytes() == notes_saved
         observations["closedNotes"] = hidden
         button("Show Portals")
@@ -418,7 +418,7 @@ def prove(
         tap(65293)
         final = ready(
             lambda value: any(
-                item["name"] == "UX layout" for item in value.get("savedLayouts", [])
+                item["name"] == "UX layout" for item in value.get("arrangements", [])
             )
         )
         assert final["value"]["context"] == initial["value"]["context"]
@@ -452,7 +452,7 @@ def prove(
         divided = ready(lambda value: len(value["voyages"][0]["portals"]) == 2)
         second = divided["value"]["voyages"][0]["portals"][1]
         assert second["name"] == "Notes 2" and second["name"] != portal["name"]
-        assert second["id"] != portal["id"] and second["content"] != portal["content"]
+        assert second["id"] != portal["id"] and second["vessel"] != portal["vessel"]
         button("Close Portal " + second["name"])
         ready(
             lambda value: value["voyages"][0]["portalLayout"]["root"]["kind"] == "leaf"
@@ -496,18 +496,18 @@ def prove(
             == portal["id"]
         )
         assert reordered["value"]["voyages"][0]["portals"] == [portal, second]
-        assert reordered["value"]["contents"] == revealed["value"]["contents"]
+        assert reordered["value"]["vessels"] == revealed["value"]["vessels"]
         assert reordered["value"]["context"] == initial["value"]["context"]
         button("Home")
         home = ready(lambda value: value["view"] == "home")
-        home_members = home["value"]["home"]["fleets"][0]["vessels"]
+        home_members = home["value"]["home"]["fleets"][0]["placements"]
         assert len(home_members) == 1
         agents = home_members[0]
         assert (
             next(
                 item
-                for item in home["value"]["contents"]
-                if item["id"] == agents["content"]
+                for item in home["value"]["vessels"]
+                if item["id"] == agents["vessel"]
             )["typeId"]
             == "agents"
         )
@@ -525,18 +525,18 @@ def prove(
         launched_agent = ready(
             lambda value: any(
                 item.get("launch", {}).get("kind") == "codex" and item.get("backend")
-                for item in value["contents"]
+                for item in value["vessels"]
             )
         )
         agent_content = next(
             item
-            for item in launched_agent["value"]["contents"]
+            for item in launched_agent["value"]["vessels"]
             if item.get("launch", {}).get("kind") == "codex"
         )
         agent_panel = next(
             item
-            for item in fleet(launched_agent["value"])["vessels"]
-            if item["content"] == agent_content["id"]
+            for item in fleet(launched_agent["value"])["placements"]
+            if item["vessel"] == agent_content["id"]
         )
         agent_process = rpc("terminal.get", {"terminal": agent_content["backend"]})
         assert agent_process["state"] == "live", agent_process
@@ -578,14 +578,14 @@ def prove(
         button("Choose Vessel content")
         button("Create Notes Vessel")
         created_home = ready(
-            lambda value: len(value["home"]["fleets"][0]["vessels"]) == 2
+            lambda value: len(value["home"]["fleets"][0]["placements"]) == 2
         )
-        home_panel = created_home["value"]["home"]["fleets"][0]["vessels"][1]
+        home_panel = created_home["value"]["home"]["fleets"][0]["placements"][1]
         button("Close Vessel " + home_panel["name"])
         ready(lambda value: value["home"]["fleets"][0]["root"] is None)
         restore_hidden(home_panel["name"])
         shown_home = ready(lambda value: value["home"]["fleets"][0]["root"] is not None)
-        assert shown_home["value"]["home"]["fleets"][0]["vessels"][1] == home_panel
+        assert shown_home["value"]["home"]["fleets"][0]["placements"][1] == home_panel
         button(initial["value"]["voyages"][0]["name"])
         before_cold = ready(lambda value: value["view"] == "fleet")
         assert before_cold["value"]["voyages"][0]["portals"] == [portal, second]

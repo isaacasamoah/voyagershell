@@ -38,9 +38,6 @@
             "null"
           ]
         },
-        "contentId": {
-          "type": "string"
-        },
         "cwd": {
           "type": "string"
         },
@@ -79,10 +76,13 @@
         },
         "terminalId": {
           "type": "string"
+        },
+        "vesselId": {
+          "type": "string"
         }
       },
       "required": [
-        "contentId",
+        "vesselId",
         "terminalId",
         "cwd",
         "state"

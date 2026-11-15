@@ -164,14 +164,14 @@ def prove(
         core = rpc("server.status", {})
         core_identity = process_identity(core["pid"], metadata_only=True)
         document = wait(
-            lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+            lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda item: (
-                bool(item.get("value", {}).get("contents"))
-                and bool(item["value"]["contents"][0].get("backend"))
+                bool(item.get("value", {}).get("vessels"))
+                and bool(item["value"]["vessels"][0].get("backend"))
             ),
             "bound terminal",
         )
-        address = document["value"]["contents"][0]["backend"]
+        address = document["value"]["vessels"][0]["backend"]
         shell = rpc("terminal.get", {"terminal": address})
         shell_identity = process_identity(shell["pid"], metadata_only=True)
         box = focus()

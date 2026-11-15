@@ -476,22 +476,129 @@ test("a large file that is not recorded fails", () => {
 test("a new TypeScript import cycle fails", () => {
   const directory = scratch();
   fs.writeFileSync(
-    path.join(directory, "desktop/mods/header/planted-a.ts"),
+    path.join(directory, "desktop/canvas/planted-a.ts"),
     'import { b } from "./planted-b.js";\nexport const a = b;\n',
   );
   fs.writeFileSync(
-    path.join(directory, "desktop/mods/header/planted-b.ts"),
+    path.join(directory, "desktop/canvas/planted-b.ts"),
     'import { a } from "./planted-a.js";\nexport const b = a;\n',
   );
   expectFailure(
     run(directory),
-    "NEW no-script-cycles: ts:desktop/mods/header/planted-a.ts <-> ts:desktop/mods/header/planted-b.ts",
+    "NEW no-script-cycles: ts:desktop/canvas/planted-a.ts <-> ts:desktop/canvas/planted-b.ts",
   );
 });
 
-test("the recorded header cycle that is not recorded fails", () => {
+test("the recorded canvas cycle that is not recorded fails", () => {
   expectFailure(
     run(scratch(), ["--known", without(/no-script-cycles/)]),
-    "NEW no-script-cycles: ts:desktop/mods/header/main.ts",
+    "NEW no-script-cycles: ts:desktop/canvas/main.ts",
+  );
+});
+
+const OLD_WORD = ["Content", "Id"].join("");
+
+test("an old word in new source fails the vocabulary rule", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/lib.rs",
+    (text) => `${text}\npub struct ${OLD_WORD}(pub String);\n`,
+  );
+  expectFailure(run(directory), "NEW one-vocabulary: vessel-ids has");
+});
+
+const PLANTS = [
+  [
+    "desktop/src/lib.rs",
+    `const ${["HEA", "DER"].join("")}: u32 = 1;`,
+    "canvas-package",
+  ],
+  [
+    "README.md",
+    `The Notes ${["m", "od"].join("")} is a package.`,
+    "package-nickname",
+  ],
+  [
+    "docs/content.md",
+    `A ${["content", "type"].join(" ")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "AGENTS.md",
+    `A ${["content", "package"].join(" ")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "app/src/lib.rs",
+    `fn planted() -> &'static str { "${["Content", "package"].join(" ")} removed" }`,
+    "content-words",
+  ],
+  [
+    "contract/src/lib.rs",
+    `pub ${["struct", "Content"].join(" ")} { pub id: u32 }`,
+    "vessel-ids",
+  ],
+  [
+    "desktop/canvas/chat.ts",
+    `import type { ${["Context", "as", "Scope"].join(" ")} } from "x";`,
+    "scope-aliases",
+  ],
+];
+
+for (const [file, line, group] of PLANTS) {
+  test(`a planted line in ${file} fails ${group}`, () => {
+    const directory = scratch();
+    edit(directory, file, (text) => `${text}\n${line}\n`);
+    expectFailure(run(directory), `NEW one-vocabulary: ${group} has`);
+  });
+}
+
+test("a link into another repository passes the vocabulary rule and the codemod leaves it", () => {
+  const link = `[Herdr](https://github.com/herdrdev/herdr-app/blob/x/defaults/${["mo", "ds"].join("")}/worktree/main.js)`;
+  const directory = scratch();
+  edit(directory, "docs/workspace.md", (text) => `${text}\n${link}\n`);
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  for (const stage of ["2", "5"])
+    spawnSync(
+      "node",
+      [
+        path.join(__dirname, "vocabulary.cjs"),
+        "--repository",
+        directory,
+        "--apply",
+        stage,
+      ],
+      { encoding: "utf8", env: ENV },
+    );
+  assert.ok(
+    fs
+      .readFileSync(path.join(directory, "docs/workspace.md"), "utf8")
+      .includes(link),
+  );
+});
+
+test("the codemod rewrites a planted old word with the table", () => {
+  const directory = scratch();
+  const planted = path.join(directory, "app/src/planted.rs");
+  fs.writeFileSync(planted, `pub struct ${OLD_WORD}(pub String);\n`);
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  const result = spawnSync(
+    "node",
+    [
+      path.join(__dirname, "vocabulary.cjs"),
+      "--repository",
+      directory,
+      "--apply",
+      "3",
+    ],
+    { encoding: "utf8", env: ENV },
+  );
+  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  assert.strictEqual(
+    fs.readFileSync(planted, "utf8"),
+    "pub struct VesselId(pub String);\n",
   );
 });

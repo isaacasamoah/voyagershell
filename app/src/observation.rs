@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::{core_shapes::Terminal, scope};
 use voyager_contract::{
-    Content, Context, DirectorySource, Layout, NameOrigin, PlacementId, Vessel, WorkspaceView,
+    Context, DirectorySource, Layout, NameOrigin, Placement, PlacementId, Vessel, WorkspaceView,
     context::{Branch, Directory as ContextDirectory, Facts},
-    observation::{Directory, PanelObservation, WorkspaceObservation},
+    observation::{Directory, PlacementObservation, WorkspaceObservation},
 };
 
 pub(crate) fn effective_name(
-    placement: &Vessel,
-    content: &Content,
+    placement: &Placement,
+    content: &Vessel,
     directory: &Directory,
 ) -> String {
     if placement.name_origin == NameOrigin::Deliberate || content.type_id != "terminal" {
@@ -70,16 +70,16 @@ pub(crate) fn voyage_names(
         .iter()
         .filter(|voyage| !voyage.closed && voyage.name_origin == NameOrigin::Automatic)
         .filter_map(|voyage| {
-            let primary = voyage.primary_vessel.as_ref()?;
+            let primary = voyage.primary_placement.as_ref()?;
             let panel = voyage
                 .fleets
                 .iter()
-                .flat_map(|fleet| &fleet.vessels)
+                .flat_map(|fleet| &fleet.placements)
                 .find(|panel| &panel.id == primary)?;
             let content = layout
-                .contents
+                .vessels
                 .iter()
-                .find(|content| content.id == panel.content)?;
+                .find(|content| content.id == panel.vessel)?;
             let backend = content.backend.as_ref()?;
             let terminal = terminals
                 .iter()
@@ -90,7 +90,7 @@ pub(crate) fn voyage_names(
         .collect()
 }
 
-pub(crate) fn directory(content: &Content, terminal: Option<&Terminal>) -> Directory {
+pub(crate) fn directory(content: &Vessel, terminal: Option<&Terminal>) -> Directory {
     if content.type_id == "terminal" && content.backend.is_some() {
         terminal
             .and_then(|terminal| terminal.foreground.as_ref())
@@ -126,22 +126,22 @@ pub(crate) fn validate_source(
     let valid = match source {
         DirectorySource::Live {
             placement_id,
-            content_id,
+            vessel_id,
             backend,
             cwd,
         } => facts.panels.iter().any(|panel| {
             &panel.placement_id == placement_id
-                && &panel.content_id == content_id
+                && &panel.vessel_id == vessel_id
                 && panel.backend.as_ref() == Some(backend)
                 && matches!(&panel.directory, Directory::Live { path } if path == cwd)
         }),
         DirectorySource::Starting {
             placement_id,
-            content_id,
+            vessel_id,
             cwd,
         } => facts.panels.iter().any(|panel| {
             &panel.placement_id == placement_id
-                && &panel.content_id == content_id
+                && &panel.vessel_id == vessel_id
                 && matches!(&panel.directory, Directory::Starting { path } if path == cwd)
         }),
         DirectorySource::Voyage { voyage_id, cwd } => {
@@ -177,14 +177,14 @@ pub(crate) fn capture(
             voyage
                 .fleets
                 .iter()
-                .flat_map(|fleet| &fleet.vessels)
+                .flat_map(|fleet| &fleet.placements)
                 .chain(&voyage.portals)
         })
         .filter_map(|placement| {
             let content = visible
-                .contents
+                .vessels
                 .iter()
-                .find(|item| item.id == placement.content)?;
+                .find(|item| item.id == placement.vessel)?;
             let terminal = content.backend.as_ref().and_then(|backend| {
                 terminals?
                     .iter()
@@ -193,9 +193,9 @@ pub(crate) fn capture(
             let foreground = terminal.and_then(|terminal| terminal.foreground.as_ref());
             let directory = directory(content, terminal);
             let name = effective_name(placement, content, &directory);
-            Some(PanelObservation {
+            Some(PlacementObservation {
                 placement_id: placement.id.clone(),
-                content_id: content.id.clone(),
+                vessel_id: content.id.clone(),
                 backend: content.backend.clone(),
                 directory,
                 program: foreground.map(|process| process.name.clone()),
@@ -217,7 +217,7 @@ pub(crate) fn capture(
                 (matches!(layout.view, WorkspaceView::Home)
                     || Some(&fleet.id) == layout.selected_fleet.as_ref())
                     && crate::panels::contains(
-                        &crate::panels::visible(&fleet.root, &fleet.vessels),
+                        &crate::panels::visible(&fleet.root, &fleet.placements),
                         id,
                     )
                     && fleet
@@ -314,22 +314,22 @@ mod tests {
                 },
             })
             .unwrap();
-        let first = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        let first = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
             .layout
-            .contents
+            .vessels
             .iter_mut()
-            .find(|item| item.id == first.content)
+            .find(|item| item.id == first.vessel)
             .unwrap()
             .backend = Some(CoreTerminalId("t1".into()));
         model
-            .apply(Action::CreateContent {
+            .apply(Action::CreateVessel {
                 type_id: "terminal".into(),
-                destination: voyager_contract::ContentDestination::Panel {
-                    owner: voyager_contract::PanelOwner::Fleet {
+                destination: voyager_contract::ContentDestination::Placement {
+                    owner: voyager_contract::PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),
                     },
-                    insertion: voyager_contract::PanelInsertion::Beside {
+                    insertion: voyager_contract::PlacementInsertion::Beside {
                         id: first.id.clone(),
                         side: voyager_contract::Side::Left,
                     },
@@ -337,7 +337,7 @@ mod tests {
                 launch: None,
             })
             .unwrap();
-        model.layout.voyages[0].fleets[0].vessels.reverse();
+        model.layout.voyages[0].fleets[0].placements.reverse();
         let mut terminal: Terminal = serde_json::from_value(serde_json::json!({ "address":"t1", "labels":{}, "argv":["bash"], "cwd":"/tmp/original", "state":"live", "created_ms":1, "screen":"exact", "cols":80, "rows":24, "foreground":{"pid":1,"name":"bash","argv":["bash"],"cwd":"/tmp/changed"} })).unwrap();
         assert_eq!(
             voyage_names(&model.layout, &[terminal.clone()]),
@@ -370,13 +370,15 @@ mod tests {
                 cwd: "/tmp".into(),
             })
             .unwrap();
-        let placement = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
-        let content_id = model.layout.voyages[0].fleets[0].vessels[0].content.clone();
+        let placement = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+        let vessel_id = model.layout.voyages[0].fleets[0].placements[0]
+            .vessel
+            .clone();
         model
             .layout
-            .contents
+            .vessels
             .iter_mut()
-            .find(|content| content.id == content_id)
+            .find(|content| content.id == vessel_id)
             .unwrap()
             .backend = Some(CoreTerminalId("t1".into()));
         let layout = Arc::new(model.layout);
@@ -489,9 +491,9 @@ mod tests {
             voyage_id: voyage.clone(),
             cwd: "/tmp/project".into(),
         };
-        let before = model.layout.contents.len();
+        let before = model.layout.vessels.len();
         model
-            .apply(Action::CreateFleetWithContent {
+            .apply(Action::CreateFleetWithVessel {
                 voyage: voyage.clone(),
                 name: "Fleet 2".into(),
                 source: source.clone(),
@@ -501,12 +503,12 @@ mod tests {
             .unwrap();
         let fleet = model.layout.voyages[0].fleets.last().unwrap();
         assert_eq!(model.layout.selected_fleet.as_ref(), Some(&fleet.id));
-        assert_eq!(model.layout.contents.len(), before + 1);
+        assert_eq!(model.layout.vessels.len(), before + 1);
         let content = model
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|content| content.id == fleet.vessels[0].content)
+            .find(|content| content.id == fleet.placements[0].vessel)
             .unwrap();
         assert_eq!(content.type_id, crate::content_type::NOTES_TYPE);
         assert_eq!(content.cwd, "/tmp/project");
@@ -514,7 +516,7 @@ mod tests {
         let saved = model.layout.clone();
         assert!(
             model
-                .apply(Action::CreateFleetWithContent {
+                .apply(Action::CreateFleetWithVessel {
                     voyage: voyager_contract::VoyageId("wrong".into()),
                     name: "Fleet".into(),
                     source,
@@ -528,8 +530,8 @@ mod tests {
 
     #[test]
     fn legacy_and_explicit_names_survive_while_automatic_names_follow_directory() {
-        let legacy: Vessel = serde_json::from_value(
-            serde_json::json!({"id":"p", "content":"c", "name":"Terminal 1"}),
+        let legacy: Placement = serde_json::from_value(
+            serde_json::json!({"id":"p", "vessel":"c", "name":"Terminal 1"}),
         )
         .unwrap();
         assert_eq!(legacy.name_origin, NameOrigin::Deliberate);
@@ -554,13 +556,13 @@ mod tests {
                 cwd: "/tmp/project".into(),
             })
             .unwrap();
-        let panel = &model.layout.voyages[0].fleets[0].vessels[0];
+        let panel = &model.layout.voyages[0].fleets[0].placements[0];
         let id = panel.id.clone();
         let content = model
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|content| content.id == panel.content)
+            .find(|content| content.id == panel.vessel)
             .unwrap();
         let dir = Directory::Live {
             path: "/tmp/changed".into(),
@@ -572,12 +574,12 @@ mod tests {
                 name: "My task".into(),
             })
             .unwrap();
-        let panel = &model.layout.voyages[0].fleets[0].vessels[0];
+        let panel = &model.layout.voyages[0].fleets[0].placements[0];
         let content = model
             .layout
-            .contents
+            .vessels
             .iter()
-            .find(|content| content.id == panel.content)
+            .find(|content| content.id == panel.vessel)
             .unwrap();
         assert_eq!(panel.name_origin, NameOrigin::Deliberate);
         assert_eq!(effective_name(panel, content, &dir), "My task");
@@ -594,12 +596,12 @@ mod tests {
             .unwrap();
         let voyage = model.layout.voyages[0].id.clone();
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let panel = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        let panel = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
             .layout
-            .contents
+            .vessels
             .iter_mut()
-            .find(|content| content.id == panel.content)
+            .find(|content| content.id == panel.vessel)
             .unwrap()
             .backend = Some(CoreTerminalId("t1".into()));
         model
@@ -634,13 +636,13 @@ mod tests {
         assert_eq!(model.layout.voyages[0].closed_order, 2);
         model.apply(Action::ReopenVoyage { id: voyage }).unwrap();
         assert_eq!(model.layout.selected_fleet.as_ref(), Some(&fleet));
-        assert_eq!(model.layout.voyages[0].fleets[0].vessels[0].id, panel.id);
+        assert_eq!(model.layout.voyages[0].fleets[0].placements[0].id, panel.id);
         assert_eq!(
             model
                 .layout
-                .contents
+                .vessels
                 .iter()
-                .find(|content| content.id == panel.content)
+                .find(|content| content.id == panel.vessel)
                 .unwrap()
                 .backend,
             Some(CoreTerminalId("t1".into()))

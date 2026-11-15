@@ -117,7 +117,7 @@ lifecycle](terminal.md) describes that split.
 A Notes Vessel opens beside the terminal and shows **Title**. In your second
 terminal, `ls /var/tmp/voyager-try/project/notes` prints `Title.md`.
 
-Both Vessels belong to Fleet 1. A Vessel places content inside one Fleet.
+Both Vessels belong to Fleet 1. A Vessel sits inside one Fleet.
 
 ## Step 5. Add a Fleet and a Portal
 
@@ -127,9 +127,9 @@ Both Vessels belong to Fleet 1. A Vessel places content inside one Fleet.
    column opens on the right.
 3. Click the **Fleet 1** tab.
 
-The Portal stays on screen when you change Fleets. A Portal places content
-across a whole Voyage. Vessels and Portals use the same content model. Only the
-placement differs.
+The Portal stays on screen when you change Fleets. A Portal is a Vessel placed
+across a whole Voyage. A Vessel in a Fleet and a Portal use the same Vessel
+type. Only the placement differs.
 
 ## Step 6. Dock the avatar
 
@@ -167,7 +167,7 @@ changes.
 1. In your second terminal, rename the sidebar heading:
 
    ```sh
-   cd /var/tmp/voyager-try/profile/mods/header
+   cd /var/tmp/voyager-try/profile/canvas
    cp navigation-view.js navigation-view.js.bak
    sed -i 's/\.child("Voyages"),/.child("My Voyages"),/' navigation-view.js
    ```
@@ -201,9 +201,9 @@ full workflow.
 This step follows what happens when you pick **Terminal** in the split chooser
 from step 4. Open each file as you read and find the named function.
 
-1. [`desktop/mods/header/creation.ts`](../desktop/mods/header/creation.ts)
+1. [`desktop/canvas/creation.ts`](../desktop/canvas/creation.ts)
    builds the action
-   `{operation: "create-content", destination, typeId: "terminal", launch}`.
+   `{operation: "create-vessel", destination, typeId: "terminal", launch}`.
    The `launch` entry comes from `launches.json` in the profile.
 2. The generated `invoke` in
    [`contract/generated/workspace.ts`](../contract/generated/workspace.ts) adds a
@@ -221,7 +221,7 @@ from step 4. Open each file as you read and find the named function.
    `panels::insert` in [`app/src/panels.rs`](../app/src/panels.rs) change a
    copy of the `Layout`. They record the content and its placement separately.
 6. `Core::document_set` in [`app/src/core.rs`](../app/src/core.rs) saves the
-   whole `Layout` as the Core document `voyager-layout-v1`. Only after Core
+   whole `Layout` as the Core document `voyager-layout-v2`. Only after Core
    accepts the save does the owner adopt the new layout.
 7. The response carries a `Status` of `Applied`, `Rejected` or `Uncertain`.
    Rejected means nothing changed. Uncertain means the effect may have happened,
@@ -297,12 +297,12 @@ procedure.
 - **A workspace operation.** Start at `Action` in `contract/src/lib.rs`, then
   `Model::apply` in `app/src/workspace.rs` and `scope::check`. See
   [Workspace](workspace.md).
-- **An interface change.** Start at the `.ts` files in `desktop/mods/header/`
+- **An interface change.** Start at the `.ts` files in `desktop/canvas/`
   or `content/`. See
   [Script authoring](workspace.md#script-authoring-and-checking).
 - **A native view.** Start at `native_registry` in `desktop/src/lib.rs`. See
   [Workspace](workspace.md).
-- **A content type.** Start at `IMPLEMENTATIONS` in
+- **A Vessel type.** Start at `IMPLEMENTATIONS` in
   `app/src/content/description.rs`. See [Notes and content
   ownership](content.md).
 - **An assistant tool.** Start at the tool catalog in

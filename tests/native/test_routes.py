@@ -564,11 +564,11 @@ class Routes(unittest.TestCase):
         from contextlib import contextmanager
 
         proof = importlib.import_module("proof_foundation_notes")
-        header = (ROOT / "desktop/mods/header/main.js").read_text()
-        setup = proof.setup_source(header)
-        self.assertEqual(setup.count('operation: "create-content"'), 2)
+        canvas = (ROOT / "desktop/canvas/main.js").read_text()
+        setup = proof.setup_source(canvas)
+        self.assertEqual(setup.count('operation: "create-vessel"'), 2)
         with self.assertRaises(AssertionError):
-            proof.setup_source(header + header)
+            proof.setup_source(canvas + canvas)
         source = (ROOT / "desktop/notes-legacy-fixture.js").read_text()
 
         @contextmanager

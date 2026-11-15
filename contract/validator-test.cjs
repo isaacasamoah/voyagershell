@@ -8,7 +8,7 @@ test("new-shell intent names its current content and backend without a saved lau
     expectedVersion: "4",
     action: {
       operation: "start-new-shell",
-      contentId: "content",
+      vesselId: "content",
       expectedBackend: "t1",
     },
   };
@@ -26,7 +26,7 @@ test("new-shell intent names its current content and backend without a saved lau
   );
   const outcome = {
     requestId: "open",
-    contentId: "content",
+    vesselId: "content",
     status: "rejected",
     reason: "ended",
     message: "Finished",
@@ -41,7 +41,7 @@ test("content tools contain data and revision but no actor authority", async () 
     expectedVersion: "7",
     action: {
       operation: "update",
-      contentId: "notes-a",
+      vesselId: "notes-a",
       expectedRevision: "base",
       data: { title: "Title", text: "Body" },
     },
@@ -57,7 +57,7 @@ test("content tools contain data and revision but no actor authority", async () 
   ])
     assert.equal(contentTool({ ...input, [key]: "forged" }), false);
   assert.equal(
-    contentTool({ ...input, action: { ...input.action, contentId: 4 } }),
+    contentTool({ ...input, action: { ...input.action, vesselId: 4 } }),
     false,
   );
   assert.equal(
@@ -82,7 +82,7 @@ test("generated wire validator rejects a forged caller and malformed split", asy
   assert.equal(request(valid), true);
   assert.equal(request({ ...valid, role: "owner" }), false);
   assert.equal(
-    request({ ...valid, action: { operation: "reveal-panel", id: "p1" } }),
+    request({ ...valid, action: { operation: "reveal-placement", id: "p1" } }),
     true,
   );
   assert.equal(
@@ -90,13 +90,13 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     false,
   );
   assert.equal(
-    request({ ...valid, action: { operation: "reveal-panel", id: 12 } }),
+    request({ ...valid, action: { operation: "reveal-placement", id: 12 } }),
     false,
   );
   assert.equal(
     request({
       ...valid,
-      action: { operation: "reveal-panel", id: "p1", fleet: "other" },
+      action: { operation: "reveal-placement", id: "p1", fleet: "other" },
     }),
     false,
   );
@@ -128,7 +128,7 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     request({
       ...valid,
       action: {
-        operation: "move-panel",
+        operation: "move-placement",
         id: "p1",
         target: "p2",
         side: "diagonal",
@@ -137,10 +137,10 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     false,
   );
   const creation = {
-    operation: "create-content",
+    operation: "create-vessel",
     typeId: "notes",
     destination: {
-      kind: "panel",
+      kind: "placement",
       owner: { kind: "fleet", id: "fleet-1" },
       insertion: { kind: "beside", id: "placement-1", side: "right" },
     },
@@ -179,7 +179,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
     expectedVersion: "1",
     action: {
       operation: "send",
-      contentId: "content-1",
+      vesselId: "content-1",
       terminalId: "t1",
       pid: 10,
       text: "hello",
@@ -205,7 +205,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
       expectedVersion: "1",
       action: {
         operation: "read",
-        contentId: "content-1",
+        vesselId: "content-1",
         terminalId: "t1",
         lines: 160,
       },
@@ -217,7 +217,7 @@ test("process schema keeps integer bounds and excludes caller authority", async 
       expectedVersion: "1",
       action: {
         operation: "read",
-        contentId: "content-1",
+        vesselId: "content-1",
         terminalId: "t1",
         lines: 161,
       },

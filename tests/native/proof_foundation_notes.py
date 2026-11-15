@@ -27,10 +27,10 @@ def setup_source(source):
       const layout = initial.layout;
       const voyage = layout.voyages.find((item) => item.id === layout.selectedVoyage);
       const fleet = voyage?.fleets.find((item) => item.id === layout.selectedFleet);
-      if (!voyage || !fleet || fleet.vessels.length !== 1 || voyage.portals.length) throw Error("Proof setup requires its fresh workspace");
-      this.run({ operation: "create-content", typeId: "notes", destination: { kind: "panel", owner: { kind: "fleet", id: fleet.id }, insertion: { kind: "beside", id: fleet.vessels[0].id, side: "right" } } }, task, (first, next) => {
+      if (!voyage || !fleet || fleet.placements.length !== 1 || voyage.portals.length) throw Error("Proof setup requires its fresh workspace");
+      this.run({ operation: "create-vessel", typeId: "notes", destination: { kind: "placement", owner: { kind: "fleet", id: fleet.id }, insertion: { kind: "beside", id: fleet.placements[0].id, side: "right" } } }, task, (first, next) => {
         if (first?.status !== "applied" || !first.fresh) throw Error("Proof Vessel setup was not confirmed");
-        this.run({ operation: "create-content", typeId: "notes", destination: { kind: "panel", owner: { kind: "portals", voyage: voyage.id }, insertion: { kind: "empty" } } }, next);
+        this.run({ operation: "create-vessel", typeId: "notes", destination: { kind: "placement", owner: { kind: "portals", voyage: voyage.id }, insertion: { kind: "empty" } } }, next);
       });
     });
     this.startContext(cx);"""
@@ -84,7 +84,7 @@ def prove(
 
     def document():
         try:
-            return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+            return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
         except (AssertionError, subprocess.CalledProcessError):
             return None
 
@@ -116,11 +116,11 @@ def prove(
         assert identity["uid"] == os.getuid(), identity
         owned[name] = {"pid": process, **identity}
 
-    package = profile / "mods/header/main.js"
+    package = profile / "canvas/main.js"
     original = package.read_bytes()
     source = original.decode()
     setup_active = False
-    notes_path = profile / "mods/notes/main.js"
+    notes_path = profile / "vessels/notes/main.js"
     fresh_notes = None
     try:
         assert not native("accessibility-state")["enabled"], (
@@ -146,12 +146,12 @@ def prove(
         initial = wait(
             document,
             lambda doc: (
-                len(doc["value"]["contents"]) == 1
-                and bool(doc["value"]["contents"][0].get("backend"))
+                len(doc["value"]["vessels"]) == 1
+                and bool(doc["value"]["vessels"][0].get("backend"))
             ),
             "initial terminal",
         )
-        original_terminal = initial["value"]["contents"][0]
+        original_terminal = initial["value"]["vessels"][0]
         terminal = core_rpc(
             session, env, "terminal.get", {"terminal": original_terminal["backend"]}
         )
@@ -171,20 +171,20 @@ def prove(
         start_current("notes-setup")
         created = wait(
             document,
-            lambda doc: len(doc["value"]["contents"]) == 3,
+            lambda doc: len(doc["value"]["vessels"]) == 3,
             "owner-created Notes",
         )
         voyage = created["value"]["voyages"][0]
         fleet = voyage["fleets"][0]
-        assert len(fleet["vessels"]) == 2 and len(voyage["portals"]) == 1, created
+        assert len(fleet["placements"]) == 2 and len(voyage["portals"]) == 1, created
         ids = {
-            "a": fleet["vessels"][1]["content"],
-            "b": voyage["portals"][0]["content"],
+            "a": fleet["placements"][1]["vessel"],
+            "b": voyage["portals"][0]["vessel"],
         }
         assert ids["a"] != ids["b"]
         for id in ids.values():
             content = next(
-                item for item in created["value"]["contents"] if item["id"] == id
+                item for item in created["value"]["vessels"] if item["id"] == id
             )
             assert (
                 content["typeId"] == "notes"
@@ -194,7 +194,7 @@ def prove(
         assert (
             next(
                 item
-                for item in created["value"]["contents"]
+                for item in created["value"]["vessels"]
                 if item["id"] == original_terminal["id"]
             )
             == original_terminal
@@ -243,14 +243,14 @@ def prove(
                     item["id"] != original_terminal["id"]
                     and item["typeId"] == "terminal"
                     and item.get("backend")
-                    for item in doc["value"]["contents"]
+                    for item in doc["value"]["vessels"]
                 )
             ),
             "another Fleet",
         )
         other_content = next(
             item
-            for item in other["value"]["contents"]
+            for item in other["value"]["vessels"]
             if item["id"] != original_terminal["id"]
             and item["typeId"] == "terminal"
             and item.get("backend")
@@ -305,7 +305,7 @@ def prove(
             notes.resize_and_refresh,
         ):
             stages.extend(case(**options))
-        manifest = profile / "mods/notes/mod.json"
+        manifest = profile / "vessels/notes/vessel.json"
         manifest_bytes = manifest.read_bytes()
         schema_failure = None
         schema_errors = []
@@ -409,11 +409,11 @@ def prove(
             core["core"]["id"],
         )
         final_document = document()
-        for content_id in ids.values():
+        for vessel_id in ids.values():
             item = next(
                 content
-                for content in final_document["value"]["contents"]
-                if content["id"] == content_id
+                for content in final_document["value"]["vessels"]
+                if content["id"] == vessel_id
             )
             assert (
                 item["typeId"] == "notes"

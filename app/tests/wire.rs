@@ -82,14 +82,14 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
             .call(Request {
                 request_id: client.request_id(),
                 expected_version: applied.version,
-                action: Action::CreateContent {
+                action: Action::CreateVessel {
                     launch: None,
                     type_id: "notes".into(),
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals {
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Portals {
                             voyage: initial.layout.selected_voyage.clone().unwrap(),
                         },
-                        insertion: voyager_contract::PanelInsertion::Empty,
+                        insertion: voyager_contract::PlacementInsertion::Empty,
                     },
                 },
             })
@@ -126,12 +126,15 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
     use voyager_contract::{Action, Context, Request, Status};
     let session = format!("voyager-package-effects-{}", std::process::id());
     let profile = std::env::temp_dir().join(&session);
-    let package = profile.join("mods/notes");
+    let package = profile.join("vessels/notes");
     seed_package(
         &package,
         &[
             ("main.js", "personal source"),
-            ("mod.json", include_str!("../../content/notes/mod.json")),
+            (
+                "vessel.json",
+                include_str!("../../content/notes/vessel.json"),
+            ),
         ],
     )
     .unwrap();
@@ -163,14 +166,14 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 Context::Fleet {
                     id: initial.layout.selected_fleet.clone().unwrap(),
                 },
-                request(Action::RemoveContentPackage {
+                request(Action::RemoveVesselPackage {
                     type_id: "notes".into(),
                 }),
             )
             .unwrap();
         assert_eq!(refused.status, Status::Rejected);
         assert!(package.exists());
-        let remove = request(Action::RemoveContentPackage {
+        let remove = request(Action::RemoveVesselPackage {
             type_id: "notes".into(),
         });
         let removed = client
@@ -182,14 +185,14 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let unavailable = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::CreateContent {
+                request(Action::CreateVessel {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals {
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Portals {
                             voyage: initial.layout.selected_voyage.clone().unwrap(),
                         },
-                        insertion: voyager_contract::PanelInsertion::Empty,
+                        insertion: voyager_contract::PlacementInsertion::Empty,
                     },
                 }),
             )
@@ -199,7 +202,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let restored = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::RestoreContentPackage {
+                request(Action::RestoreVesselPackage {
                     type_id: "notes".into(),
                 }),
             )
@@ -237,13 +240,13 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         ));
         let mut external = Core::connect(&session).unwrap();
         let bumped = external
-            .document_set("voyager-layout-v1", &initial.layout, initial.version)
+            .document_set("voyager-layout-v2", &initial.layout, initial.version)
             .unwrap();
         external.close().unwrap();
         let stale = client
             .scoped_call(
                 Context::Workspace,
-                request(Action::RemoveContentPackage {
+                request(Action::RemoveVesselPackage {
                     type_id: "notes".into(),
                 }),
             )
@@ -264,13 +267,13 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
 #[test]
 fn terminal_request_has_explicit_identity_and_target() {
     let request: voyager_contract::TerminalRequest = serde_json::from_value(
-        serde_json::json!({"requestId":"open-1", "contentId":"content-1", "expectedVersion":"1"}),
+        serde_json::json!({"requestId":"open-1", "vesselId":"content-1", "expectedVersion":"1"}),
     )
     .unwrap();
     assert_eq!(request.request_id, "open-1");
-    assert_eq!(request.content_id.0, "content-1");
+    assert_eq!(request.vessel_id.0, "content-1");
     assert!(serde_json::from_value::<voyager_contract::TerminalRequest>(
-        serde_json::json!({"requestId":"open-1", "contentId":"content-1", "expectedVersion":"1", "caller":"owner"})
+        serde_json::json!({"requestId":"open-1", "vesselId":"content-1", "expectedVersion":"1", "caller":"owner"})
     )
     .is_err());
 }
@@ -312,10 +315,10 @@ fn stale_marker_save_refuses_before_start() {
         .unwrap();
     let mut observer = Core::connect(&session).unwrap();
     observer
-        .document_set("voyager-layout-v1", &initial.layout, initial.version)
+        .document_set("voyager-layout-v2", &initial.layout, initial.version)
         .unwrap();
     let result = client.terminal(
-        initial.layout.contents[0].id.clone(),
+        initial.layout.vessels[0].id.clone(),
         "stale-marker".into(),
         initial.version,
     );
@@ -474,14 +477,14 @@ fn workspace_terminal_binding_is_persisted_before_attach() {
             .unwrap()
     };
     let initial = inspect();
-    let content = initial.layout.contents[0].id.clone();
+    let content = initial.layout.vessels[0].id.clone();
     let opened = client.terminal(content.clone(), "binding-test".into(), initial.version);
     let refreshed = inspect();
     let repeated = client.terminal(content.clone(), "binding-test".into(), initial.version);
     let altered = client.terminal(content.clone(), "binding-test".into(), refreshed.version);
     let stale = client.terminal(content.clone(), "stale-test".into(), initial.version);
     let mut cleanup = Core::connect(&session).unwrap();
-    let actual = refreshed.layout.contents[0]
+    let actual = refreshed.layout.vessels[0]
         .backend
         .as_ref()
         .map(|address| cleanup.terminal_get(&address.0).unwrap());
@@ -499,9 +502,9 @@ fn workspace_terminal_binding_is_persisted_before_attach() {
     assert!(stopped.is_ok());
     assert_eq!(refreshed.status, Status::Applied);
     assert!(refreshed.version > initial.version);
-    assert_eq!(refreshed.layout.contents[0].id, content);
-    assert!(refreshed.layout.contents[0].backend.is_some());
-    assert_eq!(refreshed.layout.contents[0].start_pending, None);
+    assert_eq!(refreshed.layout.vessels[0].id, content);
+    assert!(refreshed.layout.vessels[0].backend.is_some());
+    assert_eq!(refreshed.layout.vessels[0].start_pending, None);
     assert_eq!(
         actual.unwrap().labels["voyager-operation"],
         "voyager-start-binding-test"
@@ -525,11 +528,11 @@ fn controlled_lost_start_reply_remains_pending_after_reopen() {
     }
     let initial = inspect(&client);
     let mut layout = (*initial.layout).clone();
-    let content = layout.contents[0].id.clone();
-    layout.contents[0].start_pending = Some("voyager-start-proof".into());
+    let content = layout.vessels[0].id.clone();
+    layout.vessels[0].start_pending = Some("voyager-start-proof".into());
     let mut observer = Core::connect(&session).unwrap();
     observer
-        .document_set("voyager-layout-v1", &layout, initial.version)
+        .document_set("voyager-layout-v2", &layout, initial.version)
         .unwrap();
     let started = observer
         .terminal_run("/tmp", "voyager-start-proof")
@@ -543,7 +546,7 @@ fn controlled_lost_start_reply_remains_pending_after_reopen() {
     let stopped = observer.server_stop();
     observer.close().unwrap();
     assert_eq!(
-        refreshed.layout.contents[0].start_pending.as_deref(),
+        refreshed.layout.vessels[0].start_pending.as_deref(),
         Some("voyager-start-proof")
     );
     assert!(refused.is_err());

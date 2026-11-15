@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { TitleState, Title, BodyState, Body } from "voyager_input";
-import { identity, request_id, changed, invoke, theme } from "voyager_content";
+import { identity, request_id, changed, invoke, theme } from "voyager_vessel";
 import {
   contentRequest as validateRequest,
   contentResponse as validateResponse,
@@ -45,7 +45,7 @@ export default class Notes extends View {
       version: "1",
       operation,
       requestId: request_id(),
-      contentId: this.id,
+      vesselId: this.id,
       ...extra,
     };
     if (!validateRequest(request)) throw Error("Invalid content request");
@@ -58,7 +58,7 @@ export default class Notes extends View {
       if (
         !validateResponse(result) ||
         result.requestId !== request.requestId ||
-        result.contentId !== this.id
+        result.vesselId !== this.id
       )
         throw Error("Invalid content response");
       return result;

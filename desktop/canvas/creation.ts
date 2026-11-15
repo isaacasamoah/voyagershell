@@ -9,16 +9,16 @@ import {
   contentCatalog as validateContentCatalog,
 } from "./validate.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type { Catalog } from "../../../contract/generated/launchCatalog";
+import type { Catalog } from "../../contract/generated/launchCatalog";
 import type { HiddenPanel } from "./panels.js";
-import type { Request } from "../../../contract/generated/request";
+import type { Request } from "../../contract/generated/request";
 
-type Create = Extract<Request["action"], { operation: "create-content" }>;
+type Create = Extract<Request["action"], { operation: "create-vessel" }>;
 export type HiddenChoices = { panels: HiddenPanel[]; error?: string };
-type Reopen = Extract<Request["action"], { operation: "reopen-panel" }>;
+type Reopen = Extract<Request["action"], { operation: "reopen-placement" }>;
 type NewFleet = Extract<
   Request["action"],
-  { operation: "create-fleet-with-content" }
+  { operation: "create-fleet-with-vessel" }
 >;
 export type CreationDestination =
   | Create["destination"]
@@ -37,7 +37,7 @@ function chosen(
 ): Create | NewFleet {
   return destination.kind === "new-fleet"
     ? {
-        operation: "create-fleet-with-content",
+        operation: "create-fleet-with-vessel",
         voyage: destination.voyage,
         name: destination.name,
         source: destination.source,
@@ -45,7 +45,7 @@ function chosen(
         ...(launch ? { launch } : {}),
       }
     : {
-        operation: "create-content",
+        operation: "create-vessel",
         destination,
         typeId,
         ...(launch ? { launch } : {}),
@@ -149,7 +149,7 @@ export class CreationPicker {
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
     const entity =
-      destination.kind === "panel" && destination.owner.kind === "portals"
+      destination.kind === "placement" && destination.owner.kind === "portals"
         ? "Portal"
         : "Vessel";
     const content = menuSurface(`worker-choices-${id}`, "Content choices")
@@ -217,7 +217,7 @@ export class CreationPicker {
               );
             }),
         );
-      if (opening.destination.kind === "panel" && this.hidden.length)
+      if (opening.destination.kind === "placement" && this.hidden.length)
         content.child(
           menuButton(
             "hidden-vessels",
@@ -232,7 +232,7 @@ export class CreationPicker {
               cx.notify();
             }),
         );
-      if (opening.destination.kind === "panel" && this.expanded)
+      if (opening.destination.kind === "placement" && this.expanded)
         for (const panel of this.hidden)
           content.child(
             menuButton(
@@ -240,7 +240,7 @@ export class CreationPicker {
               `Reopen ${panel.name}${this.hidden.filter((item) => item.name === panel.name).length > 1 ? ` in ${panel.path}` : ""}`,
             )
               .tooltip(panel.path)
-              .child(Marker.new("reopen-panel", panel.id))
+              .child(Marker.new("reopen-placement", panel.id))
               .child(
                 div()
                   .flex()
@@ -252,13 +252,13 @@ export class CreationPicker {
               .on_click((_event, cx) => {
                 if (
                   this.current !== opening ||
-                  opening.destination.kind !== "panel"
+                  opening.destination.kind !== "placement"
                 )
                   return;
                 this.current = null;
                 create(
                   {
-                    operation: "reopen-panel",
+                    operation: "reopen-placement",
                     id: panel.id,
                     destination: opening.destination,
                   },

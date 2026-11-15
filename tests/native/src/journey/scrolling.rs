@@ -205,7 +205,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let name = Target::name(&RenameTarget::Vessel {
             id: terminal.placement().clone(),
         });
-        let tick = native.observe("a header observation of the ticking shell", |seen| {
+        let tick = native.observe("a canvas observation of the ticking shell", |seen| {
             seen.label(&name).and_then(tick_of)
         })?;
         fs::write(ticks.join("stop"), "")?;
@@ -230,7 +230,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let margin = millis(next_refresh)? - millis(saved)?;
         Verdict::new()
             .expect(
-                "the exited shell's Vessel is saved closed before the header's next 3 s observation could start",
+                "the exited shell's Vessel is saved closed before the canvas's next 3 s observation could start",
                 saved < next_refresh,
             )
             .observed("observed tick", tick)?

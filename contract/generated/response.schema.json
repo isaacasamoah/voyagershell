@@ -2,6 +2,32 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "definitions": {
+    "Arrangement": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/definitions/PlacementOwner"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "owner",
+        "name"
+      ],
+      "type": "object"
+    },
     "Axis": {
       "enum": [
         "horizontal",
@@ -30,61 +56,6 @@
       },
       "required": [
         "root"
-      ],
-      "type": "object"
-    },
-    "Content": {
-      "additionalProperties": false,
-      "properties": {
-        "backend": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "configuration": {
-          "additionalProperties": true,
-          "type": [
-            "object",
-            "null"
-          ]
-        },
-        "cwd": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "launch": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Launch"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "shellIntent": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "startPending": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "typeId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "typeId",
-        "cwd"
       ],
       "type": "object"
     },
@@ -187,9 +158,6 @@
     "Entry": {
       "additionalProperties": false,
       "properties": {
-        "content": {
-          "type": "string"
-        },
         "name": {
           "type": "string"
         },
@@ -209,10 +177,13 @@
         },
         "typeId": {
           "type": "string"
+        },
+        "vessel": {
+          "type": "string"
         }
       },
       "required": [
-        "content",
+        "vessel",
         "name",
         "typeId"
       ],
@@ -236,6 +207,12 @@
         "name": {
           "type": "string"
         },
+        "placements": {
+          "items": {
+            "$ref": "#/definitions/Placement"
+          },
+          "type": "array"
+        },
         "root": {
           "anyOf": [
             {
@@ -245,18 +222,12 @@
               "type": "null"
             }
           ]
-        },
-        "vessels": {
-          "items": {
-            "$ref": "#/definitions/Vessel"
-          },
-          "type": "array"
         }
       },
       "required": [
         "id",
         "name",
-        "vessels"
+        "placements"
       ],
       "type": "object"
     },
@@ -333,6 +304,13 @@
     "Layout": {
       "additionalProperties": false,
       "properties": {
+        "arrangements": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/Arrangement"
+          },
+          "type": "array"
+        },
         "canvas": {
           "allOf": [
             {
@@ -406,12 +384,6 @@
             "sidebarCollapsed": false
           }
         },
-        "contents": {
-          "items": {
-            "$ref": "#/definitions/Content"
-          },
-          "type": "array"
-        },
         "context": {
           "$ref": "#/definitions/Context"
         },
@@ -428,13 +400,6 @@
         "nextId": {
           "type": "string"
         },
-        "savedLayouts": {
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/SavedLayout"
-          },
-          "type": "array"
-        },
         "selectedFleet": {
           "type": [
             "string",
@@ -446,6 +411,12 @@
             "string",
             "null"
           ]
+        },
+        "vessels": {
+          "items": {
+            "$ref": "#/definitions/Vessel"
+          },
+          "type": "array"
         },
         "view": {
           "allOf": [
@@ -464,7 +435,7 @@
       },
       "required": [
         "voyages",
-        "contents",
+        "vessels",
         "context",
         "nextId"
       ],
@@ -604,7 +575,50 @@
         }
       ]
     },
-    "PanelOwner": {
+    "Permissions": {
+      "enum": [
+        "yolo",
+        "workspace-write",
+        "read-only"
+      ],
+      "type": "string"
+    },
+    "Phase": {
+      "enum": [
+        "ready",
+        "saving",
+        "incomplete",
+        "closed"
+      ],
+      "type": "string"
+    },
+    "Placement": {
+      "additionalProperties": false,
+      "properties": {
+        "hidden": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameOrigin": {
+          "$ref": "#/definitions/NameOrigin"
+        },
+        "vessel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "vessel",
+        "name"
+      ],
+      "type": "object"
+    },
+    "PlacementOwner": {
       "oneOf": [
         {
           "additionalProperties": false,
@@ -641,23 +655,6 @@
           "type": "object"
         }
       ]
-    },
-    "Permissions": {
-      "enum": [
-        "yolo",
-        "workspace-write",
-        "read-only"
-      ],
-      "type": "string"
-    },
-    "Phase": {
-      "enum": [
-        "ready",
-        "saving",
-        "incomplete",
-        "closed"
-      ],
-      "type": "string"
     },
     "Plan": {
       "additionalProperties": false,
@@ -763,32 +760,6 @@
         "context-bar"
       ],
       "type": "string"
-    },
-    "SavedLayout": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "$ref": "#/definitions/PanelOwner"
-        },
-        "root": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Split"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "owner",
-        "name"
-      ],
-      "type": "object"
     },
     "Size": {
       "oneOf": [
@@ -909,26 +880,55 @@
     "Vessel": {
       "additionalProperties": false,
       "properties": {
-        "content": {
-          "type": "string"
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "hidden": {
-          "type": "boolean"
+        "configuration": {
+          "additionalProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
         },
         "id": {
           "type": "string"
         },
-        "name": {
-          "type": "string"
+        "launch": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Launch"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "nameOrigin": {
-          "$ref": "#/definitions/NameOrigin"
+        "shellIntent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startPending": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "typeId": {
+          "type": "string"
         }
       },
       "required": [
         "id",
-        "content",
-        "name"
+        "typeId",
+        "cwd"
       ],
       "type": "object"
     },
@@ -980,11 +980,11 @@
         },
         "portals": {
           "items": {
-            "$ref": "#/definitions/Vessel"
+            "$ref": "#/definitions/Placement"
           },
           "type": "array"
         },
-        "primaryVessel": {
+        "primaryPlacement": {
           "type": [
             "string",
             "null"
@@ -1018,7 +1018,7 @@
         }
       ]
     },
-    "createdContents": {
+    "createdVessels": {
       "items": {
         "type": "string"
       },
@@ -1056,7 +1056,7 @@
     "layout",
     "fresh",
     "createdWorkspace",
-    "createdContents"
+    "createdVessels"
   ],
   "title": "Response",
   "type": "object"

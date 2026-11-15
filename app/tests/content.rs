@@ -5,7 +5,7 @@ use std::{
 };
 use voyager_app::content::Owner;
 use voyager_contract::{
-    ContentId,
+    VesselId,
     content::{Notes, Request, Response, Version},
 };
 
@@ -19,21 +19,21 @@ fn bound_updates_preserve_other_data_and_refuse_stale_or_forged() {
             .unwrap()
             .as_nanos()
     ));
-    fs::create_dir_all(path.join("mods/notes")).unwrap();
+    fs::create_dir_all(path.join("vessels/notes")).unwrap();
     fs::write(
-        path.join("mods/notes/mod.json"),
-        include_str!("../../content/notes/mod.json"),
+        path.join("vessels/notes/vessel.json"),
+        include_str!("../../content/notes/vessel.json"),
     )
     .unwrap();
     let mut owner = Owner::open(&path).unwrap();
-    assert!(owner.initialize(&ContentId("../outside".into())).is_err());
-    assert!(owner.bind(&ContentId("unregistered".into())).is_none());
-    let a = owner.initialize(&ContentId("notes-a".into())).unwrap();
-    let b = owner.initialize(&ContentId("notes-b".into())).unwrap();
+    assert!(owner.initialize(&VesselId("../outside".into())).is_err());
+    assert!(owner.bind(&VesselId("unregistered".into())).is_none());
+    let a = owner.initialize(&VesselId("notes-a".into())).unwrap();
+    let b = owner.initialize(&VesselId("notes-b".into())).unwrap();
     let read = |id: &str| Request::Inspect {
         version: Version::V1,
         request_id: "r".into(),
-        content_id: ContentId(id.into()),
+        vessel_id: VesselId(id.into()),
     };
     let revision = match owner.call(&a, read("notes-a")) {
         Response::Snapshot { snapshot, .. } => snapshot.revision,
@@ -42,7 +42,7 @@ fn bound_updates_preserve_other_data_and_refuse_stale_or_forged() {
     let update = |id: &str, revision: &str| Request::Update {
         version: Version::V1,
         request_id: "u".into(),
-        content_id: ContentId(id.into()),
+        vessel_id: VesselId(id.into()),
         expected_revision: revision.into(),
         data: Notes {
             title: "new".into(),
@@ -77,20 +77,20 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
             .unwrap()
             .as_nanos()
     ));
-    fs::create_dir_all(path.join("mods/notes")).unwrap();
-    let manifest = path.join("mods/notes/mod.json");
-    fs::write(&manifest, include_str!("../../content/notes/mod.json")).unwrap();
+    fs::create_dir_all(path.join("vessels/notes")).unwrap();
+    let manifest = path.join("vessels/notes/vessel.json");
+    fs::write(&manifest, include_str!("../../content/notes/vessel.json")).unwrap();
     fs::write(
-        path.join("mods/notes/main.js"),
+        path.join("vessels/notes/main.js"),
         include_str!("../../content/notes/main.js"),
     )
     .unwrap();
     let mut owner = Owner::open(&path).unwrap();
-    let binding = owner.initialize(&ContentId("notes-a".into())).unwrap();
+    let binding = owner.initialize(&VesselId("notes-a".into())).unwrap();
     let describe = || Request::Describe {
         version: Version::V1,
         request_id: "d".into(),
-        content_id: ContentId("notes-a".into()),
+        vessel_id: VesselId("notes-a".into()),
     };
     for _ in 0..3 {
         assert!(matches!(
@@ -118,7 +118,7 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
         Request::Inspect {
             version: Version::V1,
             request_id: "i".into(),
-            content_id: ContentId("notes-a".into()),
+            vessel_id: VesselId("notes-a".into()),
         },
     );
     assert!(
@@ -156,19 +156,23 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     let socket = runtime.join("herdr-core").join(format!("{session}.sock"));
     assert!(!socket.exists());
     let profile = runtime.join(format!("configuration-{}", std::process::id()));
-    for (name, source) in [
-        ("notes", include_str!("../../content/notes/mod.json")),
-        ("header", include_str!("../../desktop/mods/header/mod.json")),
+    for (package, file, source) in [
+        (
+            profile.join("vessels/notes"),
+            "vessel.json",
+            include_str!("../../content/notes/vessel.json"),
+        ),
+        (
+            profile.join("canvas"),
+            "canvas.json",
+            include_str!("../../desktop/canvas/canvas.json"),
+        ),
     ] {
-        fs::create_dir_all(profile.join("mods").join(name)).unwrap();
+        fs::create_dir_all(&package).unwrap();
         let mut manifest: serde_json::Value = serde_json::from_str(source).unwrap();
         manifest["contentConfiguration"] = serde_json::json!(1);
-        fs::write(
-            profile.join("mods").join(name).join("mod.json"),
-            serde_json::to_vec(&manifest).unwrap(),
-        )
-        .unwrap();
-        fs::write(profile.join("mods").join(name).join("main.js"), "").unwrap();
+        fs::write(package.join(file), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        fs::write(package.join("main.js"), "").unwrap();
     }
     let mut cleanup = Core::connect(&session).unwrap();
     let client = Client::with_content(
@@ -191,16 +195,16 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         let mut ids = Vec::new();
         for _ in 0..2 {
             workspace = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals {
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Portals {
                             voyage: workspace.layout.voyages[0].id.clone(),
                         },
                         insertion: workspace.layout.voyages[0].portals.last().map_or(
-                            voyager_contract::PanelInsertion::Empty,
-                            |panel| voyager_contract::PanelInsertion::Beside {
+                            voyager_contract::PlacementInsertion::Empty,
+                            |panel| voyager_contract::PlacementInsertion::Beside {
                                 id: panel.id.clone(),
                                 side: voyager_contract::Side::Bottom,
                             },
@@ -210,13 +214,13 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 workspace.version,
             );
             assert_eq!(workspace.status, Status::Applied);
-            ids.push(workspace.layout.contents.last().unwrap().id.clone());
+            ids.push(workspace.layout.vessels.last().unwrap().id.clone());
         }
         let binding = wait(client.bind_content(ids[0].clone())).unwrap();
         let inspect = || Request::Inspect {
             version: Version::V1,
             request_id: client.request_id(),
-            content_id: ids[0].clone(),
+            vessel_id: ids[0].clone(),
         };
         let access = Access::View(binding.clone());
         let before = client.content(access.clone(), inspect()).unwrap();
@@ -236,7 +240,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             .map(|id| {
                 let content = workspace
                     .layout
-                    .contents
+                    .vessels
                     .iter()
                     .find(|content| content.id == *id)
                     .unwrap();
@@ -258,7 +262,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         let request = Request::Configure {
             version: Version::V1,
             request_id: client.request_id(),
-            content_id: ids[0].clone(),
+            vessel_id: ids[0].clone(),
             expected_version: workspace.version,
             configuration: NotesConfiguration {
                 show_heading: false,
@@ -315,7 +319,9 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 .content(
                     Access::Agent {
                         scope: Context::Vessel {
-                            id: workspace.layout.voyages[0].fleets[0].vessels[0].id.clone()
+                            id: workspace.layout.voyages[0].fleets[0].placements[0]
+                                .id
+                                .clone()
                         },
                         expected_version: *workspace_version
                     },
@@ -335,15 +341,15 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         assert!(
             matches!(&*restored, Response::Snapshot {snapshot,configuration:Some(current),..} if snapshot.revision == original.revision && !current.configuration.show_heading && current.workspace_version == *workspace_version)
         );
-        let header_path = profile.join("mods/header/mod.json");
-        let header = fs::read(&header_path).unwrap();
-        let mut legacy: serde_json::Value = serde_json::from_slice(&header).unwrap();
+        let canvas_path = profile.join("canvas/canvas.json");
+        let canvas = fs::read(&canvas_path).unwrap();
+        let mut legacy: serde_json::Value = serde_json::from_slice(&canvas).unwrap();
         legacy
             .as_object_mut()
             .unwrap()
             .remove("contentConfiguration");
-        fs::write(&header_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-        let catalog = voyager_app::content::discover(&profile.join("mods")).unwrap();
+        fs::write(&canvas_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let catalog = voyager_app::content::discover(&profile.join("vessels")).unwrap();
         let notes = catalog
             .types
             .iter()
@@ -372,9 +378,13 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 ..
             }
         ));
-        fs::write(&header_path, header).unwrap();
+        fs::write(&canvas_path, canvas).unwrap();
         let mut external = Core::connect(&session).unwrap();
-        let manifests = [profile.join("mods/notes/mod.json"), header_path.clone()].map(|path| {
+        let manifests = [
+            profile.join("vessels/notes/vessel.json"),
+            canvas_path.clone(),
+        ]
+        .map(|path| {
             let bytes = fs::read(&path).unwrap();
             (path, bytes)
         });
@@ -383,7 +393,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             manifest["contentConfiguration"] = serde_json::json!(2);
             fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         }
-        let before_v2 = external.document_get("voyager-layout-v1").unwrap();
+        let before_v2 = external.document_get("voyager-layout-v2").unwrap();
         let read_v2 = client.content(access.clone(), inspect()).unwrap();
         assert!(
             matches!(&*read_v2, Response::Snapshot {snapshot, configuration: Some(current), ..}
@@ -407,10 +417,10 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         let refused_v2 = client.content(access.clone(), v2).unwrap();
         assert!(
             matches!(&*refused_v2, Response::Rejected {message, ..}
-                if message == "Content type notes does not support action configure"),
+                if message == "Vessel type notes does not support action configure"),
             "{refused_v2:?}"
         );
-        let after_v2 = external.document_get("voyager-layout-v1").unwrap();
+        let after_v2 = external.document_get("voyager-layout-v2").unwrap();
         assert_eq!(after_v2.version, before_v2.version);
         assert_eq!(after_v2.value, before_v2.value);
         assert_eq!(
@@ -423,10 +433,10 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         for (path, bytes) in manifests {
             fs::write(path, bytes).unwrap();
         }
-        let saved = external.document_get("voyager-layout-v1").unwrap();
+        let saved = external.document_get("voyager-layout-v2").unwrap();
         assert_eq!(saved.version, *workspace_version);
         assert_eq!(
-            saved.value["contents"]
+            saved.value["vessels"]
                 .as_array()
                 .unwrap()
                 .iter()
@@ -435,7 +445,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             false
         );
         external
-            .document_set("voyager-layout-v1", &saved.value, saved.version)
+            .document_set("voyager-layout-v2", &saved.value, saved.version)
             .unwrap();
         let observed = client.content(access.clone(), inspect()).unwrap();
         assert!(
@@ -457,28 +467,30 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             Response::Rejected { .. }
         ));
         let mut invalid = saved.value.clone();
-        invalid["contents"]
+        invalid["vessels"]
             .as_array_mut()
             .unwrap()
             .iter_mut()
             .find(|item| item["id"] == ids[0].0)
             .unwrap()["configuration"]["showHeading"] = serde_json::json!("invalid");
         let damaged = external
-            .document_set("voyager-layout-v1", &invalid, saved.version + 1)
+            .document_set("voyager-layout-v2", &invalid, saved.version + 1)
             .unwrap();
-        for content_id in [ids[0].clone(), ContentId("missing-note".into())] {
+        for vessel_id in [ids[0].clone(), VesselId("missing-note".into())] {
             let refused = client
                 .content(
                     Access::Agent {
                         scope: Context::Vessel {
-                            id: workspace.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                            id: workspace.layout.voyages[0].fleets[0].placements[0]
+                                .id
+                                .clone(),
                         },
                         expected_version: damaged.version,
                     },
                     Request::Inspect {
                         version: Version::V1,
                         request_id: client.request_id(),
-                        content_id,
+                        vessel_id,
                     },
                 )
                 .unwrap();
@@ -488,7 +500,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             );
         }
         let repaired = external
-            .document_set("voyager-layout-v1", &saved.value, damaged.version)
+            .document_set("voyager-layout-v2", &saved.value, damaged.version)
             .unwrap();
         let reopened = Client::with_content(
             session.clone(),
@@ -540,7 +552,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 Request::OpenNote {
                     version: Version::V1,
                     request_id: client.request_id(),
-                    content_id: ids[0].clone(),
+                    vessel_id: ids[0].clone(),
                     expected_version: current.workspace_version,
                     filename: current
                         .configuration

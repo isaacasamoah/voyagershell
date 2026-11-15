@@ -85,7 +85,7 @@ roles! {
     TogglePortals => "toggle-portals",
     ClosePanel => "close-panel",
     HiddenPanels => "hidden-panels",
-    ReopenPanel => "reopen-panel",
+    ReopenPlacement => "reopen-placement",
     WorkspaceDock => "workspace-dock",
     PortalArea => "portal-area",
     GoThere => "go-there",

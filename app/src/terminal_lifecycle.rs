@@ -4,19 +4,19 @@ use crate::{
     panels,
     workspace::Model,
 };
-use voyager_contract::{ContentId, CoreTerminalId, Layout, launch::Launch};
+use voyager_contract::{CoreTerminalId, Layout, VesselId, launch::Launch};
 
-fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, ContentId)> {
+fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, VesselId)> {
     let mut result = Vec::new();
     for voyage in layout.containers() {
         for fleet in voyage.fleets.iter() {
-            let root = panels::visible(&fleet.root, &fleet.vessels);
+            let root = panels::visible(&fleet.root, &fleet.placements);
             result.extend(
                 fleet
-                    .vessels
+                    .placements
                     .iter()
                     .filter(|panel| panels::contains(&root, &panel.id))
-                    .map(|panel| (panel.id.clone(), panel.content.clone())),
+                    .map(|panel| (panel.id.clone(), panel.vessel.clone())),
             );
         }
         if let Some(column) = &voyage.portal_layout {
@@ -26,14 +26,14 @@ fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, ContentId)> 
                     .portals
                     .iter()
                     .filter(|panel| panels::contains(&root, &panel.id))
-                    .map(|panel| (panel.id.clone(), panel.content.clone())),
+                    .map(|panel| (panel.id.clone(), panel.vessel.clone())),
             );
         }
     }
     result
 }
 
-pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> Vec<ContentId> {
+pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> Vec<VesselId> {
     prepare_selected(layout, terminals, None)
 }
 
@@ -41,7 +41,7 @@ pub(crate) fn prepare_voyage_reopen(
     layout: &mut Layout,
     terminals: &[Terminal],
     voyage: &voyager_contract::VoyageId,
-) -> Vec<ContentId> {
+) -> Vec<VesselId> {
     let ids: Vec<_> = layout
         .voyages
         .iter()
@@ -49,10 +49,10 @@ pub(crate) fn prepare_voyage_reopen(
         .flat_map(|item| {
             item.fleets
                 .iter()
-                .flat_map(|fleet| fleet.vessels.iter())
+                .flat_map(|fleet| fleet.placements.iter())
                 .chain(item.portals.iter())
         })
-        .map(|panel| panel.content.clone())
+        .map(|panel| panel.vessel.clone())
         .collect();
     prepare_selected(layout, terminals, Some(&ids))
 }
@@ -60,11 +60,11 @@ pub(crate) fn prepare_voyage_reopen(
 fn prepare_selected(
     layout: &mut Layout,
     terminals: &[Terminal],
-    ids: Option<&[ContentId]>,
-) -> Vec<ContentId> {
+    ids: Option<&[VesselId]>,
+) -> Vec<VesselId> {
     let retained = retained(layout);
     let mut ready = Vec::new();
-    for content in &mut layout.contents {
+    for content in &mut layout.vessels {
         if content.type_id != "terminal"
             || ids.is_some_and(|ids| !ids.contains(&content.id))
             || content.start_pending.is_some()
@@ -99,7 +99,7 @@ pub(crate) fn close_exited(
         .filter(|(_, id)| {
             model
                 .layout
-                .contents
+                .vessels
                 .iter()
                 .find(|content| &content.id == id)
                 .and_then(|content| content.backend.as_ref())
@@ -113,7 +113,7 @@ pub(crate) fn close_exited(
         .map(|(id, _)| id)
         .collect();
     for id in &closing {
-        model.apply(voyager_contract::Action::RemovePanel { id: id.clone() })?;
+        model.apply(voyager_contract::Action::RemovePlacement { id: id.clone() })?;
     }
     Ok(!closing.is_empty())
 }
@@ -167,7 +167,7 @@ mod tests {
         }
         for (index, content) in model
             .layout
-            .contents
+            .vessels
             .iter_mut()
             .filter(|item| item.type_id == "terminal")
             .enumerate()
@@ -191,7 +191,7 @@ mod tests {
         model.layout.voyages[0].fleets[0].closed = true;
         let content = model
             .layout
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.backend == Some(CoreTerminalId("t2".into())))
             .unwrap();
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(ready.len(), 1);
         let restarted = model
             .layout
-            .contents
+            .vessels
             .iter()
             .find(|item| item.id == ready[0])
             .unwrap();
@@ -215,14 +215,14 @@ mod tests {
         assert!(
             model
                 .layout
-                .contents
+                .vessels
                 .iter()
                 .any(|item| item.backend == Some(CoreTerminalId("t1".into())))
         );
         assert!(
             model
                 .layout
-                .contents
+                .vessels
                 .iter()
                 .any(|item| item.start_pending.as_deref() == Some("uncertain-start"))
         );
@@ -246,9 +246,9 @@ mod tests {
                 .iter()
                 .all(|id| {
                     model.layout.voyages[0].fleets[0]
-                        .vessels
+                        .placements
                         .iter()
-                        .all(|vessel| &vessel.content != id)
+                        .all(|vessel| &vessel.vessel != id)
                 })
         );
     }

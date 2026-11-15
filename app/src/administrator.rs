@@ -26,38 +26,38 @@ impl Dispatch {
             Self::Process(action) => ToolAction::Process(action.clone()),
             Self::Worktree(input) => ToolAction::Worktree(input.clone()),
             Self::Content(action) => ToolAction::Content(match action {
-                Content::Configure { content_id, .. } => Receipt::Configure {
-                    content_id: content_id.clone(),
+                Content::Configure { vessel_id, .. } => Receipt::Configure {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::Describe { content_id } => Receipt::Describe {
-                    content_id: content_id.clone(),
+                Content::Describe { vessel_id } => Receipt::Describe {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::Inspect { content_id } => Receipt::Inspect {
-                    content_id: content_id.clone(),
+                Content::Inspect { vessel_id } => Receipt::Inspect {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::MigrateNote { content_id } => Receipt::MigrateNote {
-                    content_id: content_id.clone(),
+                Content::MigrateNote { vessel_id } => Receipt::MigrateNote {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::ListNotes { content_id } => Receipt::ListNotes {
-                    content_id: content_id.clone(),
+                Content::ListNotes { vessel_id } => Receipt::ListNotes {
+                    vessel_id: vessel_id.clone(),
                 },
-                Content::NewNote { content_id, title } => Receipt::NewNote {
-                    content_id: content_id.clone(),
+                Content::NewNote { vessel_id, title } => Receipt::NewNote {
+                    vessel_id: vessel_id.clone(),
                     title: title.clone(),
                 },
                 Content::OpenNote {
-                    content_id,
+                    vessel_id,
                     filename,
                 } => Receipt::OpenNote {
-                    content_id: content_id.clone(),
+                    vessel_id: vessel_id.clone(),
                     filename: filename.clone(),
                 },
                 Content::Update {
-                    content_id,
+                    vessel_id,
                     expected_revision,
                     ..
                 } => Receipt::Update {
-                    content_id: content_id.clone(),
+                    vessel_id: vessel_id.clone(),
                     expected_revision: expected_revision.clone(),
                 },
             }),
@@ -125,22 +125,22 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
     Ok(vec![
         ToolDefinition {
             name: "voyager_worktree",
-            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace focus. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
+            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace dock context. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
             schema: worktree_schema,
         },
         ToolDefinition {
             name: "voyager_workspace",
-            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
+            description: "Inspect and manage the captured dock context. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes the context only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
             schema,
         },
         ToolDefinition {
             name: "voyager_process",
-            description: "Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.",
+            description: "Operate only bound terminals within this request's captured dock context. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_vessel tool.",
             schema: process_schema,
         },
         ToolDefinition {
-            name: "voyager_content",
-            description: "Describe, inspect, select files and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
+            name: "voyager_vessel",
+            description: "Describe, inspect, select files and update an existing Notes Vessel only inside the immutable captured dock context. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-vessel initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
             schema: content_schema,
         },
     ])
@@ -230,7 +230,7 @@ impl Tools {
             && turn.is_some_and(|turn| !turn.is_empty() && value.turn == turn)
             && matches!(
                 tool,
-                "voyager_workspace" | "voyager_process" | "voyager_content" | "voyager_worktree"
+                "voyager_workspace" | "voyager_process" | "voyager_vessel" | "voyager_worktree"
             )
             && value.namespace.is_none();
         let call = value.call.as_str();
@@ -302,7 +302,7 @@ impl Tools {
                 "The turn's 32-call limit was reached; no new call was dispatched",
             ));
         }
-        let limit = if tool == "voyager_content" {
+        let limit = if tool == "voyager_vessel" {
             crate::content::ENVELOPE_LIMIT
         } else {
             8192
@@ -310,7 +310,7 @@ impl Tools {
         let arguments =
             (value.arguments.to_string().len() <= limit).then(|| value.arguments.clone());
         let Some(arguments) = arguments else {
-            let message = if tool == "voyager_content" {
+            let message = if tool == "voyager_vessel" {
                 "Content arguments exceed 1 MiB plus 16 KiB. This call ID remains refused; use a new call for a different request."
             } else {
                 "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request."
@@ -577,60 +577,56 @@ fn reads(action: &Dispatch) -> bool {
 fn content_result(response: &voyager_contract::content::Response) -> EffectResult {
     use voyager_contract::content::Response;
     let (status, id, revision, warning) = match response {
-        Response::Described { content_id, .. } | Response::NotesList { content_id, .. } => {
-            (Status::Applied, content_id, None, None)
+        Response::Described { vessel_id, .. } | Response::NotesList { vessel_id, .. } => {
+            (Status::Applied, vessel_id, None, None)
         }
         Response::Configured {
-            content_id,
+            vessel_id,
             workspace_version,
             ..
         } => (
             Status::Applied,
-            content_id,
+            vessel_id,
             Some(workspace_version.to_string()),
             None,
         ),
         Response::NoteOpened {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         }
         | Response::Snapshot {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         }
         | Response::Applied {
-            content_id,
+            vessel_id,
             snapshot,
             ..
         } => (
             Status::Applied,
-            content_id,
+            vessel_id,
             Some(snapshot.revision.clone()),
             snapshot.warning.as_deref(),
         ),
         Response::Rejected {
-            content_id,
-            message,
-            ..
-        } => (Status::Rejected, content_id, None, Some(message.as_str())),
+            vessel_id, message, ..
+        } => (Status::Rejected, vessel_id, None, Some(message.as_str())),
         Response::Limited {
-            content_id,
+            vessel_id,
             revision,
             message,
             ..
         } => (
             Status::Rejected,
-            content_id,
+            vessel_id,
             revision.clone(),
             Some(message.as_str()),
         ),
         Response::Uncertain {
-            content_id,
-            message,
-            ..
-        } => (Status::Uncertain, content_id, None, Some(message.as_str())),
+            vessel_id, message, ..
+        } => (Status::Uncertain, vessel_id, None, Some(message.as_str())),
     };
     let raw = serde_json::to_string(response).expect("Content response serializes");
     let displayed_warning = warning.map(|message| {
@@ -712,29 +708,29 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
     match status {
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
-            Action::SetPanelMaximized {
+            Action::SetPlacementMaximized {
                 maximized: true, ..
             } => "Panel maximized",
-            Action::SetPanelMaximized {
+            Action::SetPlacementMaximized {
                 maximized: false, ..
             } => "Panel restored",
             Action::Home => "Home opened",
             Action::UpdateCanvas { .. } => "Workspace layout updated",
             Action::SetSidebar { .. } => "Sidebar updated",
-            Action::SavePanelLayout { .. } => "Panel layout saved",
-            Action::LoadPanelLayout { .. } => "Panel layout loaded",
+            Action::SaveArrangement { .. } => "Panel layout saved",
+            Action::LoadArrangement { .. } => "Panel layout loaded",
             Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => "Voyage created",
-            Action::CreateFleet { .. } | Action::CreateFleetWithContent { .. } => "Fleet created",
-            Action::CreateContent { .. } => "Content created",
-            Action::SetPanelHidden { .. } => "Panel visibility changed",
-            Action::RemovePanel { .. } => "Panel removed from layout",
-            Action::RemovePanelLayout { .. } => "Saved arrangement removed",
+            Action::CreateFleet { .. } | Action::CreateFleetWithVessel { .. } => "Fleet created",
+            Action::CreateVessel { .. } => "Content created",
+            Action::SetPlacementHidden { .. } => "Panel visibility changed",
+            Action::RemovePlacement { .. } => "Panel removed from layout",
+            Action::RemoveArrangement { .. } => "Saved arrangement removed",
             Action::SetPortalPresentation { .. } => "Portal column updated",
-            Action::RemoveContentPackage { .. } => "Content package removed",
-            Action::RestoreContentPackage { .. } => "Content package restored",
+            Action::RemoveVesselPackage { .. } => "Vessel package removed",
+            Action::RestoreVesselPackage { .. } => "Vessel package restored",
             Action::Rename { .. } => "Name changed",
-            Action::ResizePanelSplit { .. } => "Split resized",
-            Action::MovePanel { .. } => "Panel moved",
+            Action::ResizePlacementSplit { .. } => "Split resized",
+            Action::MovePlacement { .. } => "Panel moved",
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
@@ -745,8 +741,8 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::SelectFleet { .. } => "Fleet selected",
             Action::CloseFleet { .. } => "Fleet closed",
             Action::ReopenFleet { .. } => "Fleet reopened",
-            Action::RevealPanel { .. } => "Panel revealed",
-            Action::ReopenPanel { .. } => "Existing panel reopened",
+            Action::RevealPlacement { .. } => "Panel revealed",
+            Action::ReopenPlacement { .. } => "Existing panel reopened",
             Action::Dock { .. } => "Focus changed",
             Action::StartNewShell { .. } => "New shell authorized",
         }
@@ -774,10 +770,10 @@ mod tests {
         let response = ContentResponse::Snapshot {
             version: Version::V1,
             request_id: "read".into(),
-            content_id: voyager_contract::ContentId("notes".into()),
+            vessel_id: voyager_contract::VesselId("notes".into()),
             configuration: None,
             snapshot: Snapshot {
-                content_id: voyager_contract::ContentId("notes".into()),
+                vessel_id: voyager_contract::VesselId("notes".into()),
                 revision: "revision".into(),
                 data: Notes {
                     title: "Title".into(),
@@ -789,7 +785,7 @@ mod tests {
         let request = voyager_contract::content::Request::Inspect {
             version: Version::V1,
             request_id: "read".into(),
-            content_id: voyager_contract::ContentId("notes".into()),
+            vessel_id: voyager_contract::VesselId("notes".into()),
         };
         let response = crate::content::bounded_response(&request, response);
         let result = content_result(&response);
@@ -813,15 +809,15 @@ mod tests {
         };
         let directory =
             std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
-        std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        std::fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         std::fs::write(
-            directory.join("mods/notes/main.js"),
+            directory.join("vessels/notes/main.js"),
             include_str!("../../content/notes/main.js"),
         )
         .unwrap();
         std::fs::write(
-            directory.join("mods/notes/mod.json"),
-            include_str!("../../content/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
+            include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
         let session = format!("voyager-n3-owner-{}", std::process::id());
@@ -844,13 +840,13 @@ mod tests {
             let voyage = initial.layout.voyages[0].id.clone();
             let fleet = initial.layout.voyages[0].fleets[0].id.clone();
             let created = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
-                        insertion: voyager_contract::PanelInsertion::Beside {
-                            id: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PlacementInsertion::Beside {
+                            id: initial.layout.voyages[0].fleets[0].placements[0].id.clone(),
                             side: voyager_contract::Side::Right,
                         },
                     },
@@ -858,29 +854,29 @@ mod tests {
                 initial.version,
             );
             assert_eq!(created.status, Status::Applied);
-            let a = created.layout.contents.last().unwrap().id.clone();
+            let a = created.layout.vessels.last().unwrap().id.clone();
             let placement = created.layout.voyages[0].fleets[0]
-                .vessels
+                .placements
                 .last()
                 .unwrap()
                 .id
                 .clone();
             let created = call(
-                Action::CreateContent {
+                Action::CreateVessel {
                     launch: None,
                     type_id: crate::content_type::NOTES_TYPE.into(),
-                    destination: voyager_contract::ContentDestination::Panel {
-                        owner: voyager_contract::PanelOwner::Portals { voyage },
-                        insertion: voyager_contract::PanelInsertion::Empty,
+                    destination: voyager_contract::ContentDestination::Placement {
+                        owner: voyager_contract::PlacementOwner::Portals { voyage },
+                        insertion: voyager_contract::PlacementInsertion::Empty,
                     },
                 },
                 created.version,
             );
-            let b = created.layout.contents.last().unwrap().id.clone();
-            let note_path = |id: &voyager_contract::ContentId| {
+            let b = created.layout.vessels.last().unwrap().id.clone();
+            let note_path = |id: &voyager_contract::VesselId| {
                 let content = created
                     .layout
-                    .contents
+                    .vessels
                     .iter()
                     .find(|content| content.id == *id)
                     .unwrap();
@@ -910,10 +906,10 @@ mod tests {
                 assert!(Instant::now() < deadline);
                 thread::sleep(Duration::from_millis(5));
             };
-            let inspect = |id: &voyager_contract::ContentId| ContentRequest::Inspect {
+            let inspect = |id: &voyager_contract::VesselId| ContentRequest::Inspect {
                 version: Version::V1,
                 request_id: workspace.request_id(),
-                content_id: id.clone(),
+                vessel_id: id.clone(),
             };
             let read = inspect(&a);
             let snapshot = workspace
@@ -949,7 +945,7 @@ mod tests {
                 preview: None,
             };
             let mut tools = Tools::default();
-            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","contentId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
+            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_vessel","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","vesselId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
             assert!(
                 tools
                     .callback(
@@ -1024,7 +1020,7 @@ mod tests {
                 crate::codex::encode_tool_reply(&applied.replies[0])["result"]
             );
             callback["id"] = "changed".into();
-            callback["params"]["arguments"]["action"]["contentId"] = json!(b);
+            callback["params"]["arguments"]["action"]["vesselId"] = json!(b);
             assert_eq!(
                 tools
                     .callback(
@@ -1055,11 +1051,11 @@ mod tests {
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             let mut external = Core::connect(&session).unwrap();
             let bumped = external
-                .document_set("voyager-layout-v1", &created.layout, created.version)
+                .document_set("voyager-layout-v2", &created.layout, created.version)
                 .unwrap();
             callback["id"] = "stale".into();
             callback["params"]["callId"] = "stale".into();
-            callback["params"]["arguments"]["action"]["contentId"] = json!(a);
+            callback["params"]["arguments"]["action"]["vesselId"] = json!(a);
             callback["params"]["arguments"]["action"]["expectedRevision"] = json!(applied_revision);
             assert!(
                 tools
@@ -1076,7 +1072,7 @@ mod tests {
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             assert_eq!(std::fs::read(&b_path).unwrap(), b_before);
             std::fs::write(
-                directory.join("mods/notes/mod.json"),
+                directory.join("vessels/notes/vessel.json"),
                 br#"{"name":"Notes"}"#,
             )
             .unwrap();
@@ -1340,7 +1336,7 @@ mod tests {
         let mut oversized = process_callback.clone();
         oversized["id"] = "oversized-process".into();
         oversized["params"]["callId"] = "oversized-process".into();
-        oversized["params"]["arguments"] = json!({"expectedVersion":final_state.version.to_string(),"action":{"operation":"send","contentId":"none","terminalId":"t1","pid":1,"text":"x".repeat(8192)}});
+        oversized["params"]["arguments"] = json!({"expectedVersion":final_state.version.to_string(),"action":{"operation":"send","vesselId":"none","terminalId":"t1","pid":1,"text":"x".repeat(8192)}});
         let large_refusal = tools
             .callback(
                 &oversized,

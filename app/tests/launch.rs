@@ -92,18 +92,18 @@ fn explicit_worker_creation_binds_only_its_new_content() {
             cwd: "/tmp".into(),
         })
         .unwrap();
-    let original = model.layout.contents[0].clone();
+    let original = model.layout.vessels[0].clone();
     let fleet = model.layout.selected_fleet.clone().unwrap();
-    let after = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    let after = model.layout.voyages[0].fleets[0].placements[0].id.clone();
     let mut request = serde_json::json!({
-        "operation": "create-content", "typeId": "terminal",
-        "destination": {"kind": "panel", "owner": {"kind": "fleet", "id": fleet}, "insertion": {"kind": "beside", "id": after, "side": "right"}},
+        "operation": "create-vessel", "typeId": "terminal",
+        "destination": {"kind": "placement", "owner": {"kind": "fleet", "id": fleet}, "insertion": {"kind": "beside", "id": after, "side": "right"}},
         "launch": {"kind": "codex", "model": "gpt-6.1-sol", "effort": "high", "permissions": "yolo"}
     });
     let create: Action = serde_json::from_value(request.clone()).unwrap();
     model.apply(create).unwrap();
-    assert_eq!(model.layout.contents[0], original);
-    let worker = serde_json::to_value(model.layout.contents.last().unwrap()).unwrap();
+    assert_eq!(model.layout.vessels[0], original);
+    let worker = serde_json::to_value(model.layout.vessels.last().unwrap()).unwrap();
     assert_eq!(worker["launch"], request["launch"]);
     assert!(worker["backend"].is_null());
     let before = model.layout.clone();
@@ -143,8 +143,8 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             .unwrap();
         let fleet = &initial.layout.voyages[0].fleets[0];
         let action: Action = serde_json::from_value(serde_json::json!({
-            "operation":"create-content", "typeId":"terminal",
-            "destination":{"kind":"panel", "owner":{"kind":"fleet", "id":fleet.id}, "insertion":{"kind":"beside", "id":fleet.vessels[0].id, "side":"right"}},
+            "operation":"create-vessel", "typeId":"terminal",
+            "destination":{"kind":"placement", "owner":{"kind":"fleet", "id":fleet.id}, "insertion":{"kind":"beside", "id":fleet.placements[0].id, "side":"right"}},
             "launch":{"kind":"program", "argv":["/no-voyager-worker-here"]}
         })).unwrap();
         let request = Request {
@@ -155,7 +155,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         let created = client.call(request.clone()).unwrap();
         assert_eq!(created.status, Status::Applied);
         let mut changed = request.clone();
-        if let Action::CreateContent { launch, .. } = &mut changed.action {
+        if let Action::CreateVessel { launch, .. } = &mut changed.action {
             *launch = Some(voyager_contract::launch::Launch::Terminal);
         }
         let changed = client.call(changed).unwrap();
@@ -166,7 +166,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
                 .as_deref()
                 .is_some_and(|message| message.contains("Changed request identity"))
         );
-        let id = created.layout.contents.last().unwrap().id.clone();
+        let id = created.layout.vessels.last().unwrap().id.clone();
         let refused = client.terminal(id.clone(), client.request_id(), created.version);
         assert!(
             matches!(refused, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
@@ -180,24 +180,21 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             .unwrap();
         let worker = inspected
             .layout
-            .contents
+            .vessels
             .iter()
             .find(|item| item.id == id)
             .unwrap();
         assert!(worker.backend.is_none() && worker.start_pending.is_none());
-        assert_eq!(
-            worker.launch,
-            created.layout.contents.last().unwrap().launch
-        );
+        assert_eq!(worker.launch, created.layout.vessels.last().unwrap().launch);
         let original_launch = worker.launch.clone();
         let mut changed = (*inspected.layout).clone();
         changed
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.id == id)
             .unwrap()
             .launch = Some(voyager_contract::launch::Launch::Terminal);
-        core.document_set("voyager-layout-v1", &changed, inspected.version)
+        core.document_set("voyager-layout-v2", &changed, inspected.version)
             .unwrap();
         let observed = client
             .call(Request {
@@ -206,7 +203,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
                 action: Action::Inspect,
             })
             .unwrap();
-        assert!(!observed.created_contents.contains(&id));
+        assert!(!observed.created_vessels.contains(&id));
         let refused = client.terminal(id.clone(), client.request_id(), observed.version);
         assert!(
             matches!(refused, Err(Error::Rejected { message, .. }) if message.contains("creation launch changed"))
@@ -221,12 +218,12 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         assert_eq!(unchanged.version, observed.version);
         assert_eq!(unchanged.layout, observed.layout);
         changed
-            .contents
+            .vessels
             .iter_mut()
             .find(|item| item.id == id)
             .unwrap()
             .launch = original_launch;
-        core.document_set("voyager-layout-v1", &changed, observed.version)
+        core.document_set("voyager-layout-v2", &changed, observed.version)
             .unwrap();
         let restored = client
             .call(Request {
@@ -240,7 +237,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             matches!(retry, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
         );
         assert_eq!(client.call(request).unwrap().status, Status::Applied);
-        assert_eq!(inspected.layout.contents.len(), 3);
+        assert_eq!(inspected.layout.vessels.len(), 3);
         let reopened = Client::open(session.clone(), "/tmp".into());
         let snapshot = reopened
             .call(Request {

@@ -1,15 +1,15 @@
 import type {
   Layout,
-  PanelOwner,
+  PlacementOwner,
   Split,
-  Vessel,
+  Placement,
   Voyage,
-} from "../../../contract/generated/response";
+} from "../../contract/generated/response";
 
 export type PanelGroup = {
-  owner: PanelOwner;
+  owner: PlacementOwner;
   voyage: Voyage;
-  members: Vessel[];
+  members: Placement[];
   root: Split | null;
   maximizedPlacement?: string | null;
 };
@@ -32,7 +32,7 @@ export function panelGroups(layout: Layout): PanelGroup[] {
       groups.push({
         owner: { kind: "fleet", id: fleet.id },
         voyage,
-        members: fleet.vessels,
+        members: fleet.placements,
         root: fleet.root ?? null,
         maximizedPlacement: fleet.maximizedPlacement,
       });
@@ -70,7 +70,7 @@ export function activeGroups(layout: Layout): PanelGroup[] {
 export function visiblePanels(
   group: Pick<PanelGroup, "root" | "members" | "maximizedPlacement">,
   maximized = false,
-): Vessel[] {
+): Placement[] {
   const ids = new Set<string>();
   const visit = (tree: Split | null) => {
     if (!tree) return;
@@ -91,12 +91,12 @@ export function visiblePanels(
   );
 }
 
-export type HiddenPanel = Vessel & { path: string };
+export type HiddenPanel = Placement & { path: string };
 
 export function hiddenPanels(
   layout: Layout,
-  destination: import("../../../contract/generated/request").ContentDestination,
-  processes: import("../../../contract/generated/processResponse").ProcessInfo[],
+  destination: import("../../contract/generated/request").ContentDestination,
+  processes: import("../../contract/generated/processResponse").ProcessInfo[],
 ): HiddenPanel[] {
   const groups = panelGroups(layout);
   const target = groups.find(
@@ -107,12 +107,10 @@ export function hiddenPanels(
   const live = new Set(
     processes
       .filter((process) => process.state === "live" && process.pid)
-      .map((process) =>
-        JSON.stringify([process.contentId, process.terminalId]),
-      ),
+      .map((process) => JSON.stringify([process.vesselId, process.terminalId])),
   );
   const contents = new Map(
-    layout.contents.map((content) => [content.id, content]),
+    layout.vessels.map((content) => [content.id, content]),
   );
   return groups
     .filter(
@@ -125,7 +123,7 @@ export function hiddenPanels(
       return group.members
         .filter((panel) => {
           if (visible.has(panel.id)) return false;
-          const content = contents.get(panel.content);
+          const content = contents.get(panel.vessel);
           if (!content || content.startPending) return false;
           return content.typeId === "terminal"
             ? Boolean(

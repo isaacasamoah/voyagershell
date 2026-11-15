@@ -15,7 +15,7 @@ export function panelGroups(layout) {
       groups.push({
         owner: { kind: "fleet", id: fleet.id },
         voyage,
-        members: fleet.vessels,
+        members: fleet.placements,
         root: fleet.root ?? null,
         maximizedPlacement: fleet.maximizedPlacement,
       });
@@ -78,12 +78,10 @@ export function hiddenPanels(layout, destination, processes) {
   const live = new Set(
     processes
       .filter((process) => process.state === "live" && process.pid)
-      .map((process) =>
-        JSON.stringify([process.contentId, process.terminalId]),
-      ),
+      .map((process) => JSON.stringify([process.vesselId, process.terminalId])),
   );
   const contents = new Map(
-    layout.contents.map((content) => [content.id, content]),
+    layout.vessels.map((content) => [content.id, content]),
   );
   return groups
     .filter(
@@ -96,7 +94,7 @@ export function hiddenPanels(layout, destination, processes) {
       return group.members
         .filter((panel) => {
           if (visible.has(panel.id)) return false;
-          const content = contents.get(panel.content);
+          const content = contents.get(panel.vessel);
           if (!content || content.startPending) return false;
           return content.typeId === "terminal"
             ? Boolean(

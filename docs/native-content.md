@@ -1,6 +1,6 @@
 # Native shell host
 
-The native shell is an editable JavaScript view rendered through GPUI Shell. The host copies its default script, generated bindings and theme into the selected profile only when those files do not already exist. It exposes a read-only color projection and the typed workspace connection described in [workspace.md](workspace.md). A source reload keeps the previous view if the new source cannot load; theme errors are shown without replacing the last valid theme. The accepted earlier header established hosting, not the new workspace operations. Closing this checkpoint quits its own process and bridge, leaving the dedicated Core server running. The complete viewer/quit lifecycle is not yet implemented.
+The native shell is an editable JavaScript view rendered through GPUI Shell. The host copies its default script, generated bindings and theme into the selected profile only when those files do not already exist. It exposes a read-only color projection and the typed workspace connection described in [workspace.md](workspace.md). A source reload keeps the previous view if the new source cannot load; theme errors are shown without replacing the last valid theme. The accepted earlier canvas established hosting, not the new workspace operations. Closing this checkpoint quits its own process and bridge, leaving the dedicated Core server running. The complete viewer/quit lifecycle is not yet implemented.
 
 Run the owned trial with an absolute dedicated profile and session:
 

@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { observe, lockReach } = require("./observe.cjs");
 const { parse } = require("./yaml.cjs");
+const vocabulary = require("./vocabulary.cjs");
 
 const HERE = __dirname;
 
@@ -155,8 +156,18 @@ function violations(rule, facts) {
         id: `${rule.id}: ${file}`,
         at: file,
         count,
+        unit: "lines",
         limit: rule.limit,
       }));
+  }
+  if (rule.check === "forbid_terms") {
+    return [...facts.terms.get(rule.id)].map(([id, hits]) => ({
+      id: `${rule.id}: ${id}`,
+      at: `${hits[0].file}:${hits[0].line}`,
+      count: hits.length,
+      unit: "hits",
+      limit: 0,
+    }));
   }
   throw new Error(`Rule ${rule.id} has unknown check ${rule.check}`);
 }
@@ -168,14 +179,34 @@ function gate({
   known = path.join(HERE, "known-violations.yaml"),
 }) {
   const tree = revision ?? workingTree(repository);
-  const observation = observe(repository, tree);
+  const ruleList = parse(fs.readFileSync(rules, "utf8")).rules;
+  const tables = new Map(
+    ruleList
+      .filter((rule) => rule.check === "forbid_terms")
+      .map((rule) => [
+        rule.id,
+        vocabulary.load(path.join(path.dirname(rules), rule.table)),
+      ]),
+  );
+  const observation = observe(
+    repository,
+    tree,
+    undefined,
+    (snapshot) =>
+      new Map(
+        [...tables].map(([id, table]) => [
+          id,
+          vocabulary.scanSnapshot(table, snapshot),
+        ]),
+      ),
+  );
   const facts = {
+    terms: observation.scanned,
     edges: observation.observed.edges,
     unresolved: observation.observed.unresolved,
     sizes: observation.sizes,
     lock: observation.lock,
   };
-  const ruleList = parse(fs.readFileSync(rules, "utf8")).rules;
   const entries = parse(fs.readFileSync(known, "utf8")).known ?? [];
   for (const entry of entries)
     if (!entry.id || !entry.owner || !entry.reason)
@@ -195,18 +226,18 @@ function gate({
       fresh.push(
         item.count === undefined
           ? `NEW ${id}${where}`
-          : `NEW ${id} has ${item.count} lines, over the limit of ${item.limit}`,
+          : `NEW ${id} has ${item.count} ${item.unit}, over the limit of ${item.limit}`,
       );
     } else if (item.count !== undefined) {
       if (typeof entry.limit !== "number")
         throw new Error(`Known size violation needs a numeric limit: ${id}`);
       if (item.count > entry.limit)
         fresh.push(
-          `NEW ${id} has ${item.count} lines, over its recorded limit of ${entry.limit}`,
+          `NEW ${id} has ${item.count} ${item.unit}, over its recorded limit of ${entry.limit}`,
         );
       else if (item.count < entry.limit)
         stale.push(
-          `STALE ${id} has ${item.count} lines, lower its recorded limit from ${entry.limit} to ${item.count} in known-violations.yaml`,
+          `STALE ${id} has ${item.count} ${item.unit}, lower its recorded limit from ${entry.limit} to ${item.count} in known-violations.yaml`,
         );
     }
   }

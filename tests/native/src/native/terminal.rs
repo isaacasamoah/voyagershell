@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use std::time::Duration;
 use voyager_contract::inspection::Frame;
-use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
+use voyager_contract::{CoreTerminalId, Layout, PlacementId, VesselId};
 
 pub const EXPECTATION: Duration = Duration::from_secs(4);
 pub const LOOK: Duration = Duration::from_millis(10);
@@ -289,7 +289,7 @@ impl Terminal {
                 return Ok(None);
             };
             Ok(layout
-                .contents
+                .vessels
                 .first()
                 .and_then(|content| placement_of(&layout, &content.id).cloned()))
         })?;
@@ -307,9 +307,9 @@ impl Terminal {
                 .find(|placed| &placed.id == placement)
                 .and_then(|placed| {
                     layout
-                        .contents
+                        .vessels
                         .iter()
-                        .find(|content| content.id == placed.content)
+                        .find(|content| content.id == placed.vessel)
                 });
             Ok(content.and_then(|content| content.backend.clone()))
         })?;
@@ -565,9 +565,9 @@ fn inset(frame: &Frame) -> u16 {
     (PADDING * frame.window.scale).ceil() as u16
 }
 
-fn placement_of<'a>(layout: &'a Layout, content: &ContentId) -> Option<&'a PlacementId> {
+fn placement_of<'a>(layout: &'a Layout, content: &VesselId) -> Option<&'a PlacementId> {
     placed(layout)
-        .find(|placed| &placed.content == content)
+        .find(|placed| &placed.vessel == content)
         .map(|placed| &placed.id)
 }
 
@@ -873,14 +873,14 @@ mod tests {
                     "id": "fleet-4",
                     "name": "Fleet 1",
                     "root": null,
-                    "vessels": [
-                        {"id": "placement-7", "content": "content-6", "name": "Agents 1"},
-                        {"id": "placement-3", "content": "content-2", "name": "Terminal 1"}
+                    "placements": [
+                        {"id": "placement-7", "vessel": "content-6", "name": "Agents 1"},
+                        {"id": "placement-3", "vessel": "content-2", "name": "Terminal 1"}
                     ]
                 }],
-                "portals": [{"id": "placement-9", "content": "content-8", "name": "Notes"}]
+                "portals": [{"id": "placement-9", "vessel": "content-8", "name": "Notes"}]
             }],
-            "contents": [],
+            "vessels": [],
             "selectedVoyage": "voyage-1",
             "selectedFleet": "fleet-4",
             "context": {"kind": "workspace"},
@@ -888,7 +888,7 @@ mod tests {
         }))
         .expect("a contract layout");
         let placed = |content: &str| {
-            placement_of(&layout, &ContentId(content.into())).map(|placement| placement.0.as_str())
+            placement_of(&layout, &VesselId(content.into())).map(|placement| placement.0.as_str())
         };
         assert_eq!(placed("content-2"), Some("placement-3"));
         assert_eq!(placed("content-8"), Some("placement-9"));
