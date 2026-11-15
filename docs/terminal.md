@@ -454,7 +454,8 @@ gate passes it at any time. The owner then keeps it only when a Vessel's
 backend still names the terminal, and updates the reported facts. A
 `foreground` report changes no fact. It moves the activity counter, and the
 canvas reads the process list again while an Agents Vessel is shown, so a new
-foreground program shows there without the 3 s loop. A `doc` report names no
+foreground program shows there without the 3 s loop. A change that arrives
+during such a read is read once more, 250 ms after that read ends. A `doc` report names no
 terminal, so nothing keeps it, and the layout's version compare-and-set still
 decides a foreign write. A `lost` report makes the fact unknown and never ends
 a program.

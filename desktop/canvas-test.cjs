@@ -1062,6 +1062,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
         },
       };
     if (name === "voyager_theme") return { projection: () => ({}) };
+    if (name === "voyager_native") return { Marker: MarkerStub };
     if (name === "./process-icons.js")
       return {
         processIcon: (program) => {
@@ -1174,10 +1175,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   assert.ok(buttons.has("vessels-group-type-voyage-python"));
   assert.deepEqual(icons, ["Codex", "Bash", "Notes", "python"]);
   const row = buttons.get("vessel-home-agent");
-  assert.match(
-    row.calls.find(([name]) => name === "accessibility_label")[1],
-    /folder, Codex, Idle/,
-  );
+  const label = row.calls.find(([name]) => name === "accessibility_label")[1];
+  assert.match(label, /folder, Codex, Idle/);
+  assert.deepEqual(deepMarkers(row), [["agents-row", "home-agent", label]]);
   const cx = {};
   row.calls.find(([name]) => name === "on_click")[1]({}, cx);
   buttons
@@ -1373,6 +1373,66 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
   );
   await pending;
   assert.deepEqual(await choices, { panels: [], error: undefined });
+});
+
+test("a new activity revision reads processes again only while an Agents Vessel is shown", async () => {
+  let reads = 0;
+  const finishes = [];
+  const Canvas = new Function(
+    "View",
+    "inspectProcesses",
+    "reported_activity",
+    "validateReportedActivity",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(
+    class {},
+    () => {
+      reads++;
+      return new Promise((done) => finishes.push(done));
+    },
+    () => JSON.stringify({ terminals: {}, limited: false }),
+    () => true,
+  );
+  const fleet = (vessel) => ({
+    id: "fleet",
+    placements: [{ id: "placement", vessel }],
+    root: { kind: "leaf", placement: "placement" },
+  });
+  const layout = (vessel, typeId) => ({
+    view: "fleet",
+    selectedVoyage: "voyage",
+    selectedFleet: "fleet",
+    voyages: [{ id: "voyage", fleets: [fleet(vessel)], portals: [] }],
+    vessels: [{ id: vessel, typeId }],
+  });
+  const view = Object.assign(new Canvas(), {
+    version: "7",
+    activityRevision: "",
+    layout: layout("shell", "terminal"),
+  });
+  const tasks = [];
+  const quiet = [];
+  const task = { notify() {}, sleep: async (ms) => quiet.push(ms) };
+  const cx = { spawn: (run) => tasks.push(run(task)) };
+  view.readActivity("1", cx);
+  assert.equal(reads, 0, "No Agents Vessel is shown");
+  view.layout = layout("overview", "agents");
+  view.readActivity("1", cx);
+  assert.equal(reads, 0, "The revision did not change");
+  view.readActivity("2", cx);
+  view.readActivity("3", cx);
+  assert.equal(reads, 1, "A read in flight is not doubled");
+  const settled = () => new Promise((done) => setImmediate(done));
+  finishes[0]([]);
+  await settled();
+  assert.equal(reads, 2, "A change during a read is read once more");
+  assert.deepEqual(quiet, [250], "The second read waits a quiet time");
+  finishes[1]([]);
+  await Promise.all(tasks);
+  view.readActivity("4", cx);
+  assert.equal(reads, 3);
+  finishes[2]([]);
+  await Promise.all(tasks);
 });
 
 function chatClass() {

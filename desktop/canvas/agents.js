@@ -1,10 +1,11 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_theme";
+import { Marker } from "voyager_native";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";
-import { visiblePanels } from "./panels.js";
+import { activeGroups, visiblePanels } from "./panels.js";
 const AGENT_NAMES = {
   codex: "Codex",
   claude: "Claude",
@@ -44,6 +45,19 @@ function statusGroup(activity) {
       return "Done";
   }
   return "Idle";
+}
+export function agentsShown(layout) {
+  return (
+    !!layout &&
+    activeGroups(layout).some((group) =>
+      visiblePanels(group, true).some((panel) =>
+        layout.vessels.some(
+          (content) =>
+            content.id === panel.vessel && content.typeId === "agents",
+        ),
+      ),
+    )
+  );
 }
 export function agentsView(
   layout,
@@ -181,11 +195,12 @@ export function agentsView(
         });
       }
   }
-  const row = (item) =>
-    Button.new(`vessel-${item.id}`)
-      .accessibility_label(
-        [item.name, item.program, item.detail].filter(Boolean).join(", "),
-      )
+  const row = (item) => {
+    const label = [item.name, item.program, item.detail]
+      .filter(Boolean)
+      .join(", ");
+    return Button.new(`vessel-${item.id}`)
+      .accessibility_label(label)
       .tooltip(item.hint)
       .w_full()
       .justify_start()
@@ -231,7 +246,9 @@ export function agentsView(
                 ]
               : [],
           ),
-      );
+      )
+      .child(Marker.new("agents-row", item.id, label));
+  };
   const section = (id, title, items) => {
     const collapsed = options?.collapsed.has(id) || false;
     return div()

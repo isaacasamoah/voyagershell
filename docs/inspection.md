@@ -166,6 +166,7 @@ union all come from that list.
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |
 | `profile-update` | Profile path of the file | One line of the notice that a newer first-party version of an edited or unrecorded profile file is available | `Updates::view` in `banner.rs` |
 | `window-minimize`, `window-maximize`, `window-close` | Empty | The window buttons at the right end of the top strip, drawn only under client decorations | `windowControls` in `navigation-view.ts` |
+| `agents-row` | Placement id | One row of an Agents Vessel. Its `label` is the row's name, program and detail | `agentsView` in `agents.ts` |
 
 A name control leaves the frame while its rename editor replaces it, and
 `name-editor` with the same key takes its place. The editor takes keyboard
