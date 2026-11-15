@@ -8,7 +8,7 @@ const DOCS = {
   map: "docs/context-map.md",
 };
 const SOURCE = "tests/architecture/vocabulary.yaml";
-const TABLE_PREFIX = "tests/architecture/vocabulary.";
+const TABLE_PREFIX = "tests/architecture/";
 const GENERATE = "npm run vocabulary:generate";
 
 function model(table) {

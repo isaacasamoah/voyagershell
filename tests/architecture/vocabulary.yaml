@@ -121,6 +121,7 @@ rules:
     new: 'canvas'
     files: ['desktop/src/host.rs', 'desktop/src/quit.rs', 'desktop/src/lib.rs']
     code: true
+    ban: false
   - id: canvas-host-render-counter
     stage: 2
     old: '"header_renders"'
@@ -565,20 +566,6 @@ rules:
     old: '\bpanel header\b'
     new: 'panel title bar'
     ban: false
-  - id: canvas-sentence-start
-    stage: 5
-    old: '(^|[.!?|#]\s+)Header\b'
-    new: '$1Canvas'
-    flags: 'gm'
-    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs']
-    ban: false
-  - id: canvas-noun
-    stage: 5
-    group: canvas-package
-    old: '\b[Hh]eader\b'
-    new: 'canvas'
-    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs', 'tests/native/proof_resources.py', 'tests/native/test_frames.py']
-    ban: false
   - id: vessel-package-prose
     stage: 5
     old: '\b([Cc])ontent package(s?)\b'
@@ -594,6 +581,36 @@ rules:
     old: '\b[Cc]ontent instance(s?)\b'
     new: 'Vessel$1'
     group: content-words
+  - id: vessel-id-prose
+    stage: 6
+    old: '\b[Cc]ontent ID\b'
+    new: 'Vessel ID'
+    ban: false
+  - id: canvas-constants
+    stage: 6
+    group: canvas-package
+    old: '\b(LEGACY_DIV_)HEADER\b|\bHEADER(_REFRESH)\b'
+    new: '$1CANVAS$2'
+  - id: canvas-snake-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\b(original_)header\b|\bheader(_sha256|_renders)\b'
+    new: '$1canvas$2'
+  - id: canvas-camel-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\bheader(Sha256|Restored|Height)\b'
+    new: 'canvas$1'
+  - id: canvas-pascal-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\bHeader(Bar|Host)\b'
+    new: 'Canvas$1'
+  - id: canvas-the-header-prose
+    stage: 6
+    group: canvas-package
+    old: '\b([Tt]he) header((?:\x27s)? (?:draws?|drawn|renders?|regions?|colou?rs?|height|buttons?|layout)\b)'
+    new: '$1 canvas$2'
   - id: theme-declarations
     stage: 2
     group: theme-module
@@ -648,13 +665,24 @@ rules:
     ban: false
 
 retired:
-  - id: retired-header
+  - id: retired-header-package
     group: canvas-package
-    words: header
-    swap: canvas
+    words: header package
+    swap: canvas package
     stage: 6
     term: Canvas
-    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs', 'tests/native/proof_resources.py', 'tests/native/test_frames.py']
+  - id: retired-header-script
+    group: canvas-package
+    words: header script
+    swap: canvas script
+    stage: 6
+    term: Canvas
+  - id: retired-header-mod
+    group: canvas-package
+    words: header mod
+    swap: canvas package
+    stage: 6
+    term: Canvas
   - id: retired-content-type
     group: content-words
     words: content type
@@ -662,8 +690,8 @@ retired:
     stage: 6
     term: Vessel type
     allow:
-      - '\bContent-Type\b'
-      - '"content-type"'
+      - '\b[Cc]ontent-[Tt]ype\b'
+      - '(?<!\b(?:const|static|let|fn)\s+)\bCONTENT_TYPE\b'
   - id: retired-content-package
     group: content-words
     words: content package
