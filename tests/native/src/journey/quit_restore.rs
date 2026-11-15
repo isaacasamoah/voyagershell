@@ -7,12 +7,9 @@ use crate::x11::{Observed, Request};
 use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Placement};
-
-const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 
 cases! {
     QuitAndKeep => "quit-and-keep",
@@ -271,11 +268,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native.keep_window("window-buttons")?;
         let seen = native.window_requests()?.len();
         native.click(&Target::WINDOW_MINIMIZE)?;
-        let minimise = requests_after(native, seen, 1)?;
+        let minimise = native.requests_after(seen, 1)?;
         native.click(&Target::WINDOW_MAXIMIZE)?;
-        let first = requests_after(native, seen + 1, 1)?;
+        let first = native.requests_after(seen + 1, 1)?;
         native.click(&Target::WINDOW_MAXIMIZE)?;
-        let second = requests_after(native, seen + 2, 1)?;
+        let second = native.requests_after(seen + 2, 1)?;
         let all = native.window_requests()?;
         Verdict::new()
             .expect(
@@ -301,7 +298,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         under(native, Decorations::Client)?;
         let seen = native.window_requests()?.len();
         native.drag_from_corner(4, (-40, -30))?;
-        let sent = requests_after(native, seen, 1)?;
+        let sent = native.requests_after(seen, 1)?;
         Verdict::new()
             .expect(
                 "a drag from the bottom-right corner sends one bottom-right resize request",
@@ -494,11 +491,7 @@ fn under(native: &mut Native, decorations: Decorations) -> Result<()> {
     if native.running() && native.decorations() == decorations {
         return Ok(());
     }
-    if native.running() {
-        native.close()?;
-    }
-    native.decorate_as(decorations)?;
-    native.launch()?;
+    native.launch_as(decorations)?;
     native
         .settle(
             "the restored Fleet tabs, Vessels and terminals",
@@ -506,17 +499,6 @@ fn under(native: &mut Native, decorations: Decorations) -> Result<()> {
             |picture| picture.whole() && picture.bound(),
         )
         .map(drop)
-}
-
-fn requests_after(native: &mut Native, seen: usize, count: usize) -> Result<Vec<Observed>> {
-    let deadline = Instant::now() + REQUEST_PATIENCE;
-    loop {
-        let all = native.window_requests()?;
-        if all.len() >= seen + count || Instant::now() >= deadline {
-            return Ok(all.into_iter().skip(seen).take(count).collect());
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
 }
 
 fn at_rest(native: &Native) -> Result<Saved> {

@@ -726,6 +726,16 @@ logical pixels wide, under client decorations when the window is neither
 maximized nor fullscreen. A press on a grip asks the window manager to start a
 resize from that edge.
 
+The empty parts of the top bar move the window. `dragFiller` in
+`navigation-view.ts` draws one filler after the Fleet tabs, in the Home strip and
+in the sidebar's top row, each marked `window_control_area("drag")`. The Fleet
+tabs no longer grow, so the filler takes the empty space. A left press dragged
+across a filler asks the window manager to start a move, and a double-click
+maximises or restores the window. Only a filler carries the drag area. A Fleet
+tab, a button or a Vessel never does, because a drag area on an ancestor of the
+tabs would also fire during a tab drag and hijack its reordering. Dragging a
+Fleet tab only reorders it.
+
 ### Restoring the window position
 
 GPUI reports the client window's root-relative origin. An X11 ConfigureRequest

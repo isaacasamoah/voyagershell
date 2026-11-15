@@ -56,8 +56,12 @@ the next case needs.
 | `rename-escape-cancels` | Double-click the Fleet's name, type, press Escape | The editor holds the typed text before Escape, the saved name is unchanged, and the drawn name is the saved name |
 | `rename-empty-refused` | Double-click the Vessel's name, press BackSpace, press Return | The editor is empty before Return, the saved name is unchanged, and the drawn name is the saved name |
 | `relaunch-restores` | Press Ctrl+Q, launch the same profile | Before Ctrl+Q, the saved and drawn workspace match the journey's model. The candidate quits with a success status. The layout document and its version are equal before and after. Core and the shells of all four Vessels are the same processes. The Fleet, the Voyage and the Vessel that the journey renamed are saved as `Native Fleet`, `Keyboard Voyage` and `+`. The avatar is docked where the document says. The window draws every Voyage row, every Fleet tab of the selected Voyage, and the name and the terminal of every Vessel of the selected Fleet. Every Voyage row, every Fleet tab and the renamed Vessel's title shows its saved name. After the relaunch the saved and drawn workspace again match the journey's model |
+| `drag-bar-moves-window` | Relaunch under `--decorations client`, select the first Voyage, hold on the empty top bar after the Fleet tabs and move the pointer across it | Every window request that the observer records for the window is a move, and there is at least one |
+| `tab-drag-does-not-move-window` | Hold the second Fleet tab and move it onto the left half of the first tab until the insertion bar shows, release | The saved order puts the second Fleet first. The observer records no window request |
+| `double-click-bar-maximises-window` | Double-click the empty top bar | The observer records exactly one toggle of the window's maximized state, and no other request |
+| `sidebar-drag-moves-window` | Hold on the empty part of the sidebar's top row and move the pointer across it | Every window request that the observer records for the window is a move, and there is at least one |
 
-Every case except `relaunch-restores` also ends with the expectation `the
+Every case from `split-vessel` to `rename-empty-refused` also ends with the expectation `the
 saved and drawn workspace match the journey's model`, once the case has made
 its inputs. The journey keeps a model of the whole workspace: the Home Voyage
 as it was at the start, and each Voyage, Fleet and Vessel with its name, in
@@ -190,6 +194,12 @@ Portal, docking to it, renaming it and keeping it across a new Fleet. The
 native `quit-restore` journey covers Quit, a warm relaunch, a cold restart and
 the reopen of the saved workspace. The native `voyage-close` journey covers
 closing and reopening a Voyage.
+
+The four window cases run after `relaunch-restores` and need `--decorations client`.
+They judge the requests that the app sends to the window manager. The verifier
+runs no window manager, so no window moves and no case checks that a real
+window manager moves or maximises the window. The cases do not model the
+workspace, because the tab drag changes the saved Fleet order.
 
 These deleted checks are out of date.
 

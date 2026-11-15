@@ -25,10 +25,12 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::layout_document::{DOCUMENT, Reading, read};
 use voyager_contract::{Fleet, Layout, Placement, Voyage};
+
+const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -690,6 +692,17 @@ impl Native {
         self.decorate()
     }
 
+    pub fn launch_as(&mut self, decorations: Decorations) -> Result<()> {
+        if self.running() && self.surface.decorations == decorations {
+            return Ok(());
+        }
+        if self.running() {
+            self.close()?;
+        }
+        self.decorate_as(decorations)?;
+        self.launch()
+    }
+
     pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
         let Some(requests) = &self.requests else {
             return Ok(Vec::new());
@@ -704,6 +717,17 @@ impl Native {
             .into_iter()
             .filter(|seen| seen.request.window() == self.window)
             .collect())
+    }
+
+    pub fn requests_after(&mut self, seen: usize, count: usize) -> Result<Vec<Observed>> {
+        let deadline = Instant::now() + REQUEST_PATIENCE;
+        loop {
+            let all = self.window_requests()?;
+            if all.len() >= seen + count || Instant::now() >= deadline {
+                return Ok(all.into_iter().skip(seen).take(count).collect());
+            }
+            sleep(Duration::from_millis(50));
+        }
     }
 
     fn release_requests(&mut self) -> Result<()> {

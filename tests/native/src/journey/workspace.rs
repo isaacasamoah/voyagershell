@@ -3,9 +3,9 @@ mod model;
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, fleets, vessels, voyages};
+use crate::native::{Decorations, Native, Seen, Terminal, fleets, vessels, voyages};
 use crate::sandbox;
-use crate::x11::Key;
+use crate::x11::{Key, Observed, Request};
 use anyhow::Result;
 use model::{Model, Row, Tab};
 use serde::Serialize;
@@ -30,6 +30,10 @@ cases! {
     RenameEscape => "rename-escape-cancels",
     RenameEmpty => "rename-empty-refused",
     Relaunch => "relaunch-restores",
+    DragBarMovesWindow => "drag-bar-moves-window",
+    TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
+    DoubleClickMaximises => "double-click-bar-maximises-window",
+    SidebarDragMovesWindow => "sidebar-drag-moves-window",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -589,7 +593,120 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("after", &after)?
             .observed("restored", &restored)?
             .observed("differences after the relaunch", &reopened)
+    })?;
+
+    cases.check(native, Case::DragBarMovesWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        native.drag_across(&Target::window_drag("fleets"), (60, 0))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("drag-move")?;
+        Verdict::new()
+            .expect(
+                "a drag across the empty top bar sends a move request for the window",
+                !sent.is_empty() && sent.iter().all(moves),
+            )
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::TabDragDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let before = tabs(&at_rest(native)?.document, &start.voyage);
+        let seen = native.window_requests()?.len();
+        let [first, last] = before.as_slice() else {
+            return Verdict::new()
+                .expect("the Voyage holds two Fleet tabs to drag", false)
+                .observed("tabs", &before);
+        };
+        let first_tab = Target::name(&RenameTarget::Fleet { id: first.clone() });
+        let mut held = native.hold(&Target::name(&RenameTarget::Fleet { id: last.clone() }))?;
+        held.toward(native.point_in(&first_tab, 0.25, 0.5)?)?;
+        held.until("the insertion bar on the first Fleet tab", |seen| {
+            seen.shows(&Target::fleet_drop(first)).then_some(())
+        })?;
+        held.release()?;
+        let after = native.settle(
+            "the Fleet tabs in the saved order",
+            |seen| Some(tabs(seen.document, &start.voyage)),
+            |order| *order != before,
+        )?;
+        native.keep_window("tab-drag")?;
+        let sent = native.window_requests()?;
+        Verdict::new()
+            .expect(
+                "dragging the second Fleet tab onto the first puts it first",
+                after.first() == Some(last) && after.last() == Some(first),
+            )
+            .expect("the tab drag sends no window request", sent.len() == seen)
+            .observed("before", &before)?
+            .observed("after", &after)?
+            .observed("requests", &sent[seen..])
+    })?;
+
+    cases.check(native, Case::DoubleClickMaximises, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        native.double_click(&Target::window_drag("fleets"))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("zoom")?;
+        let all = native.window_requests()?;
+        Verdict::new()
+            .expect(
+                "a double-click on the empty top bar sends one toggle of the window's maximized state",
+                maximises(&sent),
+            )
+            .expect(
+                "the double-click sent no other window request",
+                all.len() == seen + 1,
+            )
+            .observed("requests", &all[seen..])
+    })?;
+
+    cases.check(native, Case::SidebarDragMovesWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        native.drag_across(&Target::window_drag("sidebar"), (40, 0))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("sidebar-drag")?;
+        Verdict::new()
+            .expect(
+                "a drag across the sidebar's empty top row sends a move request for the window",
+                !sent.is_empty() && sent.iter().all(moves),
+            )
+            .observed("requests", &sent)
     })
+}
+
+fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
+    native.launch_as(Decorations::Client)?;
+    native.click(&Target::name(&RenameTarget::Voyage {
+        id: start.voyage.clone(),
+    }))?;
+    native.observe("the Voyage's Fleet tabs and the empty top bar", |seen| {
+        (tabs(seen.document, &start.voyage).len() == 2
+            && seen.shows(&Target::window_drag("fleets"))
+            && seen.shows(&Target::window_drag("sidebar")))
+        .then_some(())
+    })
+}
+
+fn tabs(layout: &Layout, voyage: &VoyageId) -> Vec<FleetId> {
+    voyages(layout)
+        .filter(|saved| saved.id == *voyage)
+        .flat_map(|saved| saved.fleets.iter().filter(|fleet| !fleet.closed))
+        .map(|fleet| fleet.id.clone())
+        .collect()
+}
+
+fn moves(observed: &Observed) -> bool {
+    matches!(&observed.request, Request::MoveResize { direction, .. } if direction.name == "move")
+}
+
+fn maximises(sent: &[Observed]) -> bool {
+    matches!(sent, [Observed { request: Request::NetWmState { action, first, second, .. }, .. }]
+        if action.name == "toggle"
+            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_VERT"))
+            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_HORZ")))
 }
 
 fn modelled(native: &Native, model: &Model, verdict: Verdict) -> Result<Verdict> {

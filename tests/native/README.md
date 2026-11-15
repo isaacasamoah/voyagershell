@@ -33,7 +33,7 @@ The environment is not yet accepted as a complete implementation of that design.
 | Seeded, live-edited and shared run profile, and a second identified build | Implemented by the `profile` journey. Checks the theme background only. See Profile fixtures below. |
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
-| Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. No journey asserts on them yet. See Client decorations and window requests below. |
+| Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. `quit-restore` asserts the window buttons, the corner grip and the close button, and `workspace` asserts the drag, the double-click and the tab drag. See Client decorations and window requests below. |
 | Window-manager behavior, IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
 
@@ -423,7 +423,7 @@ asserts the hints `[2, 0, 0, 0, 0]` after each launch. Any other hints end the r
 take effect. `Native::decorate_as` switches a run between `server` and `client`
 while the app is closed, so a case can pick the surface it needs. The
 `quit-restore` journey does this for the window buttons, the corner grip, the close
-button and the absent controls.
+button and the absent controls. The `workspace` journey relaunches under client decorations after its relaunch case and sends its drags to the `window-drag` fillers, so a held drag, a double-click and a Fleet tab drag are judged by the requests that reach the observer.
 
 Before the app starts, a verifier-owned test client sends one move request for
 the observer's own window. The observer must see it with direction 8 within the
