@@ -1,5 +1,6 @@
+use crate::activity::Event;
 use crate::content::Access;
-use crate::core::{Core, Error};
+use crate::core::{Core, Error, PROCESS_EFFECTS, PROCESS_READS};
 use crate::terminal_lifecycle::Lifecycle;
 use serde::Serialize;
 use std::collections::VecDeque;
@@ -206,6 +207,24 @@ impl Envelope {
         }
     }
 
+    pub(crate) fn report(event: &Event) -> Self {
+        Self {
+            request: format!("core-{}", event.sequence),
+            kind: Kind::Workspace,
+            caller: Caller::Core {
+                machine: Machine::Local,
+            },
+            target: event
+                .terminal
+                .as_ref()
+                .map_or(Target::Workspace, |terminal| {
+                    Self::terminal_at(&CoreTerminalId(terminal.clone()))
+                }),
+            expected: None,
+            effect: false,
+        }
+    }
+
     pub(crate) fn observed(request: String, version: u64) -> Self {
         Self {
             request,
@@ -275,6 +294,7 @@ impl<T> From<Result<T, Error>> for Outcome<T> {
 pub(crate) struct Ticket {
     request: String,
     kind: Kind,
+    effect: bool,
     fingerprint: [u8; 32],
 }
 
@@ -289,6 +309,7 @@ pub(crate) enum Admission<T> {
 struct Entry<R> {
     request: String,
     kind: Kind,
+    effect: bool,
     fingerprint: [u8; 32],
     receipt: Option<R>,
 }
@@ -314,6 +335,7 @@ impl<R> Ledger<R> {
         self.entries.push_back(Entry {
             request: ticket.request,
             kind: ticket.kind,
+            effect: ticket.effect,
             fingerprint: ticket.fingerprint,
             receipt: None,
         });
@@ -344,10 +366,10 @@ impl<R> Ledger<R> {
         self.entries.retain(|entry| entry.request != request);
     }
 
-    fn pending(&self, kind: Kind) -> usize {
+    fn pending(&self, kind: Kind, effect: bool) -> usize {
         self.entries
             .iter()
-            .filter(|entry| entry.kind == kind && entry.receipt.is_none())
+            .filter(|entry| entry.kind == kind && entry.effect == effect && entry.receipt.is_none())
             .count()
     }
 }
@@ -403,6 +425,7 @@ impl<R> FrontDoor<R> {
             Ok(()) => Admission::New(Ticket {
                 request: envelope.request.clone(),
                 kind: envelope.kind,
+                effect: envelope.effect,
                 fingerprint,
             }),
         }
@@ -435,8 +458,14 @@ impl<R> FrontDoor<R> {
         self.ledger.forget(request);
     }
 
-    pub(crate) fn pending(&self, kind: Kind) -> usize {
-        self.ledger.pending(kind)
+    pub(crate) fn crowded(&self, envelope: &Envelope) -> bool {
+        let limit = match (envelope.kind, envelope.effect) {
+            (Kind::Process, true) => PROCESS_EFFECTS,
+            (Kind::Process, false) => PROCESS_READS,
+            (Kind::Worktree, _) => 1,
+            _ => return false,
+        };
+        self.ledger.pending(envelope.kind, envelope.effect) >= limit
     }
 
     pub(crate) fn end(
@@ -669,6 +698,86 @@ mod tests {
     }
 
     #[test]
+    fn a_core_report_names_its_terminal_and_passes_the_gate_at_any_time() {
+        let report = |terminal: Option<&str>| Event {
+            sequence: 42,
+            terminal: terminal.map(str::to_owned),
+            report: crate::activity::Report::Foreground,
+        };
+        let placed = Envelope::report(&report(Some("t7")));
+        assert_eq!(placed.request, "core-42");
+        assert_eq!(
+            placed.caller,
+            Caller::Core {
+                machine: Machine::Local
+            }
+        );
+        assert_eq!(
+            placed.target,
+            Target::Terminal(TerminalAddress {
+                machine: Machine::Local,
+                terminal: CoreTerminalId("t7".into()),
+            })
+        );
+        assert_eq!(Envelope::report(&report(None)).target, Target::Workspace);
+        let mut door = Door::default();
+        door.depart();
+        assert_eq!(door.gate(&placed), Ok(()));
+        assert!(
+            door.gate(&Envelope::observed("request-1".into(), 7))
+                .is_err()
+        );
+        door.land();
+        let mut core = Err(Error::Uncertain("never connected".into()));
+        door.end(Lifecycle::QuitAndKeep, &mut core).unwrap();
+        assert_eq!(door.gate(&placed), Ok(()));
+        assert!(
+            door.gate(&Envelope::observed("request-2".into(), 7))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn pending_reads_and_pending_effects_fill_separate_limits() {
+        let mut door = Door::default();
+        let process = |id: usize, action: ProcessAction| {
+            let request = ProcessRequest {
+                request_id: format!("process-{id}"),
+                input: ProcessInput {
+                    expected_version: 7,
+                    action,
+                },
+            };
+            (Envelope::process(&Context::Workspace, &request), request)
+        };
+        let stop = |id: usize| {
+            process(
+                id,
+                ProcessAction::Stop {
+                    vessel_id: VesselId("vessel-1".into()),
+                    terminal_id: CoreTerminalId("t7".into()),
+                    pid: 9,
+                },
+            )
+        };
+        for id in 0..PROCESS_EFFECTS {
+            assert!(!door.crowded(&stop(id).0));
+            door.open(admitted(&door, &stop(id)));
+        }
+        assert!(door.crowded(&stop(PROCESS_EFFECTS).0));
+        for id in 100..100 + PROCESS_READS {
+            let list = process(id, ProcessAction::List);
+            assert!(!door.crowded(&list.0));
+            door.open(admitted(&door, &list));
+        }
+        assert!(door.crowded(&process(200, ProcessAction::List).0));
+        door.settle("process-100", "listed");
+        assert!(!door.crowded(&process(200, ProcessAction::List).0));
+        assert!(door.crowded(&stop(PROCESS_EFFECTS).0));
+        assert!(!door.crowded(&create("request-1", "one").0));
+    }
+
+    #[test]
     fn a_repeat_is_answered_after_quitting_and_while_a_save_is_in_flight() {
         let mut door = Door::default();
         let first = create("request-1", "one");
@@ -714,7 +823,7 @@ mod tests {
             let inspect = workspace(&format!("inspect-{index}"), Action::Inspect);
             door.record(admitted(&door, &inspect), "inspected");
         }
-        assert_eq!(door.pending(Kind::Workspace), 1);
+        assert_eq!(door.ledger.pending(Kind::Workspace, true), 1);
         assert!(matches!(
             door.admit(&confirm.0, &confirm.1, own),
             Admission::Pending(message) if message.contains("in progress")
@@ -724,7 +833,7 @@ mod tests {
             door.admit(&confirm.0, &confirm.1, own),
             Admission::Repeat("closed")
         ));
-        assert_eq!(door.pending(Kind::Workspace), 0);
+        assert_eq!(door.ledger.pending(Kind::Workspace, true), 0);
     }
 
     #[test]
@@ -760,7 +869,7 @@ mod tests {
         door.open(admitted(&door, &rename));
         door.forget("request-1");
         door.record(admitted(&door, &rename), "renamed");
-        assert_eq!(door.pending(Kind::Workspace), 0);
+        assert_eq!(door.ledger.pending(Kind::Workspace, true), 0);
     }
 
     #[test]

@@ -89,9 +89,17 @@ fn prepare_selected(
     ready
 }
 
+pub(crate) fn exited(terminals: &[Terminal]) -> Vec<CoreTerminalId> {
+    terminals
+        .iter()
+        .filter(|terminal| terminal.has_exited())
+        .map(|terminal| CoreTerminalId(terminal.address.clone()))
+        .collect()
+}
+
 pub(crate) fn close_exited(
     model: &mut Model,
-    terminals: &[Terminal],
+    exited: &[CoreTerminalId],
     live: &[CoreTerminalId],
 ) -> Result<bool, String> {
     let closing: Vec<_> = retained(&model.layout)
@@ -103,12 +111,7 @@ pub(crate) fn close_exited(
                 .iter()
                 .find(|content| &content.id == id)
                 .and_then(|content| content.backend.as_ref())
-                .filter(|backend| live.contains(backend))
-                .is_some_and(|backend| {
-                    terminals
-                        .iter()
-                        .any(|terminal| terminal.address == backend.0 && terminal.has_exited())
-                })
+                .is_some_and(|backend| live.contains(backend) && exited.contains(backend))
         })
         .map(|(id, _)| id)
         .collect();
@@ -237,10 +240,10 @@ mod tests {
             terminal("t1", "finished", "killed"),
             terminal("t2", "live", ""),
         ];
-        assert!(close_exited(&mut model, &terminals, &live).unwrap());
+        assert!(close_exited(&mut model, &exited(&terminals), &live).unwrap());
         assert!(model.layout.voyages[0].fleets[0].root.is_none());
         assert!(model.layout.voyages[1].fleets[0].root.is_some());
-        assert!(!close_exited(&mut model, &terminals, &[]).unwrap());
+        assert!(!close_exited(&mut model, &exited(&terminals), &[]).unwrap());
         assert!(
             prepare_reopen(&mut model.layout, &terminals)
                 .iter()

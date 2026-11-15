@@ -64,12 +64,16 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
                 action,
             },
         };
-        let listed = client
-            .process(Context::Workspace, request(ProcessAction::List))
-            .unwrap();
+        let listing = request(ProcessAction::List);
+        let listed = client.process(Context::Workspace, listing.clone()).unwrap();
         let Some(ProcessOutput::List { processes, .. }) = &listed.output else {
             panic!("The real process list is missing: {listed:?}")
         };
+        let repeated = client.process(Context::Workspace, listing).unwrap();
+        assert!(
+            std::sync::Arc::ptr_eq(&listed, &repeated),
+            "A repeated process list was not answered from the ledger"
+        );
         let target = processes
             .iter()
             .find(|process| process.vessel_id == content)
@@ -145,6 +149,127 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
                 .has_exited(),
             "The placed shell is not recorded as exited"
         );
+    }));
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.server_stop().unwrap();
+    checked.unwrap();
+}
+
+fn notice_within(
+    changes: &async_channel::Receiver<voyager_app::client::WorkspaceNotice>,
+    wait: Duration,
+) -> Option<voyager_app::client::WorkspaceNotice> {
+    let deadline = Instant::now() + wait;
+    loop {
+        if let Ok(notice) = changes.try_recv() {
+            return Some(notice);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn a_placed_foreground_change_moves_the_activity_notice_and_a_foreign_one_does_not() {
+    use std::{
+        future::Future,
+        pin::pin,
+        task::{Context as TaskContext, Poll, Waker},
+    };
+    let suffix = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let session = format!("voyager-foreground-{}-{suffix}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        let inspect = || {
+            client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap()
+        };
+        let initial = inspect();
+        let content = initial.layout.vessels[0].id.clone();
+        let viewer = client
+            .terminal(content.clone(), client.request_id(), initial.version)
+            .unwrap();
+        let bound = inspect();
+        let list = || {
+            let listed = client
+                .process(
+                    Context::Workspace,
+                    ProcessRequest {
+                        request_id: client.request_id(),
+                        input: ProcessInput {
+                            expected_version: bound.version,
+                            action: ProcessAction::List,
+                        },
+                    },
+                )
+                .unwrap();
+            let Some(ProcessOutput::List { processes, .. }) = &listed.output else {
+                panic!("The real process list is missing: {listed:?}")
+            };
+            processes
+                .iter()
+                .find(|process| process.vessel_id == content)
+                .unwrap()
+                .clone()
+        };
+        assert_ne!(list().foreground.as_deref(), Some("sleep"));
+        let changes = |after| {
+            let mut subscribing = pin!(client.workspace_changes(after));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let polled = subscribing
+                    .as_mut()
+                    .poll(&mut TaskContext::from_waker(Waker::noop()));
+                if let Poll::Ready(changes) = polled {
+                    return changes.unwrap();
+                }
+                assert!(Instant::now() < deadline, "The owner never subscribed");
+                thread::sleep(Duration::from_millis(1));
+            }
+        };
+        let mut seen = notice_within(&changes(None), Duration::from_secs(5)).unwrap();
+        while let Some(later) = notice_within(&changes(Some(seen)), Duration::from_millis(1500)) {
+            seen = later;
+        }
+        let mut foreign = Core::connect(&session).unwrap();
+        foreign
+            .terminal_run_with(
+                serde_json::from_value(
+                    json!({"argv":["/bin/sleep","30"],"cwd":"/tmp","keep":true}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let quiet = changes(Some(seen));
+        assert_eq!(
+            notice_within(&quiet, Duration::from_millis(1500)),
+            None,
+            "A foreign program's events reached the canvas"
+        );
+        viewer.input(b"sleep 30\r".to_vec()).unwrap();
+        let started = Instant::now();
+        let moved = notice_within(&quiet, Duration::from_secs(2))
+            .expect("The placed program's foreground change never reached the canvas");
+        eprintln!(
+            "foreground_to_notice_ms={} without an observation or a list",
+            started.elapsed().as_millis()
+        );
+        assert!(
+            moved.activity_revision > seen.activity_revision,
+            "{moved:?}"
+        );
+        assert_eq!(moved.revision, seen.revision);
+        assert_eq!(list().foreground.as_deref(), Some("sleep"));
     }));
     let mut cleanup = Core::connect(&session).unwrap();
     cleanup.server_stop().unwrap();

@@ -138,8 +138,8 @@ word. Unknown has an explicit reason. The ever-reported flag is the exact Core
 true/false when observed, and null when its source is unavailable. Reported done
 is not process exit or a verified task result. Private conversation progress remains separate.
 
-The adapter applies subscription snapshots, ordered events and Core's missed
-replacement snapshots. It does not classify output or infer activity from
+The owner applies subscription snapshots, ordered events and Core's missed
+replacement snapshots, which the Core reader queues for it as reports. It does not classify output or infer activity from
 silence. Unsupported observation, malformed metadata, gaps and channel loss
 remain unknown without an automatic repair RPC. Explicit Refresh can renew the
 observation on the same connection. Input, workspace effects and Quit keep their
@@ -162,8 +162,10 @@ cache allowance. Uncovered Portal title bars show unknown with a limit label. A 
 absent from a snapshot remains unknown with a null reported flag; a present
 terminal's explicit false remains false.
 
-One coalesced owner wake retains the latest facts through a full mailbox.
+One coalesced owner wake announces queued reports, and the owner also takes
+them before every message, so a full mailbox loses none.
 Activity has its own counter and does not change document CAS or packageRevision.
+The counter also moves when a placed terminal's foreground program changes.
 Rendering reads cached data without a status polling loop or document read per
 event. Existing scoped process list/read results expose the same reported-data
 meaning after their normal caller/backend checks. Snapshots supply source time;
@@ -393,40 +395,81 @@ method or feature. The connection then fails with the refusal kind
 `unsupported_core` and a message naming Core's release and the minimum. Every
 later request repeats that refusal; nothing reconnects or retries.
 
-The owner queue in `app/src/client.rs` does not wait for Core's terminal
-list; it acts on the reply when it arrives. Workspace observations and the exit
-check share one `terminal.list`. It starts on the owner (`Core::begin` needs the request
-sequence), and a short worker thread waits for the reply and posts it back as a
-message. At most one list is in flight: observations that arrive meanwhile wait
-for it, and an exit that finishes meanwhile asks for one more list after it. So
-reads never hold more than one of the connection's ten request slots, which [delayed process effects](workspace.md) count, and a save or an
-Inspect is never refused as busy behind them. The owner answers each observation
-against the current workspace version: a changed workspace answers "observe it
-again", and an observation of a version newer than the list waits for the next
-list. Voyage renames and live bindings change only when the list began at the
-current version; exited panels close either way, because an exit is final. Calls
-whose reply decides the next effect stay on the owner in order: document saves
-with their version compare-and-set, the open/run/attach chain, liveness checks
-before a Send, Stop or reopen, Quit, and context preparation. Reads stay there
-too: the administrator's process List (`terminal.list`) and Read
-(`terminal.get`, then `terminal.read`) in `app/src/process.rs`, the
-`terminal.list` checks before a worktree removal, a Voyage close and a vessel
-package change from a live directory, and the `events.subscribe` that
-resubscribes activity. They move with the front door, which owns ordered
-effects.
+The owner queue in `app/src/client.rs` does not wait for a Core read. It begins
+the request, because `Core::begin` needs the request sequence, and a short
+worker thread waits for the reply and posts it back as a message. Four kinds of
+read work this way.
+
+- **Workspace observations** share one `terminal.list`. At most one is in
+  flight, and observations that arrive meanwhile wait for it. The owner answers
+  each observation against the current workspace version. A changed workspace
+  answers "observe it again", and an observation of a version newer than the
+  list waits for the next list. Voyage renames and live bindings change only
+  when the list began at the current version. A Vessel whose program the list
+  shows exited closes either way, because an exit is final.
+- **Process List and Read**, from the administrator and the Agents list
+  (`app/src/process.rs`). List begins `terminal.list`. Read begins
+  `terminal.get` and `terminal.read` together. The request stays pending in the
+  front door's ledger, and the answer is recorded when the reply arrives. At
+  most four of these reads are pending at once, beside the eight process
+  effects.
+- **A read that comes before an effect.** These are the `terminal.list` checks
+  before a worktree removal, before a Voyage close, and before a Voyage or
+  Fleet is created from a live directory. The request departs as a
+  [workspace save](workspace.md#a-save-in-flight) does, so effects wait in
+  order and requests with no effect are answered. When the list lands, a
+  workspace request is decided again from the start with the list in hand, so
+  its freshness, version and scope are checked a second time.
+- **The activity subscription.** `events.subscribe` begins at startup and on
+  Refresh. One is in flight at a time, and a Refresh that arrives meanwhile
+  waits for the same reply. The worker thread installs the reply's channel and
+  queues its snapshot itself, so a busy owner cannot let early events pass
+  their 256 KiB limit.
+
+The connection allows twenty pending requests, and `app/src/core_pending.rs`
+adds them up: eight process effects, four process reads at two calls each, the
+observation list, one save or list in flight, the subscription and one ordinary
+owner call. So a save or an Inspect is never refused as busy behind reads or
+behind [delayed process effects](workspace.md). Calls whose reply
+decides the next effect stay on the owner in order: document reads and the
+saves outside the workspace kind, the open/run/attach chain, liveness checks
+before a Send, Stop or reopen, the first Inspect's reopen list, Quit, and
+context preparation.
 
 Core events arrive on one subscription with no filter. A label filter would
 match only an exact value, and Core numbers every event in one sequence, so a
-filtered stream would read as gaps. `Activity` keeps only events for terminals
-that a placement records as its backend. A `finished` event for such a terminal
-marks an exit check. At its next message the owner lists Core's terminals and
-closes each retained panel whose terminal exited while bound as live, saves the
-layout and notifies the canvas. When Core refuses the list as busy, the check
-stays marked and starts at the next message. A program's exit therefore shows without the
-canvas's 3 s observation. That observation remains: it renames Voyages, refreshes
-live bindings and recovers an exit missed in a sequence gap or a refused
-`terminal.list`. A foreign program in the same session produces events that match
-no placement and change nothing. The VT
+filtered stream would read as gaps. The reader thread parses each line into a
+report and queues it for the owner. It keeps Core's sequence, drops a report
+for a terminal that no Vessel names as its backend, and never writes a fact.
+The reports are Core's `created`, `restarted`, `status`, `foreground`, `lost`,
+`finished`, `removed` and `doc` events, the subscription's snapshot and Core's
+`missed` snapshot. The queue holds 1,024 reports. A newer `status` or
+`foreground` for the same terminal replaces the one at the back of the queue,
+and a full queue counts as a sequence gap.
+
+Before each message the owner takes the queued reports in order. Each one
+becomes a [front door](workspace.md#the-front-door) envelope with the `core`
+caller and the terminal's address as its target. A report has no effect, so the
+gate passes it at any time. The owner then keeps it only when a Vessel's
+backend still names the terminal, and updates the reported facts. A
+`foreground` report changes no fact. It moves the activity counter, and the
+canvas reads the process list again while an Agents Vessel is shown, so a new
+foreground program shows there without the 3 s loop. A `doc` report names no
+terminal, so nothing keeps it, and the layout's version compare-and-set still
+decides a foreign write. A `lost` report makes the fact unknown and never ends
+a program.
+
+A program that exited with reason `exited` is reported by a `finished` event,
+or by a snapshot that lists it. Closing its Vessel is the one effect the `core`
+caller causes, and it needs no `terminal.list`. It passes the gate like any
+other effect. It waits while a save or a list is in flight, and it is dropped
+while Voyager quits. It runs once when the layout is fresh: the owner closes
+each retained panel whose terminal was bound as live, saves the layout and
+notifies the canvas. A save that fails marks the layout not fresh and is not
+tried again. A foreign program in the same session produces reports that match
+no backend and change nothing. The canvas's 3 s observation remains. It renames
+Voyages, refreshes live bindings and closes a Vessel whose exit was lost in a
+sequence gap. The VT
 binding uses [libghostty-rs at 8363442](https://github.com/Uzaaft/libghostty-rs/tree/83634421c232385f9fd7c61f454961341453d661),
 which builds Ghostty's VT library and requires the matching Zig toolchain.
 Core protocol behavior is based on

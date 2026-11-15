@@ -13,7 +13,19 @@ use std::{
 
 pub(super) type Replies = Arc<Mutex<HashMap<u64, SyncSender<Value>>>>;
 
-const PENDING_LIMIT: usize = 11;
+pub(crate) const PROCESS_EFFECTS: usize = 8;
+pub(crate) const PROCESS_READS: usize = 4;
+const CALLS_PER_READ: usize = 2;
+const OBSERVATION_LIST: usize = 1;
+const FLIGHT: usize = 1;
+const SUBSCRIPTION: usize = 1;
+const OWNER_CALL: usize = 1;
+const PENDING_LIMIT: usize = PROCESS_EFFECTS
+    + PROCESS_READS * CALLS_PER_READ
+    + OBSERVATION_LIST
+    + FLIGHT
+    + SUBSCRIPTION
+    + OWNER_CALL;
 pub(crate) const DEADLINE: Duration = Duration::from_secs(20);
 
 pub(crate) struct Pending<R> {
@@ -101,7 +113,8 @@ mod tests {
         let mut pending = (1..=PENDING_LIMIT as u64)
             .map(|id| register(id).unwrap())
             .collect::<Vec<_>>();
-        assert!(matches!(register(12), Err(Error::Rejected { kind, .. }) if kind == "busy"));
+        let over = PENDING_LIMIT as u64 + 1;
+        assert!(matches!(register(over), Err(Error::Rejected { kind, .. }) if kind == "busy"));
         drop(pending.remove(0));
         assert!(!replies.lock().unwrap().contains_key(&1));
         assert_eq!(replies.lock().unwrap().len(), PENDING_LIMIT - 1);
@@ -119,7 +132,7 @@ mod tests {
         assert!(matches!(abandoned.wait(), Err(Error::Uncertain(_))));
         link.set("read failed".into()).unwrap();
         assert!(
-            matches!(register(13), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
+            matches!(register(over), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
         );
     }
 }

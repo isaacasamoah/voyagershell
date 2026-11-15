@@ -28,8 +28,8 @@ mod hello;
 pub use hello::{Incompatible, MINIMUM_CORE};
 #[path = "core_pending.rs"]
 mod pending;
-pub(crate) use pending::DEADLINE;
 pub(crate) use pending::Pending;
+pub(crate) use pending::{DEADLINE, PROCESS_EFFECTS, PROCESS_READS};
 #[path = "core_reader.rs"]
 mod reader;
 #[path = "core_viewer.rs"]
@@ -371,36 +371,51 @@ impl Core {
         true
     }
 
-    pub(crate) fn observe_activity(&mut self, wake: Box<dyn Fn() + Send + Sync>) {
-        if let Ok(mut activity) = self.activity.lock() {
-            activity.wake_with(wake);
-        }
-        self.refresh_activity();
-    }
-
-    pub(crate) fn refresh_activity(&mut self) {
-        if !self.activity_supported || self.link.get().is_some() {
-            if let Ok(mut activity) = self.activity.lock() {
-                activity.fail("Activity subscription is unavailable");
-            }
-            return;
-        }
-        if let Ok(mut activity) = self.activity.lock() {
+    pub(crate) fn begin_activity(&mut self, done: impl FnOnce() + Send + 'static) -> bool {
+        let supported = self.activity_supported && self.link.get().is_none();
+        if let Ok(mut activity) = self.activity.lock()
+            && supported
+        {
             activity.begin();
         }
         Self::activity_flow(&self.activity, &self.control, 0);
-        let result: Result<SubscribeResult, Error> =
-            self.call("events.subscribe", SubscribeParams::default());
+        let begun: Option<Pending<SubscribeResult>> = supported
+            .then(|| {
+                self.begin("events.subscribe", SubscribeParams::default())
+                    .ok()
+            })
+            .flatten();
+        let Some(pending) = begun else {
+            if let Ok(mut activity) = self.activity.lock() {
+                activity.fail("Activity subscription is unavailable");
+            }
+            return false;
+        };
+        let (activity, streams) = (self.activity.clone(), self.streams.clone());
+        let control = self.control.clone();
+        thread::spawn(move || {
+            Self::install_activity(&activity, &streams, &control, pending.wait());
+            done();
+        });
+        true
+    }
+
+    fn install_activity(
+        activity: &Arc<Mutex<Activity>>,
+        streams: &Arc<Mutex<Streams>>,
+        control: &SyncSender<Frame>,
+        result: Result<SubscribeResult, Error>,
+    ) {
         let result = result
             .map_err(|error| format!("{error:?}"))
             .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string()));
-        let credit = if let Ok(mut activity) = self.activity.lock() {
+        let credit = if let Ok(mut activity) = activity.lock() {
             match result.and_then(|result| {
                 if result
                     .get("channel")
                     .and_then(Value::as_u64)
                     .is_some_and(|channel| {
-                        self.streams
+                        streams
                             .lock()
                             .is_ok_and(|streams| streams.buffers.contains_key(&(channel as u32)))
                     })
@@ -418,20 +433,7 @@ impl Core {
         } else {
             0
         };
-        Self::activity_flow(&self.activity, &self.control, credit);
-    }
-
-    pub(crate) fn activity_revision(&self) -> u64 {
-        self.activity
-            .lock()
-            .map(|activity| activity.revision)
-            .unwrap_or(0)
-    }
-
-    pub(crate) fn reported_activity(
-        terminal: &Terminal,
-    ) -> voyager_contract::activity::ReportedActivity {
-        Activity::inspect(serde_json::to_value(terminal).unwrap_or(Value::Null))
+        Self::activity_flow(activity, control, credit);
     }
 
     fn call<P: Serialize, R: DeserializeOwned>(
@@ -579,15 +581,22 @@ impl Core {
         Ok(result)
     }
 
-    pub fn terminal_get(&mut self, terminal: &str) -> Result<Terminal, Error> {
-        let before = self.activity_seed_start(terminal);
-        let result: Terminal = self.call(
+    pub(crate) fn begin_terminal_get(
+        &mut self,
+        terminal: &str,
+    ) -> Result<Pending<Terminal>, Error> {
+        self.begin(
             "terminal.get",
             GetParams {
                 caller: None,
                 terminal: terminal.into(),
             },
-        )?;
+        )
+    }
+
+    pub fn terminal_get(&mut self, terminal: &str) -> Result<Terminal, Error> {
+        let before = self.activity_seed_start(terminal);
+        let result = self.begin_terminal_get(terminal)?.wait()?;
         if result.address != terminal {
             return Err(Error::Uncertain(
                 "Core observation returned a different terminal identity; no action was sent"
@@ -613,7 +622,15 @@ impl Core {
     }
 
     pub fn terminal_read(&mut self, terminal: &str, lines: u32) -> Result<ReadResult, Error> {
-        self.call(
+        self.begin_terminal_read(terminal, lines)?.wait()
+    }
+
+    pub(crate) fn begin_terminal_read(
+        &mut self,
+        terminal: &str,
+        lines: u32,
+    ) -> Result<Pending<ReadResult>, Error> {
+        self.begin(
             "terminal.read",
             ReadParams {
                 caller: None,

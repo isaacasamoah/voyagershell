@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     time::{SystemTime, UNIX_EPOCH},
 };
 use voyager_contract::activity::{ActivityState, Projection, ReportedActivity};
@@ -9,6 +9,9 @@ use voyager_contract::activity::{ActivityState, Projection, ReportedActivity};
 pub(crate) const LINE_LIMIT: usize = 1024 * 1024;
 pub(crate) const EARLY_LIMIT: usize = 256 * 1024;
 const TERMINAL_LIMIT: usize = 256;
+const REPORT_LIMIT: usize = 1024;
+const ENDED: &str = "Program observation ended or was lost";
+const GAP: &str = "Activity sequence gap";
 
 #[derive(Deserialize)]
 struct Root {
@@ -35,6 +38,8 @@ struct Fact {
 #[derive(Deserialize)]
 struct Terminal {
     address: String,
+    state: Option<String>,
+    reason: Option<String>,
     #[serde(flatten)]
     fact: Fact,
 }
@@ -46,7 +51,7 @@ struct Snapshot {
 }
 
 #[derive(Deserialize)]
-struct Event {
+struct Notice {
     seq: u64,
     #[serde(rename = "type")]
     kind: String,
@@ -59,13 +64,37 @@ struct Entry {
     revision: u64,
 }
 
+pub(crate) struct Sighting {
+    address: String,
+    fact: ReportedActivity,
+    exited: bool,
+}
+
+pub(crate) enum Report {
+    Snapshot(Vec<Sighting>),
+    Seen(ReportedActivity),
+    Status(ReportedActivity),
+    Foreground,
+    Lost,
+    Finished { exited: bool },
+    Removed,
+    Document,
+    Gap(String),
+}
+
+pub(crate) struct Event {
+    pub(crate) sequence: u64,
+    pub(crate) terminal: Option<String>,
+    pub(crate) report: Report,
+}
+
 #[derive(Default)]
 pub(crate) struct Activity {
     entries: BTreeMap<String, Entry>,
     pub(crate) revision: u64,
-    sequence: Option<u64>,
     unavailable: Option<String>,
     binding_limited: bool,
+    dirty: bool,
     pub(crate) channel: Option<u32>,
     pending: bool,
     ignored_channel: Option<u32>,
@@ -73,8 +102,9 @@ pub(crate) struct Activity {
     early: Vec<u8>,
     partial: Vec<u8>,
     close: Option<u32>,
-    ended: bool,
-    dirty: bool,
+    sequence: Option<u64>,
+    stalled: bool,
+    inbox: VecDeque<Event>,
     wake: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
@@ -157,20 +187,109 @@ impl Activity {
 
     fn changed(&mut self) {
         self.revision = self.revision.saturating_add(1);
-        if !self.dirty {
-            self.dirty = true;
-            if let Some(wake) = &self.wake {
-                wake();
-            }
-        }
+        self.dirty = true;
     }
 
     pub(crate) fn take_dirty(&mut self) -> bool {
         std::mem::take(&mut self.dirty)
     }
 
-    pub(crate) fn take_ended(&mut self) -> bool {
-        std::mem::take(&mut self.ended)
+    fn push(&mut self, event: Event) {
+        if self.inbox.len() >= REPORT_LIMIT {
+            self.stalled = true;
+            if let Some(last) = self.inbox.back_mut() {
+                last.terminal = None;
+                last.report = Report::Gap("Activity report limit exceeded".into());
+            }
+            return;
+        }
+        if let Some(last) = self.inbox.back_mut()
+            && last.terminal == event.terminal
+            && matches!(
+                (&last.report, &event.report),
+                (Report::Status(_), Report::Status(_)) | (Report::Foreground, Report::Foreground)
+            )
+        {
+            *last = event;
+            return;
+        }
+        self.inbox.push_back(event);
+        if self.inbox.len() == 1
+            && let Some(wake) = &self.wake
+        {
+            wake();
+        }
+    }
+
+    fn gap(&mut self, reason: &str) {
+        self.stalled = true;
+        self.push(Event {
+            sequence: self.sequence.unwrap_or(0),
+            terminal: None,
+            report: Report::Gap(reason.into()),
+        });
+    }
+
+    pub(crate) fn take(&mut self) -> Vec<Event> {
+        self.inbox.drain(..).collect()
+    }
+
+    fn record(&mut self, address: String, fact: ReportedActivity) {
+        self.changed();
+        self.entries.insert(
+            address,
+            Entry {
+                fact,
+                revision: self.revision,
+            },
+        );
+    }
+
+    pub(crate) fn apply(&mut self, event: Event) -> Vec<String> {
+        let placed = event
+            .terminal
+            .filter(|address| self.entries.contains_key(address));
+        match (event.report, placed) {
+            (Report::Snapshot(seen), _) => {
+                self.unavailable = None;
+                self.changed();
+                for entry in self.entries.values_mut() {
+                    entry.fact = unknown("Terminal absent from Core snapshot");
+                    entry.revision = self.revision;
+                }
+                let mut exited = Vec::new();
+                for sighting in seen {
+                    if let Some(entry) = self.entries.get_mut(&sighting.address) {
+                        entry.fact = sighting.fact;
+                        if sighting.exited {
+                            exited.push(sighting.address);
+                        }
+                    }
+                }
+                exited
+            }
+            (Report::Gap(reason), _) => {
+                self.invalidate(&reason);
+                Vec::new()
+            }
+            (Report::Seen(fact) | Report::Status(fact), Some(address)) => {
+                self.record(address, fact);
+                Vec::new()
+            }
+            (Report::Foreground, Some(_)) => {
+                self.changed();
+                Vec::new()
+            }
+            (Report::Lost | Report::Removed, Some(address)) => {
+                self.record(address, unknown(ENDED));
+                Vec::new()
+            }
+            (Report::Finished { exited }, Some(address)) => {
+                self.record(address.clone(), unknown(ENDED));
+                if exited { vec![address] } else { Vec::new() }
+            }
+            (Report::Document, _) | (_, None) => Vec::new(),
+        }
     }
 
     #[cfg(test)]
@@ -293,7 +412,7 @@ impl Activity {
         self.pending = false;
         self.partial = Vec::new();
         self.early = Vec::new();
-        self.invalidate(reason);
+        self.gap(reason);
     }
 
     pub(crate) fn take_close(&mut self) -> Option<u32> {
@@ -314,17 +433,25 @@ impl Activity {
             return;
         }
         self.sequence = Some(snapshot.seq);
-        self.unavailable = None;
-        self.changed();
-        for entry in self.entries.values_mut() {
-            entry.fact = unknown("Terminal absent from Core snapshot");
-            entry.revision = self.revision;
-        }
-        for terminal in snapshot.terminals {
-            if let Some(entry) = self.entries.get_mut(&terminal.address) {
-                entry.fact = observed(terminal.fact, Some(snapshot.seq));
-            }
-        }
+        self.stalled = false;
+        let seen = snapshot
+            .terminals
+            .into_iter()
+            .filter(|terminal| self.entries.contains_key(&terminal.address))
+            .map(|terminal| Sighting {
+                exited: crate::core_state::exited(
+                    terminal.state.as_deref(),
+                    terminal.reason.as_deref(),
+                ),
+                fact: observed(terminal.fact, Some(snapshot.seq)),
+                address: terminal.address,
+            })
+            .collect();
+        self.push(Event {
+            sequence: snapshot.seq,
+            terminal: None,
+            report: Report::Snapshot(seen),
+        });
     }
 
     pub(crate) fn install(&mut self, value: Value) -> Result<u32, String> {
@@ -367,6 +494,35 @@ impl Activity {
         Ok(())
     }
 
+    fn report(notice: Notice) -> Result<Option<Event>, String> {
+        let fact = |data| serde_json::from_value::<Fact>(data).map_err(|error| error.to_string());
+        let report = match notice.kind.as_str() {
+            "status" => {
+                if notice.terminal.is_none() {
+                    return Err("Status event has no terminal".into());
+                }
+                Report::Status(observed(fact(notice.data)?, Some(notice.seq)))
+            }
+            "created" | "restarted" => Report::Seen(observed(fact(notice.data)?, None)),
+            "foreground" => Report::Foreground,
+            "lost" => Report::Lost,
+            "finished" => Report::Finished {
+                exited: crate::core_state::exited(
+                    Some("finished"),
+                    notice.data.get("reason").and_then(Value::as_str),
+                ),
+            },
+            "removed" => Report::Removed,
+            "doc" => Report::Document,
+            _ => return Ok(None),
+        };
+        Ok(Some(Event {
+            sequence: notice.seq,
+            terminal: notice.terminal,
+            report,
+        }))
+    }
+
     pub(crate) fn notification(&mut self, value: Value) -> Result<(), String> {
         if value.get("jsonrpc").and_then(Value::as_str) != Some("2.0") || value.get("id").is_some()
         {
@@ -382,58 +538,31 @@ impl Activity {
                     .as_u64()
                     .ok_or("Invalid heartbeat sequence")?;
                 if self.sequence.is_some_and(|prior| seq > prior) {
-                    self.invalidate("Activity sequence gap");
+                    self.gap(GAP);
                 }
             }
             Some("event") => {
-                let event: Event = serde_json::from_value(value["params"].clone())
+                let notice: Notice = serde_json::from_value(value["params"].clone())
                     .map_err(|error| error.to_string())?;
-                if self.sequence.is_some_and(|prior| event.seq <= prior) {
+                if self.sequence.is_some_and(|prior| notice.seq <= prior) {
                     return Ok(());
                 }
-                if self.sequence.and_then(|prior| prior.checked_add(1)) != Some(event.seq) {
-                    self.sequence = Some(event.seq);
-                    self.invalidate("Activity sequence gap");
+                let next = self.sequence.and_then(|prior| prior.checked_add(1)) == Some(notice.seq);
+                self.sequence = Some(notice.seq);
+                if !next {
+                    self.gap(GAP);
                     return Ok(());
                 }
-                self.sequence = Some(event.seq);
-                if self.unavailable.is_some() {
+                if self.stalled {
                     return Ok(());
                 }
-                if event.kind == "status" {
-                    let address = event.terminal.ok_or("Status event has no terminal")?;
-                    let fact: Fact =
-                        serde_json::from_value(event.data).map_err(|error| error.to_string())?;
-                    if self.entries.contains_key(&address) {
-                        let fact = observed(fact, Some(event.seq));
-                        self.changed();
-                        self.entries.insert(
-                            address,
-                            Entry {
-                                fact,
-                                revision: self.revision,
-                            },
-                        );
-                    }
-                } else if matches!(event.kind.as_str(), "created" | "restarted") {
-                    let mut data = event.data;
-                    if let Some(address) = event.terminal {
-                        data["address"] = address.into();
-                    }
-                    self.seed(data, self.revision)?;
-                } else if matches!(event.kind.as_str(), "lost" | "finished" | "removed")
-                    && let Some(address) = event.terminal
-                    && self.entries.contains_key(&address)
+                if let Some(event) = Self::report(notice)?
+                    && event
+                        .terminal
+                        .as_ref()
+                        .is_none_or(|address| self.entries.contains_key(address))
                 {
-                    self.ended |= event.kind == "finished";
-                    self.changed();
-                    self.entries.insert(
-                        address,
-                        Entry {
-                            fact: unknown("Program observation ended or was lost"),
-                            revision: self.revision,
-                        },
-                    );
+                    self.push(event);
                 }
             }
             _ => return Err("Unknown activity notification".into()),
@@ -481,6 +610,10 @@ impl Activity {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     use voyager_contract::activity::ActivityState;
 
     #[test]
@@ -541,22 +674,146 @@ mod tests {
         }
     }
 
-    #[test]
-    fn only_a_placed_terminal_finishing_requests_an_exit_check() {
+    fn settle(facts: &mut Activity) -> Vec<String> {
+        let mut exited = Vec::new();
+        for event in facts.take() {
+            exited.extend(facts.apply(event));
+        }
+        exited
+    }
+
+    fn event(seq: u64, kind: &str, terminal: &str, data: Value) -> Value {
+        json!({"jsonrpc":"2.0","method":"event","params":{"seq":seq,"type":kind,"terminal":terminal,"data":data}})
+    }
+
+    fn subscribed(addresses: &[&str]) -> Activity {
         let mut facts = Activity::default();
-        facts.bind(["t1"]);
+        facts.bind(addresses.iter().copied());
         facts.begin();
         facts
             .install(json!({"seq":0,"channel":9,"terminals":[]}))
             .unwrap();
-        let event = |seq: u64, kind: &str, terminal: &str| json!({"jsonrpc":"2.0","method":"event","params":{"seq":seq,"type":kind,"terminal":terminal,"data":{"reason":"exited"}}});
-        facts.notification(event(1, "finished", "foreign")).unwrap();
-        facts.notification(event(2, "lost", "t1")).unwrap();
-        assert!(!facts.take_ended());
-        facts.notification(event(3, "finished", "t1")).unwrap();
-        facts.notification(event(4, "finished", "t1")).unwrap();
-        assert!(facts.take_ended());
-        assert!(!facts.take_ended());
+        settle(&mut facts);
+        facts
+    }
+
+    #[test]
+    fn a_foreign_event_is_dropped_and_only_a_placed_exit_is_reported() {
+        let mut facts = subscribed(&["t1", "t2"]);
+        let before = facts.revision;
+        let ending = |reason: &str| json!({"reason":reason});
+        facts
+            .notification(event(1, "finished", "foreign", ending("exited")))
+            .unwrap();
+        facts
+            .notification(event(2, "foreground", "foreign", Value::Null))
+            .unwrap();
+        facts
+            .notification(event(
+                3,
+                "status",
+                "foreign",
+                json!({"status":{"state":"done"},"reported":true}),
+            ))
+            .unwrap();
+        assert!(facts.inbox.is_empty());
+        facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":4,"type":"doc","data":{"name":"voyager","version":4}}})).unwrap();
+        assert_eq!(facts.inbox.len(), 1);
+        assert!(settle(&mut facts).is_empty());
+        assert_eq!(facts.revision, before);
+        assert_eq!(facts.get("foreign").state, ActivityState::Unknown);
+        facts
+            .notification(event(5, "lost", "t1", ending("signaled")))
+            .unwrap();
+        facts
+            .notification(event(6, "finished", "t1", ending("killed")))
+            .unwrap();
+        assert!(settle(&mut facts).is_empty());
+        assert!(facts.revision > before);
+        facts
+            .notification(event(7, "finished", "t1", ending("exited")))
+            .unwrap();
+        facts
+            .notification(event(8, "finished", "t2", ending("exited")))
+            .unwrap();
+        facts.bind(["t1"]);
+        assert_eq!(settle(&mut facts), ["t1"]);
+        assert!(settle(&mut facts).is_empty());
+    }
+
+    #[test]
+    fn a_missed_snapshot_resyncs_facts_and_reports_an_exit_inside_the_gap() {
+        let mut facts = subscribed(&["t1", "t2"]);
+        let working = json!({"status":{"state":"working"},"reported":true});
+        facts
+            .notification(event(2, "status", "t2", working.clone()))
+            .unwrap();
+        facts
+            .notification(event(3, "finished", "t1", json!({"reason":"exited"})))
+            .unwrap();
+        assert!(settle(&mut facts).is_empty());
+        assert!(facts.get("t2").reason.unwrap().contains("sequence"));
+        facts
+            .notification(
+                json!({"jsonrpc":"2.0","method":"missed","params":{"seq":9,"terminals":[
+                    {"address":"t1","state":"finished","reason":"exited","reported":false},
+                    {"address":"t2","state":"live","status":{"state":"working"},"reported":true},
+                    {"address":"foreign","state":"finished","reason":"exited","reported":false}
+                ]}}),
+            )
+            .unwrap();
+        assert_eq!(settle(&mut facts), ["t1"]);
+        assert_eq!(facts.get("t2").state, ActivityState::Working);
+        assert_eq!(facts.get("t1").reported, Some(false));
+        facts
+            .notification(event(
+                10,
+                "status",
+                "t2",
+                json!({"status":{"state":"done"},"reported":true}),
+            ))
+            .unwrap();
+        assert!(settle(&mut facts).is_empty());
+        assert_eq!(facts.get("t2").state, ActivityState::Done);
+    }
+
+    #[test]
+    fn repeated_reports_wake_once_and_a_full_inbox_becomes_a_gap() {
+        let mut facts = subscribed(&["t1", "t2"]);
+        let woken = Arc::new(AtomicUsize::new(0));
+        let wakes = woken.clone();
+        facts.wake_with(Box::new(move || {
+            wakes.fetch_add(1, Ordering::SeqCst);
+        }));
+        let status = |seq: u64, terminal: &str, state: &str| {
+            event(
+                seq,
+                "status",
+                terminal,
+                json!({"status":{"state":state},"reported":true}),
+            )
+        };
+        for (seq, state) in [(1, "working"), (2, "blocked"), (3, "done")] {
+            facts.notification(status(seq, "t1", state)).unwrap();
+        }
+        assert_eq!(woken.load(Ordering::SeqCst), 1);
+        assert_eq!(facts.inbox.len(), 1);
+        settle(&mut facts);
+        assert_eq!(facts.get("t1").state, ActivityState::Done);
+        for seq in 4..4 + 2 * REPORT_LIMIT as u64 {
+            let terminal = if seq % 2 == 0 { "t1" } else { "t2" };
+            facts
+                .notification(status(seq, terminal, "working"))
+                .unwrap();
+        }
+        assert_eq!(woken.load(Ordering::SeqCst), 2);
+        assert_eq!(facts.inbox.len(), REPORT_LIMIT);
+        settle(&mut facts);
+        assert!(facts.get("t1").limited && facts.get("t2").limited);
+        assert_eq!(facts.get("t2").state, ActivityState::Unknown);
+        facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":9000,"terminals":[{"address":"t1","status":{"state":"idle"},"reported":true}]}})).unwrap();
+        settle(&mut facts);
+        assert_eq!(facts.get("t1").state, ActivityState::Idle);
     }
 
     #[test]
@@ -569,6 +826,7 @@ mod tests {
         assert_eq!(facts.data(9, &event[..31]), 0);
         assert_eq!(facts.data(9, &event[31..]), 0);
         facts.install(json!({"seq":1,"channel":9,"terminals":[{"address":"t1","status":{"state":"working","app":"test"},"status_ms":42,"reported":true},{"address":"t3","reported":false}]})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Done);
         assert_eq!(facts.get("t1").source_ms, None);
         assert_eq!(facts.get("t2").state, ActivityState::Unknown);
@@ -577,28 +835,35 @@ mod tests {
         assert_eq!(facts.get("t3").reported, Some(false));
         assert_eq!(facts.get("t1").reported, Some(true));
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":2,"type":"status","terminal":"t1","data":{"status":{"state":"error"},"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Done);
         facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":8,"terminals":[{"address":"t1","status":{"state":"blocked","kind":"permission","title":"Approval","msg":"Program request"},"status_ms":55,"reported":true}]}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Blocked);
         assert_eq!(facts.get("t1").source_ms.as_deref(), Some("55"));
         assert!(facts.get("t1").title.is_none() && facts.get("t1").message.is_none());
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":9,"type":"future-kind","data":{}}})).unwrap();
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":10,"type":"status","terminal":"t1","data":{"status":null,"records":{"child":{}},"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
         assert_eq!(
             facts.get("t1").reason.as_deref(),
             Some("Only child records were reported")
         );
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":12,"type":"status","terminal":"t1","data":{"status":{"state":"idle"},"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
         assert!(facts.get("t1").reason.unwrap().contains("sequence"));
         facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":13,"terminals":[{"address":"t1","status":{"state":"future"},"status_ms":81,"reported":true}]}})).unwrap();
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":14,"type":"status","terminal":"t1","data":{"status":{"state":"different"},"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
         assert_eq!(facts.get("t1").source_ms, None);
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":15,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"status_ms":93,"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").source_ms.as_deref(), Some("93"));
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":16,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"reported":true}}})).unwrap();
+        settle(&mut facts);
         assert_eq!(facts.get("t1").source_ms, None);
     }
 
@@ -610,8 +875,10 @@ mod tests {
         facts
             .install(json!({"seq":0,"channel":7,"terminals":[]}))
             .unwrap();
+        settle(&mut facts);
         let before = facts.revision;
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"reported":true}}})).unwrap();
+        settle(&mut facts);
         facts
             .seed(
                 json!({"address":"t1","status":{"state":"idle"},"reported":true}),
@@ -620,12 +887,14 @@ mod tests {
             .unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Working);
         facts.data(7, &vec![b'x'; LINE_LIMIT + 1]);
+        settle(&mut facts);
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
         assert_eq!(facts.get("t1").reported, None);
         assert!(facts.partial.is_empty());
         assert!(facts.channel.is_none());
         facts.begin();
         facts.data(11, &vec![b'x'; EARLY_LIMIT + 1]);
+        settle(&mut facts);
         assert!(facts.early.is_empty());
         assert!(facts.get("t1").limited);
         let names: Vec<_> = (0..300).map(|index| format!("t{index}")).collect();

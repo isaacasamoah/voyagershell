@@ -1,6 +1,13 @@
 use super::*;
 use crate::core_shapes::HelloResult;
 
+fn applied(activity: &Arc<Mutex<Activity>>) {
+    let mut facts = activity.lock().unwrap();
+    for event in facts.take() {
+        facts.apply(event);
+    }
+}
+
 #[test]
 fn reported_activity_frames_credit_close_and_control_are_separate() {
     let activity = Arc::new(Mutex::new(Activity::default()));
@@ -36,6 +43,11 @@ fn reported_activity_frames_credit_close_and_control_are_separate() {
     );
     assert_eq!(
         activity.lock().unwrap().get("t1").state,
+        voyager_contract::activity::ActivityState::Unknown
+    );
+    applied(&activity);
+    assert_eq!(
+        activity.lock().unwrap().get("t1").state,
         voyager_contract::activity::ActivityState::Working
     );
     assert!(!Core::activity_frame(
@@ -57,6 +69,7 @@ fn reported_activity_frames_credit_close_and_control_are_separate() {
         }
     ));
     assert_eq!(receive.try_recv().unwrap().kind, 2);
+    applied(&activity);
     assert_eq!(
         activity.lock().unwrap().get("t1").state,
         voyager_contract::activity::ActivityState::Unknown
@@ -227,6 +240,7 @@ fn quit_and_keep_fences_input_and_activity_and_sends_nothing_to_core() {
     assert!(result.is_ok(), "{result:?}");
     assert!(requests.try_recv().is_err());
     assert!(!*core.input_open.lock().unwrap());
+    applied(&core.activity);
     assert_eq!(
         core.activity.lock().unwrap().get("t1").reason.as_deref(),
         Some("Voyager is quitting")
