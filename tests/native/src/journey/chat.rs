@@ -1,7 +1,7 @@
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen};
-use crate::provider::{Provider, Turn};
+use crate::provider::{Provider, Script, Turn};
 use crate::system::PATIENCE;
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
@@ -10,12 +10,15 @@ use serde_json::{Value, json};
 use std::fs;
 use voyager_contract::conversation::Focus;
 use voyager_contract::inspection::Role;
+use voyager_contract::{FleetId, RenameTarget};
 
 cases! {
     OpenChat => "open-chat",
     SendMessage => "send-message",
     StreamedReply => "streamed-reply",
     ProviderError => "provider-error",
+    ToolCallInspect => "tool-call-inspect",
+    ToolCallEffect => "tool-call-effect",
 }
 
 pub const CONTROL: Case = Case::StreamedReply;
@@ -29,6 +32,30 @@ const REFUSAL: &str = "Stand-in refused this turn";
 const AGAIN: &str = "Are you there?";
 const AGAIN_ITEM: &str = "stand-in-reply-2";
 const AGAIN_REPLY: &str = "oru: yes.";
+const INSPECT: &str = "Inspect the workspace";
+const INSPECT_ITEM: &str = "stand-in-inspect";
+const EFFECT: &str = "Rename the Fleet";
+const EFFECT_ITEM: &str = "stand-in-effect";
+const DONE: &str = "oru: done.";
+const RENAMED: &str = "Scripted Fleet";
+const WORKSPACE: &str = "voyager_workspace";
+
+fn inspect_script() -> Script {
+    Script::parse(&format!(
+        r#"{{"calls":[{{"tool":"{WORKSPACE}","arguments":{{"expectedVersion":"0","action":{{"operation":"inspect"}}}}}}]}}"#
+    ))
+    .expect("the built-in inspect script is valid")
+}
+
+fn effect_script() -> Script {
+    Script::parse(&format!(
+        r#"{{"calls":[
+            {{"tool":"{WORKSPACE}","arguments":{{"expectedVersion":"0","action":{{"operation":"inspect"}}}}}},
+            {{"atMs":100,"tool":"{WORKSPACE}","arguments":{{"expectedVersion":{{"$result":[0,"/version"]}},"action":{{"operation":"rename","target":{{"kind":"fleet","id":{{"$result":[0,"/layout/selectedFleet"]}}}},"name":"{RENAMED}"}}}}}}
+        ]}}"#
+    ))
+    .expect("the built-in effect script is valid")
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Chat {
@@ -216,7 +243,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     if replied.is_none() {
         return Ok(());
     }
-    cases.check(native, Case::ProviderError, |native| {
+    let answered = cases.make(native, Case::ProviderError, |native| {
         type_draft(native, FAILING)?;
         native.press(Key::Return)?;
         let failing = provider.next_turn(PATIENCE)?;
@@ -238,7 +265,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |seen| Some(Chat::of(seen)),
             |chat| chat.reply(AGAIN_ITEM) == Some(AGAIN_REPLY) && chat.sending(),
         )?;
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect(
                 "the provider's error is drawn, Send is drawn, and the message is kept",
                 refused.error.as_deref() == Some(REFUSAL)
@@ -258,8 +285,131 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("refused", &refused)?
             .observed("answered", &answered)?
-            .observed("turns", provider.turn_starts().len())
+            .observed("turns", provider.turn_starts().len())?;
+        Ok((verdict, Some(())))
+    })?;
+    if answered.is_none() {
+        return Ok(());
+    }
+    let inspected = cases.make(native, Case::ToolCallInspect, |native| {
+        let turn = ask(native, &provider, INSPECT)?;
+        let played = provider.play(&turn, &inspect_script())?;
+        conclude(native, &provider, &turn, INSPECT_ITEM)?;
+        let (_, layout) = native
+            .document()?
+            .context("The layout document is missing")?;
+        let result = played.first().map(|call| &call.result);
+        let text = result.and_then(returned_text);
+        let verdict = Verdict::new()
+            .expect(
+                "one call reached the app's workspace tool and the app returned a successful result",
+                played.len() == 1
+                    && result.is_some_and(|result| result["result"]["success"] == true),
+            )
+            .expect(
+                "the returned result is the app's Applied reply naming the saved layout's selected Fleet",
+                text.as_ref().is_some_and(|text| {
+                    text["status"] == "applied"
+                        && text["layout"]["selectedFleet"]
+                            == json!(layout.selected_fleet.as_ref().map(|fleet| &fleet.0))
+                }),
+            )
+            .observed("played", &played)?
+            .observed("returned", &text)?;
+        Ok((verdict, Some(())))
+    })?;
+    if inspected.is_none() {
+        return Ok(());
+    }
+    cases.check(native, Case::ToolCallEffect, |native| {
+        let custom = native.script.clone();
+        let script = custom.clone().unwrap_or_else(effect_script);
+        let (_, before) = native
+            .document()?
+            .context("The layout document is missing")?;
+        let fleet = before
+            .selected_fleet
+            .clone()
+            .context("The layout has no selected Fleet")?;
+        script.require_calls()?;
+        let turn = ask(native, &provider, EFFECT)?;
+        let played = provider.play(&turn, &script)?;
+        conclude(native, &provider, &turn, EFFECT_ITEM)?;
+        let mut verdict = Verdict::new().expect(
+            "every scripted call received a result from the app, in script order",
+            played.len() == script.calls.len()
+                && played
+                    .iter()
+                    .zip(&script.calls)
+                    .all(|(call, scripted)| call.tool == scripted.tool && is_return(&call.result)),
+        );
+        if custom.is_none() {
+            let drawn = native.settle(
+                "the renamed Fleet drawn",
+                |seen| {
+                    Some(
+                        seen.label(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))
+                            .map(str::to_owned),
+                    )
+                },
+                |name| name.as_deref() == Some(RENAMED),
+            )?;
+            let saved = saved_name(native, &fleet)?;
+            verdict = verdict
+                .expect(
+                    "the built-in rename's result was Applied",
+                    played
+                        .get(1)
+                        .and_then(|call| returned_text(&call.result))
+                        .is_some_and(|text| text["status"] == "applied"),
+                )
+                .expect(
+                    "the Fleet's drawn name and its saved name are the scripted name",
+                    drawn.as_deref() == Some(RENAMED) && saved.as_deref() == Some(RENAMED),
+                )
+                .observed("drawn", &drawn)?;
+        }
+        verdict.observed("played", &played)
     })
+}
+
+fn ask(native: &Native, provider: &Provider, text: &str) -> Result<Turn> {
+    type_draft(native, text)?;
+    native.press(Key::Return)?;
+    let turn = provider.next_turn(PATIENCE)?;
+    provider.started(&turn)?;
+    Ok(turn)
+}
+
+fn conclude(native: &Native, provider: &Provider, turn: &Turn, item: &str) -> Result<()> {
+    provider.item_started(turn, item)?;
+    provider.finish(turn, item, DONE)?;
+    provider.complete(turn)?;
+    native.settle(
+        "the turn complete with Send drawn",
+        |seen| Some(Chat::of(seen)),
+        |chat| chat.sending() && !chat.status && chat.reply(item) == Some(DONE),
+    )?;
+    Ok(())
+}
+
+fn is_return(frame: &Value) -> bool {
+    frame.get("result").is_some() || frame.get("error").is_some()
+}
+
+fn returned_text(frame: &Value) -> Option<Value> {
+    serde_json::from_str(frame.pointer("/result/contentItems/0/text")?.as_str()?).ok()
+}
+
+fn saved_name(native: &Native, fleet: &FleetId) -> Result<Option<String>> {
+    Ok(native.document()?.and_then(|(_, layout)| {
+        layout
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .find(|found| &found.id == fleet)
+            .map(|found| found.name.clone())
+    }))
 }
 
 fn type_draft(native: &Native, text: &str) -> Result<Option<String>> {
