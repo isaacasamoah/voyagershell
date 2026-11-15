@@ -219,6 +219,14 @@ fn cases_of(attempts: &[&Attempt]) -> BTreeMap<String, String> {
     merged
 }
 
+fn blamed_attempt<'a>(attempts: &[&'a Attempt]) -> Option<&'a Attempt> {
+    attempts
+        .iter()
+        .copied()
+        .filter(|attempt| attempt.ended != Ended::Passed)
+        .min_by_key(|attempt| Blame::precedence(attempt))
+}
+
 fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideReport> {
     let mine: Vec<&Attempt> = all
         .iter()
@@ -247,7 +255,7 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
         } else if slot == Slot::Flake {
             seconds.push(last.seconds);
         } else {
-            reds.push(last);
+            reds.extend(attempts.iter().copied());
         }
         slots.push(slot);
     }
@@ -258,15 +266,7 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
     } else {
         Slot::Green
     };
-    let failing = reds
-        .iter()
-        .copied()
-        .min_by_key(|a| Blame::precedence(a))
-        .or_else(|| {
-            mine.iter()
-                .copied()
-                .find(|attempt| attempt.ended != Ended::Passed)
-        });
+    let failing = blamed_attempt(if reds.is_empty() { &mine } else { &reds });
     let median_seconds = median(&seconds);
     let spread = median_seconds.filter(|m| *m > 0.0).and_then(|m| {
         let low = seconds.iter().copied().fold(f64::INFINITY, f64::min);
@@ -1016,6 +1016,81 @@ mod tests {
             assert_eq!(judged.reports[0].head.blame, Some(Blame::Fixture));
             assert_eq!(judged.reports[0].verdict, "inconclusive");
         }
+    }
+
+    fn failed(side: Side, round: usize, number: u8, blame: Blame) -> Attempt {
+        let mut attempt = run_of(J, side, round, number, Ended::Failed, 5.0);
+        attempt.blame = Some(blame);
+        attempt.check = Some(format!("{blame:?}").to_lowercase());
+        attempt
+    }
+
+    fn head_blame(attempts: Vec<Attempt>) -> (Option<Blame>, Option<String>, &'static str) {
+        let mut all = both(J, &[20.0, 21.0], &[]);
+        all.extend(attempts);
+        let judged = judge(&all, &[J], 0.15, &[]).expect("a judgement");
+        let report = &judged.reports[0];
+        (report.head.blame, report.head.check.clone(), report.verdict)
+    }
+
+    #[test]
+    fn blame_ignores_attempt_order_inside_one_round() {
+        for pair in [
+            [Blame::Product, Blame::Unknown],
+            [Blame::Unknown, Blame::Product],
+        ] {
+            let (blame, check, verdict) = head_blame(vec![
+                failed(Side::Head, 0, 1, pair[0]),
+                failed(Side::Head, 0, 2, pair[1]),
+            ]);
+            assert_eq!(blame, Some(Blame::Product));
+            assert_eq!(check.as_deref(), Some("product"));
+            assert_eq!(verdict, "red");
+        }
+    }
+
+    #[test]
+    fn a_fixture_retry_is_blamed_on_the_fixture() {
+        for pair in [
+            [Blame::Fixture, Blame::Unknown],
+            [Blame::Unknown, Blame::Fixture],
+        ] {
+            let (blame, _, verdict) = head_blame(vec![
+                failed(Side::Head, 0, 1, pair[0]),
+                failed(Side::Head, 0, 2, pair[1]),
+            ]);
+            assert_eq!(blame, Some(Blame::Fixture));
+            assert_eq!(verdict, "inconclusive");
+        }
+    }
+
+    #[test]
+    fn mixed_rounds_pool_every_failed_attempt() {
+        let (blame, _, verdict) = head_blame(vec![
+            failed(Side::Head, 0, 1, Blame::Unknown),
+            failed(Side::Head, 0, 2, Blame::Fixture),
+            failed(Side::Head, 1, 1, Blame::Unknown),
+            failed(Side::Head, 1, 2, Blame::Product),
+        ]);
+        assert_eq!(blame, Some(Blame::Product));
+        assert_eq!(verdict, "red");
+    }
+
+    #[test]
+    fn a_flake_keeps_product_blame_but_a_red_round_outranks_it() {
+        let flake = vec![
+            failed(Side::Head, 0, 1, Blame::Product),
+            run_of(J, Side::Head, 0, 2, Ended::Passed, 5.0),
+        ];
+        let (blame, _, _) = head_blame(flake.clone());
+        assert_eq!(blame, Some(Blame::Product));
+        let mut mixed = flake;
+        mixed.extend([
+            failed(Side::Head, 1, 1, Blame::Unknown),
+            failed(Side::Head, 1, 2, Blame::Fixture),
+        ]);
+        let (blame, _, _) = head_blame(mixed);
+        assert_eq!(blame, Some(Blame::Fixture));
     }
 
     #[test]
