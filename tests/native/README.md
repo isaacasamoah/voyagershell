@@ -283,6 +283,7 @@ Limits.
 - Wall time includes the sandbox and display start, which every run pays equally. That fixed cost dilutes a slowdown.
 - The comparison against history spans time, so machine load at different hours is a confounder. Only the comparison against the base shares load.
 - Three rounds make a median of three. One slow run cannot move it, and two can.
+- Observed on this machine, equal builds differed by at most 5 percent in every journey over three rounds, and a 400 ms sleep in the scroll path made terminal-scrolling 39 percent slower. A planted 60 ms sleep made it 5 percent slower and was not flagged. In one battery, two slow runs in three moved a journey's head median 12 percent with no code change.
 - A deterministic failure costs a second run before it is called red.
 - Linux X11 only.
 
