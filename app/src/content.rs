@@ -5,7 +5,7 @@ pub(crate) mod rename;
 mod view;
 pub(crate) use description::supports_type;
 pub use description::{NOTES_TYPE, describe, discover, require_action};
-pub use package::seed_package;
+pub mod install;
 pub(crate) use view::Phase as ViewPhase;
 pub use view::ViewBinding;
 

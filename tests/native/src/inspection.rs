@@ -66,6 +66,10 @@ impl Target {
         Self::keyed(Role::SplitDivider, key)
     }
 
+    pub fn profile_update(path: &str) -> Self {
+        Self::keyed(Role::ProfileUpdate, path)
+    }
+
     pub const GO_THERE: Self = Self::single(Role::GoThere);
     pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
 

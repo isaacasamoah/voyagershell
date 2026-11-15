@@ -101,7 +101,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/src/host.rs'
-    limit: 1028
+    limit: 1026
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'

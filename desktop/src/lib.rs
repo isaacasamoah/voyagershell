@@ -2,6 +2,7 @@ mod arrangement;
 mod avatar;
 mod avatar_motion;
 mod avatar_pack;
+mod banner;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
 mod content_budget;
@@ -19,6 +20,7 @@ mod occluding;
 mod platform;
 mod quit;
 mod script_types;
+mod shipped;
 mod speech;
 mod split;
 mod status;
@@ -55,144 +57,12 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
     let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
-    seed(&package.join("main.js"), include_str!("../canvas/main.js"))?;
-    seed(&package.join("ui.js"), include_str!("../../content/ui.js"))?;
-    seed(
-        &package.join("canvas.json"),
-        include_str!("../canvas/canvas.json"),
-    )?;
-    seed(
-        &package.join("regions.js"),
-        include_str!("../canvas/regions.js"),
-    )?;
-    seed(
-        &package.join("creation.js"),
-        include_str!("../canvas/creation.js"),
-    )?;
-    seed(
-        &package.join("navigation-view.js"),
-        include_str!("../canvas/navigation-view.js"),
-    )?;
-    seed(
-        &package.join("panel-view.js"),
-        include_str!("../canvas/panel-view.js"),
-    )?;
-    seed(
-        &package.join("panels.js"),
-        include_str!("../canvas/panels.js"),
-    )?;
-    seed(&package.join("menu.js"), include_str!("../canvas/menu.js"))?;
-    seed(
-        &package.join("activity.js"),
-        include_str!("../canvas/activity.js"),
-    )?;
-    seed(
-        &package.join("voyage-colours.js"),
-        include_str!("../canvas/voyage-colours.js"),
-    )?;
-    seed(
-        &package.join("agents.js"),
-        include_str!("../canvas/agents.js"),
-    )?;
-    seed(
-        &package.join("processes.js"),
-        include_str!("../canvas/processes.js"),
-    )?;
-    seed(
-        &package.join("process-icons.js"),
-        include_str!("../canvas/process-icons.js"),
-    )?;
-    seed(
-        &package.join("worktrees.js"),
-        include_str!("../canvas/worktrees.js"),
-    )?;
-    seed(
-        &package.join("AGENTS.md"),
-        include_str!("../canvas/AGENTS.md"),
-    )?;
-    seed(
-        &package.join("voyage-close.js"),
-        include_str!("../canvas/voyage-close.js"),
-    )?;
-    seed(
-        &package.join("stop-session.js"),
-        include_str!("../canvas/stop-session.js"),
-    )?;
-    seed(&theme, include_str!("../themes/voyager.json"))?;
-    seed(
-        &package.join("validate.js"),
-        include_str!("../../contract/generated/validate.js"),
-    )?;
-    seed(
-        &package.join("workspace.js"),
-        include_str!("../../contract/generated/workspace.js"),
-    )?;
-    seed(&package.join("chat.js"), include_str!("../canvas/chat.js"))?;
-    seed(
-        &package.join("chat.svg"),
-        include_str!("../canvas/chat.svg"),
-    )?;
-    for (name, source) in [
-        ("home.svg", include_str!("../canvas/home.svg")),
-        ("activity.svg", include_str!("../canvas/activity.svg")),
-        ("sidebar.svg", include_str!("../canvas/sidebar.svg")),
-        (
-            "sidebar-collapse.svg",
-            include_str!("../canvas/sidebar-collapse.svg"),
-        ),
-        ("bash.svg", include_str!("../canvas/bash.svg")),
-        ("note.svg", include_str!("../canvas/note.svg")),
-        ("codex.svg", include_str!("../canvas/codex.svg")),
-        ("claude.svg", include_str!("../canvas/claude.svg")),
-        (
-            "icons-LICENSE.txt",
-            include_str!("../canvas/icons-LICENSE.txt"),
-        ),
-        (
-            "icons-NOTICE.txt",
-            include_str!("../canvas/icons-NOTICE.txt"),
-        ),
-        ("helmet.svg", include_str!("../canvas/helmet.svg")),
-        ("orbit.svg", include_str!("../canvas/orbit.svg")),
-        ("voyager.svg", include_str!("../canvas/voyager.svg")),
-        (
-            "split-horizontal.svg",
-            include_str!("../canvas/split-horizontal.svg"),
-        ),
-        (
-            "split-vertical.svg",
-            include_str!("../canvas/split-vertical.svg"),
-        ),
-        ("close.svg", include_str!("../canvas/close.svg")),
-        ("embed.svg", include_str!("../canvas/embed.svg")),
-        ("overlay.svg", include_str!("../canvas/overlay.svg")),
-        ("maximize.svg", include_str!("../canvas/maximize.svg")),
-        ("restore.svg", include_str!("../canvas/restore.svg")),
-        ("folder.svg", include_str!("../canvas/folder.svg")),
-        ("branch.svg", include_str!("../canvas/branch.svg")),
-        ("speech-wave.svg", include_str!("../canvas/speech-wave.svg")),
-    ] {
-        seed(&package.join(name), source)?;
-    }
-    seed(
-        &package.join("conversation.js"),
-        include_str!("../../contract/generated/conversation.js"),
-    )?;
     let notes_package = profile.join("vessels/notes");
-    voyager_app::content::seed_package(
-        &notes_package,
-        &[
-            ("main.js", include_str!("../../content/notes/main.js")),
-            ("ui.js", include_str!("../../content/ui.js")),
-            (
-                "vessel.json",
-                include_str!("../../content/notes/vessel.json"),
-            ),
-            (
-                "validate.js",
-                include_str!("../../contract/generated/validate.js"),
-            ),
-        ],
+    let profile_updates = voyager_app::content::install::install(
+        &profile,
+        &shipped::files(voyager_app::content::install::package_absent(
+            &notes_package,
+        )),
     )?;
     let content_owner = voyager_app::content::Owner::open(&profile)?;
     let manifest: serde_json::Value =
@@ -295,6 +165,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             notes,
                             avatar,
                             stop_session,
+                            profile_updates,
                         },
                         window,
                         cx,

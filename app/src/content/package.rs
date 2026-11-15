@@ -1,6 +1,5 @@
 use std::{
-    fs,
-    io::{self, Write},
+    io,
     path::{Path, PathBuf},
 };
 
@@ -9,21 +8,6 @@ pub(crate) fn removed_path(package: &Path) -> PathBuf {
         ".{}.removed",
         package.file_name().unwrap_or_default().to_string_lossy()
     ))
-}
-
-pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {
-    if package.exists() || removed_path(package).exists() {
-        return Ok(());
-    }
-    fs::create_dir_all(package)?;
-    for (name, source) in files {
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(package.join(name))?
-            .write_all(source.as_bytes())?;
-    }
-    Ok(())
 }
 
 pub(crate) fn remove(package: &Path) -> Result<(), String> {
@@ -71,9 +55,31 @@ fn move_package(_source: &Path, _destination: &Path) -> Result<(), String> {
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
-    use crate::content::{Owner, describe, discover, seed_package};
-    use std::fs;
+    use crate::content::{
+        Owner, describe, discover,
+        install::{Shipped, install, package_absent},
+    };
+    use std::{fs, path::Path};
     use voyager_contract::{VesselId, content::Availability};
+
+    fn seed_package(package: &Path, files: &[(&str, &str)]) -> std::io::Result<()> {
+        let profile = package.parent().unwrap().parent().unwrap();
+        let absent = package_absent(package);
+        let paths = files
+            .iter()
+            .map(|(name, _)| format!("vessels/notes/{name}"))
+            .collect::<Vec<_>>();
+        let shipped = files
+            .iter()
+            .zip(&paths)
+            .map(|((_, source), path)| Shipped {
+                path,
+                bytes: source.as_bytes(),
+                absent,
+            })
+            .collect::<Vec<_>>();
+        install(profile, &shipped).map(|_| ())
+    }
 
     #[test]
     fn removed_package_restores_personal_source_without_disabling_terminal() {

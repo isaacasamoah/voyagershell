@@ -99,6 +99,7 @@ roles! {
     SplitDivider => "split-divider",
     MaximizePanel => "maximize-panel",
     MovePreview => "move-preview",
+    ProfileUpdate => "profile-update",
 }
 
 #[cfg(test)]

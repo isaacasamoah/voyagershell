@@ -304,6 +304,39 @@ Limits.
 - A deterministic failure costs a second run before it is called red.
 - Linux X11 only.
 
+### Profile updates
+
+The `profile-updates` journey starts the build on a profile that an older build
+wrote. Give it the checked-in `tests/native/fixtures/profile-updates`, which holds
+an `installed.json` and these files under `canvas/`:
+
+- `AGENTS.md` equals its record, so it is untouched.
+- `navigation-view.js` is the version shipped before Stop session existed. It has
+  no record and matches the history of shipped versions, so it is untouched.
+- `icons-LICENSE.txt` differs from its record, and `icons-NOTICE.txt` has no
+  record and is in no history. Both are edited.
+- `retired.js` equals its record and is no longer shipped. `retired-edited.js`
+  differs from its record and is no longer shipped.
+
+```sh
+tests/native/target/debug/voyager-verification run --journey profile-updates --binary "$candidate" --sha256 "$expected" --profile-fixture tests/native/fixtures/profile-updates --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/profile-updates"
+```
+
+`untouched-files-update-and-stop-session-shows` checks that the two untouched
+files changed and that the Home menu offers Stop session. `edited-files-stay-as-they-were`
+checks that the edited files are byte for byte as seeded and none is moved aside.
+`edited-files-are-announced-with-a-diff` reads the `profile-update` controls and the
+diff file. `a-dropped-file-is-deleted-only-when-untouched` checks the two retired
+files. `a-second-start-changes-no-file` quits, starts again and compares the
+bytes and modification times of every first-party file. The `profile-updates`
+patch makes the app treat an edited file as untouched, so
+`edited-files-stay-as-they-were` fails.
+
+The journey does not use a second build. A record in the fixture stands for the
+older build, which is the only way a profile reaches a new build. It does not
+check that a build older than the profile's writer leaves the files alone. That is a
+known gap.
+
 ### Stand-in provider
 
 The app starts its private conversation by running `codex app-server` from

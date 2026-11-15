@@ -1,0 +1,12 @@
+diff --git a/app/src/content/install.rs b/app/src/content/install.rs
+--- a/app/src/content/install.rs
++++ b/app/src/content/install.rs
+@@ -70,7 +70,7 @@
+         Some(current) if current == shipped => Stance::Current,
+         Some(current) => match record {
+             Some(installed) if installed == current => Stance::Untouched,
+-            Some(installed) => Stance::Edited { installed },
++            Some(_) => Stance::Untouched,
+             None if shipped_before => Stance::Untouched,
+             None => Stance::Unrecorded,
+         },
