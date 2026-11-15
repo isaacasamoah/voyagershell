@@ -38,7 +38,7 @@ impl Plan {
             .iter()
             .find(|content| content.id == placement.vessel)
             .ok_or("Content not found")?;
-        if selected.type_id != crate::content_type::NOTES_TYPE {
+        if selected.type_id != crate::vessel_type::NOTES_TYPE {
             return Ok(None);
         }
         let configuration =
@@ -70,7 +70,7 @@ impl Plan {
         let directory =
             std::fs::canonicalize(&file.directory).map_err(|error| error.to_string())?;
         for content in &layout.vessels {
-            if content.type_id != crate::content_type::NOTES_TYPE {
+            if content.type_id != crate::vessel_type::NOTES_TYPE {
                 continue;
             }
             let Some(bound) = configuration(content)?.notes_file else {
@@ -162,7 +162,7 @@ pub(crate) fn synchronize_labels(layout: &mut Layout) {
     let files: Vec<_> = layout
         .vessels
         .iter()
-        .filter(|content| content.type_id == crate::content_type::NOTES_TYPE)
+        .filter(|content| content.type_id == crate::vessel_type::NOTES_TYPE)
         .filter_map(|content| {
             let configuration: NotesConfiguration =
                 serde_json::from_value(serde_json::Value::Object(content.configuration.clone()?))
@@ -281,7 +281,7 @@ mod tests {
         let beside = model.layout.voyages[0].fleets[0].placements[0].id.clone();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::content_type::NOTES_TYPE.into(),
+                type_id: crate::vessel_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet { id: fleet },
                     insertion: PlacementInsertion::Beside {

@@ -1,5 +1,5 @@
 use super::{INITIAL_NOTES, manifest, state_schema};
-pub use crate::content_type::NOTES_TYPE;
+pub use crate::vessel_type::NOTES_TYPE;
 use std::path::Path;
 use voyager_contract::content::{
     Actions, Availability, Backend, Catalog, DataDescription, Description, NativeHost, NativeView,

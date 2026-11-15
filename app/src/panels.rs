@@ -566,7 +566,7 @@ pub(crate) fn insert(
 
 pub(crate) fn default_name(members: &[Placement], type_id: &str) -> String {
     let base = match type_id {
-        crate::content_type::NOTES_TYPE => "Notes",
+        crate::vessel_type::NOTES_TYPE => "Notes",
         "agents" => "Agents",
         _ => "Terminal",
     };
@@ -655,11 +655,11 @@ pub(crate) fn normalize(layout: &mut Layout) -> Result<(), String> {
 
 pub(crate) fn validate(layout: &Layout) -> Result<(), String> {
     let mut placements = BTreeSet::new();
-    let mut content_ids = BTreeSet::new();
+    let mut vessel_ids = BTreeSet::new();
     for owner in owners(layout) {
         let current = group(layout, &owner)?;
         for panel in current.members {
-            if !placements.insert(&panel.id.0) || !content_ids.insert(&panel.vessel.0) {
+            if !placements.insert(&panel.id.0) || !vessel_ids.insert(&panel.vessel.0) {
                 return Err("Stored panel belongs to multiple arrangements".into());
             }
         }
@@ -813,7 +813,7 @@ mod tests {
         let first = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::content_type::NOTES_TYPE.into(),
+                type_id: crate::vessel_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),
