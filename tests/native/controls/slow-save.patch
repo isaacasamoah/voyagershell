@@ -1,0 +1,15 @@
+diff --git a/app/src/client.rs b/app/src/client.rs
+index 3f3fe41..384bbf2 100644
+--- a/app/src/client.rs
++++ b/app/src/client.rs
+@@ -1989,8 +1989,8 @@ impl Client {
+                                         } else { false };
+                                         let pending = begin_save(core, &candidate.layout, version)
+                                             .map_err(|error| unbound(created_notes, error))?;
+-                                        post(&core_sender, pending, |result| Message::Saved {
+-                                            result: result.map(|saved| saved.version),
++                                        let _ = core_sender.try_send(Message::Saved {
++                                            result: pending.wait().map(|saved| saved.version),
+                                         });
+                                         Ok(Step::Save(Box::new(Departure {
+                                             before: Arc::clone(&layout),

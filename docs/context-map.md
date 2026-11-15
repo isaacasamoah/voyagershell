@@ -42,6 +42,7 @@ Guide: [docs/workspace.md](workspace.md).
 Owns files:
 
 - `app/src/client.rs`
+- `app/src/front_door.rs`
 - `app/src/layout_store.rs`
 - `app/src/process.rs`
 - `app/src/launch.rs`
@@ -52,6 +53,7 @@ Owns files:
 - `app/src/terminal_lifecycle.rs`
 - `app/src/tests.rs`
 - `app/tests/exit_events.rs`
+- `app/tests/front_door.rs`
 - `app/tests/launch.rs`
 - `app/tests/quit.rs`
 - `app/tests/selected_stop.rs`

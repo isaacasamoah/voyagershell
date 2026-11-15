@@ -20,6 +20,63 @@ does not change its content identity or backend. These layers implement the
 architecture's ownership rules; they do not require a file for every diagram box.
 Browser embedding and additional provider implementations remain separate work.
 
+## The front door
+
+Every request passes `app/src/front_door.rs` on the owner thread, in this order.
+
+1. **Envelope.** The owner builds one `Envelope` from the bound caller and the
+   request. It holds the request id, the kind, the caller, the target, the
+   expected revision and whether the request has an effect. The caller is the
+   canvas, the avatar with its captured focus, a Vessel's own view, or Core. A
+   request never names its own caller. An empty id, an id over 128 bytes, or an
+   empty or over-long Vessel revision is refused here.
+2. **Ledger.** One list holds every request id with its kind, a fingerprint and
+   the first answer. The fingerprint covers the kind, caller, target, expected
+   revision and payload. A repeat returns the first answer and runs nothing. A
+   changed request under a known id is refused. An id that another kind holds
+   is refused. A request that is still in flight answers that it is pending.
+3. **Gates.** An effect is refused while Voyager quits. A request with no effect
+   passes: a workspace inspect, a Vessel inspect, describe or list, and a
+   process list or read. A workspace inspect while quitting answers from the
+   owner's last layout and marks it not fresh.
+4. **Decide** and 5. **Effect.** Each kind supplies these. The kinds are
+   workspace, content, worktree, process and terminal.
+6. **Record.** The owner stores the answer in the ledger and replies.
+
+The ledger keeps the last 32 settled answers of each kind, in the order they
+settled, and never evicts a pending entry. A refusal from the first three stages
+is not stored, so nothing but the first answer can ever be replayed. An
+uncertain answer is stored like any other and is never run again.
+
+Later steps of an admitted effect use the same gate. Those are the worktree
+removal preflight, the worktree completion, and the Core terminal list that
+closes Vessels whose programs ended. That list result carries the Core caller.
+
+### A save in flight
+
+A workspace change that only edits the layout sends its `doc.set` to Core and
+returns to the queue. This covers create, rename, select, dock, resize, remove
+and reopen. Core's reply comes back as a message, and the record stage runs
+then. While that save is in flight:
+
+- A request with no effect runs at once.
+- Every effect waits in arrival order, so effects stay serial. At most 8
+  requests wait. A further effect is refused as busy with nothing queued.
+- Quit waits, so a save that was sent is confirmed before the Core connection
+  ends.
+
+When the reply lands, the owner installs the saved layout only if its revision
+is newer than the layout it holds. An inspect during the flight may already
+have loaded it.
+
+The other saves still block the owner: opening a terminal, selecting or
+configuring a Note, the last step of a Voyage close or a worktree change, the
+closure of an ended Vessel, and the repairs an inspect makes. A slow Core delays
+every request behind those.
+
+The envelope names a terminal by a machine and a Core address, and the Core
+caller names its machine. Only the local machine exists today.
+
 ## Shared panel arrangements
 
 The current owner contract uses `PlacementOwner`: a Fleet ID or a Voyage's Portal
@@ -586,11 +643,11 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most ten pending RPCs: at most eight admitted process effects, the one shared
-terminal list that observations and the exit check wait on, and one ordinary
-owner call. Process admissions remain counted until
-the owner reconciles completion. The thirty-two-entry process receipt history
-evicts completed entries only. Replies received after a caller has gone away
+most eleven pending RPCs: at most eight admitted process effects, the one shared
+terminal list that observations and the exit check wait on, the one workspace
+save in flight, and one ordinary owner call. Process admissions remain counted
+until the owner reconciles completion. The [front door](#the-front-door) ledger
+keeps every pending request and evicts settled entries only. Replies received after a caller has gone away
 are ignored without disconnecting unrelated viewers. Disconnects release all
 waiting callers with uncertain outcomes. Each request's twenty-second deadline
 starts when dispatched, rather than when a completion worker starts waiting.

@@ -40,7 +40,7 @@ const DONE: &str = "oru: done.";
 const RENAMED: &str = "Scripted Fleet";
 const WORKSPACE: &str = "voyager_workspace";
 
-fn inspect_script() -> Script {
+pub(super) fn inspect_script() -> Script {
     Script::parse(&format!(
         r#"{{"calls":[{{"tool":"{WORKSPACE}","arguments":{{"expectedVersion":"0","action":{{"operation":"inspect"}}}}}}]}}"#
     ))
@@ -373,7 +373,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
-fn ask(native: &Native, provider: &Provider, text: &str) -> Result<Turn> {
+pub(super) fn ask(native: &Native, provider: &Provider, text: &str) -> Result<Turn> {
     type_draft(native, text)?;
     native.press(Key::Return)?;
     let turn = provider.next_turn(PATIENCE)?;
@@ -381,7 +381,12 @@ fn ask(native: &Native, provider: &Provider, text: &str) -> Result<Turn> {
     Ok(turn)
 }
 
-fn conclude(native: &Native, provider: &Provider, turn: &Turn, item: &str) -> Result<()> {
+pub(super) fn conclude(
+    native: &Native,
+    provider: &Provider,
+    turn: &Turn,
+    item: &str,
+) -> Result<()> {
     provider.item_started(turn, item)?;
     provider.finish(turn, item, DONE)?;
     provider.complete(turn)?;
@@ -397,11 +402,11 @@ fn is_return(frame: &Value) -> bool {
     frame.get("result").is_some() || frame.get("error").is_some()
 }
 
-fn returned_text(frame: &Value) -> Option<Value> {
+pub(super) fn returned_text(frame: &Value) -> Option<Value> {
     serde_json::from_str(frame.pointer("/result/contentItems/0/text")?.as_str()?).ok()
 }
 
-fn saved_name(native: &Native, fleet: &FleetId) -> Result<Option<String>> {
+pub(super) fn saved_name(native: &Native, fleet: &FleetId) -> Result<Option<String>> {
     Ok(native.document()?.and_then(|(_, layout)| {
         layout
             .voyages

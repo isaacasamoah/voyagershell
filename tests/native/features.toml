@@ -283,3 +283,16 @@ behavior = "covered"
 performance = "none"
 visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "front-door"
+name = "Front door"
+path = "Ask for something while Core is slow to confirm a save, and get a read answered at once while every change keeps its turn."
+sources = ["app/src/front_door.rs", "app/src/client.rs", "app/src/client_core.rs"]
+journeys = ["slow-save"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"

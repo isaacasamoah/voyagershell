@@ -10,6 +10,7 @@ mod profile;
 mod profile_updates;
 mod quit_restore;
 mod scrolling;
+mod slow_save;
 mod voyage_close;
 mod workspace;
 
@@ -115,6 +116,7 @@ journeys! {
     LayoutCompat => "layout-compat" in layout_compat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     LayoutRefused => "layout-refused" in layout_refused, sidebar: None, window: None;
     LayoutCorrupt => "layout-corrupt" in layout_corrupt, sidebar: None, window: None;
+    SlowSave => "slow-save" in slow_save, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -132,6 +134,10 @@ impl Journey {
         }
     }
 
+    pub fn core_delay(self) -> Option<&'static str> {
+        matches!(self, Self::SlowSave).then_some(slow_save::HOLD)
+    }
+
     pub fn control_patch(self) -> String {
         format!("tests/native/controls/{}.patch", self.name())
     }
@@ -140,7 +146,7 @@ impl Journey {
         Self::ALL
             .iter()
             .map(|journey| {
-                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
+                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"coreDelay":journey.core_delay(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
             })
             .collect()
     }

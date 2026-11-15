@@ -312,6 +312,10 @@ impl System {
         }
     }
 
+    pub fn held(&self, method: &str) -> Option<Duration> {
+        self.core_delay.hold(method)
+    }
+
     pub fn delay_core(&mut self, delay: &CoreDelay) {
         delay.install(self);
         self.core_delay = delay.clone();
