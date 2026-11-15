@@ -161,6 +161,60 @@ with its connection number. The frames are written by hand, so they are only as
 faithful as the shapes in `app/src/codex_protocol.rs`. No pinned app-server
 schema checks them yet.
 
+### Core reply relay
+
+`run --core-delay METHOD=MS[,METHOD=MS]` holds Core's replies to the named
+methods for that many milliseconds, so a journey can prove what the app does
+while Core is slow. The app reaches Core through a child process, `hc connect`,
+that it starts from the `VOYAGER_HC` variable. With the flag, the driver sets
+`VOYAGER_HC` to `/voyager/bin/hc-delay`. That is the verifier binary, which sees
+its own name, starts the real `hc connect` as a child, copies the hello line
+each way, then copies frames in both directions. It reads the JSON-RPC message
+in each frame on channel 0. When a request names a held method, it remembers the
+request identity. The matching reply waits for the delay and every other frame
+passes at once, so a held reply can arrive after later replies. The request
+itself is never held, so Core does the work on time and only the app's knowledge
+of it is late.
+
+A zero delay forwards the frame unchanged and records nothing. The relay is
+still in the path, so zero measures the relay and not its absence. A run without
+`--core-delay` has no relay. The driver's own requests to Core, including its
+`doc.get` and `terminal.list` reads, go to the socket directly and are never
+held, so an observation sees the true state while the app sees the delayed one.
+
+Each held reply adds a line to `core-relay.jsonl` in the evidence folder when it
+is released. The line holds the method, the request identity, the delay, and the
+times in milliseconds since the Unix epoch at which the request was seen, the
+reply arrived and the reply was released. `checks.json` records the delays as
+`coreDelay`. After the journey the driver reads that ledger, and a line whose method or delay the flag did not ask for ends the run `inconclusive`, blamed on the verifier even when a case failed first.
+
+The driver refuses a delay it cannot apply. A method must be written in lower
+case with dots and underscores, named once, and held for at most 30000 ms. After
+Core is up and before the first case, the driver reads Core's own method list
+from its hello reply. A method that Core does not offer ends the run
+`inconclusive`, blamed on the verifier. The app has already started by then, so
+that check does not stop the app from starting.
+
+Limits. The relay reads only channel 0, so it holds replies to requests and
+never the terminal data frames or events that arrive on other channels. It
+cannot hold a request, reorder requests or drop a frame. It sits in front of the
+one `hc connect` that the app starts, so each further bridge process is its own
+relay with its own ledger lines. The app limits itself to ten pending Core
+requests, so a long delay on a busy method can make the app refuse new requests
+as busy. That is the app's behavior and what the delay is for. The relay delays
+the reply, not Core's work.
+
+Observed, on one machine and with the app at the time of writing. The app sends
+one `doc.set` at a time and waits for each reply, so `--core-delay doc.set=2000`
+stretched the `workspace` journey from about 24 s to between 70 s and 100 s. Of
+five such runs, three passed, one failed `switch-voyage` on its 12 s observation
+deadline, and one ended `inconclusive` with an operating system error 11 in
+`split-vessel` that no delay run explained. With `terminal.list=2000`, the
+`terminal-scrolling` journey fails `exit-closes`, because the app learns of an
+exit through that reply. A journey that holds a method this long therefore
+measures the app's tolerance for the delay, and a failure under it is the
+journey's finding about the app, not a defect of the relay.
+
 ### Negative controls
 
 Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
@@ -274,6 +328,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
 | `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. |
+| `/voyager/bin/hc-delay` | The verifier binary itself, read-only. Under that name it runs as the Core reply relay. It does nothing unless `--core-delay` names it as the app's Core bridge. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
 | `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
 | `/voyager/home/second-project` | An empty second folder. The `workspace` journey moves one shell into it before it creates a Voyage. |
@@ -620,6 +675,8 @@ pass. Quality review remains a separate required result, never inferred from a
 runtime pass. Preserve an incomplete or failed directory; a new run needs a new
 directory. There is no replay of failed input commands. Observation polling is
 read-only. Each input intent and command acknowledgement is recorded separately.
+
+`core-relay.jsonl` holds each held Core reply when `--core-delay` was given.
 
 `actions.jsonl` preserves commands, input intents and acknowledgements, the
 start of each case, Core requests and replies, and capture hashes. A pointer

@@ -251,6 +251,7 @@ impl Native {
         self.core = Some(Identity::read(pid(&core)?)?);
         self.core_id = core["core"]["id"].clone();
         ensure!(!self.core_id.is_null(), "Missing Core identity");
+        self.system.vet_core_delay()?;
         self.identify()
     }
 

@@ -1,3 +1,4 @@
+use crate::core_relay::CoreDelay;
 use crate::sandbox;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -256,6 +257,7 @@ pub struct System {
     pub evidence: PathBuf,
     pub session: String,
     pub env: BTreeMap<String, String>,
+    core_delay: CoreDelay,
     acknowledged: AtomicUsize,
     dispatch_mark: AtomicUsize,
     watched: Mutex<BTreeMap<String, Value>>,
@@ -303,10 +305,24 @@ impl System {
             evidence,
             session,
             env,
+            core_delay: CoreDelay::default(),
             acknowledged: AtomicUsize::new(0),
             dispatch_mark: AtomicUsize::new(0),
             watched: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    pub fn delay_core(&mut self, delay: &CoreDelay) {
+        delay.install(self);
+        self.core_delay = delay.clone();
+    }
+
+    pub fn vet_core_delay(&self) -> Result<()> {
+        if self.core_delay.is_empty() {
+            return Ok(());
+        }
+        let hello = self.rpc("hello", json!({}))?;
+        self.core_delay.vet(&hello["methods"])
     }
 
     pub fn mark_dispatch(&self) {
@@ -469,6 +485,7 @@ impl System {
             matches!(
                 method,
                 "server.status"
+                    | "hello"
                     | "doc.get"
                     | "terminal.get"
                     | "terminal.list"

@@ -15,6 +15,7 @@ pub const SECOND_PROJECT: &str = "/voyager/home/second-project";
 pub const RUNTIME: &str = "/voyager/runtime";
 pub const CORE: &str = "/voyager/bin/hc";
 pub const PROVIDER: &str = "/voyager/bin/codex";
+pub const CORE_RELAY: &str = "/voyager/bin/hc-delay";
 pub const PROVIDER_SOCKET: &str = "/voyager/runtime/provider.sock";
 pub const DISPLAY: &str = ":99";
 const SHELL_STARTUP: [&str; 4] = [".bashrc", ".bash_profile", ".profile", ".inputrc"];
@@ -58,7 +59,9 @@ impl Sandbox<'_> {
             }
         }
         command.extend(["--ro-bind".into(), text(self.core)?, CORE.into()]);
-        command.extend(["--ro-bind".into(), text(self.verifier)?, PROVIDER.into()]);
+        for relay in [PROVIDER, CORE_RELAY] {
+            command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
+        }
         for path in [Some(self.verifier), Some(self.candidate), self.assets]
             .into_iter()
             .flatten()
