@@ -1,20 +1,28 @@
 use super::layout::{avatar_on_dock, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, voyages};
+use crate::native::{Decorations, Native, Seen, Terminal, voyages};
 use crate::system::{Identity, until};
+use crate::x11::{Observed, Request};
 use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::time::Instant;
+use std::thread;
+use std::time::{Duration, Instant};
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Placement};
+
+const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 
 cases! {
     QuitAndKeep => "quit-and-keep",
     RelaunchReattaches => "relaunch-reattaches",
     QuitBusy => "quit-busy-keeps-output",
     CloseWindow => "close-window-keeps",
+    WindowButtons => "window-buttons-send-minimise-and-maximise-requests",
+    CornerGrip => "bottom-right-grip-sends-resize-request",
+    CloseButton => "close-button-keeps",
+    ControlsAbsent => "controls-absent-under-server-decorations",
     ColdRestart => "cold-restart-restores",
     StopSession => "stop-session",
 }
@@ -70,6 +78,7 @@ impl Drawn {
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
+    let original = native.decorations();
     let before = cases.make(native, Case::QuitAndKeep, |native| {
         terminal.line(native, "echo QUIT-$((6*7))")?;
         terminal.shows(native, "QUIT-42")?;
@@ -251,6 +260,142 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("drawn", &picture)?
             .observed("shell", &shell)
     })?;
+    cases.check(native, Case::WindowButtons, |native| {
+        under(native, Decorations::Client)?;
+        native.observe("the three window buttons", |seen| {
+            (seen.shows(&Target::WINDOW_MINIMIZE)
+                && seen.shows(&Target::WINDOW_MAXIMIZE)
+                && seen.shows(&Target::WINDOW_CLOSE))
+            .then_some(())
+        })?;
+        native.keep_window("window-buttons")?;
+        let seen = native.window_requests()?.len();
+        native.click(&Target::WINDOW_MINIMIZE)?;
+        let minimise = requests_after(native, seen, 1)?;
+        native.click(&Target::WINDOW_MAXIMIZE)?;
+        let first = requests_after(native, seen + 1, 1)?;
+        native.click(&Target::WINDOW_MAXIMIZE)?;
+        let second = requests_after(native, seen + 2, 1)?;
+        let all = native.window_requests()?;
+        Verdict::new()
+            .expect(
+                "one click on Minimize sends one iconic change-state request for the window",
+                matches!(minimise.as_slice(), [Observed { request: Request::ChangeState { state, .. }, .. }] if state.name == "iconic"),
+            )
+            .expect(
+                "each click on Maximize sends one toggle of the window's maximized state",
+                [&first, &second].iter().all(|requests| {
+                    matches!(requests.as_slice(), [Observed { request: Request::NetWmState { action, first, second, .. }, .. }]
+                        if action.name == "toggle"
+                            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_VERT"))
+                            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_HORZ")))
+                }),
+            )
+            .expect(
+                "the three clicks sent exactly three window requests",
+                all.len() == seen + 3,
+            )
+            .observed("requests", &all[seen..])
+    })?;
+    cases.check(native, Case::CornerGrip, |native| {
+        under(native, Decorations::Client)?;
+        let seen = native.window_requests()?.len();
+        native.drag_from_corner(4, (-40, -30))?;
+        let sent = requests_after(native, seen, 1)?;
+        Verdict::new()
+            .expect(
+                "a drag from the bottom-right corner sends one bottom-right resize request",
+                matches!(sent.as_slice(), [Observed { request: Request::MoveResize { direction, .. }, .. }] if direction.name == "size-bottom-right"),
+            )
+            .observed("requests", &sent)
+    })?;
+    cases.check(native, Case::CloseButton, |native| {
+        under(native, Decorations::Client)?;
+        terminal.line(native, "echo BUTTON-$((6*7))")?;
+        terminal.shows(native, "BUTTON-42")?;
+        let saved = at_rest(native)?;
+        let roster = native.live_terminals()?;
+        let core = native.core()?.clone();
+        native.observe("the close button", |seen| {
+            seen.shows(&Target::WINDOW_CLOSE).then_some(())
+        })?;
+        native.keep_window("close-button-before")?;
+        let pressed = Instant::now();
+        native.click(&Target::WINDOW_CLOSE)?;
+        native.await_exit()?;
+        let close_millis = pressed.elapsed().as_millis();
+        let core_after = answering_core(native)?;
+        let closed = terminal.program(native)?;
+        let roster_closed = native.live_terminals()?;
+        native.launch()?;
+        let picture = native.settle(
+            "the same Voyage drawn with its terminals after the close button",
+            |seen| Some(drawn(seen)),
+            |picture| picture.whole() && picture.bound(),
+        )?;
+        let reopened = saved_now(native)?;
+        terminal.line(native, "echo BUTTON-AGAIN-$((6*7))")?;
+        let typed = terminal.printed(native, "BUTTON-AGAIN-42")?;
+        let shell = terminal.program(native)?;
+        Verdict::new()
+            .expect(
+                "Core is the same process after the close button",
+                core_after.as_ref() == Some(&core),
+            )
+            .expect(
+                "the shell is the same live program after the close button",
+                closed.same && closed.state.as_deref() == Some("live"),
+            )
+            .expect(
+                "Core lists the same live terminals after the close button",
+                roster_closed == roster,
+            )
+            .expect(
+                "the relaunch draws the same Voyage from the same document and version",
+                picture.whole()
+                    && reopened.as_ref().map(|saved| saved.version) == Some(saved.version)
+                    && reopened
+                        .as_ref()
+                        .map(|saved| &saved.document.selected_voyage)
+                        == Some(&saved.document.selected_voyage),
+            )
+            .expect(
+                "text typed after the relaunch reaches the same shell",
+                typed && shell.same,
+            )
+            .observed("core", json!({"before":core,"after":core_after}))?
+            .observed("roster", json!({"before":roster,"after":roster_closed}))?
+            .observed("closeMillis", close_millis)?
+            .observed("drawn", &picture)?
+            .observed("shell", &shell)
+    })?;
+    cases.check(native, Case::ControlsAbsent, |native| {
+        native.close()?;
+        under(native, Decorations::Server)?;
+        let hints = native.window_motif_hints()?;
+        let drawn = native.observe("the Fleet tabs without window buttons", |seen| {
+            Some((
+                seen.shows(&Target::HOME),
+                seen.shows(&Target::WINDOW_MINIMIZE),
+                seen.shows(&Target::WINDOW_MAXIMIZE),
+                seen.shows(&Target::WINDOW_CLOSE),
+            ))
+            .filter(|(home, ..)| *home)
+        })?;
+        native.keep_window("controls-absent")?;
+        under(native, original)?;
+        Verdict::new()
+            .expect(
+                "the window keeps the server-drawn title bar under server decorations",
+                hints.as_deref() == Some(&[2, 0, 1, 0, 0]),
+            )
+            .expect(
+                "no window button is drawn beside the Home button under server decorations",
+                !drawn.1 && !drawn.2 && !drawn.3,
+            )
+            .observed("hints", hints)?
+            .observed("drawn", drawn)
+    })?;
     cases.check(native, Case::ColdRestart, |native| {
         let saved = at_rest(native)?;
         native.close()?;
@@ -343,6 +488,35 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("core", json!({"before":core,"ended":ended}))?
             .observed("programs", &programs)
     })
+}
+
+fn under(native: &mut Native, decorations: Decorations) -> Result<()> {
+    if native.running() && native.decorations() == decorations {
+        return Ok(());
+    }
+    if native.running() {
+        native.close()?;
+    }
+    native.decorate_as(decorations)?;
+    native.launch()?;
+    native
+        .settle(
+            "the restored Fleet tabs, Vessels and terminals",
+            |seen| Some(drawn(seen)),
+            |picture| picture.whole() && picture.bound(),
+        )
+        .map(drop)
+}
+
+fn requests_after(native: &mut Native, seen: usize, count: usize) -> Result<Vec<Observed>> {
+    let deadline = Instant::now() + REQUEST_PATIENCE;
+    loop {
+        let all = native.window_requests()?;
+        if all.len() >= seen + count || Instant::now() >= deadline {
+            return Ok(all.into_iter().skip(seen).take(count).collect());
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 fn at_rest(native: &Native) -> Result<Saved> {

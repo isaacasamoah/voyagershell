@@ -246,6 +246,29 @@ impl Native {
         self.pointer()
     }
 
+    pub fn drag_from_corner(&self, inset: i16, by: (i16, i16)) -> Result<()> {
+        let window = self.x11()?.geometry(self.window)?;
+        let width = i16::try_from(window.width).context("The window is too wide to aim at")?;
+        let height = i16::try_from(window.height).context("The window is too tall to aim at")?;
+        let start = (window.x + width - inset, window.y + height - inset);
+        let end = (start.0 + by.0, start.1 + by.1);
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"corner-drag","button":1,"window":self.window,"from":start,"to":end,"steps":DRAG_STEPS}),
+            || {
+                x11.move_to(start.0, start.1)?;
+                x11.hold(1)?;
+                let moved = (1..=DRAG_STEPS).try_for_each(|step| {
+                    let (x, y) = along(start, end, step);
+                    x11.move_to(x, y)
+                });
+                x11.release(1)?;
+                moved
+            },
+        )?;
+        self.pointer()
+    }
+
     pub fn drag_between(&self, target: &Target, from: (i16, i16), to: (i16, i16)) -> Result<()> {
         let held = self.spot(target)?;
         ensure!(

@@ -417,8 +417,13 @@ event with the window's `_MOTIF_WM_HINTS` and `_GTK_FRAME_EXTENTS`. The hints
 `[2, 0, 0, 0, 0]` mean that the app took client decorations and `[2, 0, 1, 0, 0]`
 mean that it kept server decorations. The record is an observation. The flag
 makes the client path available and the app must ask for it.
-Nothing asserts the hints yet, so a run whose compositor failed to start still passes until
-a journey checks them. That is a known gap.
+The app asks for client decorations, so every run under `--decorations client`
+asserts the hints `[2, 0, 0, 0, 0]` after each launch. Any other hints end the run
+`inconclusive`, blamed on the fixture, because the verifier's compositor did not
+take effect. `Native::decorate_as` switches a run between `server` and `client`
+while the app is closed, so a case can pick the surface it needs. The
+`quit-restore` journey does this for the window buttons, the corner grip, the close
+button and the absent controls.
 
 Before the app starts, a verifier-owned test client sends one move request for
 the observer's own window. The observer must see it with direction 8 within the

@@ -103,6 +103,9 @@ roles! {
     MaximizePanel => "maximize-panel",
     MovePreview => "move-preview",
     ProfileUpdate => "profile-update",
+    WindowMinimize => "window-minimize",
+    WindowMaximize => "window-maximize",
+    WindowClose => "window-close",
 }
 
 #[cfg(test)]

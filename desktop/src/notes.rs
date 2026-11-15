@@ -447,7 +447,7 @@ struct Source {
 }
 
 fn signature(package: &Path) -> Result<Source> {
-    let files = crate::host::source_snapshot(package)?;
+    let files = crate::source_snapshot::source_snapshot(package)?;
     let mut bytes = Vec::new();
     std::fs::File::open(package.join("vessel.json"))?
         .take(voyager_app::content::ENVELOPE_LIMIT as u64 + 1)

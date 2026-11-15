@@ -28,6 +28,9 @@ impl Target {
     pub const STATUS: Self = Self::single(Role::WorkspaceStatus);
     pub const REFRESH: Self = Self::single(Role::WorkspaceRefresh);
     pub const STOP_SESSION: Self = Self::single(Role::StopSession);
+    pub const WINDOW_MINIMIZE: Self = Self::single(Role::WindowMinimize);
+    pub const WINDOW_MAXIMIZE: Self = Self::single(Role::WindowMaximize);
+    pub const WINDOW_CLOSE: Self = Self::single(Role::WindowClose);
     pub const STOP_SESSION_CONFIRM: Self = Self::single(Role::StopSessionConfirm);
 
     const fn single(role: Role) -> Self {

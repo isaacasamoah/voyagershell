@@ -1108,6 +1108,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Prepared",
     "PortalArea",
     "Column",
+    "client_decorated",
+    "quit",
     source,
   )(
     class {},
@@ -1173,6 +1175,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       },
     },
     component,
+    () => false,
+    () => {},
   );
   const view = new Canvas();
   const context = { kind: "vessel", id: "vessel" };

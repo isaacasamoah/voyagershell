@@ -140,6 +140,7 @@ edges:
   - {from: 'rs:voyager_desktop::host', to: 'rs:voyager_contract::administrator', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop::host', to: 'rs:voyager_contract::worktree', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_desktop::inspect', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
+  - {from: 'rs:voyager_desktop::lifecycle', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop::notes', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop::notes', to: 'rs:voyager_app::content', from_owner: desktop-presentation, to_owner: content}
   - {from: 'rs:voyager_desktop::notes', to: 'rs:voyager_app::voyage_close', from_owner: desktop-presentation, to_owner: placement}

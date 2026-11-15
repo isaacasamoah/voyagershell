@@ -622,7 +622,9 @@ impl Native {
         self.arrange()?;
         let x11 = self.x11()?;
         if self.surface.decorations == Decorations::Client {
-            self.system.record(json!({"event":"decorations","window":self.window,"motifHints":x11.motif_hints(self.window)?,"frameExtents":x11.frame_extents(self.window)?}))?;
+            let hints = x11.motif_hints(self.window)?;
+            self.system.record(json!({"event":"decorations","window":self.window,"motifHints":hints,"frameExtents":x11.frame_extents(self.window)?}))?;
+            ensure_client_hints(hints.as_deref())?;
         }
         self.system
             .act(json!({"input":"focus","window":self.window}), || {
@@ -661,6 +663,31 @@ impl Native {
         self.requests = Some(requests);
         confirmed?;
         self.window_requests().map(drop)
+    }
+
+    pub fn decorations(&self) -> Decorations {
+        self.surface.decorations
+    }
+
+    pub fn running(&self) -> bool {
+        self.viewer.is_some()
+    }
+
+    pub fn window_motif_hints(&self) -> Result<Option<Vec<u32>>> {
+        self.x11()?.motif_hints(self.window)
+    }
+
+    pub fn decorate_as(&mut self, decorations: Decorations) -> Result<()> {
+        ensure!(
+            self.viewer.is_none(),
+            "The decorations change only while the candidate is closed"
+        );
+        if self.surface.decorations == decorations {
+            return Ok(());
+        }
+        self.release_requests()?;
+        self.surface.decorations = decorations;
+        self.decorate()
     }
 
     pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
@@ -1146,6 +1173,16 @@ impl Native {
         let recorded = self.system.record(event);
         error.or(recorded.err().map(|error| format!("{process}: {error:#}")))
     }
+}
+
+const CLIENT_HINTS: [u32; 5] = [2, 0, 0, 0, 0];
+
+fn ensure_client_hints(hints: Option<&[u32]>) -> Result<()> {
+    ensure!(
+        hints == Some(&CLIENT_HINTS),
+        "The app asks for client decorations, but under the verifier's compositor its window carries the hints {hints:?} and not {CLIENT_HINTS:?}; the verifier's compositor did not take effect"
+    );
+    Ok(())
 }
 
 pub enum Cause {
@@ -1725,5 +1762,26 @@ pub(crate) mod tests {
             "A dead display was blamed on the product"
         );
         Ok(())
+    }
+
+    #[test]
+    fn client_hints_pass_only_for_the_client_decorated_record() {
+        assert!(ensure_client_hints(Some(&[2, 0, 0, 0, 0])).is_ok());
+        for refused in [
+            Some(&[2, 0, 1, 0, 0][..]),
+            Some(&[2, 0, 0, 0][..]),
+            Some(&[][..]),
+            None,
+        ] {
+            let error = ensure_client_hints(refused).unwrap_err().to_string();
+            assert!(error.contains("compositor did not take effect"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_run_whose_compositor_did_not_take_effect_is_blamed_on_the_fixture() {
+        let mut native = native().unwrap();
+        let error = ensure_client_hints(Some(&[2, 0, 1, 0, 0])).unwrap_err();
+        assert!(matches!(native.diagnose(&error), Cause::Fixture(_)));
     }
 }
