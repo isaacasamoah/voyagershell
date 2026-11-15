@@ -693,11 +693,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 
 fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
     native.launch_as(Decorations::Client)?;
-    native.click(&Target::name(&RenameTarget::Voyage {
-        id: start.voyage.clone(),
-    }))?;
+    if at_rest(native)?.document.selected_voyage.as_ref() != Some(&start.voyage) {
+        native.click(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+    }
     native.observe("the Voyage's Fleet tabs and the empty top bar", |seen| {
-        (tabs(seen.document, &start.voyage).len() == 2
+        (seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+            && tabs(seen.document, &start.voyage).len() == 2
             && seen.shows(&Target::window_drag("fleets"))
             && seen.shows(&Target::window_drag("sidebar")))
         .then_some(())
