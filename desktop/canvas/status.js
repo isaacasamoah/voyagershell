@@ -4,6 +4,13 @@ import { take_placement_notice } from "voyager_workspace";
 export function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
+export function changedBesidesRevision(next, seen) {
+  return (
+    next.closeRevision !== seen.closeRevision ||
+    next.navigationRevision !== seen.navigationRevision ||
+    next.packageRevision !== seen.packageRevision
+  );
+}
 export function outcome(reply) {
   if (reply.status === "refused")
     return `Refused. ${reply.message || "Nothing changed."}`;

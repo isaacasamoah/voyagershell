@@ -247,8 +247,10 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
             Err(async_channel::TryRecvError::Empty)
         ));
         let mut external = Core::connect(&session).unwrap();
+        let mut changed = (*initial.layout).clone();
+        changed.next_id += 1;
         let bumped = external
-            .document_set("voyager-layout-v2", &initial.layout, initial.version)
+            .document_set("voyager-layout-v2", &changed, initial.version)
             .unwrap();
         external.close().unwrap();
         let stale = client

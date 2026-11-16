@@ -531,6 +531,23 @@
               "type": "string"
             },
             "operation": {
+              "const": "focus-vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
               "const": "close-fleet",
               "type": "string"
             }

@@ -184,6 +184,7 @@ edges:
   - {from: 'ts:desktop/canvas/chat.ts', to: 'ts:contract/generated/conversation.ts', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'ts:desktop/canvas/main.ts', to: 'ts:contract/generated/workspace.ts', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'ts:desktop/canvas/menu.ts', to: 'ts:content/ui.ts', from_owner: desktop-presentation, to_owner: content}
+  - {from: 'ts:desktop/canvas/panel-view.ts', to: 'ts:contract/generated/workspace.ts', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'ts:desktop/canvas/stop-session.ts', to: 'ts:content/ui.ts', from_owner: desktop-presentation, to_owner: content}
   - {from: 'ts:desktop/canvas/voyage-close.ts', to: 'ts:content/ui.ts', from_owner: desktop-presentation, to_owner: content}
   - {from: 'ts:desktop/canvas/voyage-close.ts', to: 'ts:contract/generated/workspace.ts', from_owner: desktop-presentation, to_owner: placement}

@@ -19,7 +19,7 @@ const ADDED: [&str; 5] = [
     "/canvas/density",
     "/voyages/0/fleets/0/pinned",
     "/vessels/0/badge",
-    "/navigation",
+    "/bookmarks",
     "/vessels/1/packageVersion",
 ];
 

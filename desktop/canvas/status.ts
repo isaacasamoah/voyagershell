@@ -8,6 +8,20 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+type Notice = {
+  closeRevision: string;
+  navigationRevision: string;
+  packageRevision: string;
+};
+
+export function changedBesidesRevision(next: Notice, seen: Notice): boolean {
+  return (
+    next.closeRevision !== seen.closeRevision ||
+    next.navigationRevision !== seen.navigationRevision ||
+    next.packageRevision !== seen.packageRevision
+  );
+}
+
 export function outcome(reply: Reply): string {
   if (reply.status === "refused")
     return `Refused. ${reply.message || "Nothing changed."}`;

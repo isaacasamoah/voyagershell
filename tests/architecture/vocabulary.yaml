@@ -746,7 +746,7 @@ contexts:
     name: Placement
     summary: 'Decides where each Vessel sits and which Context a request carries.'
     guide: docs/workspace.md
-    owns: [app/src/workspace.rs, app/src/scope.rs, app/src/context.rs, app/src/panels.rs, app/src/canvas.rs, app/src/voyage_close.rs, app/src/worktrees.rs, contract/src/lib.rs, contract/src/place.rs, contract/src/layout_document.rs, contract/tests/layout_compat.rs, contract/tests/layout_document.rs, contract/tests/reply.rs, contract/src/panels.rs, contract/src/canvas.rs, contract/src/context.rs, contract/src/voyage_close.rs, contract/src/worktree.rs, app/tests/canvas.rs, app/tests/maximize.rs, app/tests/shared_panels.rs, app/tests/voyage_close.rs, contract/src/bin/export.rs, contract/tests/panels.rs, contract/generated/workspace.ts]
+    owns: [app/src/workspace.rs, app/src/scope.rs, app/src/context.rs, app/src/panels.rs, app/src/canvas.rs, app/src/voyage_close.rs, app/src/worktrees.rs, contract/src/lib.rs, contract/src/place.rs, contract/src/layout_document.rs, contract/tests/layout_compat.rs, contract/tests/layout_document.rs, contract/tests/reply.rs, contract/src/panels.rs, contract/src/canvas.rs, contract/src/context.rs, contract/src/voyage_close.rs, contract/src/worktree.rs, app/tests/canvas.rs, app/tests/maximize.rs, app/tests/shared_panels.rs, app/tests/navigation.rs, app/tests/voyage_close.rs, contract/src/bin/export.rs, contract/tests/panels.rs, contract/generated/workspace.ts]
     uses: [Vessel]
   - id: content
     name: Content

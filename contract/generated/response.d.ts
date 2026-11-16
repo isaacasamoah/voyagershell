@@ -132,6 +132,7 @@ export interface Layout {
   canvas?: Canvas;
   context: Context;
   home?: Voyage | null;
+  navigation?: LastUsed[];
   nextId: string;
   selectedFleet?: string | null;
   selectedVoyage?: string | null;
@@ -182,6 +183,11 @@ export interface PortalLayout {
   root?: Split | null;
   visible: boolean;
   width: number;
+}
+export interface LastUsed {
+  fleet: string;
+  vessel?: string | null;
+  voyage: string;
 }
 export interface Vessel {
   backend?: string | null;

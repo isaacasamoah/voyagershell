@@ -172,6 +172,7 @@ fn offered(action: &Action) -> bool {
         | Action::SetPlacementHidden { .. }
         | Action::RemovePlacement { .. }
         | Action::RemoveArrangement { .. }
+        | Action::FocusVessel { .. }
         | Action::SetPortalPresentation { .. } => false,
     }
 }

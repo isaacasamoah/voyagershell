@@ -101,6 +101,7 @@ roles! {
     WorkspaceRefresh => "workspace-refresh",
     SplitDivider => "split-divider",
     MaximizePanel => "maximize-panel",
+    FocusedVessel => "focused-vessel",
     MovePreview => "move-preview",
     ProfileUpdate => "profile-update",
     WindowMinimize => "window-minimize",

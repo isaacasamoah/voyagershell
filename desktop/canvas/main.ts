@@ -26,14 +26,19 @@ import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
-import { errorMessage, outcome, statusLine } from "./status.js";
+import {
+  changedBesidesRevision,
+  errorMessage,
+  outcome,
+  statusLine,
+} from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
-import { renderPanel } from "./panel-view.js";
+import { focusedPlacement, moveFocus, renderPanel } from "./panel-view.js";
 import {
   renderSidebar,
   renderFleets,
@@ -47,7 +52,9 @@ import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
   currentVoyage,
+  openingPlacement,
   panelGroups,
+  shownPanels,
   visiblePanels,
   hiddenPanels,
 } from "./panels.js";
@@ -163,7 +170,6 @@ export default class Canvas extends View {
   closeVoyage = new VoyageClose();
   declare workspaceNotice: ReturnType<typeof workspace_notice>;
   declare automaticRefresh: boolean;
-  declare focused: string | null;
   declare hoveredPanel: string | null;
   declare hoveredFleet: string | null;
   processes: ProcessInfo[] = [];
@@ -209,6 +215,7 @@ export default class Canvas extends View {
     this.workspaceNotice = {
       revision: "0",
       closeRevision: "0",
+      navigationRevision: "0",
       packageRevision: "0",
       activityRevision: "0",
     };
@@ -219,7 +226,6 @@ export default class Canvas extends View {
     this.activityLimit = null;
     this.terminals = new Map();
     this.openings = new Map();
-    this.focused = null;
     this.hoveredPanel = null;
     this.hoveredFleet = null;
     this.processPending = false;
@@ -244,11 +250,13 @@ export default class Canvas extends View {
     });
   }
 
+  get focused(): string | null {
+    return focusedPlacement(this);
+  }
+
   activePlacement(): Placement | undefined {
     if (!this.layout) return;
-    const shown = activeGroups(this.layout).flatMap((group) =>
-      visiblePanels(group, true),
-    );
+    const shown = shownPanels(this.layout);
     return shown.find((panel) => panel.id === this.focused) || shown[0];
   }
 
@@ -676,24 +684,22 @@ export default class Canvas extends View {
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
             const current = this.layout;
-            const shown = current
-              ? activeGroups(current).flatMap((group) =>
-                  visiblePanels(group, true),
-                )
-              : [];
+            const shown = shownPanels(current);
             const created = shown.find(
               (panel) => !previousContents.has(panel.vessel),
             );
-            if (changesSelection) this.focused = shown[0]?.id || null;
-            else if (creating && created) this.focused = created.id;
+            const opened = openingPlacement(current);
+            if (changesSelection) moveFocus(this, "opening", task);
+            else if (creating && created)
+              moveFocus(this, { placement: created.id }, task);
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
                 : splitMaximized
                   ? created
-                  : shown[0];
+                  : opened;
               if (target && (maximization || splitMaximized))
-                this.focused = target.id;
+                moveFocus(this, { placement: target.id }, task);
               if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
             }
           } catch (error) {
@@ -752,18 +758,10 @@ export default class Canvas extends View {
 
   inspectNotice(cx: UIContext) {
     const notice = workspace_notice();
-    const packageChanged =
-      notice.packageRevision !== this.workspaceNotice.packageRevision;
-    const closeChanged =
-      notice.closeRevision !== this.workspaceNotice.closeRevision;
+    const changed = changedBesidesRevision(notice, this.workspaceNotice);
     this.workspaceNotice = notice;
     this.refreshRequested = false;
-    if (
-      !packageChanged &&
-      !closeChanged &&
-      BigInt(notice.revision) <= BigInt(this.version)
-    )
-      return;
+    if (!changed && BigInt(notice.revision) <= BigInt(this.version)) return;
     this.automaticRefresh = true;
     try {
       this.run({ operation: "inspect" }, cx);
@@ -789,20 +787,18 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
-    if (this.focused) {
-      const shown = activeGroups(result.layout).flatMap((group) =>
-        visiblePanels(group, true),
-      );
-      if (
-        !shown.some((panel) => panel.id === this.focused) &&
-        !this.chat?.open &&
-        !this.editing &&
-        !this.layoutName &&
-        !window.has_active_dialog()
-      ) {
-        this.focused = shown[0]?.id || null;
-        this.focus.focus();
-      }
+    if (!this.focused && result.layout.view === "fleet")
+      moveFocus(this, "opening", task);
+    if (
+      this.focused &&
+      !shownPanels(result.layout).some((panel) => panel.id === this.focused) &&
+      !this.chat?.open &&
+      !this.editing &&
+      !this.layoutName &&
+      !window.has_active_dialog()
+    ) {
+      moveFocus(this, "opening", task);
+      this.focus.focus();
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
@@ -954,9 +950,7 @@ export default class Canvas extends View {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
     const errors: string[] = [];
-    for (const vessel of activeGroups(layout).flatMap((group) =>
-      visiblePanels(group, true),
-    )) {
+    for (const vessel of shownPanels(layout)) {
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (content?.typeId !== "terminal") continue;
       const opening = this.openings.get(vessel.vessel);
@@ -1988,8 +1982,7 @@ export default class Canvas extends View {
     }
     if (
       ownerNotice.revision !== this.workspaceNotice.revision ||
-      ownerNotice.closeRevision !== this.workspaceNotice.closeRevision ||
-      ownerNotice.packageRevision !== this.workspaceNotice.packageRevision
+      changedBesidesRevision(ownerNotice, this.workspaceNotice)
     ) {
       this.refreshRequested = true;
       if (!this.busy) this.inspectNotice(cx);

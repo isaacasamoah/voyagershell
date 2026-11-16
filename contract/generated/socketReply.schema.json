@@ -230,6 +230,28 @@
       ],
       "type": "object"
     },
+    "LastUsed": {
+      "additionalProperties": false,
+      "properties": {
+        "fleet": {
+          "type": "string"
+        },
+        "vessel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "voyage",
+        "fleet"
+      ],
+      "type": "object"
+    },
     "Launch": {
       "oneOf": [
         {
@@ -395,6 +417,12 @@
               "type": "null"
             }
           ]
+        },
+        "navigation": {
+          "items": {
+            "$ref": "#/definitions/LastUsed"
+          },
+          "type": "array"
         },
         "nextId": {
           "type": "string"

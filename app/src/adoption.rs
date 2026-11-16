@@ -83,10 +83,10 @@ impl Adoptions {
         self.pending.clear();
     }
 
-    pub(crate) fn settle(
+    pub(crate) fn settle<Revision: Copy>(
         &mut self,
-        save: impl FnOnce(&Layout, u64) -> Result<u64, Unsaved>,
-        (layout, version, fresh): (&mut Arc<Layout>, &mut u64, &mut bool),
+        save: impl FnOnce(&Layout, Revision) -> Result<Revision, Unsaved>,
+        (layout, version, fresh): (&mut Arc<Layout>, &mut Revision, &mut bool),
         live: &mut Vec<CoreTerminalId>,
     ) -> bool {
         let mut candidate = Model {

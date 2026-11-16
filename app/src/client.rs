@@ -27,8 +27,11 @@ mod reply;
 mod terminal_start;
 use crate::adoption::{Adoptions, Unsaved};
 use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING};
-use crate::layout_store::{begin_save, carry_notice, load, rejected, save, settle_save};
+use crate::layout_store::{
+    LayoutRevision, begin_save, carry_notice, load, rejected, save, settle_save,
+};
 use crate::vessel_socket::{Call, Sockets};
+pub use core_calls::WorkspaceNotice;
 use core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
     live_directories, post, relist, reports, unlisted,
@@ -37,14 +40,6 @@ use terminal_start::{CreatedTerminal, require_finished};
 
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct WorkspaceNotice {
-    pub package_revision: u64,
-    pub revision: u64,
-    pub activity_revision: u64,
-    pub close_revision: u64,
-}
 
 enum Message {
     PrepareContext {
@@ -260,7 +255,7 @@ impl Receipt {
 struct Departure {
     before: Arc<Layout>,
     candidate: Layout,
-    expected: u64,
+    expected: LayoutRevision,
     reopening: Vec<VesselId>,
     created_notes: bool,
 }
@@ -479,7 +474,7 @@ impl Client {
             let call: Call = Arc::new(move |vessel, request| caller.program_call(vessel, request));
             let mut vessel_sockets = Sockets::new(&session, call);
             let mut layout = Arc::new(Layout::default());
-            let mut version = 0;
+            let mut version = LayoutRevision::default();
             let mut fresh = false;
             let mut door = FrontDoor::<Receipt>::default();
             let mut held = VecDeque::<Message>::new();
@@ -509,7 +504,10 @@ impl Client {
                 let mut noticed = false;
                 if !door.flying() && adoptions.waiting() {
                     if door
-                        .gate(&Envelope::observed(close_client.request_id(), version))
+                        .gate(&Envelope::observed(
+                            close_client.request_id(),
+                            version.structure,
+                        ))
                         .is_err()
                     {
                         adoptions.drop_all();
@@ -525,7 +523,7 @@ impl Client {
                     }
                 }
                 if !door.flying() && !exits.is_empty() {
-                    let closure = Envelope::observed(close_client.request_id(), version);
+                    let closure = Envelope::observed(close_client.request_id(), version.structure);
                     if door.gate(&closure).is_err() {
                         exits.clear();
                     } else if fresh && let Ok(current_core) = core.as_mut() {
@@ -567,13 +565,17 @@ impl Client {
                         version: expected,
                     } => {
                         if fresh
-                            && version == expected
+                            && version.structure == expected
                             && layout.context == scope
                             && let Ok(core) = core.as_mut()
                         {
                             let started = std::time::Instant::now();
-                            let result =
-                                crate::context::prepare(&layout, version, core, content.as_mut());
+                            let result = crate::context::prepare(
+                                &layout,
+                                version.structure,
+                                core,
+                                content.as_mut(),
+                            );
                             if let Ok(mut prepared) = published_context.lock() {
                                 *prepared = result.ok();
                             }
@@ -656,7 +658,7 @@ impl Client {
                         let response = Response {
                             request_id: request.request_id.clone(),
                             status: status.clone(),
-                            version,
+                            version: version.structure,
                             layout: crate::scope::project(&layout, scope.as_ref()),
                             fresh,
                             created_workspace: false,
@@ -716,7 +718,7 @@ impl Client {
                         continue;
                     }
                     Message::ContextFacts { reply } => {
-                        let _ = reply.try_send(crate::context::capture(&layout, version));
+                        let _ = reply.try_send(crate::context::capture(&layout, version.structure));
                         continue;
                     }
                     Message::WorkspaceObservation {
@@ -739,15 +741,17 @@ impl Client {
                     }
                     Message::Listed { terminals } => {
                         let (begun, terminals) = (listing.listed(), terminals.ok());
-                        let observed =
-                            Envelope::observed(close_client.request_id(), begun.unwrap_or(version));
+                        let observed = Envelope::observed(
+                            close_client.request_id(),
+                            begun.unwrap_or(version.structure),
+                        );
                         let closed = (|| -> Result<(), String> {
                             let (Some(terminals), Ok(current_core), Ok(()), true) =
                                 (&terminals, core.as_mut(), door.gate(&observed), fresh)
                             else {
                                 return Ok(());
                             };
-                            let current = begun == Some(version);
+                            let current = begun == Some(version.structure);
                             let live = live(&live_bindings, &closing);
                             if let Some(candidate) =
                                 changed_layout(&layout, terminals, &live, current)?
@@ -787,8 +791,8 @@ impl Client {
                     Message::BindContent { id, reply } => {
                         let result = (|| {
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
-                            let (current, revision, _) =
-                                load(core, &cwd).map_err(|error| format!("{error:?}"))?;
+                            let (current, revision, _) = load(core, &cwd, &layout, version)
+                                .map_err(|error| format!("{error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
@@ -880,8 +884,8 @@ impl Client {
                                 return Err("Content request exceeds the envelope limit".into());
                             }
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
-                            let (current, revision, _) =
-                                load(core, &cwd).map_err(|error| format!("{error:?}"))?;
+                            let (current, revision, _) = load(core, &cwd, &layout, version)
+                                .map_err(|error| format!("{error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
@@ -919,7 +923,7 @@ impl Client {
                             Ok(crate::content::run(
                                 owner,
                                 &layout,
-                                version,
+                                version.structure,
                                 &access,
                                 request.clone(),
                             ))
@@ -971,12 +975,13 @@ impl Client {
                             let core = core
                                 .as_mut()
                                 .map_err(|error| format!("Core unavailable: {error:?}"))?;
-                            let (current, revision, missing) = load(core, &cwd)
-                                .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                            let (current, revision, missing) =
+                                load(core, &cwd, &layout, version)
+                                    .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = !missing;
-                            if missing || version != request.expected_version {
+                            if missing || version.structure != request.expected_version {
                                 return Err("Workspace changed; no worktree was removed".into());
                             }
                             if !matches!(&scope, None | Some(Context::Workspace))
@@ -1051,15 +1056,17 @@ impl Client {
                                 let core = core
                                     .as_mut()
                                     .map_err(|error| format!("Core unavailable: {error:?}"))?;
-                                let (current, revision, missing) = load(core, &cwd)
-                                    .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                                let (current, revision, missing) =
+                                    load(core, &cwd, &layout, version).map_err(|error| {
+                                        format!("Workspace unavailable: {error:?}")
+                                    })?;
                                 layout = Arc::new(current);
                                 version = revision;
                                 fresh = !missing;
                                 if missing {
                                     return Err("Workspace is unavailable".into());
                                 }
-                                if version != request.expected_version {
+                                if version.structure != request.expected_version {
                                     return Err("Workspace changed after Git dispatch".into());
                                 }
                                 let current_source = layout
@@ -1090,25 +1097,27 @@ impl Client {
                                 let mut candidate = Model {
                                     layout: (*layout).clone(),
                                 };
-                                let actions = if let WorktreeAction::Remove { path } =
-                                    &request.action
-                                {
-                                    candidate
-                                        .layout
-                                        .voyages
-                                        .iter()
-                                        .filter(|voyage| {
-                                            voyage.cwd.as_ref().is_some_and(|cwd| {
-                                                std::path::Path::new(cwd).starts_with(path)
+                                let actions =
+                                    if let WorktreeAction::Remove { path } = &request.action {
+                                        candidate
+                                            .layout
+                                            .voyages
+                                            .iter()
+                                            .filter(|voyage| {
+                                                voyage.cwd.as_ref().is_some_and(|cwd| {
+                                                    std::path::Path::new(cwd).starts_with(path)
+                                                })
                                             })
-                                        })
-                                        .map(|voyage| Action::CloseVoyage {
-                                            id: voyage.id.clone(),
-                                        })
-                                        .collect::<Vec<_>>()
-                                } else {
-                                    vec![worktree_voyage_action(&candidate.layout, &checkout.path)?]
-                                };
+                                            .map(|voyage| Action::CloseVoyage {
+                                                id: voyage.id.clone(),
+                                            })
+                                            .collect::<Vec<_>>()
+                                    } else {
+                                        vec![crate::workspace::open_checkout(
+                                            &candidate.layout,
+                                            &checkout.path,
+                                        )?]
+                                    };
                                 for action in actions {
                                     crate::scope::check(&layout, scope.as_ref(), &action)?;
                                     candidate.apply(action)?;
@@ -1187,7 +1196,7 @@ impl Client {
                             if door.crowded(&Envelope::worktree(scope.as_ref(), &request)) {
                                 return Err("A worktree operation is already pending".into());
                             }
-                            if !fresh || version != request.expected_version {
+                            if !fresh || version.structure != request.expected_version {
                                 return Err(
                                     "Inspect the current workspace before using worktrees".into()
                                 );
@@ -1203,11 +1212,12 @@ impl Client {
                             let core = core
                                 .as_mut()
                                 .map_err(|error| format!("Core unavailable: {error:?}"))?;
-                            let (current, revision, missing) = load(core, &cwd)
-                                .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                            let (current, revision, missing) =
+                                load(core, &cwd, &layout, version)
+                                    .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
-                            if missing || version != request.expected_version {
+                            if missing || version.structure != request.expected_version {
                                 return Err(
                                     "Workspace changed; inspect before using worktrees".into()
                                 );
@@ -1331,7 +1341,7 @@ impl Client {
                             Arc::new(ProcessResponse {
                                 request_id: request.request_id.clone(),
                                 status,
-                                version,
+                                version: version.structure,
                                 fresh,
                                 output: None,
                                 message: Some(message),
@@ -1360,17 +1370,17 @@ impl Client {
                             Err(rejected(
                                 "Process request limit reached; no effect was queued".into(),
                             ))
-                        } else if !fresh || version != request.input.expected_version {
+                        } else if !fresh || version.structure != request.input.expected_version {
                             Err(rejected(
                                 "Inspect the current workspace revision before using processes"
                                     .into(),
                             ))
                         } else {
                             match core.as_mut() {
-                                Ok(core) => load(core, &cwd).and_then(|(current, revision, _)| {
+                                Ok(core) => load(core, &cwd, &layout, version).and_then(|(current, revision, _)| {
                                     layout = Arc::new(current);
                                     version = revision;
-                                    if version != request.input.expected_version {
+                                    if version.structure != request.input.expected_version {
                                         return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
                                     }
                                     crate::process::start(core, &layout, &scope, &request.input.action)
@@ -1383,7 +1393,7 @@ impl Client {
                                 door.open(ticket);
                                 let sender = process_sender.clone();
                                 thread::spawn(move || {
-                                    let completed = effect.wait(version);
+                                    let completed = effect.wait(version.structure);
                                     let _ = sender.send_blocking(Message::ProcessDone {
                                         request_id: request.request_id,
                                         completed,
@@ -1396,7 +1406,7 @@ impl Client {
                         };
                         let answer = process_response(
                             request.request_id.clone(),
-                            version,
+                            version.structure,
                             &mut fresh,
                             Err(error).into(),
                         );
@@ -1412,7 +1422,7 @@ impl Client {
                         let completed = completed.settle(core.as_mut().ok());
                         let outcome = process_response(
                             request_id.clone(),
-                            completed.read_at.unwrap_or(version),
+                            completed.read_at.unwrap_or(version.structure),
                             &mut fresh,
                             completed.result.into(),
                         );
@@ -1489,9 +1499,9 @@ impl Client {
                                         &candidate,
                                     );
                                 }
-                                if revision > version {
+                                if revision > version.document {
+                                    version = version.after(revision, &before, &candidate);
                                     layout = Arc::new(candidate);
-                                    version = revision;
                                 }
                                 Step::Done
                             },
@@ -1581,7 +1591,7 @@ impl Client {
                             Err(rejected(
                                 "Inspect the workspace before opening a terminal".into(),
                             ))
-                        } else if version != expected_version {
+                        } else if version.structure != expected_version {
                             Err(rejected(
                                 "Layout changed; inspect before opening a terminal".into(),
                             ))
@@ -1635,7 +1645,7 @@ impl Client {
                 let mut response = Response {
                     request_id: request.request_id.clone(),
                     status: voyager_contract::Outcome::Refused,
-                    version,
+                    version: version.structure,
                     layout: crate::scope::project(&layout, scope.as_ref()),
                     fresh,
                     created_workspace: false,
@@ -1710,7 +1720,8 @@ impl Client {
                                     }
                                 }
                                 if matches!(request.action, Action::Inspect) {
-                                    load(core, &cwd).and_then(|(loaded, revision, missing)| {
+                                    let stored = load(core, &cwd, &layout, version);
+                                    stored.and_then(|(loaded, revision, missing)| {
                                     let mut candidate = Model { layout: loaded };
                                     let mut revision = revision;
                                     if missing {
@@ -1763,7 +1774,8 @@ impl Client {
                                     Err(rejected(
                                         "Inspect the workspace before making a change".into(),
                                     ))
-                                } else if request.expected_version != version
+                                } else if request.expected_version != version.structure
+                                    && !request.action.is_navigation()
                                     && !matches!(request.action, Action::CancelVoyageClose { .. })
                                 {
                                     Err(rejected(
@@ -1780,7 +1792,7 @@ impl Client {
                                             };
                                             closing.prepare(
                                                 &layout,
-                                                version,
+                                                version.structure,
                                                 id,
                                                 &request.request_id,
                                                 &terminals?,
@@ -1805,7 +1817,7 @@ impl Client {
                                             let confirmed = closing.confirm(
                                                 id,
                                                 plan,
-                                                version,
+                                                version.structure,
                                                 &request.request_id,
                                             )?;
                                             let worker = close_client.clone();
@@ -1884,7 +1896,7 @@ impl Client {
                                         }
                                         rename_rebind = Some(crate::voyage_close::RenamedNotes {
                                             files: plan.moved_files(),
-                                            workspace_version: version,
+                                            workspace_version: version.structure,
                                             snapshot,
                                         });
                                         return Ok(Step::Done);
@@ -1932,11 +1944,12 @@ impl Client {
                                     if let Action::RemoveVesselPackage { type_id }
                                     | Action::RestoreVesselPackage { type_id } = &request.action
                                     {
-                                        let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no Vessel package was changed: {error:?}")))?;
+                                        let (current, revision, missing) = load(core, &cwd, &layout, version).map_err(|error| rejected(format!("Workspace observation unavailable; no Vessel package was changed: {error:?}")))?;
                                         layout = Arc::new(current);
                                         version = revision;
                                         fresh = true;
-                                        if missing || request.expected_version != version {
+                                        if missing || request.expected_version != version.structure
+                                        {
                                             return Err(rejected("Workspace changed; inspect before changing a Vessel package".into()));
                                         }
                                         crate::scope::check(
@@ -1994,7 +2007,7 @@ impl Client {
                                         };
                                         crate::observation::validate_source(
                                             &layout,
-                                            version,
+                                            version.structure,
                                             source,
                                             terminals.as_deref(),
                                         )
@@ -2005,10 +2018,12 @@ impl Client {
                                         Action::StartNewShell { .. }
                                             | Action::ReopenPlacement { .. }
                                     ) {
-                                        let (current, revision, missing) = load(core, &cwd)?;
+                                        let (current, revision, missing) =
+                                            load(core, &cwd, &layout, version)?;
                                         layout = Arc::new(current);
                                         version = revision;
-                                        if missing || request.expected_version != version {
+                                        if missing || request.expected_version != version.structure
+                                        {
                                             return Err(rejected("Workspace changed; inspect before changing a terminal viewer".into()));
                                         }
                                         crate::scope::check(
@@ -2112,7 +2127,7 @@ impl Client {
                 if let Ok(core) = core.as_mut() {
                     carry_notice(&mut core.layout.notice, &request.action, &mut response);
                 }
-                response.version = version;
+                response.version = version.structure;
                 response.layout = crate::scope::project(&layout, scope.as_ref());
                 response.created_vessels =
                     eligible_contents(&layout, scope.as_ref(), &created_vessels);
@@ -2133,7 +2148,7 @@ impl Client {
                     if package_changed {
                         notices.packages.fetch_add(1, Ordering::Relaxed);
                     }
-                    notices.send(version, closing.revision);
+                    notices.after(previous_version, version, scope.is_some(), closing.revision);
                 }
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
                     && response.status == voyager_contract::Outcome::Applied
@@ -2158,7 +2173,7 @@ impl Client {
                     }
                     let _ = close_sender.try_send(Message::PrepareContext {
                         scope: layout.context.clone(),
-                        version,
+                        version: version.structure,
                     });
                 }
             }
@@ -2997,39 +3012,6 @@ fn grant_new_shell(
     });
 }
 
-fn worktree_voyage_action(layout: &Layout, checkout: &str) -> Result<Action, String> {
-    let target = std::fs::canonicalize(checkout)
-        .map_err(|error| format!("Checkout unavailable: {error}"))?;
-    if let Some(voyage) = layout.voyages.iter().find(|voyage| {
-        voyage
-            .cwd
-            .as_ref()
-            .and_then(|cwd| std::fs::canonicalize(cwd).ok())
-            .as_ref()
-            == Some(&target)
-    }) {
-        return Ok(if voyage.closed {
-            Action::ReopenVoyage {
-                id: voyage.id.clone(),
-            }
-        } else {
-            Action::SelectVoyage {
-                id: voyage.id.clone(),
-            }
-        });
-    }
-    let name = target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("/")
-        .to_owned();
-    let cwd = target
-        .to_str()
-        .ok_or("Checkout path is not UTF-8")?
-        .to_owned();
-    Ok(Action::CreateVoyage { name, cwd })
-}
-
 fn record_created_terminals(
     pending: &mut Vec<CreatedTerminal>,
     previous: &Layout,
@@ -3067,7 +3049,7 @@ fn eligible_contents(
 fn select_note(
     core: &mut Core,
     layout: &mut Arc<Layout>,
-    version: &mut u64,
+    version: &mut LayoutRevision,
     fresh: &mut bool,
     owner: &mut crate::content::Owner,
     access: &crate::content::Access,
@@ -3097,14 +3079,15 @@ fn select_note(
     };
     let mut created = None;
     let selected = (|| {
-        crate::content::admit(owner, layout, *version, access, request)?;
-        if expected_version != version {
+        crate::content::admit(owner, layout, version.structure, access, request)?;
+        if *expected_version != version.structure {
             return Err("Workspace changed; inspect before selecting a note".to_owned());
         }
         let directory = crate::content::notes_directory(layout, vessel_id)?;
         if matches!(request, Request::MigrateNote { .. }) {
-            let current = crate::content::configuration(owner, layout, vessel_id, *version)?
-                .ok_or("Notes configuration is unavailable")?;
+            let current =
+                crate::content::configuration(owner, layout, vessel_id, version.structure)?
+                    .ok_or("Notes configuration is unavailable")?;
             if current.configuration.notes_file.is_some() {
                 return Err("This note already has a Markdown file".into());
             }
@@ -3199,7 +3182,7 @@ fn select_note(
                 vessel_id: vessel_id.clone(),
                 snapshot,
                 configuration,
-                workspace_version: revision,
+                workspace_version: revision.structure,
             }
         }
         Err(error) => {
@@ -3220,7 +3203,7 @@ fn select_note(
 fn configure(
     core: &mut Core,
     layout: &mut Arc<Layout>,
-    version: &mut u64,
+    version: &mut LayoutRevision,
     fresh: &mut bool,
     owner: &mut crate::content::Owner,
     access: &crate::content::Access,
@@ -3238,12 +3221,12 @@ fn configure(
         return crate::content::reject(request, "Expected a configuration request".into());
     };
     let candidate = (|| {
-        crate::content::admit(owner, layout, *version, access, request)?;
-        if expected_version != version {
+        crate::content::admit(owner, layout, version.structure, access, request)?;
+        if *expected_version != version.structure {
             return Err("Workspace changed; inspect before configuring content".into());
         }
         owner.require_configure()?;
-        let current = crate::content::configuration(owner, layout, vessel_id, *version)?
+        let current = crate::content::configuration(owner, layout, vessel_id, version.structure)?
             .ok_or("Notes configuration is unavailable")?;
         if configuration.notes_file != current.configuration.notes_file {
             return Err("Use a note selection action to change the selected file".into());
@@ -3276,7 +3259,7 @@ fn configure(
                 request_id: request_id.clone(),
                 vessel_id: vessel_id.clone(),
                 configuration: configuration.clone(),
-                workspace_version: revision,
+                workspace_version: revision.structure,
             }
         }
         Err(Error::Rejected { kind, message }) => {
@@ -3546,15 +3529,17 @@ mod terminal_outcome_tests {
                     },
                 },
             };
+            let mut changed = (*closed.layout).clone();
+            changed.next_id += 1;
             let external = core
-                .document_set("voyager-layout-v2", &closed.layout, closed.version)
+                .document_set("voyager-layout-v2", &changed, closed.version)
                 .unwrap();
             let stale = client
                 .call(request(closed.version, action.clone()))
                 .unwrap();
             assert_eq!(stale.status, Outcome::Refused);
             assert_eq!(stale.version, external.version);
-            assert_eq!(stale.layout, closed.layout);
+            assert_eq!(*stale.layout, changed);
             let inspected = client.call(request(0, Action::Inspect)).unwrap();
             let reopen = request(inspected.version, action.clone());
             let opened = client.call(reopen.clone()).unwrap();
