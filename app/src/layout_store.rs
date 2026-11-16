@@ -1,6 +1,7 @@
 use crate::core::{Core, Error, LayoutKeep, Pending};
 use crate::core_shapes::{DocGetResult, DocSetResult};
-use crate::workspace::{Model, Part};
+use crate::layout_parts::Part;
+use crate::workspace::Model;
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -342,7 +343,7 @@ mod tests {
         fn current(&self, expected: u64, action: &Action) -> bool {
             self.seen
                 .current(expected, self.revision, &self.layout, || {
-                    crate::workspace::parts(&self.layout, action)
+                    crate::layout_parts::parts(&self.layout, action)
                 })
         }
 

@@ -2,8 +2,8 @@ use crate::{
     core::{Core, Error, MAX_INPUT_BYTES, Pending, TerminalList},
     core_shapes::{InterruptResult, ReadResult, SendResult, Terminal},
     core_state::TerminalState,
+    layout_parts::Part,
     scope,
-    workspace::Part,
 };
 use std::sync::Arc;
 use voyager_contract::{

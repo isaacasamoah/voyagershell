@@ -995,7 +995,7 @@ revision. A Fleet that the user created or renamed does not refuse an agent's
 rename of a Vessel in another Fleet. A second edit to the same Vessel from the
 same old revision is refused, and the refusal carries the current layout.
 
-`Part` in `app/src/workspace.rs` names the parts. They are the workspace itself
+`Part` in `app/src/layout_parts.rs` names the parts. They are the workspace itself
 (the Voyage order, Home, the canvas and the saved arrangements), each Voyage,
 each Fleet, each placement, each Vessel and the whole set of Vessels. A Voyage holds its own fields and
 the order of its Fleets and Portals, not their contents. A Fleet holds its name,
@@ -1003,7 +1003,7 @@ state, placement order, split tree and maximized placement, not the placement
 records. `Part::same` destructures every field it compares, and it ignores
 navigation and `next_id`, so a new field does not build until it is placed.
 
-`workspace::parts` finds the parts that a workspace action changes. It applies
+`layout_parts::parts` finds the parts that a workspace action changes. It applies
 the action to a copy of the current layout and compares the two. An action that
 the copy cannot apply, such as a Voyage shutdown confirmation or a Vessel
 package change, has no parts, so it needs the current revision. A process

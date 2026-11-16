@@ -2,7 +2,8 @@ pub use crate::terminal_lifecycle::Lifecycle;
 use crate::{
     activity::Activity,
     core::{Error, Viewer, WeakViewer},
-    workspace::{Model, Part},
+    layout_parts::Part,
+    workspace::Model,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -32,8 +33,8 @@ use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING}
 use crate::layout_store::{
     LayoutRevision, Seen, begin_save, carry_notice, load, rejected, save, settle_save,
 };
-use content_calls::{configure, select_note};
 use crate::vessel_socket::{Call, Sockets};
+use content_calls::{configure, select_note};
 pub use core_calls::WorkspaceNotice;
 use core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
@@ -1822,7 +1823,7 @@ impl Client {
                                         request.expected_version,
                                         version,
                                         &layout,
-                                        || crate::workspace::parts(&layout, &request.action),
+                                        || crate::layout_parts::parts(&layout, &request.action),
                                     )
                                 {
                                     Err(rejected(
@@ -2075,7 +2076,7 @@ impl Client {
                                                 version,
                                                 &layout,
                                                 || {
-                                                    crate::workspace::parts(
+                                                    crate::layout_parts::parts(
                                                         &layout,
                                                         &request.action,
                                                     )

@@ -82,6 +82,7 @@ Guide: [docs/workspace.md](workspace.md).
 Owns files:
 
 - `app/src/workspace.rs`
+- `app/src/layout_parts.rs`
 - `app/src/scope.rs`
 - `app/src/context.rs`
 - `app/src/panels.rs`

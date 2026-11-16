@@ -1,6 +1,6 @@
 use crate::core::{Core, Error};
+use crate::layout_parts::Part;
 use crate::layout_store::{LayoutRevision, Seen, save};
-use crate::workspace::Part;
 use std::sync::Arc;
 use voyager_contract::Layout;
 
