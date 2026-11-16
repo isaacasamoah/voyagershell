@@ -46,7 +46,7 @@ function fixture(
   createdWorkspace = false,
   createdVessels = [],
 ) {
-  const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
+  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus };`;
   const layout = {
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
@@ -73,7 +73,7 @@ function fixture(
   const actions = [];
   const choices = [];
   const versions = [];
-  const Canvas = new Function(
+  const { Canvas, moveFocus } = new Function(
     "View",
     "invoke",
     "openTerminal",
@@ -150,6 +150,7 @@ function fixture(
     version: () => String(version),
     actions,
     choices,
+    focus: (id) => moveFocus(view, { placement: id }, cx),
   };
 }
 
@@ -426,7 +427,7 @@ test("Create Fleet and Refresh expose native buttons while preserving their pres
 });
 
 test("shortcuts target the focused Vessel and queue only while busy", () => {
-  const { view, cx, choices } = fixture("applied");
+  const { view, cx, choices, focus } = fixture("applied");
   const fleet = view.layout.voyages[0].fleets[0];
   fleet.placements.push({ id: "second", vessel: "other" });
   fleet.root = {
@@ -434,7 +435,7 @@ test("shortcuts target the focused Vessel and queue only while busy", () => {
     first: { kind: "leaf", placement: fleet.placements[0].id },
     second: { kind: "leaf", placement: "second" },
   };
-  view.focused = "second";
+  focus("second");
   const calls = [];
   view.run = (action) => calls.push(action);
   const modifiers = { control: true, shift: true, alt: false, platform: false };
@@ -458,7 +459,7 @@ test("shortcuts target the focused Vessel and queue only while busy", () => {
 
 test("selection focus uses the actual current-Fleet terminal and preserves outside focus", async () => {
   for (const eligible of [true, false]) {
-    const { view, cx, pending, layout } = fixture("applied");
+    const { view, cx, pending, layout, focus } = fixture("applied");
     const calls = [];
     const fleet = layout.voyages[0].fleets[0];
     fleet.placements.push({ id: "second", vessel: "other" });
@@ -467,7 +468,7 @@ test("selection focus uses the actual current-Fleet terminal and preserves outsi
       first: { kind: "leaf", placement: fleet.placements[0].id },
       second: { kind: "leaf", placement: "second" },
     };
-    view.focused = "second";
+    focus("second");
     view.terminals.set("content", {
       rememberFocus() {
         calls.push("remember");
@@ -633,7 +634,7 @@ test("an unrelated action keeps the refusal visible without retry", async () => 
 });
 
 test("workspace shortcuts use the selected Fleet and focused Vessel", () => {
-  const { view, cx, choices } = fixture("applied");
+  const { view, cx, choices, focus } = fixture("applied");
   view.layout.voyages[0].fleets[0].placements.push({
     id: "second",
     vessel: "other",
@@ -644,7 +645,7 @@ test("workspace shortcuts use the selected Fleet and focused Vessel", () => {
     first: { kind: "leaf", placement: "first" },
     second: { kind: "leaf", placement: "second" },
   };
-  view.focused = "second";
+  focus("second");
   const calls = [];
   view.run = (action) => calls.push(action);
   view.openFleetChoices = (voyage) =>
@@ -900,14 +901,14 @@ test("a layout save begun during an existing request waits before navigation", a
 });
 
 test("layout shortcuts ignore a retained hidden Vessel", () => {
-  const { view, cx, layout, choices } = fixture("applied");
+  const { view, cx, layout, choices, focus } = fixture("applied");
   const fleet = layout.voyages[0].fleets[0];
   fleet.placements = [
     { id: "hidden", vessel: "old" },
     { id: "visible", vessel: "content" },
   ];
   fleet.root = { kind: "leaf", placement: "visible" };
-  view.focused = "hidden";
+  focus("hidden");
   const calls = [];
   view.run = (action) => calls.push(action);
   view.dispatchShortcut("o", cx);
@@ -942,7 +943,7 @@ test("workspace shortcuts leave the layout-name editor alone", () => {
 });
 
 test("maximize shortcuts bind the displayed event origin and refuse busy intents", () => {
-  const { view, cx, layout } = fixture("applied");
+  const { view, cx, layout, focus } = fixture("applied");
   const fleet = layout.voyages[0].fleets[0];
   fleet.placements = [
     { id: "first", vessel: "content" },
@@ -953,7 +954,7 @@ test("maximize shortcuts bind the displayed event origin and refuse busy intents
     first: { kind: "leaf", placement: "first" },
     second: { kind: "leaf", placement: "second" },
   };
-  view.focused = "first";
+  focus("first");
   const calls = [];
   view.run = (action) => calls.push(action);
   const event = {
@@ -1044,7 +1045,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   let dockResult = null;
   let activityRevision;
   let activityReads = 0;
-  const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
+  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus };`;
   let ownerRevision = "7";
   let packageRevision = "0";
   const targets = [];
@@ -1081,7 +1082,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       return div();
     },
   };
-  const Canvas = new Function(
+  const { Canvas, moveFocus } = new Function(
     "View",
     "div",
     "Button",
@@ -1297,7 +1298,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     1,
     "The pointer press stops before native Button focus transfer",
   );
-  view.focused = "other";
+  moveFocus(view, { placement: "other" }, {});
   maximize.calls.on_click[0]({}, {});
   assert.equal(view.focused, "vessel");
   assert.deepEqual(actions.pop(), {

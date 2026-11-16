@@ -38,7 +38,7 @@ import { agentsShown } from "./agents.js";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
-import { moveFocus, renderPanel } from "./panel-view.js";
+import { focusedPlacement, moveFocus, renderPanel } from "./panel-view.js";
 import {
   renderSidebar,
   renderFleets,
@@ -52,8 +52,8 @@ import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
   currentVoyage,
+  openingPlacement,
   panelGroups,
-  rememberedPlacement,
   shownPanels,
   visiblePanels,
   hiddenPanels,
@@ -170,7 +170,6 @@ export default class Canvas extends View {
   closeVoyage = new VoyageClose();
   declare workspaceNotice: ReturnType<typeof workspace_notice>;
   declare automaticRefresh: boolean;
-  declare focused: string | null;
   declare hoveredPanel: string | null;
   declare hoveredFleet: string | null;
   processes: ProcessInfo[] = [];
@@ -227,7 +226,6 @@ export default class Canvas extends View {
     this.activityLimit = null;
     this.terminals = new Map();
     this.openings = new Map();
-    this.focused = null;
     this.hoveredPanel = null;
     this.hoveredFleet = null;
     this.processPending = false;
@@ -250,6 +248,10 @@ export default class Canvas extends View {
         await task.sleep(CONTEXT_REFRESH_MS);
       }
     });
+  }
+
+  get focused(): string | null {
+    return focusedPlacement(this);
   }
 
   activePlacement(): Placement | undefined {
@@ -686,9 +688,10 @@ export default class Canvas extends View {
             const created = shown.find(
               (panel) => !previousContents.has(panel.vessel),
             );
-            const opened = rememberedPlacement(current, shown) || shown[0];
-            if (changesSelection) this.focused = opened?.id || null;
-            else if (creating && created) moveFocus(this, created.id, task);
+            const opened = openingPlacement(current);
+            if (changesSelection) moveFocus(this, "opening", task);
+            else if (creating && created)
+              moveFocus(this, { placement: created.id }, task);
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
@@ -696,7 +699,7 @@ export default class Canvas extends View {
                   ? created
                   : opened;
               if (target && (maximization || splitMaximized))
-                moveFocus(this, target.id, task);
+                moveFocus(this, { placement: target.id }, task);
               if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
             }
           } catch (error) {
@@ -784,21 +787,17 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
-    const shown = shownPanels(result.layout);
-    this.focused ||= rememberedPlacement(result.layout, shown)?.id || null;
+    if (!this.focused && result.layout.view === "fleet")
+      moveFocus(this, "opening", task);
     if (
       this.focused &&
-      !shown.some((panel) => panel.id === this.focused) &&
+      !shownPanels(result.layout).some((panel) => panel.id === this.focused) &&
       !this.chat?.open &&
       !this.editing &&
       !this.layoutName &&
       !window.has_active_dialog()
     ) {
-      moveFocus(
-        this,
-        (rememberedPlacement(result.layout, shown) || shown[0])?.id || null,
-        task,
-      );
+      moveFocus(this, "opening", task);
       this.focus.focus();
     }
     this.closeVoyage.observe(result.closePlan);

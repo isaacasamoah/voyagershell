@@ -52,7 +52,7 @@ export function shownPanels(layout) {
   if (!layout) return [];
   return activeGroups(layout).flatMap((group) => visiblePanels(group, true));
 }
-export function rememberedPlacement(layout, shown) {
+function rememberedPlacement(layout, shown) {
   if (!layout || layout.view === "home") return;
   const entry = layout.navigation?.find(
     (item) =>
@@ -60,6 +60,10 @@ export function rememberedPlacement(layout, shown) {
       item.fleet === layout.selectedFleet,
   );
   return shown.find((panel) => panel.id === entry?.vessel);
+}
+export function openingPlacement(layout) {
+  const shown = shownPanels(layout);
+  return rememberedPlacement(layout, shown) || shown[0];
 }
 export function visiblePanels(group, maximized = false) {
   const ids = new Set();

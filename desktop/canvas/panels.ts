@@ -72,7 +72,7 @@ export function shownPanels(layout: Layout | null): Placement[] {
   return activeGroups(layout).flatMap((group) => visiblePanels(group, true));
 }
 
-export function rememberedPlacement(
+function rememberedPlacement(
   layout: Layout | null,
   shown: Placement[],
 ): Placement | undefined {
@@ -83,6 +83,11 @@ export function rememberedPlacement(
       item.fleet === layout.selectedFleet,
   );
   return shown.find((panel) => panel.id === entry?.vessel);
+}
+
+export function openingPlacement(layout: Layout | null): Placement | undefined {
+  const shown = shownPanels(layout);
+  return rememberedPlacement(layout, shown) || shown[0];
 }
 
 export function visiblePanels(

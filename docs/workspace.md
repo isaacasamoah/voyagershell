@@ -863,16 +863,30 @@ second inspect.
 **The navigation record.** `navigation` holds one entry per Voyage: its
 last-used Fleet and, optionally, its last-used Vessel placement. Any change that
 leaves the workspace on a Voyage and Fleet updates that Voyage's entry, and a
-new Fleet clears the remembered Vessel. The canvas sends `focus-vessel` when a
-click moves focus to another pane in an ordinary Voyage. It sends it outside the
-action queue, does not wait for it and ignores its reply. The owner records a
-placement only when it is in the open Fleet or that Voyage's Portals.
+new Fleet clears the remembered Vessel. The owner records a placement only when
+it is in the open Fleet or that Voyage's Portals.
 
 Selecting or reopening a Voyage, or moving to the nearest Voyage after one
 closes, opens its last-used Fleet when that Fleet is still open. Otherwise it
-opens the first open Fleet. After such a change, and on the first layout after
-launch, the canvas focuses the remembered placement when it is shown, and the
-first shown placement otherwise. Home keeps no entry.
+opens the first open Fleet. Home keeps no entry.
+
+**The canvas's focused placement.** `moveFocus` in
+`desktop/canvas/panel-view.ts` is its only writer. It keeps the placement in a
+store private to that module, and `Canvas.focused` only reads it, so an
+assignment anywhere else does not compile. A move has one of two targets:
+
+- A placement the user chose: a click on a pane, the Maximize or Restore
+  button or menu item, or the Vessel a split or create focuses. When this
+  changes focus in an ordinary Voyage, the canvas sends `focus-vessel`. It sends
+  it outside the action queue, does not wait for it and ignores its reply.
+- The opening placement: the remembered placement when it is shown, and the
+  first shown placement otherwise. The canvas moves here after a selection
+  change, when nothing is focused in an ordinary Voyage, as on the first layout
+  after launch, and when the focused placement is no longer shown. It sends
+  nothing, because the record already names this placement: a Fleet change
+  clears the remembered Vessel, and a Fleet with no remembered Vessel opens on
+  its first shown placement. A tab click therefore costs one save, the
+  selection itself.
 
 ## The stored layout across builds
 
