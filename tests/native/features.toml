@@ -322,3 +322,16 @@ behavior = "covered"
 performance = "none"
 visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "core-reports"
+name = "Core reports and slow reads"
+path = "Start a program in a terminal and see the Agents list name it at once, let a shell exit and see its Vessel close while Core is slow to list terminals, and get a read answered while the Agents list waits for Core."
+sources = ["app/src/activity.rs", "app/src/client.rs", "app/src/client_core.rs", "app/src/process.rs", "desktop/canvas/agents.*"]
+journeys = ["core-events", "slow-list"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"

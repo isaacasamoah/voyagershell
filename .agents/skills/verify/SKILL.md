@@ -93,7 +93,7 @@ On a failure, preserve the original directory. Distinguish setup/driver failure
 from an observed product defect. Repair a confirmed fixture problem in this common
 source, prove the repair with an independent negative control, then rerun the
 affected app behavior. Record a bounded unresolved result and next action if the
-repair cannot be completed; do not silently substitute a custom rig. Never replay an uncertain effect or weaken an assertion.
+repair cannot be completed; do not silently substitute a custom rig. Never weaken an assertion, and never retry an uncertain effect that a read has not proved did not happen.
 
 ## Negative control
 

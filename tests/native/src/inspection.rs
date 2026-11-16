@@ -85,6 +85,11 @@ impl Target {
 
     pub const GO_THERE: Self = Self::single(Role::GoThere);
     pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
+    pub const CREATE_AGENTS: Self = Self::single(Role::CreateAgents);
+
+    pub fn agents_row(placement: &PlacementId) -> Self {
+        Self::keyed(Role::AgentsRow, &placement.0)
+    }
 
     pub fn toggle_portals(voyage: &VoyageId) -> Self {
         Self::keyed(Role::TogglePortals, &voyage.0)

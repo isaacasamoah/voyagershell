@@ -5,9 +5,11 @@
 A typed command runs in the shell and its output is drawn. Keys reach a
 program as the bytes a terminal sends, and they follow the modes that the
 program asked for. Output is drawn when it arrives, without any input. A drag
-selects text and draws the selection. Ctrl+Shift+C puts the selection on the X
-clipboard, and Ctrl+Shift+V sends another client's clipboard text to the
-program. Typing into one terminal works while another terminal floods.
+selects text and draws the selection. Releasing the button copies a non-empty
+selection to CLIPBOARD and PRIMARY, and a click without a drag copies nothing.
+Ctrl+Shift+C puts the selection on the X clipboard, Ctrl+Shift+V sends another
+client's clipboard text to the program, and a middle click sends PRIMARY.
+Typing into one terminal works while another terminal floods.
 
 ## How to get to it (user POV)
 
@@ -25,10 +27,11 @@ is owned by desktop/src/terminal.rs, terminal_screen.rs, terminal_view.rs and
 terminal_input.rs in the selected candidate. The journey needs no sidebar
 state and no window size.
 
-Before its first case the journey checks two things about the fixture. The
-fixture home must hold no shell startup file, and the verifier's clipboard
-owner must return its own canary. Either failure ends the run `inconclusive`,
-blamed on the fixture.
+Before its first case the journey checks three things about the fixture. The
+fixture home must hold no shell startup file, the verifier's clipboard owner
+must return its own canary, and it must return its own PRIMARY canary and
+then give PRIMARY up. Any failure ends the run `inconclusive`, blamed on the
+fixture.
 
 - `typed-command-runs` types `printf 'TYPED-%s\n' $((6*7))`. Core's screen
   must hold `TYPED-42`, which only a command that ran can print, and the
@@ -50,7 +53,14 @@ blamed on the fixture.
 - `drag-selects-text` prints `COPYβ界` on a truecolor background and drags
   from one pixel inside the left edge of that box to one pixel inside its
   right edge. Every pixel that had the background colour must take one other
-  colour, and nothing outside the row may change.
+  colour, and nothing outside the row may change. Before the drag the case
+  checks the verifier's own cell grid against the drawn text. The first cell
+  must start where the box starts, and the seventh cell must lie inside the
+  box and the eighth outside it. A mismatch ends the run `inconclusive`,
+  blamed on the fixture.
+- `release-copies-the-selection-to-clipboard-and-primary` presses no key after
+  the drag. Another X client must read exactly `COPYβ界` from CLIPBOARD and
+  from PRIMARY, and the case counts the inputs sent since the release.
 - `copy-puts-the-selection-on-the-clipboard` gives CLIPBOARD to the verifier
   with the text `VERIFIER-SENTINEL` and presses Ctrl+Shift+C. The verifier's
   clipboard client must lose CLIPBOARD and then read exactly `COPYβ界` from
@@ -67,6 +77,35 @@ blamed on the fixture.
   `DURING-42` and its terminal must draw it while Core still reports `yes` or
   `timeout` in the first terminal's foreground. Ctrl+C in the first terminal
   must end the flood and leave its shell the same program.
+- `a-drag-inside-one-cell-copies-that-cell` clears the screen, prints
+  `ABCDEFGHIJ` on row 0 and `KLMNOPQRST` on row 1, and gives CLIPBOARD to the
+  verifier. It drags from 2 pixels inside the top-left corner of cell 3 of
+  row 1 to 3 pixels inside its bottom-right corner, then presses Ctrl+Shift+C.
+  Another X client must read exactly `N` from the clipboard. A pointer mapping
+  that is off by a column or a row selects a different cell or spans two rows,
+  and `copied` records that text.
+- `a-click-without-a-drag-leaves-clipboard-and-primary-unchanged` takes
+  CLIPBOARD and PRIMARY for the verifier with `VERIFIER-SENTINEL` after the
+  previous case copied, and clicks cell 8 of row 0. The click must clear the
+  drawn selection, the verifier must still own both and read the sentinel from
+  both, and neither selection may have been cleared.
+- `a-click-sends-no-bytes-and-a-middle-click-pastes-primary` runs the `keys`
+  probe with bracketed paste while the verifier owns PRIMARY with
+  `PASTEβ界`, a newline and `line2`. It clicks cell 3 of row 0 with
+  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
+  received exactly `ESC[200~`, the text, `ESC[201~` and `x`, so the click sent
+  no byte and the middle click sent the paste. A client other than the
+  verifier must have asked the verifier's PRIMARY for the text.
+- `a-middle-click-refuses-primary-over-64-kib` gives PRIMARY 70 KiB to the
+  verifier and middle-clicks. A client other than the verifier must ask for the
+  text, the terminal must draw its error banner, and the probe must have
+  received exactly the `x` typed afterwards. The 64 KiB limit is the paste
+  limit of `Screen::paste_bytes`.
+- `a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection`
+  prints `STALEWORD` in the first terminal and drags across it, so that
+  terminal holds a selection. It then takes CLIPBOARD and PRIMARY for the
+  verifier, drags from the second terminal to a point over the first, and
+  releases. Neither selection may read the first terminal's older text.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
@@ -115,9 +154,15 @@ journey claims it.
   The driver keeps 1 ms between key events and types a long shell line in
   pieces, each echoed before the next, so no case types such a burst.
 - A shell with a line editor such as ble.sh, or with any startup file.
-- A paste over 64 KiB, a copy with no selection, and a selection of more than
-  one row, by word or by line.
-- PRIMARY and middle-click paste, which the app does not offer.
+- A Ctrl+Shift+V paste over 64 KiB and a selection of more than one row, by
+  word or by line. The desktop unit test `a_release_without_selected_text_yields_nothing_to_copy`
+  covers a release with no text to copy, which no journey case drives.
+- A middle click on a platform without PRIMARY. The journey covers Linux X11
+  only.
+- Selecting one cell by pointer. The app selects the cell to the left of the
+  pointer, which
+  [Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196)
+  tracks. No case judges the cell that a drag selects.
 - Mouse reports to programs, other than the wheel that `terminal-scrolling`
   covers.
 - Input methods. Preedit and commit need an input method in the sandbox.

@@ -224,8 +224,10 @@ from step 4. Open each file as you read and find the named function.
    whole `Layout` as the Core document `voyager-layout-v2` (see [the stored layout across builds](workspace.md#the-stored-layout-across-builds)). Only after Core
    accepts the save does the owner adopt the new layout.
 7. The response carries an `Outcome` of `Applied`, `Refused` or `Uncertain`.
-   Refused means nothing changed. Uncertain means the effect may have happened,
-   and the app never repeats it automatically.
+   Refused means nothing changed. Uncertain means the effect may have happened
+   and a read of Core could not settle it. Before it answers uncertain, the
+   owner reads Core and retries only what the read proves did not happen (see
+   [settling an uncertain result](workspace.md#settling-an-uncertain-result)).
 8. The script adopts the new layout and calls `openTerminal`. `open_terminal` in
    `app/src/client.rs` saves a start marker to Core before it starts the
    program, so a crash mid-start cannot start the program twice. Then it runs

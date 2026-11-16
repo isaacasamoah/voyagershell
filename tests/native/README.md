@@ -4,7 +4,7 @@ This is the Rust slice of the maintained native fixture. It runs the journeys in
 its journey registry on an owned Linux X11 display. The journeys are
 `terminal-scrolling`, `workspace`, which covers Voyages, Fleets and Vessels,
 `quit-restore` and `terminal-input`, which covers typing, keys, output,
-selection and copy and paste in a terminal.
+selection, copy and paste and clicks in a terminal.
 The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
@@ -127,8 +127,13 @@ Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
 process. A journey judges these values as expectations. `Native::context_click`
 aims at a control the way `click` does and presses the secondary button,
-which the X11 adapter sends as button 3. A journey names the intent, not the
-button number.
+which the X11 adapter sends as button 3. `Native::middle_click` does the same
+with the middle button, which the adapter sends as button 2. A journey names
+the intent, not the button number. The display acknowledges the middle click.
+No run shows that the app received it, because the app does nothing with a
+middle click today. Two presses at one point in quick succession make a double
+or triple click. Six drags in a row that started at the same point each selected the whole
+word, and drags that started at different points did not.
 
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
@@ -144,39 +149,52 @@ five seconds. `Native::drawn_label` waits for a control to draw a label that
 the journey accepts. Its `after` argument is added to the usual deadline, for a
 label that the app draws only once a deadline of its own has passed.
 
+The `core-events` journey proves that Core's reports reach the app. It shows
+an Agents Vessel beside the first terminal. `foreground-reaches-agents-list`
+runs a program three times and stops it each time. Each change must show in the
+terminal's `agents-row` within 1 s of the driver reading it from Core.
+`exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After
+Core runs again and reports the program finished, the layout must hold the
+Vessel closed within 1 s. The pause does not make Core send a `missed`
+snapshot, so no journey covers one.
+
 The `outcomes` journey proves that a refusal shows its reason and that an
-uncertain result shows as uncertain and is not sent again. It declares
-`terminal.kill=21000` for its last case and refuses a run that holds that
-reply for 20 seconds or less.
+uncertain result is settled by reading Core, with nothing done twice. It
+declares the Core delay `arm`, so the relay is in the path and each case arms
+one fault for the next request of one method, as
+[armed faults](#armed-faults) describes. The verify skill's
+`features/outcomes.md` lists the cases and what each failure means.
 
-- `refused-shows-reason` renames a Fleet to 129 bytes. It passes when the
-  status line starts with `Refused.` and holds the owner's reason, and the
-  Fleet keeps its saved name.
-- `tool-refusal-carries-reason` plays a scripted rename to an empty name
-  through the stand-in provider. It passes when the tool result holds
-  `"status":"refused"` with the same reason.
-- `uncertain-not-replayed` pauses Core and submits a Fleet rename. It passes
-  when the status line shows the owner's uncertain answer, a second Enter on
-  the same name is declined, Core's layout document is one version on with the
-  typed name after Core resumes, and it is still at that version after Refresh.
-- `close-refused-says-why` plays a scripted rename behind the open close
-  dialog and then confirms. It passes when the dialog's message starts with
-  `Refused.` and holds the owner's reason, the Voyage stays open and every
-  program still runs.
-- `close-uncertain-not-retried` confirms a Voyage close while the relay holds
-  Core's reply to the program stop past Core's deadline. It passes when the
-  dialog's message starts with `Uncertain.`, and after the reply is released
-  the Voyage is still open and the dialog offers no second confirmation.
+- `refused-shows-reason` and `tool-refusal-carries-reason` show a refusal's
+  reason in the status line and in the tool result.
+- `rename-stalled-applied` stops Core for 24 s across a Fleet rename, past Core's
+  20 s deadline and the canvas's 22 s wait. `rename-dropped-retried` drops the
+  rename's `doc.set`. Both pass when the status line never says `Uncertain.`, the
+  rename ends applied and Core's document is exactly one version on.
+- `close-refused-says-why` shows a stale close plan's refusal.
+  `stop-dropped-retried` drops the first `terminal.kill` of a close, and
+  `stop-held-closed` holds its reply for 21 s. Both pass when the dialog never
+  says `Uncertain.`, the Voyage closes and none of its programs runs.
+- `start-held-adopted` holds a `terminal.run` reply for 21 s and passes when the
+  start is adopted with one terminal for its label. `start-stalled-not-repeated`
+  stalls the start and the requests behind it for 22 s and passes when the start
+  keeps its marker and Core holds one terminal for its label.
+- `rename-uncertain-declines-second-enter` stops Core through the owner's read and
+  the canvas's ask, until the status line says `Uncertain.`. A second Enter on
+  the same name must be declined with "Name change not confirmed", and Core
+  saves the name once after it resumes. `close-unanswered-stops-nothing`
+  confirms a Voyage close while Core is stopped and a drop is armed on
+  `terminal.kill`. The dialog refuses, and the arm stays unspent, so no stop was
+  sent. After Core resumes the Voyage is open and its programs still run. The
+  dialog may offer Confirm again, because nothing happened. A stop that stays
+  uncertain through its read cannot be reached here, because the close inspects
+  the workspace first and Core is silent for that too.
 
-Limits. `uncertain-not-replayed` reads what Core holds after it resumes and
-not which requests the app sent while Core was paused. The last case does not
-prove that no second stop was sent, because a second stop's reply would be held
-past the end of the case. The journey never reaches a reply that the app's
-owner did not answer, because the owner answers at Core's 20-second deadline
-and the caller waits 22 seconds. Two cases wait for that deadline, so a run
-takes about a minute. The journey reads labels, so it does not judge the one
-frame that the canvas fails to draw when a notice arrives while it is idle. The
-`close-uncertain` capture shows that frame's `Render failed` banner.
+Limits. No case drives the avatar's or the administrator's ask through a late
+reply, or a request cancelled while it waited in the queue. Seven cases wait for
+Core's deadline, so a run takes about six minutes. The journey reads labels, so
+it does not judge the one frame that the canvas fails to draw when a notice
+arrives while it is idle.
 
 A held gesture keeps the primary button down across steps. `Native::hold`
 presses at a control's aim point and returns a `Held`. `Held::toward` moves in
@@ -473,12 +491,80 @@ still in the path, so zero measures the relay and not its absence. A run without
 `--core-delay` has no relay. The driver's own requests to Core, including its
 `doc.get` and `terminal.list` reads, go to the socket directly and are never
 held, so an observation sees the true state while the app sees the delayed one.
+Core accepts and answers those requests within 5 s each. When it does not, the
+error reads "Core did not accept METHOD" or "Core did not answer METHOD", then
+"within 5000 ms on the verifier's own connection", with the operating system's
+error 11 after it, and the run is not blamed on the relay.
 
-Each held reply adds a line to `core-relay.jsonl` in the evidence folder when it
-is released. The line holds the method, the request identity, the delay, and the
-times in milliseconds since the Unix epoch at which the request was seen, the
-reply arrived and the reply was released. `checks.json` records the delays as
-`coreDelay`. After the journey the driver reads that ledger, and a line whose method or delay the flag did not ask for ends the run `inconclusive`, blamed on the verifier even when a case failed first.
+Each relay process writes lines to `core-relay.jsonl` in the evidence folder.
+Every line is one JSON object tagged by `event` and carries `relay`, the pid and
+start time of the relay process that wrote it. The app starts a new relay on each
+launch and kills it when it closes its Core connection, and request identities
+restart with each launch, so a hold is identified by its relay and its request
+identity together.
+
+- `alive` is written every 250 ms for as long as the relay runs, with `atMs`.
+- `held` is written when a held reply arrives from Core. It holds the method,
+  the request identity, the delay, and the times in milliseconds since the Unix
+  epoch at which the request was seen and the reply arrived.
+- `released` repeats those fields and adds `releasedAtMs`. It is written only
+  after the relay has written the reply to the app's socket.
+- `undelivered` repeats those fields and adds `undeliveredAtMs` and the error
+  kind, in place of a release when the write fails.
+
+`checks.json` records the delays as `coreDelay`.
+
+#### Armed faults
+
+A delay of `arm`, alone or beside `METHOD=MS` entries, puts the relay in the
+path with nothing held. A journey then arms one fault at a time with
+`System::arm_core`. It appends the arm to `core-relay-arms.jsonl` and writes
+it to `core-relay-arm.json`, which the relay reads as each request passes. The
+next request of the armed method takes the fault and the relay deletes the
+file, so an arm applies once.
+
+- `drop` never forwards the request. The relay writes a `dropped` line with the
+  arm.
+- `hold` forwards the request and holds its reply, like a delay. Its `held` and
+  `released` lines carry the arm.
+- `stall` waits before it forwards the request, which also delays every request
+  behind it in the same order. The relay writes a `stalled` line with
+  `forwardedAtMs`.
+
+The audit checks each line that carries an arm against `core-relay-arms.jsonl`.
+A line whose arm nobody armed, whose method or fault differs from the arm, or an
+arm applied to two requests ends the run `inconclusive`, blamed on the verifier.
+`System::arm_spent` finds the line for an arm, and a case that never sees one
+fails the same way, because it did not reach the state it judges.
+
+After the journey the driver reads that ledger and audits it against the delays
+that the flag asked for, with its own lookup into the parsed flag and not the
+relay's `CoreDelay::hold`. A line that does not parse as one of these events, or
+a ledger that cannot be read, ends the run the same way. Any of these ends the
+run `inconclusive`, blamed on the verifier, even when a case failed first.
+
+- A line whose method or delay the flag did not ask for. A relay that holds every
+  method fails here.
+- A `released` line written more than 1000 ms after `repliedAtMs` plus the
+  delay. A relay that waits several times its delay fails here. In 40 runs of
+  `slow-save` and `outcomes` the release was at most 3 ms late with the machine
+  quiet and at most 8 ms late under 18 busy loops. In 7 runs of `quit-restore`
+  it was at most 119 ms late, while other heavy builds ran on the machine, so the
+  bound leaves room for that.
+- A `held` line with no `released` or `undelivered` line from the same relay,
+  when that relay was still writing `alive` lines more than 1000 ms after the
+  hold was due. A relay that loses a held reply fails here. A relay that was
+  killed before the hold was due did not lose it, which is what happens to a
+  hold in flight when the app closes its Core connection.
+- An `undelivered` line whose error is not `BrokenPipe`. A broken pipe means the
+  app closed its end, which is the app's doing.
+
+Gaps the audit does not close. A relay that overruns its delay by less than
+1000 ms is not caught. A reply lost in the last 1000 ms of a relay's life is not
+caught. A relay that writes a `released` line without writing the reply is
+caught only by the journeys' own checks. `slow-save` reads `released` lines by
+`releasedAtMs` and `outcomes` by `event`, and neither journey fails when either
+filter is removed, so those two filters are unproved.
 
 The driver refuses a delay it cannot apply. A method must be written in lower
 case with dots and underscores, named once, and held for at most 30000 ms. After
@@ -488,8 +574,8 @@ from its hello reply. A method that Core does not offer ends the run
 that check does not stop the app from starting.
 
 Limits. The relay reads only channel 0, so it holds replies to requests and
-never the terminal data frames or events that arrive on other channels. It
-cannot hold a request, reorder requests or drop a frame. It sits in front of the
+never the terminal data frames or events that arrive on other channels. Only
+an armed fault drops or stalls a request, and it never reorders requests. It sits in front of the
 one `hc connect` that the app starts, so each further bridge process is its own
 relay with its own ledger lines. The app limits itself to eleven pending Core
 requests, so a long delay on a busy method can make the app refuse new requests
@@ -502,16 +588,17 @@ stretched the `workspace` journey from about 24 s to between 70 s and 100 s. Of
 five such runs, three passed, one failed `switch-voyage` on its 12 s observation
 deadline, and one ended `inconclusive` with an operating system error 11 in
 `split-vessel` that no delay run explained. With `terminal.list=2000`, the
-`terminal-scrolling` journey fails `exit-closes`, because the app learns of an
-exit through that reply. A journey that holds a method this long therefore
+`terminal-scrolling` journey still passes `exit-closes`, because the app closes
+an exited Vessel from Core's report and not from that reply. A build that
+learns of an exit through the list fails it. A journey that holds a method this long therefore
 measures the app's tolerance for the delay, and a failure under it is the
 journey's finding about the app, not a defect of the relay.
 
 A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
-on the command line replaces it. `slow-save` declares `doc.set=1500` and `outcomes` declares
-`terminal.kill=21000`.
+on the command line replaces it. `slow-save` declares `doc.set=1500`, `outcomes` declares
+`terminal.kill=21000` and `slow-list` declares `terminal.list=2000`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can
@@ -544,6 +631,26 @@ the app's owner, so each case waits for that terminal before it ends. It plays
 one scripted call during each held save, so it does not fill the app's list of
 waiting effects and does not reach the busy refusal. It does not quit during a
 held save.
+
+The `slow-list` journey proves what the app does while Core's reply to a
+terminal list is held. It opens the chat, starts a turn and shows an Agents
+Vessel beside the first terminal, so the canvas asks the app for the process
+list every few seconds and each of Core's replies is held.
+
+- `inspect-answered-during-held-list` plays 16 scripted workspace inspects,
+  500 ms apart. It passes when every one returned Applied and every round trip
+  was under a quarter of the hold. It reads `core-relay.jsonl` and ends the run
+  `inconclusive`, blamed on the verifier, when no inspect was sent while a
+  `terminal.list` reply was held.
+- `exit-closes-during-held-list` lets the shell exit. It passes when Core holds
+  the layout with the Vessel closed in under half of the hold.
+
+Limits. Both the Agents list's process read and the canvas's workspace
+observation are `terminal.list`, so the ledger cannot tell them apart. The
+script spans 8 s, which is longer than one canvas loop under the hold, so an
+inspect is sent during a process read. That is inferred from the loop's timing.
+The journey does not hold a process Read, the list before a worktree removal,
+the plan of a Voyage close or a create from a live directory.
 
 #### Scripted tool calls
 
@@ -663,6 +770,15 @@ The `slow-save` patch makes the app's owner wait for Core's reply to a layout
 save before it takes the next request. `inspect-answered-during-held-save` then
 fails on the expectation `the inspect was answered before Core's held reply to
 the Fleet's save was released`.
+
+The `core-events` patch stops a foreground report from moving the activity
+counter. `foreground-reaches-agents-list` then fails, because the Agents row
+names a new program only after the canvas's 3 s loop.
+
+The `slow-list` patch makes a `finished` event never report an exit.
+`exit-closes-during-held-list` then fails on the expectation `the exited
+shell's Vessel was saved closed in under half of the hold on Core's terminal
+list replies`, because the Vessel closes only when a held list lands.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -893,6 +1009,43 @@ driver refuses a point that is outside the control or under the avatar. It
 presses at the first point, moves to the second in 4 equal steps and releases,
 and it releases the button even when a move fails.
 
+`Native::click_at` clicks one point inside a control, in device pixels relative
+to the window. It refuses a point that is outside the control or under the
+avatar, as `drag_between` does. It moves to the point, asks the display where
+the pointer is and presses once only if the display reports the point. The
+display's answer is recorded as a `pointer-at` event in `actions.jsonl`, with
+the expected and the seen point, and a different answer is a fixture error.
+`Terminal::cell` gives the rectangle of one terminal cell in the same pixels
+and `Terminal::click_cell` clicks the centre of that cell. `column` and `row`
+count from 0. The app does not publish its cell size, so the verifier derives
+it. It reads `cols` and `rows` from Core's `terminal.get` for the bound
+terminal and takes the terminal element's area from the latest frame. It
+removes the padding, which is 8 logical pixels times `window.scale`, from each
+edge. A cell is the inner width divided by `cols` and the inner height
+divided by `rows`, each rounded down, and the first cell starts inside the
+padding. A cell outside the grid is refused as a fixture error, never as a
+product failure. The derivation matched the drawn text at scale 2 with the
+app's font, where a cell is 16 by 36 device pixels. The check covers cells 0,
+6 and 7 of row 0 only. At another scale the cell may not be a whole number of
+device pixels. The derived width is then short of the app's by up to one pixel
+for each column, so a cell far from the left edge may be off. No run has
+tried another scale. Two observations support `click_cell`, and neither goes through the
+app's selection. The display reports the pointer at the cell's centre, which
+`pointer-at` records. And `drag-selects-text` checks the derivation on every
+run against the text that the terminal drew. Cell 0 must start where the
+drawn box starts, and a text of seven cells must end between cell 6 and
+cell 7. A mismatch ends the run `inconclusive`, blamed on the fixture.
+
+The app's own pointer-to-cell mapping does not agree with where it draws the
+cells. A drag inside cell 3 of a drawn line highlights and copies cell 2, and
+the same shift appears for cells 5 and 9. This is tracked as
+[Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196).
+Until it is fixed, a one-character selection through `click_cell` copies the
+neighbour on the left, so no committed case judges a selection by cell. The
+run that showed it stays in the evidence of the pull request that added
+`click_cell`. Do not read a selection from the app as a check of
+`click_cell`. A click-to-move case may share the offset, which no run has checked.
+
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
@@ -927,6 +1080,19 @@ screen's text. A terminal that has lost the keyboard fails the same way. After
 `drag-selects-text`, `terminal-input` types with `echoed` and `press` on the
 terminal that already holds the keyboard, because a click would start a new
 selection.
+
+The `workspace` journey judges the avatar's sharpness in `avatar-sharp`,
+`avatar-float` and `avatar-small`. `native/avatar.rs` reduces the shipped
+`idle.png` to the avatar's device size with Lanczos3 in premultiplied alpha, and
+separately with a two by two bilinear sample, which is what GPUI draws from an
+unreduced source. A case captures the avatar's region, takes the best fit over a few
+device pixels, and compares the fully opaque interior of the reference with the
+capture after fitting one gain and one base for the whole region, because the
+avatar is drawn dimmed over the terminal. The distance is the mean absolute
+difference of the fitted channels. A case passes when the distance is within
+`SHARP_TOLERANCE` and the Lanczos reference is nearer than the bilinear one. The
+verifier runs at scale 2, so the reduction is 3.9 and 9.8 times. A capture on
+another scale is not pixel matched, and the cases do not cover a fractional scale.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A second connection belongs to the verifier's clipboard
@@ -988,14 +1154,27 @@ copy and a paste inside the app prove nothing about X.
 
 Only the owner's thread waits on that connection, for events and for replies.
 The journey's thread sends it a command through a channel and wakes it with a
-ClientMessage to the owner's window. `own` takes CLIPBOARD and confirms the
-owner with `GetSelectionOwner`. The thread answers `TARGETS`, listing
-`TARGETS` and `UTF8_STRING`, and it answers `UTF8_STRING`. It refuses any
-other target with the property None. `read` converts CLIPBOARD to
-`UTF8_STRING` and gives the owner of the clipboard 4 s. It returns the text,
-`refused` or `unanswered`. `owner` returns the window that owns CLIPBOARD.
-The thread records each request that it served or refused, with the name of
-the target, the requestor and the time, and each `SelectionClear`.
+ClientMessage to the owner's window. Each command names a `Selection`, which
+is CLIPBOARD or PRIMARY, and the two are independent. `own` takes the
+selection and confirms the owner with `GetSelectionOwner`. `disown` gives it
+up, after it checks that the verifier owns it, and confirms that nobody owns
+it. The X server sends the verifier's own `SelectionClear` for the PRIMARY it
+gave up, so a `disown` appears in the record as a `cleared` exchange. The
+thread answers `TARGETS`, listing `TARGETS` and `UTF8_STRING`, and it
+answers `UTF8_STRING`, only for a selection that it owns. It refuses any
+other target, and any other selection, with the property None. `read`
+converts the selection to `UTF8_STRING` and gives its owner 4 s. It returns
+the text, `refused` or `unanswered`. A selection that nobody owns answers at
+once with `refused`, so a read of PRIMARY from a candidate that never takes
+PRIMARY returns `refused`. `owner` returns the window that owns the selection.
+`Clip::own`, `read` and `owner` act on CLIPBOARD, so the journeys that
+predate PRIMARY did not change. `Clip::own_in`, `read_in`, `owner_in` and
+`disown_in` take the `Selection`.
+The thread records each request that it served or refused, with the selection,
+the name of the target, the requestor and the time, and each `SelectionClear`
+with its selection. The selection is empty for an atom that is neither
+CLIPBOARD nor PRIMARY. The `own`, `read` and `disown` commands appear in
+`actions.jsonl` with the selection too.
 `Native::clipboard` writes that record to `actions.jsonl` as `clipboard`
 events when a journey reads it and again at cleanup. Every wait has a
 deadline. The owner's connection gives the display 5 s to answer, as the
@@ -1006,8 +1185,11 @@ Cleanup stops the clipboard owner first, before the viewer, Core and the
 display. It sends the thread a stop command, wakes it, joins it and then drops
 the connection. The first connection is still open then, so the display does
 not lose its last client. A thread that failed is a cleanup error. Before its
-first case, `terminal-input` owns a canary text and reads it back. A canary
-that does not come back ends the run `inconclusive`, blamed on the fixture.
+first case, `terminal-input` owns a canary text and reads it back, then does
+the same for PRIMARY and gives PRIMARY up. A canary that does not come back,
+or a PRIMARY that the verifier still owns afterwards, ends the run
+`inconclusive`, blamed on the fixture. Giving PRIMARY up leaves a read of
+PRIMARY after a drag to show only what the candidate took.
 
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply

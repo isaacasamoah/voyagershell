@@ -18,7 +18,8 @@ whether it created an initially absent workspace, allowing the default shell
 for a new workspace without treating persisted unbound data as a fresh start.
 A deliberate creation action can create its own content; a known refused start
 may be retried by the existing explicit Refresh interaction. An uncertain
-start is never retried automatically. These boundaries do not implement process
+start adopts the one terminal Core lists for its label, and is otherwise never
+retried. These boundaries do not implement process
 restoration, arbitrary Home content duplication or the separate floating-window
 lifecycle.
 

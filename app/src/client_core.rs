@@ -1,17 +1,32 @@
 use super::{Message, WorkspaceNotice, save};
 use crate::{
-    activity::Activity,
+    activity::{Activity, Event},
     core::{Core, Error},
     core_shapes::Terminal,
     workspace::Model,
 };
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+        mpsc::SyncSender,
+    },
     thread,
 };
 use voyager_contract::{
-    Context, CoreTerminalId, Layout, PlacementId, observation::WorkspaceObservation,
+    Context, CoreTerminalId, Layout, PlacementId, Request, Response,
+    observation::WorkspaceObservation,
 };
+
+pub(super) fn connect(session: &str, activity: Arc<Mutex<Activity>>) -> Result<Core, Error> {
+    Core::connect_activity(session, activity).map_err(|error| match error {
+        Error::Uncertain(message) => Error::Rejected {
+            kind: "disconnected".into(),
+            message: format!("Core is not connected, so nothing was sent: {message}"),
+        },
+        refused => refused,
+    })
+}
 
 pub(super) fn post<R: serde::de::DeserializeOwned + Send + 'static>(
     sender: &async_channel::Sender<Message>,
@@ -24,33 +39,187 @@ pub(super) fn post<R: serde::de::DeserializeOwned + Send + 'static>(
     });
 }
 
-pub(super) fn next_message(
-    waiting: Option<Message>,
-    receiver: &async_channel::Receiver<Message>,
+pub(super) fn reports(
     activity: &Arc<Mutex<Activity>>,
     layout: &Layout,
-    mut notice: WorkspaceNotice,
-    listener: Option<&async_channel::Sender<WorkspaceNotice>>,
-) -> Result<Message, async_channel::RecvError> {
-    let message = match waiting {
-        Some(message) => message,
-        None => receiver.recv_blocking()?,
+    exits: &mut Vec<CoreTerminalId>,
+    admit: impl Fn(&Event) -> bool,
+) -> bool {
+    let Ok(mut activity) = activity.lock() else {
+        return false;
     };
-    if let Ok(mut activity) = activity.lock() {
-        activity.bind(
-            layout
-                .vessels
-                .iter()
-                .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.as_str())),
-        );
-        if activity.take_dirty()
-            && let Some(listener) = listener
-        {
-            notice.activity_revision = activity.revision;
-            let _ = listener.try_send(notice);
+    activity.bind(
+        layout
+            .vessels
+            .iter()
+            .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.as_str())),
+    );
+    for event in activity.take() {
+        if admit(&event) {
+            for exited in activity.apply(event).into_iter().map(CoreTerminalId) {
+                if !exits.contains(&exited) {
+                    exits.push(exited);
+                }
+            }
         }
     }
-    Ok(message)
+    activity.take_dirty()
+}
+
+pub(super) struct Notices {
+    pub(super) listener: Option<async_channel::Sender<WorkspaceNotice>>,
+    pub(super) packages: Arc<AtomicU64>,
+    activity: Arc<Mutex<Activity>>,
+}
+
+impl Notices {
+    pub(super) fn new(activity: Arc<Mutex<Activity>>, packages: Arc<AtomicU64>) -> Self {
+        Self {
+            listener: None,
+            packages,
+            activity,
+        }
+    }
+
+    pub(super) fn current(&self, revision: u64, close_revision: u64) -> WorkspaceNotice {
+        WorkspaceNotice {
+            revision,
+            close_revision,
+            package_revision: self.packages.load(Ordering::Relaxed),
+            activity_revision: self
+                .activity
+                .lock()
+                .map(|activity| activity.revision)
+                .unwrap_or(0),
+        }
+    }
+
+    pub(super) fn send(&self, revision: u64, close_revision: u64) {
+        if let Some(listener) = &self.listener {
+            let _ = listener.try_send(self.current(revision, close_revision));
+        }
+    }
+}
+
+pub(super) fn close_exited(
+    core: &mut Core,
+    (layout, version, fresh): (&mut Arc<Layout>, &mut u64, &mut bool),
+    exited: &[CoreTerminalId],
+    live: &[CoreTerminalId],
+) {
+    let mut candidate = Model {
+        layout: (**layout).clone(),
+    };
+    let closed = match crate::terminal_lifecycle::close_exited(&mut candidate, exited, live) {
+        Ok(true) => commit(core, layout, version, fresh, candidate),
+        Ok(false) => Ok(()),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = closed {
+        eprintln!("{error}");
+    }
+}
+
+pub(super) fn relist(
+    core: &mut Result<Core, Error>,
+    sender: &async_channel::Sender<Message>,
+    request: &Request,
+    scope: Option<&Context>,
+    reply: &SyncSender<Response>,
+) -> Result<(), Error> {
+    let core = core.as_mut().map_err(|error| error.clone())?;
+    let (request, scope, reply) = (request.clone(), scope.cloned(), reply.clone());
+    post(sender, core.begin_terminal_list()?, move |listed| {
+        Message::Relisted {
+            request,
+            scope,
+            reply,
+            terminals: listed.map(|listed| listed.terminals),
+        }
+    });
+    Ok(())
+}
+
+pub(super) fn unlisted(error: Error) -> String {
+    format!("Cannot check live process directories: {error:?}")
+}
+
+pub(super) fn live_directories(
+    terminals: Result<Vec<Terminal>, Error>,
+) -> Result<Vec<String>, String> {
+    let mut live = Vec::new();
+    for terminal in terminals.map_err(unlisted)? {
+        if terminal.is_live() {
+            if terminal.cwd.is_empty() {
+                return Err(
+                    "A live terminal directory is unavailable; no worktree was removed".into(),
+                );
+            }
+            live.push(terminal.cwd);
+            let foreground = terminal.foreground.ok_or(
+                "A live foreground process directory is unavailable; no worktree was removed",
+            )?;
+            if foreground.cwd.is_empty() {
+                return Err(
+                    "A live foreground process directory is unavailable; no worktree was removed"
+                        .into(),
+                );
+            }
+            live.push(foreground.cwd);
+        }
+    }
+    Ok(live)
+}
+
+#[derive(Default)]
+pub(super) struct Subscription {
+    begun: bool,
+    waiting: Vec<async_channel::Sender<()>>,
+}
+
+impl Subscription {
+    pub(super) fn begin(
+        &mut self,
+        core: &mut Result<Core, Error>,
+        quitting: bool,
+        sender: &async_channel::Sender<Message>,
+    ) {
+        if self.begun {
+            return;
+        }
+        let sender = sender.clone();
+        self.begun = match core {
+            Ok(core) if !quitting => core.begin_activity(move || {
+                let _ = sender.send_blocking(Message::Subscribed);
+            }),
+            _ => false,
+        };
+        if !self.begun {
+            self.answer();
+        }
+    }
+
+    pub(super) fn refresh(
+        &mut self,
+        core: &mut Result<Core, Error>,
+        quitting: bool,
+        sender: &async_channel::Sender<Message>,
+        reply: async_channel::Sender<()>,
+    ) {
+        self.waiting.push(reply);
+        self.begin(core, quitting, sender);
+    }
+
+    pub(super) fn landed(&mut self) {
+        self.begun = false;
+        self.answer();
+    }
+
+    fn answer(&mut self) {
+        for reply in self.waiting.drain(..) {
+            let _ = reply.try_send(());
+        }
+    }
 }
 
 pub(super) struct Observer {
@@ -63,15 +232,10 @@ pub(super) struct Observer {
 #[derive(Default)]
 pub(super) struct Listing {
     begun: Option<u64>,
-    exit: bool,
     observers: Vec<Observer>,
 }
 
 impl Listing {
-    pub(super) fn exit(&mut self) {
-        self.exit = true;
-    }
-
     pub(super) fn observe(&mut self, observer: Observer) {
         self.observers.push(observer);
     }
@@ -84,7 +248,7 @@ impl Listing {
         fresh: bool,
         sender: &async_channel::Sender<Message>,
     ) {
-        if self.begun.is_some() || (!self.exit && self.observers.is_empty()) {
+        if self.begun.is_some() || self.observers.is_empty() {
             return;
         }
         match core.begin_terminal_list() {
@@ -93,7 +257,6 @@ impl Listing {
                     terminals: listed.map(|listed| listed.terminals),
                 });
                 self.begun = Some(version);
-                self.exit = false;
             }
             Err(_) => {
                 for observer in std::mem::take(&mut self.observers) {
@@ -173,7 +336,8 @@ pub(super) fn changed_layout(
             voyage.name = name;
         }
     }
-    let closed = crate::terminal_lifecycle::close_exited(&mut candidate, terminals, live)?;
+    let exited = crate::terminal_lifecycle::exited(terminals);
+    let closed = crate::terminal_lifecycle::close_exited(&mut candidate, &exited, live)?;
     Ok((closed || renamed).then_some(candidate))
 }
 
@@ -215,8 +379,8 @@ mod activity_notice_tests {
     use voyager_contract::Action;
 
     #[test]
-    fn reported_activity_full_mailbox_is_published_before_a_continuing_message() {
-        let (sender, receiver) = async_channel::bounded(8);
+    fn reports_behind_a_full_mailbox_are_applied_and_a_refused_report_changes_nothing() {
+        let (sender, _receiver) = async_channel::bounded(8);
         for _ in 0..8 {
             sender.try_send(Message::RefreshContentViews).unwrap();
         }
@@ -229,45 +393,63 @@ mod activity_notice_tests {
             })
             .unwrap();
         model.layout.vessels[0].backend = Some(CoreTerminalId("t1".into()));
+        let mut exits = Vec::new();
+        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
+        let event = |seq: u64, kind: &str, terminal: &str, data: serde_json::Value| json!({"jsonrpc":"2.0","method":"event","params":{"seq":seq,"type":kind,"terminal":terminal,"data":data}});
+        let done = json!({"status":{"state":"done"},"reported":true});
         {
             let mut facts = activity.lock().unwrap();
-            facts.bind(["t1"]);
             facts.begin();
             facts
                 .install(json!({"seq":0,"channel":7,"terminals":[]}))
                 .unwrap();
-            facts.take_dirty();
             facts.wake_with(Box::new(move || {
-                let _ = sender.try_send(Message::ActivityChanged);
+                let _ = sender.try_send(Message::CoreReported);
             }));
-            facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"done"},"reported":true}}})).unwrap();
+            facts.notification(event(1, "status", "t1", done)).unwrap();
         }
-        let (listener, changed) = async_channel::bounded(1);
-        let notice = WorkspaceNotice {
-            close_revision: 0,
-            revision: 55,
-            package_revision: 7,
-            activity_revision: 0,
-        };
-        assert!(matches!(
-            next_message(
-                None,
-                &receiver,
-                &activity,
-                &model.layout,
-                notice,
-                Some(&listener)
-            )
-            .unwrap(),
-            Message::RefreshContentViews
-        ));
-        let actual = changed.try_recv().unwrap();
-        assert_eq!((actual.revision, actual.package_revision), (55, 7));
-        assert!(actual.activity_revision > 0);
+        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
         assert_eq!(
             activity.lock().unwrap().get("t1").state,
             voyager_contract::activity::ActivityState::Done
         );
+        let exited = json!({"reason":"exited"});
+        for (seq, terminal) in [(2, "foreign"), (3, "t1")] {
+            let finished = event(seq, "finished", terminal, exited.clone());
+            activity.lock().unwrap().notification(finished).unwrap();
+        }
+        assert!(!reports(&activity, &model.layout, &mut exits, |_| false));
+        assert!(exits.is_empty());
+        let again = event(4, "finished", "t1", exited);
+        activity.lock().unwrap().notification(again).unwrap();
+        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
+        assert!(!reports(&activity, &model.layout, &mut exits, |_| true));
+        assert_eq!(exits, [CoreTerminalId("t1".into())]);
+    }
+
+    #[test]
+    fn live_directories_name_each_live_terminal_and_its_foreground_program() {
+        let terminal = |address: &str, state: &str, foreground: serde_json::Value| -> Terminal {
+            serde_json::from_value(json!({
+                "address":address, "labels":{}, "argv":["bash"], "cwd":"/tmp/shell",
+                "state":state, "created_ms":0, "screen":"exact", "cols":80, "rows":24,
+                "foreground":foreground
+            }))
+            .unwrap()
+        };
+        let running = json!({"name":"vim","cwd":"/tmp/project","pid":17,"argv":["vim"]});
+        let listed = vec![
+            terminal("t1", "live", running),
+            terminal("t2", "finished", serde_json::Value::Null),
+        ];
+        assert_eq!(
+            live_directories(Ok(listed)),
+            Ok(vec!["/tmp/shell".to_owned(), "/tmp/project".to_owned()])
+        );
+        let unseen = vec![terminal("t3", "live", serde_json::Value::Null)];
+        assert!(live_directories(Ok(unseen)).is_err_and(|error| error.contains("foreground")));
+        let unlisted = live_directories(Err(Error::Uncertain("no reply".into())));
+        assert!(unlisted.is_err_and(|error| error.starts_with("Cannot check live process")));
     }
 
     #[test]

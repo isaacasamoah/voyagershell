@@ -74,7 +74,7 @@ path back fails the check.
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
-Sync commit: `cb0acc6ed76ada81c20bfb5f392eccc5593a488e`
+Sync commit: `749314a2a81b2b74dfc33b59519c4b2dfe180fdf`
 
 `check.sh` reads the file column and the sync commit from this file. Move the sync
 commit forward only after you have read every diff in those files since the

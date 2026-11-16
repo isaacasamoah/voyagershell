@@ -40,7 +40,7 @@ impl Render for Pane {
                     return;
                 }
                 terminal_bounds.set(Some(gpui::Bounds::new(
-                    bounds.origin + gpui::point(px(8.), px(8.)),
+                    bounds.origin,
                     gpui::size(bounds.size.width - px(16.), bounds.size.height - px(16.)),
                 )));
                 let cols = super::font::fitted_columns(
@@ -299,11 +299,20 @@ impl Render for Pane {
                     cx.notify();
                 }
             }))
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(|pane, _: &gpui::MouseDownEvent, window, cx| {
+                    pane.focus.focus(window, cx);
+                    if let Err(error) = pane.paste_primary(cx) {
+                        pane.status = format!("Input: {error:#}");
+                    }
+                    cx.notify();
+                }),
+            )
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|pane, event: &gpui::MouseUpEvent, _, cx| {
-                    pane.selecting = false;
-                    if let Err(error) = pane.select(Select::Release, event.position) {
+                    if let Err(error) = pane.release(event.position, cx) {
                         pane.status = format!("Selection: {error:#}");
                     }
                     cx.notify();
@@ -313,8 +322,7 @@ impl Render for Pane {
                 MouseButton::Left,
                 cx.listener(|pane, event: &gpui::MouseUpEvent, _, cx| {
                     if pane.selecting {
-                        pane.selecting = false;
-                        if let Err(error) = pane.select(Select::Release, event.position) {
+                        if let Err(error) = pane.release(event.position, cx) {
                             pane.status = format!("Selection: {error:#}");
                         }
                         cx.notify();

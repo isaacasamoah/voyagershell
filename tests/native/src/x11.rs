@@ -2,7 +2,7 @@ mod clipboard;
 mod compositor;
 mod requests;
 
-pub use clipboard::{Clipboard, Exchange, Reading};
+pub use clipboard::{Clipboard, Exchange, Reading, Selection};
 pub use compositor::Compositor;
 pub use requests::{Observed, Request, Requests};
 
@@ -359,6 +359,11 @@ impl Display {
 
     pub fn under_pointer(&self) -> Result<Window> {
         Ok(self.connection.query_pointer(self.root)?.reply()?.child)
+    }
+
+    pub fn pointer_at(&self) -> Result<(i16, i16)> {
+        let pointer = self.connection.query_pointer(self.root)?.reply()?;
+        Ok((pointer.root_x, pointer.root_y))
     }
 
     pub fn move_to(&self, x: i16, y: i16) -> Result<()> {

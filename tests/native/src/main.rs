@@ -388,10 +388,7 @@ fn drive(plan: Plan) -> Result<i32> {
         plan.core_delay.as_ref().map(|delay| {
             (
                 "core-relay-ledger",
-                delay.audit(
-                    &fs::read_to_string(native.system.evidence.join("core-relay.jsonl"))
-                        .unwrap_or_default(),
-                ),
+                delay.audit_file(&native.system.evidence),
             )
         }),
         Some((
@@ -497,6 +494,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/arrangement.rs"),
     ),
     ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
+    (
+        "src/journey/core_events.rs",
+        include_bytes!("journey/core_events.rs"),
+    ),
     ("src/journey/input.rs", include_bytes!("journey/input.rs")),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
@@ -536,6 +537,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/scrolling.rs"),
     ),
     (
+        "src/journey/slow_list.rs",
+        include_bytes!("journey/slow_list.rs"),
+    ),
+    (
         "src/journey/slow_save.rs",
         include_bytes!("journey/slow_save.rs"),
     ),
@@ -548,11 +553,16 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/workspace.rs"),
     ),
     (
+        "src/journey/workspace/avatar.rs",
+        include_bytes!("journey/workspace/avatar.rs"),
+    ),
+    (
         "src/journey/workspace/model.rs",
         include_bytes!("journey/workspace/model.rs"),
     ),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/native.rs", include_bytes!("native.rs")),
+    ("src/native/avatar.rs", include_bytes!("native/avatar.rs")),
     ("src/native/input.rs", include_bytes!("native/input.rs")),
     (
         "src/native/terminal.rs",

@@ -1,12 +1,12 @@
 use super::chat::{ask, conclude, returned_text};
 use super::{Cases, Verdict, cases};
+use crate::core_relay::{Arm, Fault};
 use crate::inspection::Target;
 use crate::native::{Native, fleets, voyages};
 use crate::provider::{Provider, Script};
 use crate::x11::Key;
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 use serde_json::{Value, json};
-use std::fs;
 use std::time::Duration;
 use voyager_contract::inspection::Role;
 use voyager_contract::{FleetId, Layout, RenameTarget, VoyageId};
@@ -14,42 +14,50 @@ use voyager_contract::{FleetId, Layout, RenameTarget, VoyageId};
 cases! {
     RefusedReason => "refused-shows-reason",
     ToolRefused => "tool-refusal-carries-reason",
-    UncertainNotReplayed => "uncertain-not-replayed",
+    SaveStalled => "rename-stalled-applied",
+    SaveDropped => "rename-dropped-retried",
     CloseRefused => "close-refused-says-why",
-    CloseUncertain => "close-uncertain-not-retried",
+    StopDropped => "stop-dropped-retried",
+    StopHeld => "stop-held-closed",
+    RenameUncertain => "rename-uncertain-declines-second-enter",
+    CloseUnanswered => "close-unanswered-stops-nothing",
+    StartHeld => "start-held-adopted",
+    StartStalled => "start-stalled-not-repeated",
 }
 
 pub const CONTROL: Case = Case::RefusedReason;
-pub const HOLD: &str = "terminal.kill=21000";
+pub const HOLD: &str = "arm";
 
+const SAVE: &str = "doc.set";
+const START: &str = "terminal.run";
 const STOP: &str = "terminal.kill";
-const LEDGER: &str = "core-relay.jsonl";
+const LABEL: &str = "voyager-operation";
 
 const CORE_DEADLINE: Duration = Duration::from_secs(20);
+const HELD_MS: u64 = 21_000;
+const STALLED_MS: u64 = 22_000;
+const STALL: Duration = Duration::from_secs(24);
 const REFUSED: &str = "Refused.";
 const UNCERTAIN: &str = "Uncertain.";
 const REASON: &str = "A name must contain 1 to 128 bytes";
-const UNCONFIRMED: &str = "Core result unconfirmed";
 const CHANGED: &str = "Layout changed";
 const ASK_BEHIND: &str = "Rename the Fleet while I look at the close dialog";
 const BEHIND: &str = "Renamed Behind";
 const BEHIND_ITEM: &str = "stand-in-behind";
-const UNCONFIRMED_CLOSE: &str = "Shutdown is unconfirmed";
+const STALLED: &str = "Held Fleet";
 const DECLINED: &str = "Name change not confirmed";
-const RENAMED: &str = "Held Fleet";
+const INSPECT: &str = "Voyage remains open. Inspect before another close";
+const STALE: &str = "Inspect the workspace before making a change";
+const SILENT: Duration = Duration::from_secs(60);
+const SILENT_NAME: &str = "Silent Fleet";
+const NOT_REPEATED: &str = "so it was not repeated";
+const DROPPED: &str = "Retried Fleet";
 const TOO_LONG: usize = 129;
 const WORKSPACE: &str = "voyager_workspace";
 const ASK: &str = "Rename the Fleet to nothing";
 const ITEM: &str = "stand-in-refused";
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
-    let hold = native.system.held(STOP).unwrap_or_default();
-    ensure!(
-        hold > CORE_DEADLINE,
-        "The outcomes journey needs Core's {STOP} replies held past Core's {} s deadline, and this run holds them for {} ms",
-        CORE_DEADLINE.as_secs(),
-        hold.as_millis()
-    );
     let start = saved(native)?;
     let voyage = voyages(&start)
         .next()
@@ -135,88 +143,74 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("played", &played)
     })?;
 
-    cases.check(native, Case::UncertainNotReplayed, |native| {
-        let subject = RenameTarget::Fleet { id: fleet.clone() };
-        let (name, editor) = (Target::name(&subject), Target::editor(&subject));
-        native.double_click(&name)?;
-        native.observe("the Fleet's name editor", |seen| {
-            (seen.shows(&editor) && !seen.shows(&name)).then_some(())
-        })?;
-        native.type_text(RENAMED)?;
-        let (version, _) = native.settle(
-            "the editor holding the new name over a saved layout at rest",
-            |seen| {
-                seen.label(&editor)
-                    .map(|draft| (seen.version, draft == RENAMED))
-            },
-            |(_, typed)| *typed,
-        )?;
-        let (status, again) = native.with_core_paused(|native| {
+    cases.check(native, Case::SaveStalled, |native| {
+        let typed = type_name(native, &fleet, STALLED)?;
+        let labels = native.with_core_paused(|native| {
             native.press(Key::Return)?;
-            let status = native.drawn_label(
-                &Target::STATUS,
-                CORE_DEADLINE,
-                "an uncertain result in the status line while Core is paused",
-                |label| label.starts_with(UNCERTAIN),
-            )?;
-            native.keep_window("uncertain")?;
-            native.press(Key::Return)?;
-            let again = native.screen_status(
-                "the canvas declining to send the same name again",
-                |label| !label.starts_with(UNCERTAIN),
-            )?;
-            Ok((status, again))
+            native.keep_window("stalled-paused")?;
+            native.drawn_labels(&Target::STATUS, STALL)
         })?;
-        let landed = native.watch(|native| {
-            Ok(native.document()?.and_then(|(version, layout)| {
-                (fleet_name(&layout, &fleet).as_deref() == Some(RENAMED)).then_some(version)
-            }))
-        })?;
-        native.press(Key::Escape)?;
-        native.click(&Target::REFRESH)?;
-        let drawn = native.settle(
-            "the Fleet drawn under its saved name after Refresh",
-            |seen| {
-                let labels: Vec<&str> = seen
-                    .frame
-                    .elements
-                    .iter()
-                    .filter(|element| element.role == Role::FleetName && element.key == fleet.0)
-                    .filter_map(|element| element.label.as_deref())
-                    .collect();
-                Some((seen.version, labels == [RENAMED]))
-            },
-            |(_, drawn)| *drawn,
-        );
-        native.keep_window("uncertain-after-refresh")?;
+        let (drawn, after) = renamed(native, &fleet, STALLED)?;
+        native.keep_window("stalled-applied")?;
         Verdict::new()
             .expect(
-                "the status line showed the owner's uncertain answer while Core was paused",
-                status.contains(UNCONFIRMED),
+                "the status line never said Uncertain while Core was paused past the canvas's wait",
+                !said_uncertain(&labels),
             )
             .expect(
-                "a second Enter on the same name was declined and not sent",
-                again.contains(DECLINED),
+                "the rename ended as applied without Refresh: the editor closed and the Fleet is drawn under the new name",
+                drawn,
             )
             .expect(
-                "Core saved the name once after it resumed",
-                landed == Some(version + 1),
+                "Core saved the name once and its document has not changed again",
+                after == typed + 1,
+            )
+            .observed("statusLabels", &labels)?
+            .observed("versions", json!({"before":typed,"after":after}))
+    })?;
+
+    cases.check(native, Case::SaveDropped, |native| {
+        let typed = type_name(native, &fleet, DROPPED)?;
+        let arm = native.system.arm_core(SAVE, Fault::Drop)?;
+        native.press(Key::Return)?;
+        let labels = native.drawn_labels(&Target::STATUS, CORE_DEADLINE)?;
+        let (drawn, after) = renamed(native, &fleet, DROPPED)?;
+        let spent = spent(native, &arm)?;
+        Verdict::new()
+            .expect(
+                "the status line never said Uncertain",
+                !said_uncertain(&labels),
             )
             .expect(
-                "after Refresh the canvas draws the Fleet once under the saved name and Core's document has not changed again",
-                drawn.as_ref().is_ok_and(|drawn| *drawn == (version + 1, true)),
+                "the rename ended as applied: the editor closed and the Fleet is drawn under the new name",
+                drawn,
             )
-            .observed("status", &status)?
-            .observed("secondEnter", &again)?
-            .observed("versions", json!({"before":version,"landed":landed,"afterRefresh":drawn.ok().map(|drawn| drawn.0)}))
+            .expect(
+                "the one retry saved the name once",
+                after == typed + 1,
+            )
+            .observed("statusLabels", &labels)?
+            .observed("withheld", &spent)?
+            .observed("versions", json!({"before":typed,"after":after}))
     })?;
 
     let message = Target::voyage_close_status(&voyage);
     cases.check(native, Case::CloseRefused, |native| {
         let turn = ask(native, &provider, ASK_BEHIND)?;
-        native.observe("the started turn drawn in the chat", |seen| {
-            seen.shows(&Target::CHAT_STATUS).then_some(())
-        })?;
+        native.settle(
+            "the started turn and its message drawn in the chat",
+            |seen| {
+                let asked = seen.frame.elements.iter().any(|element| {
+                    element.role == Role::ChatMessage
+                        && element
+                            .label
+                            .as_deref()
+                            .is_some_and(|label| label.contains(ASK_BEHIND))
+                });
+                Some(seen.shows(&Target::CHAT_STATUS) && asked)
+            },
+            |drawn| *drawn,
+        )?;
         open_dialog(native, &voyage)?;
         let live = native.live_terminals()?;
         let played = provider.play(&turn, &rename(BEHIND)?)?;
@@ -262,38 +256,384 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("atRest", json!({"open":open,"message":kept}))
     })?;
 
-    cases.check(native, Case::CloseUncertain, |native| {
-        open_dialog(native, &voyage)?;
-        native.click(&Target::voyage_close_confirm(&voyage))?;
-        let status = native.drawn_label(
-            &message,
-            CORE_DEADLINE,
-            "an uncertain result in the close dialog while the stop's reply is held",
-            |label| label.starts_with(UNCERTAIN),
-        )?;
-        native.keep_window("close-uncertain")?;
-        let stops = native.watch(|native| {
-            let held = held_stops(native)?;
-            Ok((!held.is_empty()).then_some(held))
+    for (case, fault) in [
+        (Case::StopDropped, Fault::Drop),
+        (Case::StopHeld, Fault::Hold { ms: HELD_MS }),
+    ] {
+        cases.check(native, case, |native| {
+            if !is_open(&saved(native)?, &voyage) {
+                reopen(native, &voyage)?;
+            }
+            let programs = programs(native, &voyage)?;
+            open_dialog(native, &voyage)?;
+            let arm = native.system.arm_core(STOP, fault)?;
+            native.click(&Target::voyage_close_confirm(&voyage))?;
+            native.keep_window(&format!("{}-confirmed", super::Case::name(case)))?;
+            let labels = native.drawn_labels(&message, CORE_DEADLINE)?;
+            let closed = native.settle(
+                "the Voyage closed",
+                |seen| Some(!is_open(seen.document, &voyage)),
+                |closed| *closed,
+            );
+            native.keep_window(&format!("{}-closed", super::Case::name(case)))?;
+            let live = native.live_terminals()?;
+            let spent = spent(native, &arm)?;
+            Verdict::new()
+                .expect(
+                    "the close dialog never said Uncertain",
+                    !said_uncertain(&labels),
+                )
+                .expect(
+                    "the Voyage closed",
+                    closed.as_ref().is_ok_and(|closed| *closed),
+                )
+                .expect(
+                    "none of the Voyage's programs still runs",
+                    !programs.is_empty() && programs.iter().all(|program| !live.contains(program)),
+                )
+                .observed("dialogLabels", &labels)?
+                .observed("fault", &spent)?
+                .observed("programs", json!({"stopped":programs,"live":live}))
         })?;
-        let (open, offered, kept) = at_rest(native, &voyage, &message)?;
+    }
+    cases.check(native, Case::RenameUncertain, |native| {
+        if !is_open(&saved(native)?, &voyage) {
+            reopen(native, &voyage)?;
+        }
+        let typed = type_name(native, &fleet, SILENT_NAME)?;
+        let (status, again) = native.with_core_paused(|native| {
+            native.press(Key::Return)?;
+            let status = native.drawn_label(
+                &Target::STATUS,
+                SILENT,
+                "an uncertain result in the status line while Core stays paused",
+                |label| label.starts_with(UNCERTAIN),
+            )?;
+            native.keep_window("rename-uncertain")?;
+            native.press(Key::Return)?;
+            let again = native.screen_status(
+                "the canvas declining to send the same name again",
+                |label| !label.starts_with(UNCERTAIN),
+            )?;
+            Ok((status, again))
+        })?;
+        let landed = native.watch(|native| {
+            Ok(native.document()?.and_then(|(version, layout)| {
+                (fleet_name(&layout, &fleet).as_deref() == Some(SILENT_NAME)).then_some(version)
+            }))
+        })?;
+        native.press(Key::Escape)?;
+        native.click(&Target::REFRESH)?;
+        let (settled, _) = renamed(native, &fleet, SILENT_NAME)?;
         Verdict::new()
             .expect(
-                "the close dialog says Uncertain and that the shutdown is unconfirmed",
-                status.contains(UNCONFIRMED_CLOSE),
+                "the status line said Uncertain while Core stayed silent past the owner's read",
+                status.starts_with(UNCERTAIN),
             )
             .expect(
-                "after the held reply is released the Voyage is still open, so nothing closed it again",
-                open,
+                "a second Enter on the same name was declined and not sent",
+                again.contains(DECLINED),
             )
             .expect(
-                "the dialog keeps the uncertain result and offers no second confirmation",
-                !offered && kept.as_deref().is_some_and(|kept| kept.starts_with(UNCERTAIN)),
+                "after Refresh the canvas draws the Fleet under the saved name",
+                settled,
+            )
+            .expect(
+                "Core saved the name once after it resumed",
+                landed == Some(typed + 1),
             )
             .observed("status", &status)?
-            .observed("heldStops", &stops)?
-            .observed("afterRelease", json!({"open":open,"confirmOffered":offered,"message":kept}))
+            .observed("secondEnter", &again)?
+            .observed("versions", json!({"before":typed,"landed":landed}))
+    })?;
+
+    cases.check(native, Case::CloseUnanswered, |native| {
+        if !is_open(&saved(native)?, &voyage) {
+            reopen(native, &voyage)?;
+        }
+        let before = programs(native, &voyage)?;
+        open_dialog(native, &voyage)?;
+        let arm = native.system.arm_core(STOP, Fault::Drop)?;
+        let status = native.with_core_paused(|native| {
+            native.click(&Target::voyage_close_confirm(&voyage))?;
+            let status = native.drawn_label(
+                &message,
+                SILENT,
+                "a refusal in the close dialog while Core stays paused",
+                |label| label.contains(INSPECT) || label.contains(STALE),
+            )?;
+            native.keep_window("close-unanswered")?;
+            Ok(status)
+        })?;
+        let (open, _, kept) = at_rest(native, &voyage, &message)?;
+        let after = programs(native, &voyage)?;
+        let stopped = native.system.arm_spent(&arm)?;
+        native.click(&Target::voyage_close_cancel(&voyage))?;
+        native.observe("the close dialog dismissed", |seen| {
+            (!seen.shows(&Target::voyage_close_cancel(&voyage))).then_some(())
+        })?;
+        Verdict::new()
+            .expect(
+                "no terminal.kill reached Core while the close could not inspect the workspace",
+                stopped.is_none(),
+            )
+            .expect("the Voyage is still open after Core resumed", open)
+            .expect(
+                "every program of the Voyage still runs",
+                !before.is_empty() && after == before,
+            )
+            .observed("status", &status)?
+            .observed("atRest", json!({"open":open,"message":kept}))?
+            .observed("programs", json!({"before":before,"after":after}))?
+            .observed("stop", &stopped)
+    })?;
+
+    cases.check(native, Case::StartHeld, |native| {
+        let (born, arm) = create_fleet(native, &voyage, Fault::Hold { ms: HELD_MS })?;
+        let labels = native.drawn_labels(&Target::STATUS, CORE_DEADLINE)?;
+        let (bound, drawn) = started(native, &born)?;
+        let same = match operation(native, bound.as_deref())? {
+            Some(operation) => labelled(native, &operation)?,
+            None => Vec::new(),
+        };
+        let spent = spent(native, &arm)?;
+        Verdict::new()
+            .expect(
+                "the status line never said Uncertain",
+                !said_uncertain(&labels),
+            )
+            .expect(
+                "the new Fleet's terminal is bound and drawn",
+                bound.is_some() && drawn,
+            )
+            .expect(
+                "Core holds exactly one terminal for the start",
+                same.len() == 1,
+            )
+            .observed("statusLabels", &labels)?
+            .observed("fault", &spent)?
+            .observed("startTerminals", &same)
+    })?;
+
+    cases.check(native, Case::StartStalled, |native| {
+        let (born, arm) = create_fleet(native, &voyage, Fault::Stall { ms: STALLED_MS })?;
+        native.drawn_labels(&Target::STATUS, CORE_DEADLINE)?;
+        let spent = spent(native, &arm)?;
+        let status = native
+            .screen_status("the start's unconfirmed answer in the status line", |label| {
+                label.contains(NOT_REPEATED)
+            })
+            .ok();
+        let marker = pending_start(&saved(native)?, &born);
+        let same = match &marker {
+            Some(operation) => labelled(native, operation)?,
+            None => Vec::new(),
+        };
+        Verdict::new()
+            .expect(
+                "the start whose list could not prove it absent keeps its marker and was not repeated",
+                marker.is_some(),
+            )
+            .expect(
+                "Core holds exactly one terminal for the start",
+                same.len() == 1,
+            )
+            .expect(
+                "the status line says the start was not repeated",
+                status.is_some(),
+            )
+            .observed("fault", &spent)?
+            .observed("status", &status)?
+            .observed("marker", &marker)?
+            .observed("startTerminals", &same)
+    })?;
+
+    Ok(())
+}
+
+fn type_name(native: &Native, fleet: &FleetId, typed: &str) -> Result<u64> {
+    let subject = RenameTarget::Fleet { id: fleet.clone() };
+    let (name, editor) = (Target::name(&subject), Target::editor(&subject));
+    native.double_click(&name)?;
+    native.observe("the Fleet's name editor", |seen| {
+        (seen.shows(&editor) && !seen.shows(&name)).then_some(())
+    })?;
+    native.type_text(typed)?;
+    let (version, _) = native.settle(
+        "the editor holding the new name over a saved layout at rest",
+        |seen| {
+            seen.label(&editor)
+                .map(|draft| (seen.version, draft == typed))
+        },
+        |(_, held)| *held,
+    )?;
+    Ok(version)
+}
+
+fn renamed(native: &Native, fleet: &FleetId, typed: &str) -> Result<(bool, u64)> {
+    let subject = RenameTarget::Fleet { id: fleet.clone() };
+    let (name, editor) = (Target::name(&subject), Target::editor(&subject));
+    let drawn = native
+        .settle(
+            "the Fleet drawn under its new name with the editor closed",
+            |seen| {
+                let labels: Vec<&str> = seen
+                    .frame
+                    .elements
+                    .iter()
+                    .filter(|element| element.role == Role::FleetName && element.key == fleet.0)
+                    .filter_map(|element| element.label.as_deref())
+                    .collect();
+                Some(!seen.shows(&editor) && seen.shows(&name) && labels == [typed])
+            },
+            |drawn| *drawn,
+        )
+        .unwrap_or(false);
+    let (version, layout) = native
+        .document()?
+        .context("The layout document is missing")?;
+    let saved = fleet_name(&layout, fleet).as_deref() == Some(typed);
+    Ok((drawn && saved, version))
+}
+
+fn said_uncertain(labels: &[String]) -> bool {
+    labels.iter().any(|label| label.starts_with(UNCERTAIN))
+}
+
+fn spent(native: &Native, arm: &Arm) -> Result<Value> {
+    let applied = native.watch(|native| native.system.arm_spent(arm))?;
+    applied.with_context(|| {
+        format!(
+            "The Core relay never applied arm {} to {}, so this case did not reach the state it judges",
+            arm.id, arm.method
+        )
     })
+}
+
+fn create_fleet(native: &Native, voyage: &VoyageId, fault: Fault) -> Result<(FleetId, Arm)> {
+    if !is_open(&saved(native)?, voyage) {
+        reopen(native, voyage)?;
+    }
+    let known: Vec<FleetId> = fleets(&saved(native)?)
+        .map(|fleet| fleet.id.clone())
+        .collect();
+    native.click(&Target::create_fleet(voyage))?;
+    let arm = native.system.arm_core(START, fault)?;
+    native.click(&Target::worker("terminal"))?;
+    let born = native
+        .watch(|native| {
+            Ok(fleets(&saved(native)?)
+                .find(|fleet| !known.contains(&fleet.id))
+                .map(|fleet| fleet.id.clone()))
+        })?
+        .context("Core never held the new Fleet")?;
+    Ok((born, arm))
+}
+
+fn started(native: &Native, fleet: &FleetId) -> Result<(Option<String>, bool)> {
+    native
+        .settle(
+            "the new Fleet's terminal bound and drawn",
+            |seen| {
+                let placement = fleets(seen.document)
+                    .find(|item| &item.id == fleet)?
+                    .placements
+                    .first()?;
+                let vessel = seen
+                    .document
+                    .vessels
+                    .iter()
+                    .find(|vessel| vessel.id == placement.vessel)?;
+                let bound = vessel
+                    .backend
+                    .as_ref()
+                    .filter(|_| vessel.start_pending.is_none())
+                    .map(|backend| backend.0.clone());
+                Some((bound, seen.shows(&Target::terminal(&placement.id))))
+            },
+            |(bound, drawn)| bound.is_some() && *drawn,
+        )
+        .or_else(|_| Ok((None, false)))
+}
+
+fn operation(native: &Native, bound: Option<&str>) -> Result<Option<String>> {
+    let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+    Ok(listed["terminals"]
+        .as_array()
+        .context("Core listed no terminals")?
+        .iter()
+        .find(|terminal| bound.is_some() && terminal["address"].as_str() == bound)
+        .and_then(|terminal| terminal["labels"][LABEL].as_str().map(str::to_owned)))
+}
+
+fn labelled(native: &Native, operation: &str) -> Result<Vec<Value>> {
+    let listed = native.system.watch(
+        "terminal.list",
+        json!({"all":true,"labels":{LABEL:operation}}),
+    )?;
+    Ok(listed["terminals"]
+        .as_array()
+        .context("Core listed no terminals")?
+        .clone())
+}
+
+fn pending_start(layout: &Layout, fleet: &FleetId) -> Option<String> {
+    let placement = fleets(layout)
+        .find(|item| &item.id == fleet)?
+        .placements
+        .first()?;
+    layout
+        .vessels
+        .iter()
+        .find(|vessel| vessel.id == placement.vessel)?
+        .start_pending
+        .clone()
+}
+
+fn programs(native: &Native, voyage: &VoyageId) -> Result<Vec<String>> {
+    let layout = saved(native)?;
+    let live = native.live_terminals()?;
+    let placed: Vec<_> = voyages(&layout)
+        .filter(|item| &item.id == voyage)
+        .flat_map(|item| item.fleets.iter().flat_map(|fleet| fleet.placements.iter()))
+        .map(|placement| placement.vessel.clone())
+        .collect();
+    Ok(layout
+        .vessels
+        .iter()
+        .filter(|vessel| placed.contains(&vessel.id))
+        .filter_map(|vessel| vessel.backend.as_ref().map(|backend| backend.0.clone()))
+        .filter(|backend| live.contains(backend))
+        .collect())
+}
+
+fn reopen(native: &Native, voyage: &VoyageId) -> Result<()> {
+    let entry = Target::reopen_voyage(voyage);
+    let offered = native.observe("the workspace with the sidebar drawn", |seen| {
+        Some(seen.shows(&entry))
+    })?;
+    if !offered {
+        native.click(&Target::RECENT_VOYAGES)?;
+    }
+    native.click(&entry)?;
+    native.settle(
+        "the reopened Voyage with a live program in each terminal",
+        |seen| Some(is_open(seen.document, voyage)),
+        |open| *open,
+    )?;
+    native
+        .watch(|native| {
+            let live = programs(native, voyage)?;
+            let mut placed = !live.is_empty();
+            for program in &live {
+                let seen = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":program}))?;
+                placed &= seen["foreground"]["cwd"].is_string();
+            }
+            Ok(placed.then_some(()))
+        })?
+        .context("The reopened Voyage has no live program in a known folder")
 }
 
 fn open_dialog(native: &Native, voyage: &VoyageId) -> Result<()> {
@@ -327,15 +667,6 @@ fn at_rest(
         },
         |_| true,
     )
-}
-
-fn held_stops(native: &Native) -> Result<Vec<Value>> {
-    let ledger = fs::read_to_string(native.system.evidence.join(LEDGER)).unwrap_or_default();
-    Ok(ledger
-        .lines()
-        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter(|line| line["method"] == STOP)
-        .collect())
 }
 
 fn saved(native: &Native) -> Result<Layout> {

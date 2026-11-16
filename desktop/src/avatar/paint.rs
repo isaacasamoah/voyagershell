@@ -36,14 +36,26 @@ fn layer(pack: Arc<Compiled>, pose: usize, opacity: f32, diameter: f32) -> AnyEl
                             px(drawing.image_size[1] as f32 * scale),
                         ),
                     );
-                    if let Err(error) = window.paint_image(
-                        clip,
-                        image,
-                        Corners::default(),
-                        Arc::clone(&drawing.image),
-                        0,
-                        false,
-                    ) {
+                    let device = |length: f32| (length * window.scale_factor()).round() as u32;
+                    let sharp = pack.sharp.copy(
+                        &drawing.image,
+                        [
+                            device(drawing.image_size[0] as f32 * scale),
+                            device(drawing.image_size[1] as f32 * scale),
+                        ],
+                        window.window_handle().window_id(),
+                        window.scale_factor(),
+                    );
+                    if !sharp.retired.is_empty() {
+                        window.on_next_frame(move |window, cx| {
+                            for image in sharp.retired {
+                                cx.drop_image(image, Some(window));
+                            }
+                        });
+                    }
+                    if let Err(error) =
+                        window.paint_image(clip, image, Corners::default(), sharp.image, 0, false)
+                    {
                         eprintln!("Avatar image paint failed: {error}");
                     }
                 },

@@ -1,6 +1,8 @@
+mod avatar;
 mod input;
 mod terminal;
 
+pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -452,6 +454,10 @@ impl Native {
         )
     }
 
+    pub fn look_at(&self, region: Geometry) -> Result<Pixels> {
+        self.x11()?.capture(self.window, region)
+    }
+
     pub fn watch<T>(&self, mut read: impl FnMut(&Self) -> Result<Option<T>>) -> Result<Option<T>> {
         poll(PATIENCE, GLANCE, true, || read(self))
     }
@@ -797,6 +803,28 @@ impl Native {
                 .filter(|label| wanted(label))
                 .map(str::to_owned)
         })
+    }
+
+    pub fn drawn_labels(&self, target: &Target, during: Duration) -> Result<Vec<String>> {
+        let x11 = self.x11()?;
+        let path = self.inspection();
+        let mut seen: Vec<String> = Vec::new();
+        poll(during, Duration::from_millis(10), true, || {
+            let window = x11.geometry(self.window)?;
+            if let Some(label) = inspection::read(&path)?
+                .filter(|frame| drawn_for(frame, window))
+                .and_then(|frame| {
+                    target
+                        .find(&frame)
+                        .and_then(|element| element.label.clone())
+                })
+                && seen.last() != Some(&label)
+            {
+                seen.push(label);
+            }
+            Ok(None::<()>)
+        })?;
+        Ok(seen)
     }
 
     pub fn with_core_paused<T>(&self, during: impl FnOnce(&Self) -> Result<T>) -> Result<T> {

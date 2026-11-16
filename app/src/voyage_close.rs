@@ -1,6 +1,7 @@
 use crate::{
     client::{CallError, Client},
-    core::{Core, Error},
+    core::Error,
+    core_shapes::Terminal,
     core_state::TerminalState,
     panels,
 };
@@ -152,7 +153,7 @@ impl Closing {
         version: u64,
         id: &VoyageId,
         request: &str,
-        core: &mut Core,
+        terminals: &[Terminal],
     ) -> Result<(), Error> {
         if self
             .plan
@@ -187,7 +188,6 @@ impl Closing {
             })
             .transpose()
             .map_err(|error| refused(&format!("Could not inspect worktree changes: {error:?}")))?;
-        let terminals = core.terminal_list()?;
         let placements: Vec<_> = voyage
             .fleets
             .iter()

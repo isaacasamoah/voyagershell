@@ -119,8 +119,8 @@ revision. The native canvas keeps its single subscription and the script consume
 the notice before queuing a coalesced read. A document notice already reflected
 in the view does not trigger another read or prepare. Automatic notice reads still
 prepare newly authorized content, but do not clear and retry known-refused
-terminal openings. Deliberate Refresh retains that retry. Uncertain starts are
-never replayed. The prior revision() read remains available for personal canvas
+terminal openings. Deliberate Refresh retains that retry. A start that stays
+uncertain after the owner's settle is never repeated. The prior revision() read remains available for personal canvas
 source; new composition uses notice().
 
 The filesystem/availability and notice changes have source tests and a separately

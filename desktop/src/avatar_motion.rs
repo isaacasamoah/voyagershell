@@ -231,6 +231,7 @@ mod tests {
                     size: [2, 2],
                     anchor: [1., 1.],
                 },
+                sharp: Default::default(),
                 poses: vec![drawing, shifted],
                 clips: vec![Timeline {
                     from: 0,

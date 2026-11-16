@@ -1,12 +1,12 @@
-use crate::core_relay::CoreDelay;
+use crate::core_relay::{self, Arm, CoreDelay, Fault};
 use crate::sandbox;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -321,6 +321,41 @@ impl System {
         self.core_delay = delay.clone();
     }
 
+    pub fn arm_core(&self, method: &str, fault: Fault) -> Result<Arm> {
+        ensure!(
+            self.core_delay.armed(),
+            "This journey did not declare an armed Core relay"
+        );
+        let arms = self.evidence.join(core_relay::ARMS);
+        let id = std::fs::read_to_string(&arms)
+            .map(|text| text.lines().count() as u64)
+            .unwrap_or(0)
+            + 1;
+        let arm = Arm {
+            id,
+            method: method.into(),
+            fault,
+        };
+        let text = serde_json::to_string(&arm)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(&arms)?;
+        writeln!(file, "{text}")?;
+        file.sync_data()?;
+        let staged = self.evidence.join(format!("{}.staged", core_relay::ARM));
+        std::fs::write(&staged, &text)?;
+        std::fs::rename(&staged, self.evidence.join(core_relay::ARM))?;
+        self.record(json!({"event":"Core-armed","arm":arm}))?;
+        Ok(arm)
+    }
+
+    pub fn arm_spent(&self, arm: &Arm) -> Result<Option<Value>> {
+        let ledger =
+            std::fs::read_to_string(self.evidence.join(core_relay::LEDGER)).unwrap_or_default();
+        Ok(ledger
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|line| line["arm"].as_u64() == Some(arm.id)))
+    }
+
     pub fn vet_core_delay(&self) -> Result<()> {
         if self.core_delay.is_empty() {
             return Ok(());
@@ -503,17 +538,32 @@ impl System {
     }
 
     fn exchange(&self, request: &Value) -> Result<Value> {
-        let mut stream = UnixStream::connect(self.socket())?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-        writeln!(stream, "{request}")?;
-        let mut bytes = Vec::new();
-        BufReader::new(stream)
-            .take(8 * 1024 * 1024)
-            .read_until(b'\n', &mut bytes)?;
-        ensure!(bytes.ends_with(b"\n"), "Incomplete or oversized Core reply");
-        Ok(serde_json::from_slice(&bytes)?)
+        exchange_over(&self.socket(), request, CORE_PATIENCE)
     }
+}
+
+const CORE_PATIENCE: Duration = Duration::from_secs(5);
+
+fn exchange_over(socket: &Path, request: &Value, patience: Duration) -> Result<Value> {
+    let method = request["method"].as_str().unwrap_or_default();
+    let stalled = |error: io::Error, verb: &str| match error.kind() {
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => anyhow!(
+            "Core did not {verb} {method} within {} ms on the verifier's own connection ({error})",
+            patience.as_millis()
+        ),
+        _ => anyhow::Error::from(error),
+    };
+    let mut stream = UnixStream::connect(socket)?;
+    stream.set_read_timeout(Some(patience))?;
+    stream.set_write_timeout(Some(patience))?;
+    writeln!(stream, "{request}").map_err(|error| stalled(error, "accept"))?;
+    let mut bytes = Vec::new();
+    BufReader::new(stream)
+        .take(8 * 1024 * 1024)
+        .read_until(b'\n', &mut bytes)
+        .map_err(|error| stalled(error, "answer"))?;
+    ensure!(bytes.ends_with(b"\n"), "Incomplete or oversized Core reply");
+    Ok(serde_json::from_slice(&bytes)?)
 }
 
 fn answer(request: &Value, reply: Value) -> Result<Value> {
@@ -635,6 +685,54 @@ pub(crate) mod tests {
     use crate::scratch::Scratch;
     use std::cell::Cell;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn a_core_that_stops_answering_is_named_in_the_error() {
+        let folder = Scratch::new("core-timeout").expect("a scratch folder");
+        let socket = folder.path().join("core.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).expect("a listener");
+        let silent = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("a connection");
+            std::thread::sleep(Duration::from_millis(600));
+            drop(stream);
+        });
+        let error = exchange_over(
+            &socket,
+            &json!({"jsonrpc":"2.0","id":1,"method":"doc.get","params":{}}),
+            Duration::from_millis(100),
+        )
+        .expect_err("a silent Core");
+        let text = format!("{error:#}");
+        assert!(
+            text.starts_with("Core did not answer doc.get within 100 ms"),
+            "{text}"
+        );
+        silent.join().expect("the listener thread");
+    }
+
+    #[test]
+    fn a_core_that_stops_reading_is_named_in_the_error() {
+        let folder = Scratch::new("core-timeout").expect("a scratch folder");
+        let socket = folder.path().join("core.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).expect("a listener");
+        let deaf = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("a connection");
+            std::thread::sleep(Duration::from_millis(800));
+            drop(stream);
+        });
+        let error = exchange_over(
+            &socket,
+            &json!({"jsonrpc":"2.0","id":1,"method":"doc.set","params":{"text":"x".repeat(16 * 1024 * 1024)}}),
+            Duration::from_millis(100),
+        )
+        .expect_err("a Core that does not read");
+        let text = format!("{error:#}");
+        assert!(
+            text.starts_with("Core did not accept doc.set within 100 ms"),
+            "{text}"
+        );
+        deaf.join().expect("the listener thread");
+    }
 
     #[test]
     fn a_value_holds_only_through_unbroken_glances_of_the_quiet_window() {

@@ -108,6 +108,7 @@ roles! {
     WindowClose => "window-close",
     WindowDrag => "window-drag",
     FleetDrop => "fleet-drop",
+    AgentsRow => "agents-row",
 }
 
 #[cfg(test)]

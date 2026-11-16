@@ -23,9 +23,15 @@ use voyager_contract::{
 mod core_calls;
 #[path = "client_reply.rs"]
 mod reply;
-use crate::front_door::{Admission, Envelope, FrontDoor, Kind, Outcome, WAITING};
-use crate::layout_store::{begin_save, carry_notice, load, save};
-use core_calls::{Listing, Observer, changed_layout, commit, live, next_message, post};
+#[path = "client_terminal.rs"]
+mod terminal_start;
+use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING};
+use crate::layout_store::{begin_save, carry_notice, load, rejected, save, settle_save};
+use core_calls::{
+    Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
+    live_directories, post, relist, reports, unlisted,
+};
+use terminal_start::{CreatedTerminal, require_finished};
 
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
@@ -52,10 +58,11 @@ enum Message {
         reply: SyncSender<Response>,
         result: Result<(), Error>,
     },
-    ActivityChanged,
+    CoreReported,
     RefreshActivity {
         reply: async_channel::Sender<()>,
     },
+    Subscribed,
     Quit {
         operation: Lifecycle,
         reply: async_channel::Sender<Result<(), Error>>,
@@ -111,8 +118,11 @@ enum Message {
         scope: Option<Context>,
         request: voyager_contract::worktree::Request,
         source_directory: String,
-        checkout: voyager_contract::worktree::Checkout,
-        reply: SyncSender<Result<(), String>>,
+        reply: SyncSender<Result<Vec<String>, String>>,
+    },
+    RemovalListed {
+        reply: SyncSender<Result<Vec<String>, String>>,
+        terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
     WorktreeDone {
         scope: Option<Context>,
@@ -126,10 +136,11 @@ enum Message {
         request: ProcessRequest,
         reply: SyncSender<Arc<ProcessResponse>>,
         queued_at: std::time::Instant,
+        claim: Claim,
     },
     ProcessDone {
         request_id: String,
-        result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+        completed: crate::process::Completed,
         reply: SyncSender<Arc<ProcessResponse>>,
     },
     Workspace {
@@ -137,12 +148,14 @@ enum Message {
         scope: Option<Context>,
         reply: SyncSender<Response>,
         queued_at: std::time::Instant,
+        claim: Claim,
     },
     NoteExit {
         view: crate::content::ViewBinding,
         revision: String,
         request: Request,
         reply: SyncSender<Response>,
+        claim: Claim,
     },
     NoteRenameReady {
         request: Request,
@@ -155,9 +168,16 @@ enum Message {
         request_id: String,
         expected_version: u64,
         reply: SyncSender<Result<Viewer, Error>>,
+        claim: Claim,
     },
     Saved {
         result: Result<u64, Error>,
+    },
+    Relisted {
+        request: Request,
+        scope: Option<Context>,
+        reply: SyncSender<Response>,
+        terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
 }
 
@@ -236,6 +256,7 @@ impl Receipt {
 struct Departure {
     before: Arc<Layout>,
     candidate: Layout,
+    expected: u64,
     reopening: Vec<VesselId>,
     created_notes: bool,
 }
@@ -250,6 +271,7 @@ struct Flight {
 enum Step {
     Done,
     Deferred,
+    List,
     Save(Box<Departure>),
 }
 
@@ -283,8 +305,11 @@ impl Message {
             | Self::NoteRenameReady { .. } => return true,
             Self::PrepareContext { .. }
             | Self::CloseSaves { .. }
-            | Self::ActivityChanged
+            | Self::CoreReported
             | Self::RefreshActivity { .. }
+            | Self::Subscribed
+            | Self::RemovalListed { .. }
+            | Self::Relisted { .. }
             | Self::Launches { .. }
             | Self::RefreshContentViews
             | Self::RegisterView { .. }
@@ -300,48 +325,36 @@ impl Message {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct CreatedTerminal {
-    id: VesselId,
-    launch: voyager_contract::launch::Launch,
-    backend: Option<CoreTerminalId>,
-    shell_intent: Option<String>,
-}
-
-impl CreatedTerminal {
-    fn matches(&self, content: &voyager_contract::Vessel) -> bool {
-        self.id == content.id
-            && self.backend == content.backend
-            && self.shell_intent == content.shell_intent
-            && &self.launch
-                == content
-                    .launch
-                    .as_ref()
-                    .unwrap_or(&voyager_contract::launch::Launch::Terminal)
-    }
-
-    fn eligible(&self, content: &voyager_contract::Vessel) -> bool {
-        self.matches(content)
-            && content.type_id == "terminal"
-            && (content.backend.is_none() || self.shell_intent.is_some())
-            && content.start_pending.is_none()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum CallError {
     Rejected(String),
     Unconfirmed(String),
 }
 
-pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration);
+pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration, Claim);
 
 impl PendingCall {
     pub(crate) fn wait(self) -> Result<Response, CallError> {
-        self.0.recv_timeout(self.1).map_err(|_| {
-            CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
-        })
+        answer(&self.0, self.1, &self.2, "Workspace")
     }
+}
+
+fn answer<T>(
+    receive: &mpsc::Receiver<T>,
+    within: Duration,
+    claim: &Claim,
+    what: &str,
+) -> Result<T, CallError> {
+    receive.recv_timeout(within).map_err(|_| {
+        if claim.cancel() {
+            CallError::Rejected(format!(
+                "Workspace busy; the {} request was still queued when its wait ended, so it was cancelled and nothing was sent",
+                what.to_lowercase()
+            ))
+        } else {
+            CallError::Unconfirmed(format!("{what} result unconfirmed; do not repeat the request"))
+        }
+    })
 }
 
 #[derive(Clone)]
@@ -445,12 +458,15 @@ impl Client {
         let close_sender = sender.clone();
         let core_sender = sender.clone();
         thread::spawn(move || {
-            let mut core = Core::connect_activity(&session, observed_activity.clone());
-            if let Ok(core) = &mut core {
-                core.observe_activity(Box::new(move || {
-                    let _ = activity_sender.try_send(Message::ActivityChanged);
+            if let Ok(mut activity) = observed_activity.lock() {
+                activity.wake_with(Box::new(move || {
+                    let _ = activity_sender.try_send(Message::CoreReported);
                 }));
             }
+            let mut core = connect(&session, observed_activity.clone());
+            let mut subscription = Subscription::default();
+            subscription.begin(&mut core, false, &core_sender);
+            let mut exits = Vec::<CoreTerminalId>::new();
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
             let mut fresh = false;
@@ -462,44 +478,49 @@ impl Client {
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut listing = Listing::default();
-            let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
+            let mut notices = Notices::new(observed_activity.clone(), published_packages);
             let mut closing = crate::voyage_close::Closing::default();
             let mut renaming: Option<(
                 crate::voyage_close::SaveTicket,
                 crate::content::rename::Plan,
                 crate::voyage_close::RenameRelease,
             )> = None;
-            while let Ok(message) = next_message(
-                (!door.flying()).then(|| held.pop_front()).flatten(),
-                &receiver,
-                &observed_activity,
-                &layout,
-                WorkspaceNotice {
-                    revision: version,
-                    package_revision: published_packages.load(Ordering::Relaxed),
-                    activity_revision: 0,
-                    close_revision: closing.revision,
-                },
-                workspace_listener.as_ref(),
-            ) {
-                if door.flying() && message.waits(held.len()) {
-                    held.push_back(message);
-                    continue;
+            loop {
+                let reported = reports(&observed_activity, &layout, &mut exits, |event| {
+                    door.gate(&Envelope::report(event)).is_ok()
+                });
+                let before = version;
+                if !door.flying() && !exits.is_empty() {
+                    let closure = Envelope::observed(close_client.request_id(), version);
+                    if door.gate(&closure).is_err() {
+                        exits.clear();
+                    } else if fresh && let Ok(current_core) = core.as_mut() {
+                        let live = live(&live_bindings, &closing);
+                        let ended = std::mem::take(&mut exits);
+                        let saved = (&mut layout, &mut version, &mut fresh);
+                        close_exited(current_core, saved, &ended, &live);
+                    }
                 }
-                if observed_activity
-                    .lock()
-                    .is_ok_and(|mut activity| activity.take_ended())
-                {
-                    listing.exit();
+                if reported || version != before {
+                    notices.send(version, closing.revision);
                 }
                 if !door.quitting()
                     && let Ok(current_core) = core.as_mut()
                 {
                     listing.start(current_core, &layout, version, fresh, &core_sender);
                 }
+                let waiting = (!door.flying()).then(|| held.pop_front()).flatten();
+                let Ok(message) = waiting.map_or_else(|| receiver.recv_blocking(), Ok) else {
+                    break;
+                };
+                if door.flying() && message.waits(held.len()) {
+                    held.push_back(message);
+                    continue;
+                }
                 let previous_version = version;
                 let previous_close_revision = closing.revision;
                 let mut landed = None;
+                let mut listed = None;
                 let mut note_exit = None;
                 let mut rename_ready = None;
                 let mut rename_rebind = None;
@@ -618,28 +639,17 @@ impl Client {
                                 close_plan: plan,
                             }),
                         );
-                        if let Some(listener) = &workspace_listener {
-                            let _ = listener.try_send(WorkspaceNotice {
-                                revision: version,
-                                close_revision: closing.revision,
-                                package_revision: published_packages.load(Ordering::Relaxed),
-                                activity_revision: core
-                                    .as_ref()
-                                    .map(Core::activity_revision)
-                                    .unwrap_or(0),
-                            });
-                        }
+                        notices.send(version, closing.revision);
                         let _ = reply.send(response);
                         continue;
                     }
-                    Message::ActivityChanged => continue,
+                    Message::CoreReported => continue,
                     Message::RefreshActivity { reply } => {
-                        if !door.quitting()
-                            && let Ok(core) = &mut core
-                        {
-                            core.refresh_activity();
-                        }
-                        let _ = reply.try_send(());
+                        subscription.refresh(&mut core, door.quitting(), &core_sender, reply);
+                        continue;
+                    }
+                    Message::Subscribed => {
+                        subscription.landed();
                         continue;
                     }
                     Message::Quit { operation, reply } => {
@@ -683,11 +693,8 @@ impl Client {
                             active,
                             reply,
                         };
-                        match core.as_mut() {
-                            Ok(current_core) if !door.quitting() => {
-                                listing.observe(observer);
-                                listing.start(current_core, &layout, version, fresh, &core_sender);
-                            }
+                        match &core {
+                            Ok(_) if !door.quitting() => listing.observe(observer),
                             _ => observer.answer(&layout, version, fresh, None),
                         }
                         continue;
@@ -714,15 +721,7 @@ impl Client {
                                     &mut fresh,
                                     candidate,
                                 )?;
-                                if let Some(listener) = &workspace_listener {
-                                    let _ = listener.try_send(WorkspaceNotice {
-                                        revision: version,
-                                        close_revision: closing.revision,
-                                        package_revision: published_packages
-                                            .load(Ordering::Relaxed),
-                                        activity_revision: current_core.activity_revision(),
-                                    });
-                                }
+                                notices.send(version, closing.revision);
                             }
                             if current {
                                 live_bindings = terminals
@@ -735,28 +734,15 @@ impl Client {
                         })();
                         let listed = closed.map(|()| terminals.as_deref());
                         listing.answer(begun, listed, &layout, version, fresh);
-                        if !door.quitting()
-                            && let Ok(current_core) = core.as_mut()
-                        {
-                            listing.start(current_core, &layout, version, fresh, &core_sender);
-                        }
                         continue;
                     }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
-                        let current = WorkspaceNotice {
-                            close_revision: closing.revision,
-                            revision: version,
-                            activity_revision: core
-                                .as_ref()
-                                .map(Core::activity_revision)
-                                .unwrap_or(0),
-                            package_revision: published_packages.load(Ordering::Relaxed),
-                        };
+                        let current = notices.current(version, closing.revision);
                         if after != Some(current) {
                             let _ = send.try_send(current);
                         }
-                        workspace_listener = Some(send);
+                        notices.listener = Some(send);
                         let _ = reply.try_send(receive);
                         continue;
                     }
@@ -926,18 +912,8 @@ impl Client {
                         {
                             owner.refresh_views();
                         }
-                        if version != previous_version
-                            && let Some(listener) = &workspace_listener
-                        {
-                            let _ = listener.try_send(WorkspaceNotice {
-                                close_revision: closing.revision,
-                                package_revision: published_packages.load(Ordering::Relaxed),
-                                revision: version,
-                                activity_revision: core
-                                    .as_ref()
-                                    .map(Core::activity_revision)
-                                    .unwrap_or(0),
-                            });
+                        if version != previous_version {
+                            notices.send(version, closing.revision);
                         }
                         door.record(ticket, Receipt::Content(Arc::clone(&response)));
                         reply.deliver(response);
@@ -947,10 +923,9 @@ impl Client {
                         scope,
                         request,
                         source_directory,
-                        checkout,
                         reply,
                     } => {
-                        let preflight = (|| -> Result<(), String> {
+                        let preflight = (|| -> Result<_, String> {
                             door.gate(&Envelope::worktree(scope.as_ref(), &request))
                                 .map_err(|_| {
                                     "Voyager is quitting; no worktree was removed".to_owned()
@@ -989,27 +964,25 @@ impl Client {
                                         .into(),
                                 );
                             }
-                            let mut live = Vec::new();
-                            for terminal in core.terminal_list().map_err(|error| {
-                                format!("Cannot check live process directories: {error:?}")
-                            })? {
-                                if terminal.is_live() {
-                                    if terminal.cwd.is_empty() {
-                                        return Err("A live terminal directory is unavailable; no worktree was removed".into());
-                                    }
-                                    live.push(terminal.cwd);
-                                    let foreground = terminal.foreground.ok_or("A live foreground process directory is unavailable; no worktree was removed")?;
-                                    if foreground.cwd.is_empty() {
-                                        return Err("A live foreground process directory is unavailable; no worktree was removed".into());
-                                    }
-                                    live.push(foreground.cwd);
-                                }
-                            }
-                            crate::worktrees::check_live_directories(&checkout.path, &live)
-                                .map_err(|error| format!("{error:?}"))?;
-                            Ok(())
+                            core.begin_terminal_list().map_err(unlisted)
                         })();
-                        let _ = reply.send(preflight);
+                        match preflight {
+                            Ok(pending) => {
+                                door.depart();
+                                post(&core_sender, pending, move |listed| {
+                                    Message::RemovalListed {
+                                        reply,
+                                        terminals: listed.map(|listed| listed.terminals),
+                                    }
+                                });
+                            }
+                            Err(error) => drop(reply.send(Err(error))),
+                        }
+                        continue;
+                    }
+                    Message::RemovalListed { reply, terminals } => {
+                        door.land();
+                        let _ = reply.send(live_directories(terminals));
                         continue;
                     }
                     Message::WorktreeDone {
@@ -1116,15 +1089,7 @@ impl Client {
                                 if let Some(owner) = content.as_mut() {
                                     owner.refresh_views();
                                 }
-                                if let Some(listener) = &workspace_listener {
-                                    let _ = listener.try_send(WorkspaceNotice {
-                                        close_revision: closing.revision,
-                                        revision: version,
-                                        package_revision: published_packages
-                                            .load(Ordering::Relaxed),
-                                        activity_revision: core.activity_revision(),
-                                    });
-                                }
+                                notices.send(version, closing.revision);
                                 Ok(())
                             })();
                             if let Err(error) = completion {
@@ -1181,7 +1146,7 @@ impl Client {
                             }
                         };
                         let prepared = (|| -> Result<(String, Vec<String>), String> {
-                            if door.pending(Kind::Worktree) > 0 {
+                            if door.crowded(&Envelope::worktree(scope.as_ref(), &request)) {
                                 return Err("A worktree operation is already pending".into());
                             }
                             if !fresh || version != request.expected_version {
@@ -1255,8 +1220,19 @@ impl Client {
                                                 ));
                                             }
                                             let (approval, receive) = mpsc::sync_channel(1);
-                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), checkout: checkout.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
-                                            receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
+                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
+                                            let live = receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
+                                            crate::worktrees::check_live_directories(
+                                                &checkout.path,
+                                                &live,
+                                            )
+                                            .map_err(
+                                                |error| {
+                                                    crate::worktrees::Error::Rejected(format!(
+                                                        "{error:?}"
+                                                    ))
+                                                },
+                                            )?;
                                             crate::worktrees::remove(
                                                 std::path::Path::new(&directory),
                                                 &checkout.path,
@@ -1301,7 +1277,11 @@ impl Client {
                         request,
                         reply,
                         queued_at,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
                             eprintln!(
                                 "voyager_timing request={} family=process phase=actor-receive queued_us={}",
@@ -1309,10 +1289,10 @@ impl Client {
                                 queued_at.elapsed().as_micros()
                             );
                         }
-                        let refused = |message: String| {
+                        let answered = |status: Status, message: String| {
                             Arc::new(ProcessResponse {
                                 request_id: request.request_id.clone(),
-                                status: Status::Rejected,
+                                status,
                                 version,
                                 fresh,
                                 output: None,
@@ -1329,17 +1309,16 @@ impl Client {
                                 let _ = reply.send(first);
                                 continue;
                             }
-                            Admission::Pending(message) | Admission::Refused(message) => {
-                                let _ = reply.send(refused(message));
+                            Admission::Pending(message) => {
+                                let _ = reply.send(answered(Status::Uncertain, message));
+                                continue;
+                            }
+                            Admission::Refused(message) => {
+                                let _ = reply.send(answered(Status::Rejected, message));
                                 continue;
                             }
                         };
-                        let result = if door.pending(Kind::Process) >= 8
-                            && !matches!(
-                                request.input.action,
-                                voyager_contract::administrator::ProcessAction::List
-                                    | voyager_contract::administrator::ProcessAction::Read { .. }
-                            ) {
+                        let result = if door.crowded(&Envelope::process(&scope, &request)) {
                             Err(rejected(
                                 "Process request limit reached; no effect was queued".into(),
                             ))
@@ -1361,28 +1340,27 @@ impl Client {
                                 Err(error) => Err(error.clone()),
                             }
                         };
-                        let settled = match result {
-                            Ok(crate::process::Started::Waiting(effect)) => {
+                        let error = match result {
+                            Ok(effect) => {
                                 door.open(ticket);
                                 let sender = process_sender.clone();
                                 thread::spawn(move || {
-                                    let result = effect.wait();
+                                    let completed = effect.wait(version);
                                     let _ = sender.send_blocking(Message::ProcessDone {
                                         request_id: request.request_id,
-                                        result,
+                                        completed,
                                         reply,
                                     });
                                 });
                                 continue;
                             }
-                            Ok(crate::process::Started::Ready(output)) => Ok(output),
-                            Err(error) => Err(error),
+                            Err(error) => error,
                         };
                         let answer = process_response(
                             request.request_id.clone(),
                             version,
                             &mut fresh,
-                            settled.into(),
+                            Err(error).into(),
                         );
                         door.record(ticket, Receipt::Process(Arc::clone(&answer)));
                         let _ = reply.send(answer);
@@ -1390,14 +1368,15 @@ impl Client {
                     }
                     Message::ProcessDone {
                         request_id,
-                        result,
+                        completed,
                         reply,
                     } => {
+                        let completed = completed.settle(core.as_mut().ok());
                         let outcome = process_response(
                             request_id.clone(),
-                            version,
+                            completed.read_at.unwrap_or(version),
                             &mut fresh,
-                            result.into(),
+                            completed.result.into(),
                         );
                         door.settle(&request_id, Receipt::Process(Arc::clone(&outcome)));
                         let _ = reply.send(outcome);
@@ -1417,9 +1396,16 @@ impl Client {
                         let Departure {
                             before,
                             candidate,
+                            expected,
                             reopening,
                             created_notes,
                         } = *departure;
+                        let result = match (result, core.as_mut()) {
+                            (Err(Error::Uncertain(message)), Ok(connected)) => {
+                                settle_save(connected, &candidate, expected, message)
+                            }
+                            (result, _) => result,
+                        };
                         landed = Some(result.map_err(|error| unbound(created_notes, error)).map(
                             |revision| {
                                 created_vessels.extend(reopening.into_iter().map(|id| {
@@ -1474,12 +1460,27 @@ impl Client {
                         ));
                         (request, scope, reply)
                     }
+                    Message::Relisted {
+                        request,
+                        scope,
+                        reply,
+                        terminals,
+                    } => {
+                        door.land();
+                        door.forget(&request.request_id);
+                        listed = Some(terminals);
+                        (request, scope, reply)
+                    }
                     Message::Workspace {
                         request,
                         scope,
                         reply,
                         queued_at,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
                             eprintln!(
                                 "voyager_timing request={} family=workspace phase=actor-receive queued_us={}",
@@ -1494,7 +1495,11 @@ impl Client {
                         revision,
                         request,
                         reply,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         note_exit = Some((view, revision));
                         (request, None, reply)
                     }
@@ -1503,7 +1508,11 @@ impl Client {
                         request_id,
                         expected_version,
                         reply,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         let request = TerminalRequest {
                             request_id,
                             vessel_id: content.clone(),
@@ -1519,7 +1528,11 @@ impl Client {
                                 let _ = reply.send(first.and_then(|viewer| viewer.upgrade()));
                                 continue;
                             }
-                            Admission::Pending(message) | Admission::Refused(message) => {
+                            Admission::Pending(message) => {
+                                let _ = reply.send(Err(Error::Uncertain(message)));
+                                continue;
+                            }
+                            Admission::Refused(message) => {
                                 let _ = reply.send(Err(rejected(message)));
                                 continue;
                             }
@@ -1547,7 +1560,7 @@ impl Client {
                             ))
                         } else {
                             match core.as_mut() {
-                                Ok(core) => open_terminal(
+                                Ok(core) => terminal_start::open_terminal(
                                     core,
                                     &mut layout,
                                     &mut version,
@@ -1722,12 +1735,15 @@ impl Client {
                                         .map_err(rejected)?;
                                     match &request.action {
                                         Action::CloseVoyage { id } => {
+                                            let Some(terminals) = listed.take() else {
+                                                return Ok(Step::List);
+                                            };
                                             closing.prepare(
                                                 &layout,
                                                 version,
                                                 id,
                                                 &request.request_id,
-                                                core,
+                                                &terminals?,
                                             )?;
                                             response.message = Some(
                                                 "Confirm the Voyage shutdown; no work has stopped"
@@ -1925,11 +1941,14 @@ impl Client {
                                             source,
                                             voyager_contract::DirectorySource::Live { .. }
                                         ) {
-                                            Some(core.terminal_list().map_err(|error| {
-                                            rejected(format!(
-                                                "Live directory observation unavailable: {error:?}"
-                                            ))
-                                        })?)
+                                            let Some(terminals) = listed.take() else {
+                                                return Ok(Step::List);
+                                            };
+                                            Some(terminals.map_err(|error| {
+                                                rejected(format!(
+                                                    "Live directory observation unavailable: {error:?}"
+                                                ))
+                                            })?)
                                         } else {
                                             None
                                         };
@@ -1997,6 +2016,7 @@ impl Client {
                                         Ok(Step::Save(Box::new(Departure {
                                             before: Arc::clone(&layout),
                                             candidate: candidate.layout,
+                                            expected: version,
                                             reopening,
                                             created_notes,
                                         })))
@@ -2019,6 +2039,18 @@ impl Client {
                             departure,
                         });
                         continue;
+                    }
+                    Ok(Step::List) => {
+                        match relist(&mut core, &core_sender, &request, scope.as_ref(), &reply) {
+                            Ok(()) => {
+                                if let Some(ticket) = ticket {
+                                    door.open(ticket);
+                                }
+                                door.depart();
+                                continue;
+                            }
+                            Err(error) => Err(error),
+                        }
                     }
                     other => other,
                 };
@@ -2059,20 +2091,9 @@ impl Client {
                     || closing.revision != previous_close_revision
                 {
                     if package_changed {
-                        let next = published_packages.load(Ordering::Relaxed).saturating_add(1);
-                        published_packages.store(next, Ordering::Relaxed);
+                        notices.packages.fetch_add(1, Ordering::Relaxed);
                     }
-                    if let Some(listener) = &workspace_listener {
-                        let _ = listener.try_send(WorkspaceNotice {
-                            package_revision: published_packages.load(Ordering::Relaxed),
-                            revision: version,
-                            activity_revision: core
-                                .as_ref()
-                                .map(Core::activity_revision)
-                                .unwrap_or(0),
-                            close_revision: closing.revision,
-                        });
-                    }
+                    notices.send(version, closing.revision);
                 }
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
                     && response.status == voyager_contract::Outcome::Applied
@@ -2460,15 +2481,17 @@ impl Client {
         request: Request,
     ) -> Result<Response, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
+        let claim = Claim::default();
         self.sender
             .try_send(Message::NoteExit {
                 view,
                 revision,
                 request,
                 reply,
+                claim: claim.clone(),
             })
             .map_err(|_| CallError::Rejected("Workspace busy; Notes Exit was not queued".into()))?;
-        PendingCall(receive, Duration::from_secs(20)).wait()
+        PendingCall(receive, Duration::from_secs(20), claim).wait()
     }
 
     pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {
@@ -2505,7 +2528,19 @@ impl Client {
     }
 
     pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
-        self.queue_workspace(Some(scope), request)?.wait()
+        self.ask(Some(scope), request)
+    }
+
+    fn ask(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {
+        let first = self
+            .queue_workspace(scope.clone(), request.clone())
+            .and_then(PendingCall::wait);
+        if !matches!(first, Err(CallError::Unconfirmed(_))) {
+            return first;
+        }
+        self.queue_workspace(scope, request)
+            .and_then(PendingCall::wait)
+            .or(first)
     }
 
     pub fn worktree(
@@ -2535,22 +2570,34 @@ impl Client {
         scope: Context,
         request: ProcessRequest,
     ) -> Result<Arc<ProcessResponse>, CallError> {
+        let first = self.queue_process(scope.clone(), request.clone());
+        if !matches!(first, Err(CallError::Unconfirmed(_))) {
+            return first;
+        }
+        self.queue_process(scope, request).or(first)
+    }
+
+    fn queue_process(
+        &self,
+        scope: Context,
+        request: ProcessRequest,
+    ) -> Result<Arc<ProcessResponse>, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
+        let claim = Claim::default();
         self.sender
             .try_send(Message::Process {
                 scope,
                 request,
                 reply,
                 queued_at: std::time::Instant::now(),
+                claim: claim.clone(),
             })
             .map_err(|_| {
                 CallError::Rejected(
                     "Workspace busy or unavailable; no process request was queued".into(),
                 )
             })?;
-        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
-            CallError::Unconfirmed("Process result unconfirmed; do not repeat the request".into())
-        })
+        answer(&receive, Duration::from_secs(25), &claim, "Process")
     }
 
     pub(crate) fn queue_inspection(&self) -> Result<PendingCall, CallError> {
@@ -2575,17 +2622,19 @@ impl Client {
         } else {
             WORKSPACE_WAIT
         };
+        let claim = Claim::default();
         self.sender
             .try_send(Message::Workspace {
                 request,
                 scope,
                 reply,
                 queued_at: std::time::Instant::now(),
+                claim: claim.clone(),
             })
             .map_err(|_| {
                 CallError::Rejected("Workspace busy or unavailable; nothing was queued".into())
             })?;
-        Ok(PendingCall(receive, timeout))
+        Ok(PendingCall(receive, timeout, claim))
     }
 
     pub fn terminal(
@@ -2594,19 +2643,33 @@ impl Client {
         request_id: String,
         expected_version: u64,
     ) -> Result<Viewer, Error> {
-        let (reply, receive) = mpsc::sync_channel(1);
-        self.sender
-            .try_send(Message::Terminal {
-                content,
-                request_id,
-                expected_version,
-                reply,
-            })
-            .map_err(|_| {
-                rejected("Workspace busy or unavailable; no terminal was started".into())
-            })?;
-        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
-            Error::Uncertain("Terminal result unconfirmed; no request was repeated".into())
+        let open = || -> Result<Result<Viewer, Error>, CallError> {
+            let (reply, receive) = mpsc::sync_channel(1);
+            let claim = Claim::default();
+            self.sender
+                .try_send(Message::Terminal {
+                    content: content.clone(),
+                    request_id: request_id.clone(),
+                    expected_version,
+                    reply,
+                    claim: claim.clone(),
+                })
+                .map_err(|_| {
+                    CallError::Rejected(
+                        "Workspace busy or unavailable; no terminal was started".into(),
+                    )
+                })?;
+            answer(&receive, Duration::from_secs(25), &claim, "Terminal")
+        };
+        let first = open();
+        let answered = if matches!(first, Err(CallError::Unconfirmed(_))) {
+            open().or(first)
+        } else {
+            first
+        };
+        answered.map_err(|error| match error {
+            CallError::Rejected(message) => rejected(message),
+            CallError::Unconfirmed(message) => Error::Uncertain(message),
         })?
     }
 }
@@ -2821,18 +2884,6 @@ fn visible_content(layout: &Layout, content: &VesselId) -> bool {
     })
 }
 
-fn require_finished(
-    observed: &crate::core_shapes::Terminal,
-    expected: &CoreTerminalId,
-) -> Result<(), Error> {
-    if observed.address != expected.0 || !observed.has_ended() {
-        return Err(rejected(
-            "The selected program is not confirmed ended; no new shell was authorized".into(),
-        ));
-    }
-    Ok(())
-}
-
 fn reopen_backend<'a>(
     layout: &'a Layout,
     id: &voyager_contract::PlacementId,
@@ -2961,197 +3012,6 @@ fn eligible_contents(
         .filter(|pending| projection.vessels.iter().any(|item| pending.eligible(item)))
         .map(|pending| pending.id.clone())
         .collect()
-}
-
-fn open_terminal(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut u64,
-    fresh: &mut bool,
-    unconfirmed: &mut HashMap<String, String>,
-    created_vessels: &mut Vec<CreatedTerminal>,
-    request: &TerminalRequest,
-) -> Result<Viewer, Error> {
-    let content = &request.vessel_id;
-    let request_id = &request.request_id;
-    let target = layout
-        .vessels
-        .iter()
-        .find(|item| &item.id == content)
-        .ok_or_else(|| rejected("Terminal content not found".into()))?;
-    if target.type_id != "terminal" {
-        return Err(rejected("Content is not a terminal".into()));
-    }
-    if let Some(operation) = &target.start_pending {
-        return Err(Error::Uncertain(format!(
-            "Terminal start {operation} is unconfirmed. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
-        )));
-    }
-    let cwd = target.cwd.clone();
-    let launch = target.launch.clone().unwrap_or_default();
-    let accepted = created_vessels
-        .iter()
-        .find(|pending| &pending.id == content);
-    let new_shell = target.shell_intent.is_some() && accepted.is_some();
-    if accepted.is_some_and(|pending| !pending.matches(target)) {
-        return Err(rejected(
-            "The creation launch changed; no program was started".into(),
-        ));
-    }
-    if new_shell {
-        let backend = target
-            .backend
-            .as_ref()
-            .ok_or_else(|| rejected("New shell intent lost its original binding".into()))?;
-        require_finished(&core.terminal_get(&backend.0)?, backend)?;
-    }
-    if target.backend.is_none()
-        && (target.shell_intent.is_some()
-            || !matches!(launch, voyager_contract::launch::Launch::Terminal))
-        && accepted.is_none()
-    {
-        return Err(rejected(
-            "This saved worker has no new-creation permission; no command was restarted".into(),
-        ));
-    }
-    let mut created = false;
-    let terminal = if let Some(address) = &target.backend
-        && !new_shell
-    {
-        core.terminal_get(&address.0)?
-    } else {
-        let operation = format!("voyager-start-{request_id}");
-        let mut pending = (**layout).clone();
-        let item = pending
-            .vessels
-            .iter_mut()
-            .find(|item| &item.id == content)
-            .ok_or_else(|| rejected("Terminal content disappeared".into()))?;
-        item.start_pending = Some(operation.clone());
-        match save(core, &pending, *version) {
-            Ok(saved) => {
-                *layout = Arc::new(pending);
-                *version = saved;
-            }
-            Err(error) => {
-                *fresh = false;
-                return Err(match error {
-                    Error::Rejected { kind, message } => Error::Rejected {
-                        kind,
-                        message: format!(
-                            "Terminal start marker was refused: {message}; no start was issued"
-                        ),
-                    },
-                    Error::Uncertain(message) => Error::Uncertain(format!(
-                        "Terminal start marker was not confirmed: {message}; no start was issued"
-                    )),
-                });
-            }
-        }
-        let run = crate::launch::terminal_command(&launch, &cwd)
-            .map_err(rejected)
-            .and_then(|argv| {
-                core.terminal_run_with(crate::core_shapes::RunParams {
-                    argv,
-                    cwd: Some(cwd.clone()),
-                    no_parent: true,
-                    labels: HashMap::from([("voyager-operation".into(), operation.clone())]),
-                    ..Default::default()
-                })
-            });
-        if !matches!(run, Err(Error::Rejected { .. })) {
-            created_vessels.retain(|item| &item.id != content);
-        }
-        let started = match run {
-            Ok(result) => result,
-            Err(Error::Uncertain(message)) => {
-                let message = format!(
-                    "Terminal start {operation} is unconfirmed: {message}. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
-                );
-                unconfirmed.insert(content.0.clone(), message.clone());
-                return Err(Error::Uncertain(message));
-            }
-            Err(error) => {
-                let mut cleared = (**layout).clone();
-                if let Some(item) = cleared.vessels.iter_mut().find(|item| &item.id == content) {
-                    item.start_pending = None;
-                }
-                match save(core, &cleared, *version) {
-                    Ok(saved) => {
-                        *layout = Arc::new(cleared);
-                        *version = saved;
-                    }
-                    Err(cleanup) => {
-                        *fresh = false;
-                        return Err(Error::Uncertain(format!(
-                            "Terminal start was refused but marker cleanup is unconfirmed: {cleanup:?}"
-                        )));
-                    }
-                }
-                return Err(error);
-            }
-        };
-        let address = started.address.clone();
-        if started.lifecycle().is_unknown() || started.start_unconfirmed() {
-            let message = format!(
-                "Terminal {address} for {operation} has an unconfirmed start; inspect it in Core. No start was repeated"
-            );
-            unconfirmed.insert(content.0.clone(), message.clone());
-            return Err(Error::Uncertain(message));
-        }
-        let mut candidate = (**layout).clone();
-        let item = candidate
-            .vessels
-            .iter_mut()
-            .find(|item| &item.id == content)
-            .ok_or_else(|| Error::Uncertain("Terminal content disappeared after start".into()))?;
-        item.backend = Some(CoreTerminalId(address.clone()));
-        item.start_pending = None;
-        item.shell_intent = None;
-        match save(core, &candidate, *version) {
-            Ok(saved) => {
-                *layout = Arc::new(candidate);
-                *version = saved;
-                created = true;
-            }
-            Err(error) => {
-                *fresh = false;
-                let message = format!(
-                    "Terminal {address} started but workspace save failed: {error:?}; no start was repeated"
-                );
-                unconfirmed.insert(content.0.clone(), message.clone());
-                return Err(Error::Uncertain(message));
-            }
-        }
-        started
-    };
-    let address = &terminal.address;
-    let attached = core
-        .terminal_attach(&terminal)
-        .map_err(|error| attach_failure(error, created, address))?;
-    core.viewer(&attached)
-}
-
-pub(crate) fn rejected(message: String) -> Error {
-    Error::Rejected {
-        kind: "invalid_workspace".into(),
-        message,
-    }
-}
-
-fn attach_failure(error: Error, created: bool, address: &str) -> Error {
-    match (created, error) {
-        (true, Error::Rejected { kind, message }) => Error::Rejected {
-            kind,
-            message: format!(
-                "Terminal {address} started and its binding was saved, but viewer attachment was refused: {message}. No start was repeated"
-            ),
-        },
-        (true, Error::Uncertain(message)) => Error::Uncertain(format!(
-            "Terminal {address} started and its binding was saved, but viewer attachment is unconfirmed: {message}. No start was repeated"
-        )),
-        (false, error) => error,
-    }
 }
 
 fn select_note(
@@ -3970,7 +3830,7 @@ mod terminal_outcome_tests {
 
     #[test]
     fn known_finished_attach_is_not_an_unconfirmed_start() {
-        let error = attach_failure(
+        let error = terminal_start::attach_failure(
             Error::Rejected {
                 kind: "finished".into(),
                 message: "Terminal has exited".into(),
@@ -3982,7 +3842,7 @@ mod terminal_outcome_tests {
             matches!(error, Error::Rejected { kind, message } if kind == "finished" && message.contains("t1"))
         );
         assert!(matches!(
-            attach_failure(Error::Uncertain("connection lost".into()), true, "t1"),
+            terminal_start::attach_failure(Error::Uncertain("connection lost".into()), true, "t1"),
             Error::Uncertain(_)
         ));
     }
@@ -4013,6 +3873,7 @@ mod content_admission_tests {
                         },
                         scope: None,
                         reply,
+                        claim: Claim::default(),
                         queued_at: std::time::Instant::now(),
                     })
                     .is_ok()

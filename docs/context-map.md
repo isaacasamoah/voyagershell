@@ -43,6 +43,7 @@ Owns files:
 
 - `app/src/client.rs`
 - `app/src/client_reply.rs`
+- `app/src/client_terminal.rs`
 - `app/src/front_door.rs`
 - `app/src/layout_store.rs`
 - `app/src/process.rs`

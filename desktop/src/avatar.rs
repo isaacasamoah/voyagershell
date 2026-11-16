@@ -12,7 +12,6 @@ use gpui::{
 use gpui_shell::{HostError, HostModule, HostValue, ScriptView, ShellRoot};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
     path::PathBuf,
     rc::Rc,
     sync::{
@@ -281,12 +280,7 @@ impl Avatar {
                 match loaded {
                     Ok(pack) => {
                         let retired = avatar.motion.replace(pack);
-                        let mut images = HashSet::new();
-                        for pose in &retired.poses {
-                            if images.insert(pose.image.id) {
-                                cx.drop_image(Arc::clone(&pose.image), None);
-                            }
-                        }
+                        retired.release_images(cx);
                         cx.refresh_windows();
                         *avatar.animation_notice.borrow_mut() = Some(String::new());
                     }
