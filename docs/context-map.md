@@ -44,6 +44,11 @@ Owns files:
 - `app/src/client.rs`
 - `app/src/client_reply.rs`
 - `app/src/client_terminal.rs`
+- `app/src/client_admission_tests.rs`
+- `app/src/adoption.rs`
+- `app/src/vessel_socket.rs`
+- `app/src/bin/voyager.rs`
+- `contract/src/socket.rs`
 - `app/src/front_door.rs`
 - `app/src/layout_store.rs`
 - `app/src/process.rs`
@@ -83,6 +88,7 @@ Owns files:
 - `app/src/voyage_close.rs`
 - `app/src/worktrees.rs`
 - `contract/src/lib.rs`
+- `contract/src/place.rs`
 - `contract/src/layout_document.rs`
 - `contract/tests/layout_compat.rs`
 - `contract/tests/layout_document.rs`

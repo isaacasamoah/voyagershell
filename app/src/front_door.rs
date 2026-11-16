@@ -119,6 +119,7 @@ pub(crate) enum Caller {
     Canvas,
     Avatar { focus: Context },
     Content { vessel: VesselId },
+    Program { vessel: VesselId },
     Core { machine: Machine },
 }
 
@@ -163,6 +164,13 @@ impl Envelope {
             target: Target::Workspace,
             expected: Some(Revision::Layout(request.expected_version)),
             effect: !matches!(request.action, Action::Inspect),
+        }
+    }
+
+    pub(crate) fn program(vessel: VesselId, request: &Request) -> Self {
+        Self {
+            caller: Caller::Program { vessel },
+            ..Self::workspace(None, request)
         }
     }
 

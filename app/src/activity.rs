@@ -1,3 +1,4 @@
+use crate::adoption::{Labelled, Origin};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -41,6 +42,8 @@ struct Terminal {
     state: Option<String>,
     reason: Option<String>,
     #[serde(flatten)]
+    origin: Origin,
+    #[serde(flatten)]
     fact: Fact,
 }
 
@@ -71,12 +74,21 @@ pub(crate) struct Sighting {
 }
 
 pub(crate) enum Report {
-    Snapshot(Vec<Sighting>),
+    Snapshot {
+        seen: Vec<Sighting>,
+        labelled: Vec<Labelled>,
+    },
     Seen(ReportedActivity),
+    Labelled {
+        fact: ReportedActivity,
+        labelled: Labelled,
+    },
     Status(ReportedActivity),
     Foreground,
     Lost,
-    Finished { exited: bool },
+    Finished {
+        exited: bool,
+    },
     Removed,
     Document,
     Gap(String),
@@ -250,7 +262,7 @@ impl Activity {
             .terminal
             .filter(|address| self.entries.contains_key(address));
         match (event.report, placed) {
-            (Report::Snapshot(seen), _) => {
+            (Report::Snapshot { seen, .. }, _) => {
                 self.unavailable = None;
                 self.changed();
                 for entry in self.entries.values_mut() {
@@ -272,7 +284,10 @@ impl Activity {
                 self.invalidate(&reason);
                 Vec::new()
             }
-            (Report::Seen(fact) | Report::Status(fact), Some(address)) => {
+            (
+                Report::Seen(fact) | Report::Status(fact) | Report::Labelled { fact, .. },
+                Some(address),
+            ) => {
                 self.record(address, fact);
                 Vec::new()
             }
@@ -434,23 +449,26 @@ impl Activity {
         }
         self.sequence = Some(snapshot.seq);
         self.stalled = false;
-        let seen = snapshot
-            .terminals
-            .into_iter()
-            .filter(|terminal| self.entries.contains_key(&terminal.address))
-            .map(|terminal| Sighting {
-                exited: crate::core_state::exited(
-                    terminal.state.as_deref(),
-                    terminal.reason.as_deref(),
-                ),
-                fact: observed(terminal.fact, Some(snapshot.seq)),
-                address: terminal.address,
-            })
-            .collect();
+        let mut seen = Vec::new();
+        let mut labelled = Vec::new();
+        for terminal in snapshot.terminals {
+            if self.entries.contains_key(&terminal.address) {
+                seen.push(Sighting {
+                    exited: crate::core_state::exited(
+                        terminal.state.as_deref(),
+                        terminal.reason.as_deref(),
+                    ),
+                    fact: observed(terminal.fact, Some(snapshot.seq)),
+                    address: terminal.address,
+                });
+            } else if terminal.state.as_deref() == Some("live") {
+                labelled.extend(Labelled::of(&terminal.address, terminal.origin));
+            }
+        }
         self.push(Event {
             sequence: snapshot.seq,
             terminal: None,
-            report: Report::Snapshot(seen),
+            report: Report::Snapshot { seen, labelled },
         });
     }
 
@@ -503,7 +521,20 @@ impl Activity {
                 }
                 Report::Status(observed(fact(notice.data)?, Some(notice.seq)))
             }
-            "created" | "restarted" => Report::Seen(observed(fact(notice.data)?, None)),
+            "created" => {
+                let origin = serde_json::from_value::<Origin>(notice.data.clone())
+                    .map_err(|error| error.to_string())?;
+                let fact = observed(fact(notice.data)?, None);
+                match notice
+                    .terminal
+                    .as_deref()
+                    .and_then(|address| Labelled::of(address, origin))
+                {
+                    Some(labelled) => Report::Labelled { fact, labelled },
+                    None => Report::Seen(fact),
+                }
+            }
+            "restarted" => Report::Seen(observed(fact(notice.data)?, None)),
             "foreground" => Report::Foreground,
             "lost" => Report::Lost,
             "finished" => Report::Finished {
@@ -557,10 +588,11 @@ impl Activity {
                     return Ok(());
                 }
                 if let Some(event) = Self::report(notice)?
-                    && event
-                        .terminal
-                        .as_ref()
-                        .is_none_or(|address| self.entries.contains_key(address))
+                    && (matches!(event.report, Report::Labelled { .. })
+                        || event
+                            .terminal
+                            .as_ref()
+                            .is_none_or(|address| self.entries.contains_key(address)))
                 {
                     self.push(event);
                 }

@@ -15,6 +15,8 @@ pub mod inspection;
 pub mod launch;
 pub mod layout_document;
 pub mod observation;
+pub mod place;
+pub mod socket;
 pub mod voice;
 pub mod voyage_close;
 pub mod worktree;

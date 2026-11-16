@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
+import { take_placement_notice } from "voyager_workspace";
 import type { NativeElement } from "gpui-kit";
 import type { Reply } from "../../contract/generated/response";
 
@@ -13,6 +14,11 @@ export function outcome(reply: Reply): string {
   if (reply.status === "uncertain")
     return `Uncertain. ${reply.message || "The result was not confirmed."}`;
   return reply.message || "";
+}
+
+export function noticed(owner: { status: string }): string {
+  owner.status = take_placement_notice() ?? owner.status;
+  return owner.status;
 }
 
 export function statusLine(

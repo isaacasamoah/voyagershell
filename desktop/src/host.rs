@@ -177,6 +177,7 @@ fn load(
     let terminal_client = client.clone();
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
+    let placement_client = client.clone();
     let terminal_viewers = viewers.clone();
     let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
         .declarations(crate::script_types::WORKSPACE)
@@ -413,6 +414,11 @@ fn load(
     let workspace = workspace
         .function("revision", move |_| {
             Ok(HostValue::from(revision.get().revision.to_string()))
+        })
+        .function("take_placement_notice", move |_| {
+            Ok(placement_client
+                .take_placement_notice()
+                .map_or(HostValue::Null, HostValue::from))
         })
         .function("notice", move |_| {
             let notice = notice.get();

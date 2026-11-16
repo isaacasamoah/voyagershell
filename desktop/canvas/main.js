@@ -26,7 +26,7 @@ import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
-import { errorMessage, outcome, statusLine } from "./status.js";
+import { errorMessage, noticed, outcome, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
@@ -1425,7 +1425,7 @@ export default class Canvas extends View {
   }
   statusView() {
     return statusLine(
-      this.status || this.worktrees?.status || "",
+      noticed(this) || this.worktrees?.status || "",
       this.action("Refresh", { operation: "inspect" }),
     );
   }

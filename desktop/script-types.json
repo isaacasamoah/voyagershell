@@ -1,6 +1,6 @@
 {
   "canvas": {
-    "rawSha256": "5768a1fce78e720dc712d15d43f091ccf6181baa63197edeab4d830e6aafa9b3",
+    "rawSha256": "ae85d7596896b910f9e5b830db1ff709384db50a9f87834c426aa7d932d808c7",
     "modules": [
       "gpui-base",
       "gpui-kit",
