@@ -190,9 +190,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let message = Target::voyage_close_status(&voyage);
     cases.check(native, Case::CloseRefused, |native| {
         let turn = ask(native, &provider, ASK_BEHIND)?;
-        native.observe("the started turn drawn in the chat", |seen| {
-            seen.shows(&Target::CHAT_STATUS).then_some(())
-        })?;
+        native.settle(
+            "the started turn and its message drawn in the chat",
+            |seen| {
+                let asked = seen.frame.elements.iter().any(|element| {
+                    element.role == Role::ChatMessage
+                        && element
+                            .label
+                            .as_deref()
+                            .is_some_and(|label| label.contains(ASK_BEHIND))
+                });
+                Some(seen.shows(&Target::CHAT_STATUS) && asked)
+            },
+            |drawn| *drawn,
+        )?;
         open_dialog(native, &voyage)?;
         let live = native.live_terminals()?;
         let played = provider.play(&turn, &rename(BEHIND)?)?;
