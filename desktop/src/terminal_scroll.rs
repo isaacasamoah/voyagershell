@@ -22,16 +22,14 @@ pub(super) fn input(
         encoder.set_options_from_terminal(terminal).set_size(size);
         encoder.encode_to_vec(&event, &mut bytes)?;
     } else if terminal.active_screen()? == Screen::Alternate {
-        let mut event = key::Event::new()?;
-        event.set_action(key::Action::Press);
-        event.set_key(if lines < 0 {
-            key::Key::ArrowUp
-        } else {
-            key::Key::ArrowDown
-        });
-        let mut encoder = key::Encoder::new()?;
-        encoder.set_options_from_terminal(terminal);
-        encoder.encode_to_vec(&event, &mut bytes)?;
+        bytes = arrow(
+            terminal,
+            if lines < 0 {
+                key::Key::ArrowUp
+            } else {
+                key::Key::ArrowDown
+            },
+        )?;
     } else {
         return Ok(None);
     }
@@ -41,6 +39,34 @@ pub(super) fn input(
         "Wheel input exceeds the terminal's 64 KiB input limit"
     );
     Ok(Some(bytes.repeat(lines.unsigned_abs())))
+}
+
+pub(super) fn arrow(terminal: &Terminal<'_, '_>, key: libghostty_vt::key::Key) -> Result<Vec<u8>> {
+    use libghostty_vt::key;
+    let mut event = key::Event::new()?;
+    event.set_action(key::Action::Press);
+    event.set_key(key);
+    let mut encoder = key::Encoder::new()?;
+    encoder.set_options_from_terminal(terminal);
+    let mut bytes = Vec::new();
+    encoder.encode_to_vec(&event, &mut bytes)?;
+    Ok(bytes)
+}
+
+pub(super) fn arrows(
+    terminal: &Terminal<'_, '_>,
+    key: libghostty_vt::key::Key,
+    count: usize,
+) -> Result<Vec<u8>> {
+    let bytes = arrow(terminal, key)?;
+    anyhow::ensure!(
+        bytes
+            .len()
+            .checked_mul(count)
+            .is_some_and(|length| length <= voyager_app::core::MAX_INPUT_BYTES),
+        "Click movement exceeds the terminal's 64 KiB input limit"
+    );
+    Ok(bytes.repeat(count))
 }
 
 #[cfg(test)]
@@ -77,6 +103,20 @@ mod tests {
         assert_eq!(wheel(&terminal, 1), Some(b"\x1bOB".to_vec()));
         terminal.vt_write(b"\x1b[?1049l");
         assert_eq!(wheel(&terminal, 1), None);
+    }
+
+    #[test]
+    fn arrows_follow_the_programs_cursor_key_mode() {
+        let mut terminal = Terminal::new(100, 30).unwrap();
+        assert_eq!(
+            super::arrow(&terminal, libghostty_vt::key::Key::ArrowLeft).unwrap(),
+            b"\x1b[D"
+        );
+        terminal.vt_write(b"\x1b[?1h");
+        assert_eq!(
+            super::arrow(&terminal, libghostty_vt::key::Key::ArrowRight).unwrap(),
+            b"\x1bOC"
+        );
     }
 
     #[test]

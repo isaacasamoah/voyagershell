@@ -1,9 +1,42 @@
 use super::{Pane, Select, cursor_offset, paint_colors};
+use anyhow::Result;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     Context, InteractiveElement as _, MouseButton, ParentElement as _, Render, Role,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
 };
+use libghostty_vt::terminal::PointCoordinate;
+
+impl Pane {
+    pub(super) fn cell_at(&self, point: gpui::Point<gpui::Pixels>) -> Option<PointCoordinate> {
+        let bounds = self.bounds.get()?;
+        let grid = self.grid.as_ref()?;
+        let columns = grid.rows.first().map_or(0, |row| row.len());
+        if columns == 0 || grid.rows.is_empty() {
+            return None;
+        }
+        let x = f32::from(point.x - bounds.origin.x) / f32::from(self.cell_width);
+        let y = f32::from(point.y - bounds.origin.y) / f32::from(self.cell_height);
+        Some(PointCoordinate {
+            x: ((x.floor().max(0.) as usize).min(columns - 1)) as u16,
+            y: ((y.floor().max(0.) as usize).min(grid.rows.len() - 1)) as u32,
+        })
+    }
+
+    pub(super) fn click(&mut self, point: gpui::Point<gpui::Pixels>) -> Result<()> {
+        let Some(press) = self.press.take() else {
+            return Ok(());
+        };
+        let released = self.cell_at(point);
+        let composing = !self.composition.text.is_empty();
+        let Some(step) = super::click::plan(&self.screen.terminal, press, released, composing)?
+        else {
+            return Ok(());
+        };
+        let bytes = super::scroll::arrows(&self.screen.terminal, step.key, step.count)?;
+        self.send(bytes)
+    }
+}
 
 impl Render for Pane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
@@ -285,6 +318,12 @@ impl Render for Pane {
                 cx.listener(|pane, event: &gpui::MouseDownEvent, window, cx| {
                     pane.focus.focus(window, cx);
                     pane.selecting = true;
+                    pane.press = pane
+                        .cell_at(event.position)
+                        .map(|cell| super::click::Press {
+                            cell,
+                            clicks: event.click_count,
+                        });
                     if let Err(error) = pane.select(Select::Press, event.position) {
                         pane.status = format!("Selection: {error:#}");
                     }
@@ -299,12 +338,24 @@ impl Render for Pane {
                     cx.notify();
                 }
             }))
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(|pane, _: &gpui::MouseDownEvent, window, cx| {
+                    pane.focus.focus(window, cx);
+                    if let Err(error) = pane.paste_primary(cx) {
+                        pane.status = format!("Input: {error:#}");
+                    }
+                    cx.notify();
+                }),
+            )
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|pane, event: &gpui::MouseUpEvent, _, cx| {
-                    pane.selecting = false;
-                    if let Err(error) = pane.select(Select::Release, event.position) {
+                    if let Err(error) = pane.release(event.position, cx) {
                         pane.status = format!("Selection: {error:#}");
+                    }
+                    if let Err(error) = pane.click(event.position) {
+                        pane.status = format!("Input: {error:#}");
                     }
                     cx.notify();
                 }),
@@ -312,9 +363,9 @@ impl Render for Pane {
             .on_mouse_up_out(
                 MouseButton::Left,
                 cx.listener(|pane, event: &gpui::MouseUpEvent, _, cx| {
+                    pane.press = None;
                     if pane.selecting {
-                        pane.selecting = false;
-                        if let Err(error) = pane.select(Select::Release, event.position) {
+                        if let Err(error) = pane.release(event.position, cx) {
                             pane.status = format!("Selection: {error:#}");
                         }
                         cx.notify();

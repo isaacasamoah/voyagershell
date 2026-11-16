@@ -233,6 +233,19 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
+id = "window-drag-bar"
+name = "Window drag bar"
+path = "Drag the empty top bar or the sidebar's top row to move the window, double-click the bar to maximise it, and drag a Fleet tab to reorder it without moving the window."
+sources = ["desktop/canvas/navigation-view.*", "desktop/src/window_frame.rs", "desktop/patches/gpui-shell-window-drag.patch"]
+journeys = ["workspace"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"
+
+[[feature]]
 id = "profile-theme"
 name = "Profile theme"
 path = "Edit the theme file in the profile and see the window's colours change without a relaunch."

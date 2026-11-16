@@ -107,6 +107,8 @@ roles! {
     WindowMinimize => "window-minimize",
     WindowMaximize => "window-maximize",
     WindowClose => "window-close",
+    WindowDrag => "window-drag",
+    FleetDrop => "fleet-drop",
     AgentsRow => "agents-row",
 }
 

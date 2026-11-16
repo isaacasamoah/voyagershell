@@ -323,6 +323,11 @@ impl Native {
         self.pointer()
     }
 
+    pub fn drag_across(&self, target: &Target, by: (i16, i16)) -> Result<()> {
+        let from = self.spot(target)?.at;
+        self.drag_between(target, from, (from.0 + by.0, from.1 + by.1))
+    }
+
     pub fn drag_between(&self, target: &Target, from: (i16, i16), to: (i16, i16)) -> Result<()> {
         let held = self.spot(target)?;
         ensure!(

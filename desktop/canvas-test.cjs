@@ -36,6 +36,21 @@ const MarkerStub = {
   }),
 };
 
+function dragAreas(node, seen = new Set()) {
+  if (!node || typeof node !== "object" || seen.has(node)) return [];
+  if (Array.isArray(node)) return node.flatMap((item) => dragAreas(item, seen));
+  if (!Array.isArray(node.calls)) return [];
+  seen.add(node);
+  const own = node.calls
+    .filter(([name]) => name === "window_control_area")
+    .map(([, area]) => ({ area, markers: markers(node) }));
+  return own.concat(
+    node.calls.flatMap(([, ...args]) =>
+      args.flatMap((arg) => dragAreas(arg, seen)),
+    ),
+  );
+}
+
 function deepMarkers(node, seen = new Set()) {
   if (!node || typeof node !== "object" || seen.has(node)) return [];
   if (Array.isArray(node))
@@ -425,6 +440,25 @@ test("inspection markers name each control by its role and id and report the tex
   view.fleetRegion(layout, { id: "voyage-7", fleets: [] }, undefined);
   assert.deepEqual(markers(buttons.get("create-fleet-tab")), [
     ["create-fleet", "voyage-7"],
+  ]);
+  const filler = (key) => ({ area: "drag", markers: [["window-drag", key]] });
+  const fleets = [
+    { id: "fleet-1", name: "One", closed: false, placements: [] },
+    { id: "fleet-2", name: "Two", closed: false, placements: [] },
+  ];
+  const voyage = { id: "voyage-7", fleets };
+  assert.deepEqual(dragAreas(view.fleetRegion(layout, voyage, fleets[0])), [
+    filler("fleets"),
+  ]);
+  assert.deepEqual(dragAreas(view.fleetRegion(layout, undefined, undefined)), [
+    filler("fleets"),
+  ]);
+  assert.deepEqual(
+    dragAreas(view.fleetRegion({ ...layout, view: "home" }, voyage, fleets[0])),
+    [filler("home")],
+  );
+  assert.deepEqual(dragAreas(view.sidebarRegion(layout, voyage)), [
+    filler("sidebar"),
   ]);
   const controls = ["minimize", "maximize", "close"].map(
     (name) => `window-${name}`,

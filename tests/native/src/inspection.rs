@@ -67,6 +67,14 @@ impl Target {
         Self::keyed(Role::MovePreview, &placement.0)
     }
 
+    pub fn fleet_drop(fleet: &FleetId) -> Self {
+        Self::keyed(Role::FleetDrop, &fleet.0)
+    }
+
+    pub fn window_drag(key: &str) -> Self {
+        Self::keyed(Role::WindowDrag, key)
+    }
+
     pub fn split_divider(key: &str) -> Self {
         Self::keyed(Role::SplitDivider, key)
     }

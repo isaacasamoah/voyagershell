@@ -1,0 +1,67 @@
+diff --git a/crates/shell/src/materialize.rs b/crates/shell/src/materialize.rs
+index 9fffd133..a0aa7214 100644
+--- a/crates/shell/src/materialize.rs
++++ b/crates/shell/src/materialize.rs
+@@ -2041,9 +2041,10 @@ fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) ->
+ /// GPUI's `window_control_area` is a hit-test answer for the platform, and only
+ /// Windows asks it. The host opens its window with an application-drawn title
+ /// bar on every platform, so a drag area also moves the window itself: a left
+-/// press dragged across it starts the platform move, and a double-click does
+-/// what a native title bar's would — `titlebar_double_click` on macOS, a zoom on
+-/// Linux. Windows keeps its native behaviour through the hit test.
++/// press that began on it and is dragged starts the platform move, and a
++/// double-click does what a native title bar's would — `titlebar_double_click`
++/// on macOS, a zoom on Linux. Windows keeps its native behaviour through the
++/// hit test.
+ fn with_window_control<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
+     let Some(area) = behavior.window_control_area else {
+         return element;
+@@ -2053,22 +2054,40 @@ fn with_window_control<E: StatefulInteractiveElement>(element: E, behavior: &Beh
+         return element;
+     }
+     element
+-        // `on_mouse_move` reaches only the hovered element, so a move with the
+-        // left button held is a press that is being dragged across this area.
+-        .on_mouse_move(|event, window, _| {
+-            if event.pressed_button == Some(MouseButton::Left) {
+-                window.start_window_move();
+-            }
+-        })
+-        .on_mouse_down(MouseButton::Left, |event, window, _| {
++        .on_mouse_down(MouseButton::Left, |event, window, cx| {
+             if event.click_count == 2 {
++                WindowMoveArmed::set(false, cx);
+                 if cfg!(target_os = "macos") {
+                     window.titlebar_double_click();
+                 } else {
+                     window.zoom_window();
+                 }
++            } else {
++                WindowMoveArmed::set(true, cx);
+             }
+         })
++        .on_mouse_up(MouseButton::Left, |_, _, cx| WindowMoveArmed::set(false, cx))
++        .on_mouse_down_out(|_, _, cx| WindowMoveArmed::set(false, cx))
++        .on_mouse_move(|event, window, cx| {
++            if event.pressed_button == Some(MouseButton::Left) && WindowMoveArmed::take(cx) {
++                window.start_window_move();
++            }
++        })
++}
++
++#[derive(Default)]
++struct WindowMoveArmed(bool);
++
++impl gpui::Global for WindowMoveArmed {}
++
++impl WindowMoveArmed {
++    fn set(armed: bool, cx: &mut App) {
++        cx.default_global::<Self>().0 = armed;
++    }
++
++    fn take(cx: &mut App) -> bool {
++        std::mem::take(&mut cx.default_global::<Self>().0)
++    }
+ }
+ 
+ /// Reports focus and accessibility calls a component cannot honour.

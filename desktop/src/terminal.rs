@@ -4,6 +4,8 @@ use std::rc::Rc;
 
 #[path = "terminal_background.rs"]
 mod background;
+#[path = "terminal_click.rs"]
+mod click;
 #[path = "terminal_font.rs"]
 mod font;
 #[path = "terminal_input.rs"]
@@ -144,6 +146,7 @@ struct Pane {
     dirty: bool,
     bounds: Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     selecting: bool,
+    press: Option<click::Press>,
     scroll_fraction: f32,
     composition: input::Composition,
     _task: Task<()>,
@@ -169,6 +172,7 @@ impl Pane {
             }),
             cx.on_blur(&focus, window, |pane, _, cx| {
                 pane.selecting = false;
+                pane.press = None;
                 pane.composition.clear();
                 if let Err(error) = pane.viewer.focus(false) {
                     pane.status = format!("Focus: {error:?}");
@@ -222,6 +226,7 @@ impl Pane {
             dirty: true,
             bounds: Rc::new(std::cell::Cell::new(None)),
             selecting: false,
+            press: None,
             scroll_fraction: 0.,
             composition: input::Composition::default(),
             _task: task,
@@ -468,30 +473,42 @@ impl Pane {
         self.input_sent()
     }
 
+    fn release(&mut self, point: gpui::Point<gpui::Pixels>, cx: &mut gpui::App) -> Result<()> {
+        if !self.selecting {
+            return Ok(());
+        }
+        self.selecting = false;
+        self.select(Select::Release, point)?;
+        if let Some(text) = self.screen.selection_text()? {
+            copy_selection(cx, text);
+        }
+        Ok(())
+    }
+
+    fn paste_primary(&mut self, cx: &gpui::App) -> Result<()> {
+        match primary_text(cx) {
+            Some(text) => self.paste_text(&text),
+            None => Ok(()),
+        }
+    }
+
     fn select(&mut self, step: Select, point: gpui::Point<gpui::Pixels>) -> Result<()> {
-        let Some(bounds) = self.bounds.get() else {
+        let (Some(bounds), Some(cell)) = (self.bounds.get(), self.cell_at(point)) else {
             return Ok(());
         };
         let Some(grid) = &self.grid else {
             return Ok(());
         };
-        let columns = grid.rows.first().map_or(0, |row| row.len());
-        if columns == 0 || grid.rows.is_empty() {
-            return Ok(());
-        }
         let x = f32::from(point.x - bounds.origin.x);
         let y = f32::from(point.y - bounds.origin.y);
         let width = f32::from(self.cell_width);
         let height = f32::from(self.cell_height);
         self.screen.select(
             step,
-            libghostty_vt::terminal::PointCoordinate {
-                x: ((x / width).floor().max(0.) as usize).min(columns - 1) as u16,
-                y: ((y / height).floor().max(0.) as usize).min(grid.rows.len() - 1) as u32,
-            },
+            cell,
             (f64::from(x) * 64., f64::from(y) * 64.),
             libghostty_vt::selection::gesture::Geometry {
-                columns: columns as u32,
+                columns: grid.rows.first().map_or(0, |row| row.len()) as u32,
                 cell_width: (width * 64.).round().max(1.) as u32,
                 padding_left: 0,
                 screen_height: (height * grid.rows.len() as f32 * 64.).round().max(1.) as u32,
@@ -500,6 +517,22 @@ impl Pane {
         self.dirty = true;
         Ok(())
     }
+}
+
+fn copy_selection(cx: &mut gpui::App, text: String) {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    cx.write_to_primary(gpui::ClipboardItem::new_string(text.clone()));
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn primary_text(cx: &gpui::App) -> Option<String> {
+    cx.read_from_primary().and_then(|item| item.text())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+fn primary_text(_: &gpui::App) -> Option<String> {
+    None
 }
 
 fn key_code(key: &str) -> Key {
