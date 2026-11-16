@@ -967,7 +967,7 @@ Until it is fixed, a one-character selection through `click_cell` copies the
 neighbour on the left, so no committed case judges a selection by cell. The
 run that showed it stays in the evidence of the pull request that added
 `click_cell`. Do not read a selection from the app as a check of
-`click_cell`. A click-to-move case has the same exposure.
+`click_cell`. A click-to-move case may share the offset, which no run has checked.
 
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
