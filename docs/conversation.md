@@ -6,9 +6,24 @@ installed Codex app-server over stdio and creates an ephemeral private thread.
 This uses the existing native account, with no API-key route or account-file read
 by Voyager. Terminal agents and the private conversation remain separate.
 
-The default model is gpt-6.1-sol with high reasoning effort. A profile-local
-conversation.json may contain model and effort strings. These change only this
-private administrator connection. C2 restores the supported native shell tool
+A profile-local conversation.json selects the provider and its model, reasoning
+effort and system prompt:
+
+```json
+{"provider": "codex", "model": "<model>", "effort": "high", "prompt": "<system prompt>"}
+```
+
+Every field is optional, and a null field counts as missing. A missing provider
+is Codex. A missing model or effort
+is the provider adapter's default, which for Codex is its pinned model with high
+effort. A missing prompt is the built-in administrator policy in
+app/src/conversation_client.rs. A configured prompt replaces that policy for the
+text conversation, so it should restate any rule the owner still wants. The
+built-in policy carries no personal reply marker; an owner who wants one puts it
+in the configured prompt. Native voice keeps its own built-in instructions.
+These settings change only this private administrator connection. A build that
+predates a field refuses a file that names it, before any runtime starts, so an
+older build never runs a provider or prompt it cannot honour. C2 restores the supported native shell tool
 for file and search inspection while retaining the read-only sandbox,
 never-approval policy and disabled internal agents. Instructions keep project
 and extension-source changes with working Vessels. These instructions are
@@ -62,7 +77,9 @@ projection remains explicitly incomplete, and the bounded queue retains a native
 completion event so it can report the matching accepted turn's actual outcome.
 Late errors or duplicate terminal notifications do not replace a known outcome.
 
-Settings are validated before a private runtime or turn starts. Invalid settings
+Settings are validated before a private runtime or turn starts. An unknown
+field or provider, a non-string value, an empty model, effort or prompt, a model
+over 128 bytes or an effort over 32 bytes rejects that Send. Invalid settings
 reject that Send. After correcting them, the user may explicitly send again;
 Voyager does not retry automatically. Model and effort changes apply to the next
 private runtime, not silently to an already-created thread.
@@ -89,8 +106,10 @@ The native account trial also observed the installed Codex stop hook continuing
 the same turn. Its additional visible message reached chat through the native
 stream; Voyager did not submit another request. The installed stop hook checks
 for the owner's required oru: response prefix. C1's private instructions omitted
-that convention. C2 adds it to the private administrator instructions, leaving
-the global hooks and configuration unchanged. The first native C2 journey read
+that convention. C2 added it to the private administrator instructions, leaving
+the global hooks and configuration unchanged. S18a moved it out of the built-in
+policy and into the owner's configured prompt, because it is one person's
+convention, not application policy. The first native C2 journey read
 an undisclosed local marker and created a Fleet through the real owner. Its one
 completed assistant answer used the prefix without the earlier extra continuation.
 This is evidence for the tested installed account and Linux runtime, not a claim
@@ -184,6 +203,25 @@ format annotations; strict validators still reject fractions and overflow.
 
 ## Typed provider conversion
 
+The conversation owner reaches its provider only through the `Provider` trait in
+app/src/provider.rs. The trait sends a typed command under a request ID, sends
+the post-initialize acknowledgement, returns a tool reply, offers a voice
+package where the provider has one, and shuts the provider down. Events come
+back on the owner's provider-reader mailbox as the typed values below.
+app/src/provider_settings.rs reads conversation.json, maps the selected provider
+to its adapter and opens it. It declares the Codex adapter as a private child
+module, so no other module can name Codex or its frame conversion. A change that
+calls Codex from the conversation owner does not compile. Test modules convert
+recorded Codex frames through test-only re-exports. A second provider is another
+adapter behind the same trait and another arm in that one mapping. The
+administrator's tool definitions reach every provider through the same
+OpenConversation command.
+
+Provider work never blocks an application action. The owner runs on its own
+thread, a provider writes only to its own process, and the reader thread is the
+only place that waits on provider output. Workspace actions go to the workspace
+queue, not through the conversation owner.
+
 The Codex adapter owns native request encoding, bounded frame decoding and
 conversion into the values in app/src/provider.rs. The common conversation owner
 consumes typed responses, visible events and tool calls. The administrator retains
@@ -191,9 +229,7 @@ the current workspace, process, Stop and content dispatch, caller checks and
 receipt policy. Its generated tool definitions remain the same three schemas.
 The adapter encodes tool replies without moving authority into the transport.
 
-The text capability reports Protocol only when the selected executable can be
-resolved. This describes an implemented route, not a running connection or a
-successful account/model operation. Voice has separate Checking, Candidate,
+The selected provider reports the voice capability when the owner starts. Voice has separate Checking, Candidate,
 Compatible and Unavailable states. Package discovery and a compatible helper do
 not establish account readiness or audible speech. Unavailable voice refuses
 audio start while valid text and tools remain usable. Only Codex is implemented.

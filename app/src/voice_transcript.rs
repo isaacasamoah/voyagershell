@@ -101,7 +101,7 @@ mod tests {
     use serde_json::{Value, json};
 
     fn notification(state: &mut Snapshot, value: &Value, generation: u64, session: &str) -> bool {
-        match crate::codex::normalize(value.clone(), None) {
+        match crate::provider_settings::codex_event(value.clone(), None) {
             Some(crate::provider::Event::Audio(crate::provider::AudioEvent::Transcript(event))) => {
                 super::notification(state, &event, generation, session)
             }

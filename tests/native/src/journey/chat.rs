@@ -1,3 +1,4 @@
+use super::workspace::{Finish, Open, rename};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen};
@@ -8,6 +9,7 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::fs;
+use std::time::Instant;
 use voyager_contract::conversation::Focus;
 use voyager_contract::inspection::Role;
 use voyager_contract::{FleetId, RenameTarget};
@@ -17,6 +19,7 @@ cases! {
     SendMessage => "send-message",
     StreamedReply => "streamed-reply",
     ProviderError => "provider-error",
+    RenameWhileProviderWorks => "rename-while-provider-works",
     ToolCallInspect => "tool-call-inspect",
     ToolCallEffect => "tool-call-effect",
 }
@@ -38,6 +41,10 @@ const EFFECT: &str = "Rename the Fleet";
 const EFFECT_ITEM: &str = "stand-in-effect";
 const DONE: &str = "oru: done.";
 const RENAMED: &str = "Scripted Fleet";
+const PROMPT: &str = "You are the verifier's configured administrator.";
+const WORKING: &str = "Keep working";
+const WORKING_ITEM: &str = "stand-in-working";
+const RENAMED_BY_HAND: &str = "Renamed while working";
 const WORKSPACE: &str = "voyager_workspace";
 
 pub(super) fn inspect_script() -> Script {
@@ -113,6 +120,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     native
         .system
         .record(json!({"event":"stand-in","ledger":provider.ledger()}))?;
+    let settings = json!({ "prompt": PROMPT });
+    fs::write(
+        native.profile_path("conversation.json"),
+        settings.to_string(),
+    )?;
+    native
+        .system
+        .record(json!({"event":"conversation-settings","settings":settings}))?;
     let opened = cases.make(native, Case::OpenChat, |native| {
         native.click(&Target::CHAT_TOGGLE)?;
         let chat = native.settle(
@@ -139,8 +154,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     }
     let Some(turn) = cases.make(native, Case::SendMessage, |native| {
         let draft = type_draft(native, FIRST)?;
+        let pressed = Instant::now();
         native.press(Key::Return)?;
         let turn = provider.next_turn(PATIENCE)?;
+        let send_to_turn = pressed.elapsed().as_millis();
         let chat = native.settle(
             "the message drawn with the reply in progress",
             |seen| Some(Chat::of(seen)),
@@ -177,6 +194,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && thread["cwd"].as_str() == folder.to_str(),
             )
             .expect(
+                "the conversation's instructions are the prompt configured in the profile",
+                thread["baseInstructions"] == PROMPT,
+            )
+            .expect(
                 "the turn carries the typed text and the saved context as its focus",
                 turn.text == FIRST
                     && focus.as_ref().map(|focus| &focus.scope) == Some(&layout.context),
@@ -190,7 +211,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("chat", &chat)?
             .observed("threadStart", &thread)?
-            .observed("turn", &turn)?;
+            .observed("turn", &turn)?
+            .observed("sendToTurnMs", send_to_turn)?;
         Ok((verdict, Some(turn)))
     })?
     else {
@@ -199,12 +221,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let replied = cases.make(native, Case::StreamedReply, |native| {
         provider.started(&turn)?;
         provider.item_started(&turn, REPLY_ITEM)?;
+        let streamed = Instant::now();
         provider.delta(&turn, REPLY_ITEM, FIRST_DELTA)?;
         let first = native.settle(
             "the first part of the reply drawn",
             |seen| Some(Chat::of(seen)),
             |chat| chat.reply(REPLY_ITEM) == Some(FIRST_DELTA) && chat.interrupting(),
         )?;
+        let delta_to_drawn = streamed.elapsed().as_millis();
         provider.delta(&turn, REPLY_ITEM, SECOND_DELTA)?;
         let whole = format!("{FIRST_DELTA}{SECOND_DELTA}");
         let second = native.settle(
@@ -236,6 +260,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && done.error.is_none(),
             )
             .observed("first", &first)?
+            .observed("deltaToDrawnMs", delta_to_drawn)?
             .observed("second", &second)?
             .observed("done", &done)?;
         Ok((verdict, Some(())))
@@ -289,6 +314,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         Ok((verdict, Some(())))
     })?;
     if answered.is_none() {
+        return Ok(());
+    }
+    let renamed = cases.make(native, Case::RenameWhileProviderWorks, |native| {
+        let (_, layout) = native
+            .document()?
+            .context("The layout document is missing")?;
+        let fleet = layout
+            .selected_fleet
+            .context("The layout has no selected Fleet")?;
+        let turn = ask(native, &provider, WORKING)?;
+        let turns = provider.turn_starts().len();
+        let started = Instant::now();
+        let subject = RenameTarget::Fleet { id: fleet.clone() };
+        rename(native, &subject, Open::DoubleClick, RENAMED_BY_HAND, Finish::Enter)?;
+        let saved = native.watch(|native| {
+            Ok(saved_name(native, &fleet)?.filter(|name| name == RENAMED_BY_HAND))
+        })?;
+        let elapsed = started.elapsed().as_millis();
+        let working = native.settle(
+            "the reply still in progress after the rename",
+            |seen| Some(Chat::of(seen)),
+            |chat| chat.interrupting(),
+        )?;
+        let quiet = provider.turn_starts().len() == turns && provider.connections() == 1;
+        conclude(native, &provider, &turn, WORKING_ITEM)?;
+        Ok((
+            Verdict::new()
+                .expect(
+                    "the Fleet's saved name is the typed name while the provider's turn is still in progress",
+                    saved.is_some() && working.interrupting() && working.status,
+                )
+                .expect(
+                    "the rename started no provider turn and no second provider",
+                    quiet,
+                )
+                .observed("renameMs", elapsed)?
+                .observed("working", &working)?,
+            Some(()),
+        ))
+    })?;
+    if renamed.is_none() {
         return Ok(());
     }
     let inspected = cases.make(native, Case::ToolCallInspect, |native| {

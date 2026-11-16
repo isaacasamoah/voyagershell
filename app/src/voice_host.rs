@@ -278,7 +278,7 @@ mod tests {
         ] {
             assert_eq!(
                 package
-                    .check_provider(crate::codex::reported_version(&reply))
+                    .check_provider(crate::provider_settings::codex_version(&reply))
                     .is_ok(),
                 compatible,
                 "Provider reply {reply}"
