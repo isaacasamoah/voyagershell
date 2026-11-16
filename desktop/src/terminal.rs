@@ -468,6 +468,22 @@ impl Pane {
         self.input_sent()
     }
 
+    fn release(&mut self, point: gpui::Point<gpui::Pixels>, cx: &mut gpui::App) -> Result<()> {
+        self.selecting = false;
+        self.select(Select::Release, point)?;
+        if let Some(text) = self.screen.selection_text()? {
+            copy_selection(cx, text);
+        }
+        Ok(())
+    }
+
+    fn paste_primary(&mut self, cx: &gpui::App) -> Result<()> {
+        match primary_text(cx) {
+            Some(text) => self.paste_text(&text),
+            None => Ok(()),
+        }
+    }
+
     fn select(&mut self, step: Select, point: gpui::Point<gpui::Pixels>) -> Result<()> {
         let Some(bounds) = self.bounds.get() else {
             return Ok(());
@@ -500,6 +516,22 @@ impl Pane {
         self.dirty = true;
         Ok(())
     }
+}
+
+fn copy_selection(cx: &mut gpui::App, text: String) {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    cx.write_to_primary(gpui::ClipboardItem::new_string(text.clone()));
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn primary_text(cx: &gpui::App) -> Option<String> {
+    cx.read_from_primary().and_then(|item| item.text())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+fn primary_text(_: &gpui::App) -> Option<String> {
+    None
 }
 
 fn key_code(key: &str) -> Key {
@@ -758,6 +790,65 @@ mod tests {
         assert!(after.selections[0].as_ref().unwrap().contains(&4));
         screen.write(b"\x1b[3;1Hnew output");
         assert_eq!(screen.selection_text().unwrap().as_deref(), Some("alpha"));
+    }
+
+    #[test]
+    fn a_release_without_selected_text_yields_nothing_to_copy() {
+        use crate::terminal_screen::Select;
+        use libghostty_vt::{selection::gesture::Geometry, terminal::PointCoordinate};
+        let mut screen = Screen::new(20, 3).unwrap();
+        screen.write(b"alpha");
+        let geometry = Geometry {
+            columns: 20,
+            cell_width: 512,
+            padding_left: 0,
+            screen_height: 3456,
+        };
+        let gesture = |screen: &mut Screen, steps: Vec<(Select, u16, u32)>| {
+            for (step, x, y) in steps {
+                let offset = if matches!(step, Select::Press) {
+                    64.
+                } else {
+                    448.
+                };
+                screen
+                    .select(
+                        step,
+                        PointCoordinate { x, y },
+                        (f64::from(x) * 512. + offset, f64::from(y) * 1152. + 576.),
+                        geometry,
+                    )
+                    .unwrap();
+            }
+        };
+        gesture(
+            &mut screen,
+            vec![(Select::Press, 8, 1), (Select::Release, 8, 1)],
+        );
+        assert_eq!(screen.selection_text().unwrap(), None);
+        gesture(
+            &mut screen,
+            vec![
+                (Select::Press, 8, 1),
+                (Select::Drag, 12, 1),
+                (Select::Release, 12, 1),
+            ],
+        );
+        assert_eq!(screen.selection_text().unwrap(), None);
+        gesture(
+            &mut screen,
+            vec![
+                (Select::Press, 0, 0),
+                (Select::Drag, 4, 0),
+                (Select::Release, 4, 0),
+            ],
+        );
+        assert_eq!(screen.selection_text().unwrap().as_deref(), Some("alpha"));
+        gesture(
+            &mut screen,
+            vec![(Select::Press, 8, 1), (Select::Release, 8, 1)],
+        );
+        assert_eq!(screen.selection_text().unwrap(), None);
     }
 
     #[test]
