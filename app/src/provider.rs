@@ -1,6 +1,12 @@
 use crate::voice_host::Package;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::{
+    env,
+    path::PathBuf,
+    process::Child,
+    thread,
+    time::{Duration, Instant},
+};
 use voyager_contract::conversation::{Focus, Phase, Role};
 
 pub(crate) trait Provider {
@@ -9,6 +15,41 @@ pub(crate) trait Provider {
     fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String>;
     fn voice_package(&self) -> Result<Package, String>;
     fn shutdown(&mut self) -> Result<(), String>;
+}
+
+pub(crate) fn executable(variable: &str, program: &str, name: &str) -> Result<PathBuf, String> {
+    let selected = env::var_os(variable).unwrap_or_else(|| program.into());
+    let path = PathBuf::from(&selected);
+    if path.components().count() > 1 || path.is_absolute() {
+        return path
+            .canonicalize()
+            .map_err(|_| format!("Selected {name} executable is unavailable"));
+    }
+    env::var_os("PATH")
+        .and_then(|paths| {
+            env::split_paths(&paths)
+                .map(|path| path.join(&selected))
+                .find(|path| path.is_file())
+        })
+        .ok_or_else(|| format!("{name} is not installed on the current application path"))?
+        .canonicalize()
+        .map_err(|_| format!("Selected {name} executable is unavailable"))
+}
+
+pub(crate) fn reap(child: &mut Child) -> Result<(), String> {
+    if child.try_wait().map_err(|e| e.to_string())?.is_none() {
+        child.kill().map_err(|e| e.to_string())?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err("Private provider exit is unconfirmed".into());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,6 +166,12 @@ pub(crate) enum Visible {
         item: String,
         text: String,
         complete: bool,
+    },
+    Activity {
+        thread: String,
+        turn: String,
+        item: String,
+        text: String,
     },
     Started {
         thread: String,

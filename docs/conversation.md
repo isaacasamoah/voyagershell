@@ -14,9 +14,11 @@ effort and system prompt:
 ```
 
 Every field is optional, and a null field counts as missing. A missing provider
-is Codex. A missing model or effort is the provider adapter's default, which for
-Codex is its pinned model with high effort. A missing prompt is the built-in
-administrator policy in app/src/conversation_client.rs. A configured prompt
+is Codex. The provider is `codex` or `claude`. A missing model or effort is the
+provider adapter's default, which for Codex is its pinned model with high effort
+and for Claude is `opus` with high effort. A missing prompt is the selected
+provider's built-in administrator policy, `INSTRUCTIONS` in app/src/codex.rs or
+app/src/claude.rs. Each policy names the tools that its provider has. A configured prompt
 replaces that policy for the text conversation, so it should restate any rule
 the owner still wants. The built-in policy carries no personal reply marker. An
 owner who wants one puts it in the configured prompt. Native voice keeps its own
@@ -238,7 +240,7 @@ The adapter encodes tool replies without moving authority into the transport.
 The selected provider reports the voice capability when the owner starts. Voice has separate Checking, Candidate,
 Compatible and Unavailable states. Package discovery and a compatible helper do
 not establish account readiness or audible speech. Unavailable voice refuses
-audio start while valid text and tools remain usable. Only Codex is implemented.
+audio start while valid text and tools remain usable. Only Codex has voice.
 
 Ordinary outbound frames remain limited to 64 KiB. Content-only framing retains
 2 * (1 MiB + 16 KiB) + 4096 bytes to allow escaped serialized Notes results.
@@ -247,6 +249,105 @@ remains 8 KiB for workspace/process and 1 MiB + 16 KiB for content. The adapter
 accepts only a response matching the outstanding numeric request ID; the owner
 also checks that ID before settling its request. Invalid or unsupported provider
 callbacks receive explicit errors without dispatching an application effect.
+
+## Claude provider
+
+`"provider": "claude"` runs the avatar on the installed Claude Code CLI. The
+avatar uses the same command surface as agents in Vessels: `hc` for terminal
+programs and `voyager` for workspace actions. It has no Voyager tool
+definitions and no MCP server. The administrator's tool catalogue in the
+OpenConversation command is not sent to Claude.
+
+### Invocation
+
+The first Send starts one process, which lives for the conversation. The
+executable is `VOYAGER_CLAUDE_BIN` when set, otherwise `claude` on the
+application's path:
+
+```sh
+claude -p --input-format stream-json --output-format stream-json --verbose \
+  --include-partial-messages --replay-user-messages --no-session-persistence \
+  --setting-sources "" --disable-slash-commands \
+  --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
+  --tools Bash --permission-mode dontAsk \
+  --allowedTools "Bash(hc *)" "Bash(voyager *)" \
+  --model <model> --effort <effort> --system-prompt <prompt>
+```
+
+- `--tools Bash` leaves Bash as the only built-in tool. `--allowedTools`
+  approves a Bash command only when it is `hc` or `voyager`, with or without
+  arguments. The CLI checks each part of a compound command separately.
+  `--permission-mode dontAsk` denies every other command without a prompt, and
+  Claude sees the denial as the command's result.
+- `--setting-sources ""` loads no user, project or local settings, so no hooks,
+  plugins or permission rules from settings files apply. Managed policy
+  settings still apply, as the CLI documents. `--disable-slash-commands` turns
+  off skills and commands. `--strict-mcp-config` with an empty `mcpServers`
+  object loads no MCP server.
+- `--no-session-persistence` keeps the transcript off disk, so no Claude
+  session is restored or resumed.
+- `--verbose` is required by the CLI for stream-json output with `-p`.
+
+The CLI version read for this design was 2.1.322. The flags come from its
+`--help`. Its stream-json input accepts the keys `type`, `message`, `uuid`,
+`session_id`, `parent_tool_use_id` and `timestamp` on a user line, and it
+answers an `interrupt` control request with a `success` control response.
+
+### Environment and authority
+
+The child runs in the profile's `conversation` folder. Its environment is the
+application's, with `HC_SESSION` set to VoyagerShell's own Core session and
+`HC_SOCKET` to that session's socket, the same values the application's own
+`hc connect` uses. `HC_TERMINAL_ID`, `HC_SCOPE` and `HC_TERMINAL_SOCKET` are
+removed. When VoyagerShell is launched from a terminal of another Core session,
+such as the owner's live session, the avatar's `hc` commands therefore reach
+VoyagerShell's session and never the launching one. The avatar is not a
+terminal, so a program it starts with `hc run` has no parent terminal and
+outlives the avatar's command.
+
+The avatar acts with the human's authority. Its identity is advisory and
+nothing enforces it: any program of the same user can run the same `hc` and
+`voyager` commands, and the allowed-command list limits only which tool Claude
+may call, not what those commands may do. `hc run` can start any program.
+
+Each human message carries the dock context captured at Send, as a second text
+block `voyager.focus: <Focus JSON>`. The built-in policy tells Claude to act on
+that captured context and to change the dock only when asked.
+
+`voyager` finds its Vessel socket from `HC_SESSION` and `HC_TERMINAL_ID`
+(docs/voyager-command.md). The avatar has no terminal, so `voyager` refuses in
+the avatar until VoyagerShell serves an avatar socket. That socket is not in
+this build.
+
+### Stream mapping
+
+| CLI line | Conversation event |
+| --- | --- |
+| The `user` line echoed with `isReplay` while a turn start is pending | The turn's acknowledgement, `Answer::Turn` |
+| `stream_event` `message_start` | Records the message ID |
+| `stream_event` `content_block_delta` with a `text_delta` | `Visible::Message` delta, item `<message id>:<block index>` |
+| `assistant` content `tool_use` | `Visible::Activity`, item the tool-use ID, text `$ <command>` |
+| `user` content `tool_result` | `Visible::Activity` appended to that item: a new line, `refused: ` when `is_error`, then at most 2048 bytes of output |
+| `control_response` naming the pending interrupt | `Answer::Acknowledged`, or a rejection carrying the CLI's error |
+| `result` after an interrupt | `Visible::Completed` with `Interrupted` |
+| `result` with `success` and no error | `Visible::Completed` with `Completed` |
+| any other `result` | `Visible::Completed` with `Failed` and the CLI's `errors`, else its `result` text |
+| end of output | Disconnected, with the last line the CLI wrote to standard error |
+
+Text arrives only as deltas. The text blocks of complete `assistant` lines are
+not drawn again. A `Visible::Activity` is drawn as a `tool` role message with no
+tool outcome, which the chat labels Workspace. A command is Claude's own: the
+application sends Claude nothing but the human's message and the interrupt
+request, and no command result passes through the conversation owner.
+
+Initialize and OpenConversation are answered by the adapter itself, because the
+CLI has no handshake to wait for. The answers go onto the provider-reader
+mailbox without blocking. A full mailbox refuses the request. A turn starts by
+writing the user line. Interrupt writes `{"type":"control_request",
+"request_id":"interrupt-<id>","request":{"subtype":"interrupt"}}`. Voice is
+Unavailable, and audio commands are refused before anything is written. The
+2048-byte output bound is a target to measure. The 1 MiB line limit matches the
+Codex adapter's non-content frame limit.
 
 ## Native speech integration
 

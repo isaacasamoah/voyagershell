@@ -2,6 +2,10 @@ use super::{CallError, Client};
 use voyager_contract::{Action, Request, Response, Unanswered};
 
 impl Client {
+    pub(crate) fn session(&self) -> &str {
+        &self.session
+    }
+
     pub fn inspect(&self) -> Result<Response, Unanswered> {
         self.call(Request {
             request_id: self.request_id(),
@@ -44,6 +48,7 @@ mod tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "reply-test".into(),
+            session: String::new(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),

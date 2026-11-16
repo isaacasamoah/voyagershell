@@ -119,9 +119,73 @@ pub(crate) fn fail(state: &mut Snapshot, error: String, phase: Phase) -> bool {
     true
 }
 
+fn append(
+    state: &mut Snapshot,
+    role: Role,
+    id: &str,
+    text: &str,
+    complete: bool,
+    request: &str,
+) -> bool {
+    if state.limited || id.is_empty() {
+        return false;
+    }
+    let existing = state
+        .messages
+        .iter()
+        .find(|message| message.id == id && message.role == role && message.request_id == request);
+    let next_size = if complete {
+        text.len()
+    } else {
+        existing.map_or(0, |message| message.text.len()) + text.len()
+    };
+    let retained = state
+        .messages
+        .iter()
+        .map(|message| message.text.len())
+        .sum::<usize>();
+    if next_size > 65536
+        || retained + next_size.saturating_sub(existing.map_or(0, |message| message.text.len()))
+            > 256 * 1024
+        || state.messages.len() >= 128
+    {
+        state.limited = true;
+        state.error = Some("The displayed response is incomplete because it exceeded its display bound. Native work continues; nothing was replayed.".into());
+        return true;
+    }
+    if let Some(message) = state
+        .messages
+        .iter_mut()
+        .find(|message| message.id == id && message.role == role && message.request_id == request)
+    {
+        if complete {
+            text.clone_into(&mut message.text);
+        } else {
+            message.text.push_str(text);
+        }
+    } else {
+        let context = state
+            .messages
+            .iter()
+            .rev()
+            .find(|message| message.role == Role::User && message.request_id == request)
+            .and_then(|message| message.context.clone());
+        state.messages.push(Message {
+            id: id.to_owned(),
+            request_id: request.into(),
+            role,
+            text: text.to_owned(),
+            context,
+            tool: None,
+        });
+    }
+    true
+}
+
 pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str) -> bool {
     let (thread, turn) = match value {
         Visible::Message { thread, turn, .. }
+        | Visible::Activity { thread, turn, .. }
         | Visible::Started { thread, turn }
         | Visible::Completed { thread, turn, .. }
         | Visible::Error { thread, turn, .. } => (thread, turn),
@@ -133,65 +197,15 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str)
     }
     match value {
         Visible::Message {
-            item: id,
+            item,
             text,
             complete,
             ..
         } if state.phase == Phase::Working => {
-            if state.limited || id.is_empty() {
-                return false;
-            }
-            let existing = state.messages.iter().find(|message| {
-                message.id == *id
-                    && message.role == Role::Assistant
-                    && message.request_id == request
-            });
-            let next_size = if *complete {
-                text.len()
-            } else {
-                existing.map_or(0, |message| message.text.len()) + text.len()
-            };
-            let retained = state
-                .messages
-                .iter()
-                .map(|message| message.text.len())
-                .sum::<usize>();
-            if next_size > 65536
-                || retained
-                    + next_size.saturating_sub(existing.map_or(0, |message| message.text.len()))
-                    > 256 * 1024
-                || state.messages.len() >= 128
-            {
-                state.limited = true;
-                state.error = Some("The displayed response is incomplete because it exceeded its display bound. Native work continues; nothing was replayed.".into());
-                return true;
-            }
-            if let Some(message) = state.messages.iter_mut().find(|message| {
-                message.id == *id
-                    && message.role == Role::Assistant
-                    && message.request_id == request
-            }) {
-                if *complete {
-                    message.text.clone_from(text);
-                } else {
-                    message.text.push_str(text);
-                }
-            } else {
-                let context = state
-                    .messages
-                    .iter()
-                    .rev()
-                    .find(|message| message.role == Role::User && message.request_id == request)
-                    .and_then(|message| message.context.clone());
-                state.messages.push(Message {
-                    id: id.clone(),
-                    request_id: request.into(),
-                    role: Role::Assistant,
-                    text: text.clone(),
-                    context,
-                    tool: None,
-                });
-            }
+            return append(state, Role::Assistant, item, text, *complete, request);
+        }
+        Visible::Activity { item, text, .. } if state.phase == Phase::Working => {
+            return append(state, Role::Tool, item, text, false, request);
         }
         Visible::Error {
             message, retrying, ..

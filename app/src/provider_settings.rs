@@ -1,3 +1,5 @@
+#[path = "claude.rs"]
+mod claude;
 #[path = "codex.rs"]
 mod codex;
 use crate::provider::{Event, Provider};
@@ -14,18 +16,28 @@ use voyager_contract::voice::Capability;
 pub(crate) enum Kind {
     #[default]
     Codex,
+    Claude,
 }
 
 impl Kind {
     fn defaults(self) -> (&'static str, &'static str) {
         match self {
             Self::Codex => (codex::DEFAULT_MODEL, codex::DEFAULT_EFFORT),
+            Self::Claude => (claude::DEFAULT_MODEL, claude::DEFAULT_EFFORT),
+        }
+    }
+
+    pub(crate) fn instructions(self) -> &'static str {
+        match self {
+            Self::Codex => codex::INSTRUCTIONS,
+            Self::Claude => claude::INSTRUCTIONS,
         }
     }
 
     pub(crate) fn voice(self) -> Capability {
         match self {
             Self::Codex => codex::Codex::voice_capability(),
+            Self::Claude => claude::voice_capability(),
         }
     }
 }
@@ -91,10 +103,24 @@ impl Settings {
     pub(crate) fn open(
         &self,
         cwd: &Path,
+        session: &str,
         events: SyncSender<Result<Event, String>>,
     ) -> Result<Box<dyn Provider>, String> {
         match self.provider {
             Kind::Codex => Ok(Box::new(codex::Codex::open(cwd, events)?)),
+            Kind::Claude => Ok(Box::new(claude::Claude::open(
+                &claude::Options {
+                    cwd,
+                    session,
+                    model: &self.model,
+                    effort: &self.effort,
+                    prompt: self
+                        .prompt
+                        .as_deref()
+                        .unwrap_or(self.provider.instructions()),
+                },
+                events,
+            )?)),
         }
     }
 }
@@ -144,6 +170,30 @@ mod tests {
                 prompt: Some("Configured policy".into()),
             }
         );
+        fs::write(
+            profile.join("conversation.json"),
+            r#"{"provider":"claude"}"#,
+        )
+        .unwrap();
+        let claude = Settings::read(&profile).unwrap();
+        assert_eq!(
+            (
+                claude.provider,
+                claude.model.as_str(),
+                claude.effort.as_str(),
+                claude.provider.instructions()
+            ),
+            (
+                Kind::Claude,
+                claude::DEFAULT_MODEL,
+                claude::DEFAULT_EFFORT,
+                claude::INSTRUCTIONS
+            )
+        );
+        assert!(matches!(
+            claude.provider.voice(),
+            Capability::Unavailable { .. }
+        ));
         assert!(!profile.join("conversation").exists());
         fs::remove_dir_all(profile).unwrap();
     }

@@ -140,6 +140,7 @@ Owns files:
 - `app/src/provider_settings.rs`
 - `app/src/codex.rs`
 - `app/src/codex_protocol.rs`
+- `app/src/claude.rs`
 - `app/src/voice.rs`
 - `app/src/voice_host.rs`
 - `app/src/voice_session.rs`

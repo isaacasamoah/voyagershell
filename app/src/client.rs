@@ -363,6 +363,7 @@ pub struct Client {
     sequence: Arc<AtomicU64>,
     package_revision: Arc<AtomicU64>,
     identity: String,
+    session: String,
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
 }
@@ -403,11 +404,11 @@ impl Client {
     }
 
     pub fn open(session: String, cwd: String) -> Self {
-        Self::start(session, cwd, None)
+        Self::start_with_launches(session, cwd, None, None)
     }
 
     pub fn with_content(session: String, cwd: String, owner: crate::content::Owner) -> Self {
-        Self::start(session, cwd, Some(owner))
+        Self::start_with_launches(session, cwd, Some(owner), None)
     }
 
     pub fn with_content_and_launches(
@@ -417,10 +418,6 @@ impl Client {
         launches: std::path::PathBuf,
     ) -> Self {
         Self::start_with_launches(session, cwd, Some(owner), Some(launches))
-    }
-
-    fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {
-        Self::start_with_launches(session, cwd, content, None)
     }
 
     fn start_with_launches(
@@ -445,6 +442,7 @@ impl Client {
             package_revision,
             activity,
             prepared_context,
+            session: session.clone(),
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -2796,6 +2794,7 @@ mod voice_scope_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "voice-scope-test".into(),
+            session: String::new(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
@@ -3908,6 +3907,7 @@ mod content_admission_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "mailbox-test".into(),
+            session: String::new(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
