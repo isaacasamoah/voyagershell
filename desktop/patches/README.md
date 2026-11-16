@@ -20,6 +20,13 @@ capability with a `capabilities.window` manifest key, and an `Rc`-held engine in
 `LoadedApplication`. [Vessel engine limits](../../docs/content.md#vessel-engine-limits)
 owns the host rule, the numbers and the gaps.
 
+`gpui-shell-window-drag.patch` applies after it. A drag area armed a window move
+on any mouse move with the left button held, wherever the press began. The patch
+arms the move on a left press on the drag area, starts it on the next move with
+the button held and disarms it on a release, a press elsewhere, a double-click
+or the move. This is the pattern of the title bars in Zed and Herdr App. See
+[the top bar](../../docs/workspace.md) for the rule it serves.
+
 Keep these patches small. When upstream provides an equivalent interface, review
 that version and replace the patch through the normal dependency update. This
 local build integration does not publish an SDK fork or establish support on

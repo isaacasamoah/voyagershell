@@ -4,9 +4,9 @@ mod model;
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Sharpness, Terminal, fleets, vessels, voyages};
+use crate::native::{Decorations, Native, Seen, Sharpness, Terminal, fleets, vessels, voyages};
 use crate::sandbox;
-use crate::x11::Key;
+use crate::x11::{Key, Observed, Request};
 use anyhow::Result;
 use avatar::Avatar;
 use model::{Model, Row, Tab};
@@ -35,6 +35,12 @@ cases! {
     RenameEscape => "rename-escape-cancels",
     RenameEmpty => "rename-empty-refused",
     Relaunch => "relaunch-restores",
+    DragBarMovesWindow => "drag-bar-moves-window",
+    TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
+    DoubleClickMaximises => "double-click-bar-maximises-window",
+    SidebarDragMovesWindow => "sidebar-drag-moves-window",
+    VoyageDragDoesNotMoveWindow => "voyage-drag-does-not-move-window",
+    TerminalSelectionDoesNotMoveWindow => "terminal-selection-does-not-move-window",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -46,6 +52,7 @@ const SHARP_TOLERANCE: f64 = 3.5;
 const FLEET_NAME: &str = "Native Fleet";
 const VOYAGE_NAME: &str = "Keyboard Voyage";
 const VESSEL_NAME: &str = "+";
+const FILLER_GAP: f32 = 10.0;
 const MODELLED: &str = "the saved and drawn workspace match the journey's model";
 
 #[derive(PartialEq)]
@@ -701,7 +708,179 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("after", &after)?
             .observed("restored", &restored)?
             .observed("differences after the relaunch", &reopened)
+    })?;
+
+    cases.check(native, Case::DragBarMovesWindow, |native| {
+        on_bar(native, &start)?;
+        let unfilled = native.observe("the empty top bar and the create Fleet button", |seen| {
+            let filler = Target::window_drag("fleets").find(seen.frame)?.bounds;
+            let create = Target::create_fleet(&start.voyage).find(seen.frame)?.bounds;
+            Some(filler.x - (create.x + create.width))
+        })?;
+        let seen = native.window_requests()?.len();
+        native.drag_across(&Target::window_drag("fleets"), (60, 0))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("drag-move")?;
+        Verdict::new()
+            .expect(
+                "the empty top bar starts right after the create Fleet button",
+                (0.0..FILLER_GAP).contains(&unfilled),
+            )
+            .expect(
+                "a drag across the empty top bar sends a move request for the window",
+                !sent.is_empty() && sent.iter().all(moves),
+            )
+            .observed(
+                "logical pixels between the create Fleet button and the empty top bar",
+                unfilled,
+            )?
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::TabDragDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let before = tabs(&at_rest(native)?.document, &start.voyage);
+        let seen = native.window_requests()?.len();
+        let [first, last] = before.as_slice() else {
+            return Verdict::new()
+                .expect("the Voyage holds two Fleet tabs to drag", false)
+                .observed("tabs", &before);
+        };
+        let first_tab = Target::name(&RenameTarget::Fleet { id: first.clone() });
+        let filler = Target::window_drag("fleets");
+        let mut held = native.hold(&Target::name(&RenameTarget::Fleet { id: last.clone() }))?;
+        held.toward(native.point_in(&first_tab, 0.25, 0.5)?)?;
+        held.until("the insertion bar on the first Fleet tab", |seen| {
+            seen.shows(&Target::fleet_drop(first)).then_some(())
+        })?;
+        held.toward(native.point_in(&filler, 0.5, 0.5)?)?;
+        held.toward(native.point_in(&first_tab, 0.25, 0.5)?)?;
+        held.until("the insertion bar on the first Fleet tab again", |seen| {
+            seen.shows(&Target::fleet_drop(first)).then_some(())
+        })?;
+        held.release()?;
+        let after = native.settle(
+            "the Fleet tabs in the saved order",
+            |seen| Some(tabs(seen.document, &start.voyage)),
+            |order| *order != before,
+        )?;
+        native.keep_window("tab-drag")?;
+        let sent = native.requests_through_quiet(seen)?;
+        Verdict::new()
+            .expect(
+                "dragging the second Fleet tab across the empty top bar onto the first puts it first",
+                after.first() == Some(last) && after.last() == Some(first),
+            )
+            .expect(
+                "the tab drag, carried across the empty top bar, sends no window request",
+                sent.is_empty(),
+            )
+            .observed("before", &before)?
+            .observed("after", &after)?
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::DoubleClickMaximises, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        native.double_click(&Target::window_drag("fleets"))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("zoom")?;
+        let all = native.window_requests()?;
+        Verdict::new()
+            .expect(
+                "a double-click on the empty top bar sends one toggle of the window's maximized state",
+                maximises(&sent),
+            )
+            .expect(
+                "the double-click sent no other window request",
+                all.len() == seen + 1,
+            )
+            .observed("requests", &all[seen..])
+    })?;
+
+    cases.check(native, Case::SidebarDragMovesWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        native.drag_across(&Target::window_drag("sidebar"), (40, 0))?;
+        let sent = native.requests_after(seen, 1)?;
+        native.keep_window("sidebar-drag")?;
+        Verdict::new()
+            .expect(
+                "a drag across the sidebar's empty top row sends a move request for the window",
+                !sent.is_empty() && sent.iter().all(moves),
+            )
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::VoyageDragDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        let mut held = native.hold(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+        held.toward(native.point_in(&Target::window_drag("sidebar"), 0.5, 0.5)?)?;
+        held.release()?;
+        let sent = native.requests_through_quiet(seen)?;
+        native.keep_window("voyage-drag")?;
+        Verdict::new()
+            .expect(
+                "a Voyage drag carried across the sidebar's empty top row sends no window request",
+                sent.is_empty(),
+            )
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::TerminalSelectionDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        let mut held = native.hold(&Target::terminal(&start.vessel.id))?;
+        held.toward(native.point_in(&Target::window_drag("fleets"), 0.5, 0.5)?)?;
+        held.release()?;
+        let sent = native.requests_through_quiet(seen)?;
+        native.keep_window("terminal-selection")?;
+        Verdict::new()
+            .expect(
+                "a terminal selection dragged up across the empty top bar sends no window request",
+                sent.is_empty(),
+            )
+            .observed("requests", &sent)
     })
+}
+
+fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
+    native.launch_as(Decorations::Client)?;
+    if at_rest(native)?.document.selected_voyage.as_ref() != Some(&start.voyage) {
+        native.click(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+    }
+    native.observe("the Voyage's Fleet tabs and the empty top bar", |seen| {
+        (seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+            && tabs(seen.document, &start.voyage).len() == 2
+            && seen.shows(&Target::window_drag("fleets"))
+            && seen.shows(&Target::window_drag("sidebar")))
+        .then_some(())
+    })
+}
+
+fn tabs(layout: &Layout, voyage: &VoyageId) -> Vec<FleetId> {
+    voyages(layout)
+        .filter(|saved| saved.id == *voyage)
+        .flat_map(|saved| saved.fleets.iter().filter(|fleet| !fleet.closed))
+        .map(|fleet| fleet.id.clone())
+        .collect()
+}
+
+fn moves(observed: &Observed) -> bool {
+    matches!(&observed.request, Request::MoveResize { direction, .. } if direction.name == "move")
+}
+
+fn maximises(sent: &[Observed]) -> bool {
+    matches!(sent, [Observed { request: Request::NetWmState { action, first, second, .. }, .. }]
+        if action.name == "toggle"
+            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_VERT"))
+            && [first, second].iter().any(|atom| atom.as_deref() == Some("_NET_WM_STATE_MAXIMIZED_HORZ")))
 }
 
 fn modelled(native: &Native, model: &Model, verdict: Verdict) -> Result<Verdict> {

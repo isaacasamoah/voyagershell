@@ -16,6 +16,7 @@ URL = "https://github.com/longbridge/gpui-kit"
 PATCHES = (
     ROOT / "desktop" / "patches" / "gpui-shell-native-overlay.patch",
     ROOT / "desktop" / "patches" / "gpui-shell-engine-limits.patch",
+    ROOT / "desktop" / "patches" / "gpui-shell-window-drag.patch",
 )
 CHECKOUT = (
     Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
