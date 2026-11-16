@@ -1,3 +1,4 @@
+use crate::avatar_sharp::Sharp;
 use anyhow::{Context as _, Result, bail};
 use gpui::RenderImage;
 use image::{DynamicImage, Frame, ImageDecoder, ImageFormat, ImageReader, Limits};
@@ -30,6 +31,7 @@ pub struct Compiled {
     pub clips: Vec<Timeline>,
     pub bindings: [Option<usize>; 4],
     pub rest: usize,
+    pub sharp: Sharp,
 }
 
 #[derive(Clone)]
@@ -268,6 +270,7 @@ fn compile(
         clips,
         bindings,
         rest,
+        sharp: Sharp::default(),
     })
 }
 

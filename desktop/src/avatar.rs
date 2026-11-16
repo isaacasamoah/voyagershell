@@ -287,6 +287,9 @@ impl Avatar {
                                 cx.drop_image(Arc::clone(&pose.image), None);
                             }
                         }
+                        for image in retired.sharp.drain() {
+                            cx.drop_image(image, None);
+                        }
                         cx.refresh_windows();
                         *avatar.animation_notice.borrow_mut() = Some(String::new());
                     }

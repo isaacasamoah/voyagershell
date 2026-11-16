@@ -1,12 +1,14 @@
+mod avatar;
 mod model;
 
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, fleets, vessels, voyages};
+use crate::native::{Native, Seen, Sharpness, Terminal, fleets, vessels, voyages};
 use crate::sandbox;
 use crate::x11::Key;
 use anyhow::Result;
+use avatar::Avatar;
 use model::{Model, Row, Tab};
 use serde::Serialize;
 use std::path::Path;
@@ -19,6 +21,9 @@ use voyager_contract::{
 cases! {
     SplitVessel => "split-vessel",
     DockVessel => "dock-vessel",
+    AvatarSharp => "avatar-sharp",
+    AvatarFloat => "avatar-float",
+    AvatarSmall => "avatar-small",
     CreateFleet => "create-fleet",
     SwitchFleet => "switch-fleet",
     CreateVoyage => "create-voyage",
@@ -33,6 +38,10 @@ cases! {
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
+
+const DOCKED_DIAMETER: f32 = 94.;
+const COMPACT_DIAMETER: f32 = 38.;
+const SHARP_TOLERANCE: f64 = 3.5;
 
 const FLEET_NAME: &str = "Native Fleet";
 const VOYAGE_NAME: &str = "Keyboard Voyage";
@@ -232,6 +241,109 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("landing", &landing)?;
         model.dock = docked.clone();
         modelled(native, &model, verdict)
+    })?;
+
+    cases.check(native, Case::AvatarSharp, |native| {
+        native.hover(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+        let avatar = Avatar::find(native, DOCKED_DIAMETER)?;
+        let (sharpness, look) = avatar.at_rest(native)?;
+        native.keep("avatar-sharp", &look)?;
+        Verdict::new()
+            .expect(
+                "the docked avatar's opaque pixels match a Lanczos reference at its device size",
+                sharpness.lanczos.distance <= SHARP_TOLERANCE,
+            )
+            .expect(
+                "the docked avatar is nearer the Lanczos reference than a bilinear reduction",
+                sharpness.sharper(),
+            )
+            .observed("place", avatar.place())?
+            .observed("sharpness", &sharpness)
+    })?;
+
+    let compact = Context::Fleet {
+        id: start.fleet.clone(),
+    };
+    let float = cases.make(native, Case::AvatarFloat, |native| {
+        let before = at_rest(native)?.document.context;
+        native.drag(
+            &Target::AVATAR,
+            &Target::name(&RenameTarget::Fleet {
+                id: start.fleet.clone(),
+            }),
+        )?;
+        let docked = native.settle(
+            "the avatar docked to the Fleet and drawn",
+            |seen| {
+                (seen.document.context != before && avatar_bounds(seen).is_some())
+                    .then(|| seen.document.context.clone())
+            },
+            |_| true,
+        )?;
+        let avatar = Avatar::find(native, COMPACT_DIAMETER)?;
+        let frames = avatar.floating(native)?;
+        for (index, (_, look)) in frames.iter().enumerate() {
+            native.keep(&format!("avatar-float-{index}"), look)?;
+        }
+        let sharpness: Vec<&Sharpness> = frames.iter().map(|(sharpness, _)| sharpness).collect();
+        let rises: Vec<i32> = sharpness
+            .iter()
+            .map(|sharpness| sharpness.lanczos.offset[1])
+            .collect();
+        let verdict = Verdict::new()
+            .expect("the avatar docked to the Fleet", docked == compact)
+            .expect(
+                "every float frame matches a Lanczos reference at its device size",
+                sharpness
+                    .iter()
+                    .all(|sharpness| sharpness.lanczos.distance <= SHARP_TOLERANCE),
+            )
+            .expect(
+                "every float frame is nearer the Lanczos reference than a bilinear reduction",
+                sharpness.iter().all(|sharpness| sharpness.sharper()),
+            )
+            .expect(
+                "the float moved the avatar between the frames",
+                rises.iter().any(|rise| *rise != rises[0]),
+            )
+            .observed("place", avatar.place())?
+            .observed("frames", &sharpness)?;
+        Ok((verdict, Some(avatar)))
+    })?;
+    let Some(avatar) = float else {
+        return Ok(());
+    };
+
+    cases.check(native, Case::AvatarSmall, |native| {
+        native.hover(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+        let (sharpness, look) = avatar.at_rest(native)?;
+        native.keep("avatar-small", &look)?;
+        native.drag(&Target::AVATAR, &Target::name(&vessel(shell.placement())))?;
+        let landing = native.settle(
+            "the document and the frame on the Vessel dock, with the avatar drawn on it",
+            |seen| (seen.document.context != compact).then(|| landing(seen)),
+            Landing::landed,
+        )?;
+        Verdict::new()
+            .expect(
+                "the compact avatar's opaque pixels match a Lanczos reference at its device size",
+                sharpness.lanczos.distance <= SHARP_TOLERANCE,
+            )
+            .expect(
+                "the compact avatar is nearer the Lanczos reference than a bilinear reduction",
+                sharpness.sharper(),
+            )
+            .expect(
+                "the avatar returned to the Vessel dock",
+                landing.context == docked && landing.landed(),
+            )
+            .observed("place", avatar.place())?
+            .observed("sharpness", &sharpness)?
+            .observed("landing", &landing)
     })?;
 
     let made = cases.make(native, Case::CreateFleet, |native| {

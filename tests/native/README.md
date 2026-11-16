@@ -1054,6 +1054,19 @@ screen's text. A terminal that has lost the keyboard fails the same way. After
 terminal that already holds the keyboard, because a click would start a new
 selection.
 
+The `workspace` journey judges the avatar's sharpness in `avatar-sharp`,
+`avatar-float` and `avatar-small`. `native/avatar.rs` reduces the shipped
+`idle.png` to the avatar's device size with Lanczos3 in premultiplied alpha, and
+separately with a two by two bilinear sample, which is what GPUI draws from an
+unreduced source. A case captures the avatar's region, takes the best fit over a few
+device pixels, and compares the fully opaque interior of the reference with the
+capture after fitting one gain and one base for the whole region, because the
+avatar is drawn dimmed over the terminal. The distance is the mean absolute
+difference of the fitted channels. A case passes when the distance is within
+`SHARP_TOLERANCE` and the Lanczos reference is nearer than the bilinear one. The
+verifier runs at scale 2, so the reduction is 3.9 and 9.8 times. A capture on
+another scale is not pixel matched, and the cases do not cover a fractional scale.
+
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A second connection belongs to the verifier's clipboard
 owner, described below, and carries nothing else. A terminal capture is the `terminal` element's area, with
