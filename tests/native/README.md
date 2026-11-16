@@ -782,7 +782,10 @@ shown on every Fleet`. The `chat`
 patch makes a streamed delta replace the reply instead of extending it.
 `streamed-reply` then fails on the expectation `the second part extends the
 first while the reply is in progress`. The final `item/completed` frame repairs
-the text, so only a read taken while the reply streams catches it. The `terminal-input` patch makes Ctrl+Shift+C an ordinary key, so copy does
+the text, so only a read taken while the reply streams catches it. The
+`chat-claude` patch lets Claude run every Bash command instead of only `hc`
+and `voyager`. `send-message` then fails on the expectation that names the
+allowed commands, because the arguments the stand-in received differ. The `terminal-input` patch makes Ctrl+Shift+C an ordinary key, so copy does
 nothing. `copy-puts-the-selection-on-the-clipboard` then fails on the
 expectation `another X client reads exactly COPYβ界 from the clipboard`, and
 the observed text is the verifier's own `VERIFIER-SENTINEL`.
