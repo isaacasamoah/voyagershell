@@ -48,6 +48,8 @@ import {
   activeGroups,
   currentVoyage,
   panelGroups,
+  rememberedPlacement,
+  shownPanels,
   visiblePanels,
   hiddenPanels,
 } from "./panels.js";
@@ -244,11 +246,16 @@ export default class Canvas extends View {
     });
   }
 
+  noteFocus(id: string, cx: UIContext) {
+    if (this.layout?.view !== "fleet") return;
+    cx.spawn(() =>
+      invoke({ operation: "focus-vessel", id }, this.version).catch(() => null),
+    );
+  }
+
   activePlacement(): Placement | undefined {
     if (!this.layout) return;
-    const shown = activeGroups(this.layout).flatMap((group) =>
-      visiblePanels(group, true),
-    );
+    const shown = shownPanels(this.layout);
     return shown.find((panel) => panel.id === this.focused) || shown[0];
   }
 
@@ -676,22 +683,19 @@ export default class Canvas extends View {
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
             const current = this.layout;
-            const shown = current
-              ? activeGroups(current).flatMap((group) =>
-                  visiblePanels(group, true),
-                )
-              : [];
+            const shown = shownPanels(current);
             const created = shown.find(
               (panel) => !previousContents.has(panel.vessel),
             );
-            if (changesSelection) this.focused = shown[0]?.id || null;
+            const opened = rememberedPlacement(current, shown) || shown[0];
+            if (changesSelection) this.focused = opened?.id || null;
             else if (creating && created) this.focused = created.id;
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
                 : splitMaximized
                   ? created
-                  : shown[0];
+                  : opened;
               if (target && (maximization || splitMaximized))
                 this.focused = target.id;
               if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
@@ -789,20 +793,18 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
-    if (this.focused) {
-      const shown = activeGroups(result.layout).flatMap((group) =>
-        visiblePanels(group, true),
-      );
-      if (
-        !shown.some((panel) => panel.id === this.focused) &&
-        !this.chat?.open &&
-        !this.editing &&
-        !this.layoutName &&
-        !window.has_active_dialog()
-      ) {
-        this.focused = shown[0]?.id || null;
-        this.focus.focus();
-      }
+    const shown = shownPanels(result.layout);
+    this.focused ||= rememberedPlacement(result.layout, shown)?.id || null;
+    if (
+      this.focused &&
+      !shown.some((panel) => panel.id === this.focused) &&
+      !this.chat?.open &&
+      !this.editing &&
+      !this.layoutName &&
+      !window.has_active_dialog()
+    ) {
+      this.focused = shown[0]?.id || null;
+      this.focus.focus();
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
@@ -954,9 +956,7 @@ export default class Canvas extends View {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
     const errors: string[] = [];
-    for (const vessel of activeGroups(layout).flatMap((group) =>
-      visiblePanels(group, true),
-    )) {
+    for (const vessel of shownPanels(layout)) {
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (content?.typeId !== "terminal") continue;
       const opening = this.openings.get(vessel.vessel);

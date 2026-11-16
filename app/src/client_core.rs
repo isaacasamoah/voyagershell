@@ -1,4 +1,4 @@
-use super::{Message, WorkspaceNotice, save};
+use super::{LayoutRevision, Message, WorkspaceNotice, save};
 use crate::{
     activity::{Activity, Event},
     core::{Core, Error},
@@ -81,9 +81,9 @@ impl Notices {
         }
     }
 
-    pub(super) fn current(&self, revision: u64, close_revision: u64) -> WorkspaceNotice {
+    pub(super) fn current(&self, revision: LayoutRevision, close_revision: u64) -> WorkspaceNotice {
         WorkspaceNotice {
-            revision,
+            revision: revision.document,
             close_revision,
             package_revision: self.packages.load(Ordering::Relaxed),
             activity_revision: self
@@ -94,7 +94,7 @@ impl Notices {
         }
     }
 
-    pub(super) fn send(&self, revision: u64, close_revision: u64) {
+    pub(super) fn send(&self, revision: LayoutRevision, close_revision: u64) {
         if let Some(listener) = &self.listener {
             let _ = listener.try_send(self.current(revision, close_revision));
         }
@@ -103,7 +103,7 @@ impl Notices {
 
 pub(super) fn close_exited(
     core: &mut Core,
-    (layout, version, fresh): (&mut Arc<Layout>, &mut u64, &mut bool),
+    (layout, version, fresh): (&mut Arc<Layout>, &mut LayoutRevision, &mut bool),
     exited: &[CoreTerminalId],
     live: &[CoreTerminalId],
 ) {
@@ -244,7 +244,7 @@ impl Listing {
         &mut self,
         core: &mut Core,
         layout: &Arc<Layout>,
-        version: u64,
+        version: LayoutRevision,
         fresh: bool,
         sender: &async_channel::Sender<Message>,
     ) {
@@ -256,7 +256,7 @@ impl Listing {
                 post(sender, pending, |listed| Message::Listed {
                     terminals: listed.map(|listed| listed.terminals),
                 });
-                self.begun = Some(version);
+                self.begun = Some(version.structure);
             }
             Err(_) => {
                 for observer in std::mem::take(&mut self.observers) {
@@ -275,7 +275,7 @@ impl Listing {
         begun: Option<u64>,
         listed: Result<Option<&[Terminal]>, String>,
         layout: &Arc<Layout>,
-        version: u64,
+        version: LayoutRevision,
         fresh: bool,
     ) {
         for observer in std::mem::take(&mut self.observers) {
@@ -283,8 +283,8 @@ impl Listing {
                 Err(ref error) => drop(observer.reply.try_send(Err(error.clone()))),
                 Ok(Some(_))
                     if fresh
-                        && observer.version == version
-                        && begun.is_some_and(|begun| begun < version) =>
+                        && observer.version == version.structure
+                        && begun.is_some_and(|begun| begun < version.structure) =>
                 {
                     self.observers.push(observer)
                 }
@@ -298,12 +298,18 @@ impl Observer {
     pub(super) fn answer(
         self,
         layout: &Arc<Layout>,
-        version: u64,
+        version: LayoutRevision,
         fresh: bool,
         terminals: Option<&[Terminal]>,
     ) {
-        let result = if fresh && self.version == version {
-            crate::observation::capture(layout, version, &self.scope, self.active, terminals)
+        let result = if fresh && self.version == version.structure {
+            crate::observation::capture(
+                layout,
+                version.structure,
+                &self.scope,
+                self.active,
+                terminals,
+            )
         } else {
             Err("Workspace changed; observe it again".into())
         };
@@ -344,7 +350,7 @@ pub(super) fn changed_layout(
 pub(super) fn commit(
     core: &mut Core,
     layout: &mut Arc<Layout>,
-    version: &mut u64,
+    version: &mut LayoutRevision,
     fresh: &mut bool,
     candidate: Model,
 ) -> Result<(), String> {
@@ -463,9 +469,13 @@ mod activity_notice_tests {
             reply,
         });
         let layout = Arc::new(Layout::default());
-        listing.answer(Some(1), Ok(Some(&[])), &layout, 2, true);
+        let version = LayoutRevision {
+            document: 3,
+            structure: 2,
+        };
+        listing.answer(Some(1), Ok(Some(&[])), &layout, version, true);
         assert!(answered.try_recv().is_err());
-        listing.answer(Some(2), Ok(Some(&[])), &layout, 2, true);
+        listing.answer(Some(2), Ok(Some(&[])), &layout, version, true);
         assert!(answered.try_recv().is_ok());
     }
 }

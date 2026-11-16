@@ -7,6 +7,32 @@ use voyager_contract::layout_document::{
 };
 use voyager_contract::{Action, Layout, Outcome, Response};
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct LayoutRevision {
+    pub(crate) document: u64,
+    pub(crate) structure: u64,
+}
+
+impl LayoutRevision {
+    pub(crate) fn after(self, document: u64, before: &Layout, after: &Layout) -> Self {
+        Self {
+            document,
+            structure: if before.same_structure(after) {
+                self.structure
+            } else {
+                document
+            },
+        }
+    }
+
+    fn structural(document: u64) -> Self {
+        Self {
+            document,
+            structure: document,
+        }
+    }
+}
+
 pub(crate) fn rejected(message: String) -> Error {
     Error::Rejected {
         kind: "invalid_workspace".into(),
@@ -31,14 +57,22 @@ fn prepared(layout: Layout, cwd: &str) -> Result<Layout, String> {
     Ok(layout)
 }
 
-pub(crate) fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
+pub(crate) fn load(
+    core: &mut Core,
+    cwd: &str,
+    held: &Layout,
+    revision: LayoutRevision,
+) -> Result<(Layout, LayoutRevision, bool), Error> {
     let document = core.document_get(DOCUMENT)?;
     let version = document.version;
+    let observed = |layout: &Layout| revision.after(version, held, layout);
     let (source, value, imported) = if document.value.is_null() {
         let legacy = core.document_get(LEGACY_DOCUMENT)?;
         if legacy.value.is_null() {
             core.layout = LayoutKeep::default();
-            return Ok((Layout::default(), version, true));
+            let layout = Layout::default();
+            let revision = observed(&layout);
+            return Ok((layout, revision, true));
         }
         (LEGACY_DOCUMENT, import_legacy(legacy.value), true)
     } else {
@@ -58,10 +92,11 @@ pub(crate) fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Er
             let notice = core.layout.notice.take();
             core.layout = LayoutKeep { kept, notice };
             if imported {
-                let version = save(core, &layout, version)?;
-                return Ok((layout, version, false));
+                let revision = save(core, &layout, LayoutRevision::structural(version))?;
+                return Ok((layout, revision, false));
             }
-            Ok((layout, version, false))
+            let revision = observed(&layout);
+            Ok((layout, revision, false))
         }
         Reading::Newer { min_reader } => {
             back_up(core, source)?;
@@ -77,7 +112,7 @@ pub(crate) fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Er
                     "The stored workspace could not be read ({message}). A copy is in {BACKUP} and the workspace started fresh"
                 )),
             };
-            Ok((Layout::default(), version, true))
+            Ok((Layout::default(), LayoutRevision::structural(version), true))
         }
     }
 }
@@ -90,38 +125,47 @@ pub(crate) fn carry_notice(notice: &mut Option<String>, action: &Action, respons
     }
 }
 
-pub(crate) fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
-    match begin_save(core, layout, version)?.wait() {
-        Err(Error::Uncertain(message)) => settle_save(core, layout, version, message),
-        saved => Ok(saved?.version),
+pub(crate) fn save(
+    core: &mut Core,
+    layout: &Layout,
+    revision: LayoutRevision,
+) -> Result<LayoutRevision, Error> {
+    match begin_save(core, layout, revision)?.wait() {
+        Err(Error::Uncertain(message)) => {
+            settle_save(core, layout, revision, message).map(LayoutRevision::structural)
+        }
+        saved => Ok(LayoutRevision::structural(saved?.version)),
     }
 }
 
 pub(crate) fn begin_save(
     core: &mut Core,
     layout: &Layout,
-    version: u64,
+    revision: LayoutRevision,
 ) -> Result<Pending<DocSetResult>, Error> {
     let value = written(core, layout)?;
-    core.begin_document_set(DOCUMENT, &value, version)
+    core.begin_document_set(DOCUMENT, &value, revision.document)
 }
 
 pub(crate) fn settle_save(
     core: &mut Core,
     layout: &Layout,
-    version: u64,
+    revision: LayoutRevision,
     message: String,
 ) -> Result<u64, Error> {
     let value = written(core, layout)?;
     let read = |core: &mut Core| match core.document_get(DOCUMENT) {
-        Ok(read) => landing(&read, &value, version),
+        Ok(read) => landing(&read, &value, revision.document),
         Err(_) => Landing::Unknown,
     };
     let unsettled = || Error::Uncertain(format!("{message}; a read of Core did not settle it"));
     match read(core) {
         Landing::Applied(saved) => Ok(saved),
         Landing::Unknown => Err(unsettled()),
-        Landing::Missing => match core.begin_document_set(DOCUMENT, &value, version)?.wait() {
+        Landing::Missing => match core
+            .begin_document_set(DOCUMENT, &value, revision.document)?
+            .wait()
+        {
             Err(Error::Rejected { kind, .. }) if kind == "conflict" => match read(core) {
                 Landing::Applied(saved) => Ok(saved),
                 _ => Err(unsettled()),
@@ -200,6 +244,36 @@ mod tests {
         assert_eq!(
             landing(&document(6, ours.clone()), &ours, 7),
             Landing::Unknown
+        );
+    }
+
+    #[test]
+    fn only_a_structural_save_moves_the_structure_revision() {
+        let held = LayoutRevision {
+            document: 4,
+            structure: 2,
+        };
+        let before = Layout::default();
+        let mut navigated = before.clone();
+        navigated.selected_voyage = Some(voyager_contract::VoyageId("voyage-1".into()));
+        navigated.context = voyager_contract::Context::Voyage {
+            id: voyager_contract::VoyageId("voyage-1".into()),
+        };
+        assert_eq!(
+            held.after(5, &before, &navigated),
+            LayoutRevision {
+                document: 5,
+                structure: 2
+            }
+        );
+        let mut restructured = navigated.clone();
+        restructured.next_id += 1;
+        assert_eq!(
+            held.after(6, &before, &restructured),
+            LayoutRevision {
+                document: 6,
+                structure: 6
+            }
         );
     }
 

@@ -160,6 +160,14 @@ pub(crate) fn check(
     };
     let allowed = match action {
         Action::Inspect | Action::Dock { .. } | Action::Home => true,
+        Action::FocusVessel { id } => scoped.containers().any(|voyage| {
+            voyage
+                .fleets
+                .iter()
+                .flat_map(|fleet| &fleet.placements)
+                .chain(&voyage.portals)
+                .any(|placement| &placement.id == id)
+        }),
         Action::SaveArrangement { owner, .. }
         | Action::LoadArrangement { owner, .. }
         | Action::RemoveArrangement { owner, .. }

@@ -110,7 +110,10 @@ export function renderPanel(workspace, placement, scope, group) {
         .on_mouse_down("left", (_event, cx) => {
           const changed = workspace.focused !== placement.id;
           workspace.focused = placement.id;
-          if (changed) cx.spawn((task) => workspace.readObservation(task));
+          if (changed) {
+            workspace.noteFocus(placement.id, cx);
+            cx.spawn((task) => workspace.readObservation(task));
+          }
           cx.notify();
         })
         .on_key_down((event, cx) => {
@@ -241,6 +244,11 @@ export function renderPanel(workspace, placement, scope, group) {
             .children(
               content.typeId === "terminal" && terminal
                 ? [Marker.new("terminal", placement.id)]
+                : [],
+            )
+            .children(
+              workspace.focused === placement.id
+                ? [Marker.new("focused-vessel", placement.id)]
                 : [],
             )
             .child(

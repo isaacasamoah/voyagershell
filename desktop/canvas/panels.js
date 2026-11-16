@@ -48,6 +48,19 @@ export function activeGroups(layout) {
         : Boolean(voyage.portalLayout?.visible)),
   );
 }
+export function shownPanels(layout) {
+  if (!layout) return [];
+  return activeGroups(layout).flatMap((group) => visiblePanels(group, true));
+}
+export function rememberedPlacement(layout, shown) {
+  if (!layout || layout.view === "home") return;
+  const entry = layout.navigation?.find(
+    (item) =>
+      item.voyage === layout.selectedVoyage &&
+      item.fleet === layout.selectedFleet,
+  );
+  return shown.find((panel) => panel.id === entry?.vessel);
+}
 export function visiblePanels(group, maximized = false) {
   const ids = new Set();
   const visit = (tree) => {

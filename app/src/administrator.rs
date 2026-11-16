@@ -743,7 +743,7 @@ fn outcome_text(action: &Action, status: &Outcome, message: Option<&str>) -> Str
             Action::ReopenFleet { .. } => "Fleet reopened",
             Action::RevealPlacement { .. } => "Panel revealed",
             Action::ReopenPlacement { .. } => "Existing panel reopened",
-            Action::Dock { .. } => "Focus changed",
+            Action::Dock { .. } | Action::FocusVessel { .. } => "Focus changed",
             Action::StartNewShell { .. } => "New shell authorized",
         }
         .into(),
@@ -1050,9 +1050,9 @@ mod tests {
             );
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             let mut external = Core::connect(&session).unwrap();
-            let bumped = external
-                .document_set("voyager-layout-v2", &created.layout, created.version)
-                .unwrap();
+            let mut next = (*created.layout).clone();
+            next.next_id += 1;
+            let bumped = external.document_set("voyager-layout-v2", &next, created.version);
             callback["id"] = "stale".into();
             callback["params"]["callId"] = "stale".into();
             callback["params"]["arguments"]["action"]["vesselId"] = json!(a);
@@ -1080,7 +1080,7 @@ mod tests {
                 .content(
                     Access::Agent {
                         scope: focus.scope.clone(),
-                        expected_version: bumped.version,
+                        expected_version: bumped.unwrap().version,
                     },
                     inspect(&a),
                 )

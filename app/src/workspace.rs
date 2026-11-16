@@ -1,6 +1,6 @@
 use crate::panels;
 use voyager_contract::{
-    Action, ContentDestination, Context, Fleet, FleetId, Layout, Placement, PlacementId,
+    Action, ContentDestination, Context, Fleet, FleetId, LastUsed, Layout, Placement, PlacementId,
     PlacementOwner, PortalLayout, RenameTarget, Split, Vessel, VesselId, Voyage, VoyageId,
     WorkspaceView,
 };
@@ -145,6 +145,70 @@ impl Model {
     }
 
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
+        self.change(action)?;
+        self.remember_fleet();
+        Ok(())
+    }
+
+    fn remember_fleet(&mut self) {
+        let (WorkspaceView::Fleet, Some(voyage), Some(fleet)) = (
+            &self.layout.view,
+            &self.layout.selected_voyage,
+            &self.layout.selected_fleet,
+        ) else {
+            return;
+        };
+        match self
+            .layout
+            .navigation
+            .iter_mut()
+            .find(|entry| &entry.voyage == voyage)
+        {
+            Some(entry) if &entry.fleet == fleet => {}
+            Some(entry) => {
+                entry.fleet = fleet.clone();
+                entry.vessel = None;
+            }
+            None => self.layout.navigation.push(LastUsed {
+                voyage: voyage.clone(),
+                fleet: fleet.clone(),
+                vessel: None,
+            }),
+        }
+    }
+
+    fn focus_vessel(&mut self, id: PlacementId) -> Result<(), String> {
+        let voyage = self
+            .layout
+            .voyages
+            .iter()
+            .find(|voyage| Some(&voyage.id) == self.layout.selected_voyage.as_ref())
+            .filter(|_| self.layout.view == WorkspaceView::Fleet)
+            .ok_or("Only a Vessel in an open Voyage is remembered")?;
+        let shown = voyage
+            .fleets
+            .iter()
+            .filter(|fleet| Some(&fleet.id) == self.layout.selected_fleet.as_ref())
+            .flat_map(|fleet| &fleet.placements)
+            .chain(&voyage.portals)
+            .any(|placement| placement.id == id);
+        if !shown {
+            return Err("The Vessel is not in the open Fleet or its Portals".into());
+        }
+        let voyage = voyage.id.clone();
+        self.remember_fleet();
+        if let Some(entry) = self
+            .layout
+            .navigation
+            .iter_mut()
+            .find(|entry| entry.voyage == voyage)
+        {
+            entry.vessel = Some(id);
+        }
+        Ok(())
+    }
+
+    fn change(&mut self, action: Action) -> Result<(), String> {
         match action {
             Action::Inspect => (),
             Action::StartNewShell { .. } => {
@@ -281,11 +345,7 @@ impl Model {
                 if voyage.closed {
                     return Err("Voyage is closed".into());
                 }
-                self.layout.selected_fleet = voyage
-                    .fleets
-                    .iter()
-                    .find(|fleet| !fleet.closed)
-                    .map(|f| f.id.clone());
+                self.layout.selected_fleet = opening_fleet(&self.layout.navigation, voyage);
                 self.layout.selected_voyage = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
@@ -326,11 +386,7 @@ impl Model {
                         .map(|(_, voyage)| {
                             (
                                 voyage.id.clone(),
-                                voyage
-                                    .fleets
-                                    .iter()
-                                    .find(|fleet| !fleet.closed)
-                                    .map(|fleet| fleet.id.clone()),
+                                opening_fleet(&self.layout.navigation, voyage),
                             )
                         });
                     if let Some((voyage, fleet)) = next {
@@ -354,11 +410,7 @@ impl Model {
                     return Err("Voyage is already open".into());
                 }
                 voyage.closed = false;
-                self.layout.selected_fleet = voyage
-                    .fleets
-                    .iter()
-                    .find(|fleet| !fleet.closed)
-                    .map(|fleet| fleet.id.clone());
+                self.layout.selected_fleet = opening_fleet(&self.layout.navigation, voyage);
                 self.layout.selected_voyage = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
@@ -475,6 +527,7 @@ impl Model {
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
+            Action::FocusVessel { id } => self.focus_vessel(id)?,
             Action::Dock { context } => {
                 let exists = match &context {
                     Context::Workspace => true,
@@ -553,6 +606,61 @@ impl Model {
     }
 }
 
+pub(crate) fn open_checkout(layout: &Layout, checkout: &str) -> Result<Action, String> {
+    let target = std::fs::canonicalize(checkout)
+        .map_err(|error| format!("Checkout unavailable: {error}"))?;
+    if let Some(voyage) = layout.voyages.iter().find(|voyage| {
+        voyage
+            .cwd
+            .as_ref()
+            .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+            .as_ref()
+            == Some(&target)
+    }) {
+        return Ok(if voyage.closed {
+            Action::ReopenVoyage {
+                id: voyage.id.clone(),
+            }
+        } else {
+            Action::SelectVoyage {
+                id: voyage.id.clone(),
+            }
+        });
+    }
+    let name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("/")
+        .to_owned();
+    let cwd = target
+        .to_str()
+        .ok_or("Checkout path is not UTF-8")?
+        .to_owned();
+    Ok(Action::CreateVoyage { name, cwd })
+}
+
+fn opening_fleet(navigation: &[LastUsed], voyage: &Voyage) -> Option<FleetId> {
+    let open = |id: &FleetId| {
+        voyage
+            .fleets
+            .iter()
+            .any(|fleet| &fleet.id == id && !fleet.closed)
+    };
+    navigation
+        .iter()
+        .find(|entry| entry.voyage == voyage.id)
+        .map(|entry| &entry.fleet)
+        .filter(|id| open(id))
+        .or_else(|| {
+            voyage
+                .fleets
+                .iter()
+                .find(|fleet| !fleet.closed)
+                .map(|fleet| &fleet.id)
+        })
+        .cloned()
+}
+
 fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: bool) {
     if source == destination {
         return;
@@ -565,6 +673,100 @@ fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn two_voyages() -> (Model, VoyageId, FleetId, FleetId, VoyageId) {
+        let mut model = Model {
+            layout: Model::prepare(Layout::default(), "/tmp").unwrap(),
+        };
+        model
+            .apply(Action::CreateVoyage {
+                name: "A".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let a = model.layout.voyages[0].id.clone();
+        let first = model.layout.voyages[0].fleets[0].id.clone();
+        model
+            .apply(Action::CreateFleet {
+                voyage: a.clone(),
+                name: "Second".into(),
+            })
+            .unwrap();
+        let second = model.layout.voyages[0].fleets[1].id.clone();
+        model
+            .apply(Action::CreateVoyage {
+                name: "B".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let b = model.layout.voyages[1].id.clone();
+        (model, a, first, second, b)
+    }
+
+    #[test]
+    fn navigation_changes_only_the_navigation_record() {
+        let (mut model, a, _, second, b) = two_voyages();
+        let vessel = model.layout.voyages[0].fleets[1].placements[0].id.clone();
+        let before = model.layout.clone();
+        for action in [
+            Action::SelectVoyage { id: a.clone() },
+            Action::SelectFleet { id: second },
+            Action::FocusVessel { id: vessel },
+            Action::Dock {
+                context: Context::Voyage { id: a },
+            },
+            Action::Home,
+            Action::SelectVoyage { id: b },
+        ] {
+            assert!(action.is_navigation());
+            model.apply(action).unwrap();
+            assert!(before.same_structure(&model.layout));
+        }
+        assert_ne!(before, model.layout);
+    }
+
+    #[test]
+    fn a_voyage_reopens_on_its_last_used_fleet_and_vessel() {
+        let (mut model, a, _, second, b) = two_voyages();
+        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+        assert_eq!(model.layout.selected_fleet.as_ref(), Some(&second));
+        let vessel = model.layout.voyages[0].fleets[1].placements[0].id.clone();
+        model
+            .apply(Action::FocusVessel { id: vessel.clone() })
+            .unwrap();
+        model.apply(Action::SelectVoyage { id: b }).unwrap();
+        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+        assert_eq!(model.layout.selected_fleet.as_ref(), Some(&second));
+        let entry = model
+            .layout
+            .navigation
+            .iter()
+            .find(|entry| entry.voyage == a)
+            .unwrap();
+        assert_eq!(entry.fleet, second);
+        assert_eq!(entry.vessel.as_ref(), Some(&vessel));
+    }
+
+    #[test]
+    fn a_closed_last_used_fleet_falls_back_to_the_first_open_fleet() {
+        let (mut model, a, first, second, b) = two_voyages();
+        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+        model.apply(Action::CloseFleet { id: second }).unwrap();
+        model.apply(Action::SelectVoyage { id: b }).unwrap();
+        model.apply(Action::SelectVoyage { id: a }).unwrap();
+        assert_eq!(model.layout.selected_fleet, Some(first));
+    }
+
+    #[test]
+    fn a_vessel_outside_the_open_fleet_is_not_remembered() {
+        let (mut model, a, first, _, _) = two_voyages();
+        let elsewhere = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+        model.apply(Action::SelectVoyage { id: a }).unwrap();
+        assert_ne!(model.layout.selected_fleet, Some(first));
+        let before = model.layout.clone();
+        assert!(model.apply(Action::FocusVessel { id: elsewhere }).is_err());
+        assert_eq!(before, model.layout);
+    }
 
     #[test]
     fn default_agents_seed_only_a_previously_absent_home() {

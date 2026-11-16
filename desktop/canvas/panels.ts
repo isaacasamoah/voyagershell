@@ -67,6 +67,24 @@ export function activeGroups(layout: Layout): PanelGroup[] {
   );
 }
 
+export function shownPanels(layout: Layout | null): Placement[] {
+  if (!layout) return [];
+  return activeGroups(layout).flatMap((group) => visiblePanels(group, true));
+}
+
+export function rememberedPlacement(
+  layout: Layout | null,
+  shown: Placement[],
+): Placement | undefined {
+  if (!layout || layout.view === "home") return;
+  const entry = layout.navigation?.find(
+    (item) =>
+      item.voyage === layout.selectedVoyage &&
+      item.fleet === layout.selectedFleet,
+  );
+  return shown.find((panel) => panel.id === entry?.vessel);
+}
+
 export function visiblePanels(
   group: Pick<PanelGroup, "root" | "members" | "maximizedPlacement">,
   maximized = false,

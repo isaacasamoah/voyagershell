@@ -71,7 +71,7 @@
   "id": "fleet-1",
   "kind": "fleet"
  },
- "navigation": {
+ "bookmarks": {
   "lastFleet": "fleet-1"
  },
  "nextId": "100",

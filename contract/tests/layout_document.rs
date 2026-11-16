@@ -32,7 +32,7 @@ fn an_unknown_field_survives_a_save_and_follows_its_entity() {
     let mut raw = baseline();
     raw["voyages"][0]["fleets"][0]["pinned"] = json!(true);
     raw["vessels"][0]["badge"] = json!({"colour": "red"});
-    raw["navigation"] = json!({"last": "fleet-1"});
+    raw["bookmarks"] = json!({"last": "fleet-1"});
     let (mut layout, kept) = open(raw);
     assert_eq!(kept.fields(), 3);
     layout.voyages[0].fleets[0].name = "Renamed".into();
@@ -40,7 +40,7 @@ fn an_unknown_field_survives_a_save_and_follows_its_entity() {
     assert_eq!(saved["voyages"][0]["fleets"][0]["name"], "Renamed");
     assert_eq!(saved["voyages"][0]["fleets"][0]["pinned"], true);
     assert_eq!(saved["vessels"][0]["badge"], json!({"colour": "red"}));
-    assert_eq!(saved["navigation"], json!({"last": "fleet-1"}));
+    assert_eq!(saved["bookmarks"], json!({"last": "fleet-1"}));
     layout.voyages[0].fleets.clear();
     layout.voyages[0].fleets.push(voyager_contract::Fleet {
         id: voyager_contract::FleetId("fleet-2".into()),

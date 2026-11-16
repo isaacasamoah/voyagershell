@@ -444,8 +444,11 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 .unwrap()["configuration"]["showHeading"],
             false
         );
+        let mut changed = saved.value.clone();
+        let next: u64 = changed["nextId"].as_str().unwrap().parse().unwrap();
+        changed["nextId"] = (next + 1).to_string().into();
         external
-            .document_set("voyager-layout-v2", &saved.value, saved.version)
+            .document_set("voyager-layout-v2", &changed, saved.version)
             .unwrap();
         let observed = client.content(access.clone(), inspect()).unwrap();
         assert!(
