@@ -40,7 +40,7 @@ impl Render for Pane {
                     return;
                 }
                 terminal_bounds.set(Some(gpui::Bounds::new(
-                    bounds.origin + gpui::point(px(8.), px(8.)),
+                    bounds.origin,
                     gpui::size(bounds.size.width - px(16.), bounds.size.height - px(16.)),
                 )));
                 let cols = super::font::fitted_columns(
