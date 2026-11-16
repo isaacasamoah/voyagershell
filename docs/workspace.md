@@ -949,7 +949,8 @@ selection, a closed program, a Voyage close) change structure, so they always
 take the new document version. An external write is detected on the next read,
 by comparing structure. So a plan an agent built before the user
 clicked a Fleet still applies, and every check that compares a caller's version
-with the owner's ignores navigation.
+with the owner's ignores navigation. The next section narrows each check to the
+parts that a request changes.
 
 Change notices carry the structure revision, and a navigation revision that
 moves only when a scoped caller, such as an agent through the administrator,
@@ -985,6 +986,43 @@ assignment anywhere else does not compile. A move has one of two targets:
   clears the remembered Vessel, and a Fleet with no remembered Vessel opens on
   its first shown placement. A tab click therefore costs one save, the
   selection itself.
+
+## Each part has its own revision
+
+A caller still sends the one structure revision it last saw. The owner refuses
+the request only when a part that the request changes has changed since that
+revision. A Fleet that the user created or renamed does not refuse an agent's
+rename of a Vessel in another Fleet. A second edit to the same Vessel from the
+same old revision is refused, and the refusal carries the current layout.
+
+`Part` in `app/src/layout_parts.rs` names the parts. They are the workspace itself
+(the Voyage order, Home, the canvas and the saved arrangements), each Voyage,
+each Fleet, each placement, each Vessel and the whole set of Vessels. A Voyage holds its own fields and
+the order of its Fleets and Portals, not their contents. A Fleet holds its name,
+state, placement order, split tree and maximized placement, not the placement
+records. `Part::same` destructures every field it compares, and it ignores
+navigation and `next_id`, so a new field does not build until it is placed.
+
+`layout_parts::parts` finds the parts that a workspace action changes. It applies
+the action to a copy of the current layout and compares the two. An action that
+the copy cannot apply, such as a Voyage shutdown confirmation or a Vessel
+package change, has no parts, so it needs the current revision. A process
+request names the Vessel that it reads or writes, and a process list names the
+whole set of Vessels, because its answer depends on every Vessel. A terminal, Notes or content
+request names its Vessel. A worktree request names its source Voyage.
+
+`Seen` in `app/src/layout_store.rs` keeps the layout at each of the last 32
+structure revisions. The workspace queue records the current revision before it
+takes each message, so every revision that a caller can hold is recorded before
+the caller can send it back. `Seen::current` accepts the current revision. It
+accepts an older recorded revision when every part of the request is the same
+in that layout and the current one. It refuses an unrecorded or future revision.
+A content request from an agent that passes this check runs at the current
+revision. The bound of 32 is a target to measure, not a measured limit.
+
+The stored layout and the wire shapes do not change. Revisions stay inside the
+one layout document, and an older build reads and writes the same document. An
+older build still refuses any stale structure revision.
 
 ## The stored layout across builds
 

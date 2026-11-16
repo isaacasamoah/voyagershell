@@ -1,7 +1,10 @@
 use crate::core::{Core, Error, LayoutKeep, Pending};
 use crate::core_shapes::{DocGetResult, DocSetResult};
+use crate::layout_parts::Part;
 use crate::workspace::Model;
 use serde_json::Value;
+use std::collections::VecDeque;
+use std::sync::Arc;
 use voyager_contract::layout_document::{
     BACKUP, DOCUMENT, Kept, LEGACY_DOCUMENT, READER_LEVEL, Reading, import_legacy, read, write,
 };
@@ -30,6 +33,50 @@ impl LayoutRevision {
             document,
             structure: document,
         }
+    }
+}
+
+const SEEN: usize = 32;
+
+#[derive(Default)]
+pub(crate) struct Seen {
+    layouts: VecDeque<(u64, Arc<Layout>)>,
+}
+
+impl Seen {
+    pub(crate) fn note(&mut self, revision: LayoutRevision, layout: &Arc<Layout>) {
+        if self
+            .layouts
+            .back()
+            .is_some_and(|(structure, _)| *structure == revision.structure)
+        {
+            return;
+        }
+        if self.layouts.len() == SEEN {
+            self.layouts.pop_front();
+        }
+        self.layouts
+            .push_back((revision.structure, Arc::clone(layout)));
+    }
+
+    pub(crate) fn current(
+        &self,
+        expected: u64,
+        revision: LayoutRevision,
+        layout: &Layout,
+        parts: impl FnOnce() -> Option<Vec<Part>>,
+    ) -> bool {
+        if expected == revision.structure {
+            return true;
+        }
+        let Some((_, seen)) = self
+            .layouts
+            .iter()
+            .find(|(structure, _)| *structure == expected)
+        else {
+            return false;
+        };
+        parts().is_some_and(|parts| parts.iter().all(|part| part.same(seen, layout)))
     }
 }
 
@@ -202,7 +249,6 @@ fn written(core: &Core, layout: &Layout) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     const NOTICE: &str = "copy kept";
 
@@ -245,6 +291,185 @@ mod tests {
             landing(&document(6, ours.clone()), &ours, 7),
             Landing::Unknown
         );
+    }
+
+    struct Workspace {
+        seen: Seen,
+        layout: Arc<Layout>,
+        revision: LayoutRevision,
+    }
+
+    impl Workspace {
+        fn new() -> Self {
+            let mut model = Model {
+                layout: Model::prepare(Layout::default(), "/tmp").unwrap(),
+            };
+            model
+                .apply(Action::CreateVoyage {
+                    name: "A".into(),
+                    cwd: "/tmp".into(),
+                })
+                .unwrap();
+            let voyage = model.layout.voyages[0].id.clone();
+            model
+                .apply(Action::CreateFleet {
+                    voyage,
+                    name: "Second".into(),
+                })
+                .unwrap();
+            let mut workspace = Self {
+                seen: Seen::default(),
+                layout: Arc::new(model.layout),
+                revision: LayoutRevision {
+                    document: 5,
+                    structure: 5,
+                },
+            };
+            workspace.seen.note(workspace.revision, &workspace.layout);
+            workspace
+        }
+
+        fn apply(&mut self, action: Action) {
+            let mut model = Model {
+                layout: (*self.layout).clone(),
+            };
+            model.apply(action).unwrap();
+            let document = self.revision.document + 1;
+            self.revision = self.revision.after(document, &self.layout, &model.layout);
+            self.layout = Arc::new(model.layout);
+            self.seen.note(self.revision, &self.layout);
+        }
+
+        fn current(&self, expected: u64, action: &Action) -> bool {
+            self.seen
+                .current(expected, self.revision, &self.layout, || {
+                    crate::layout_parts::parts(&self.layout, action)
+                })
+        }
+
+        fn fleet(&self, index: usize) -> voyager_contract::FleetId {
+            self.layout.voyages[0].fleets[index].id.clone()
+        }
+
+        fn vessel(&self, fleet: usize) -> voyager_contract::PlacementId {
+            self.layout.voyages[0].fleets[fleet].placements[0]
+                .id
+                .clone()
+        }
+    }
+
+    fn rename(target: voyager_contract::RenameTarget, name: &str) -> Action {
+        Action::Rename {
+            target,
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn an_edit_planned_before_a_change_to_another_part_still_applies() {
+        let mut workspace = Workspace::new();
+        let planned = workspace.revision.structure;
+        let first = workspace.vessel(0);
+        workspace.apply(rename(
+            voyager_contract::RenameTarget::Fleet {
+                id: workspace.fleet(1),
+            },
+            "Renamed by the canvas",
+        ));
+        workspace.apply(Action::CreateFleet {
+            voyage: workspace.layout.voyages[0].id.clone(),
+            name: "Third".into(),
+        });
+        assert!(workspace.revision.structure > planned);
+        let edit = rename(
+            voyager_contract::RenameTarget::Vessel { id: first },
+            "Renamed by the avatar",
+        );
+        assert!(workspace.current(planned, &edit));
+    }
+
+    #[test]
+    fn a_stale_edit_to_the_same_part_is_refused() {
+        let mut workspace = Workspace::new();
+        let planned = workspace.revision.structure;
+        let first = workspace.vessel(0);
+        let target = voyager_contract::RenameTarget::Vessel { id: first.clone() };
+        workspace.apply(rename(target.clone(), "First edit"));
+        assert!(!workspace.current(planned, &rename(target, "Second edit")));
+        let split = Action::CreateVessel {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Placement {
+                owner: voyager_contract::PlacementOwner::Fleet {
+                    id: workspace.fleet(0),
+                },
+                insertion: voyager_contract::PlacementInsertion::Beside {
+                    id: first,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
+        };
+        let moved = workspace.revision.structure;
+        workspace.apply(rename(
+            voyager_contract::RenameTarget::Fleet {
+                id: workspace.fleet(0),
+            },
+            "Renamed Fleet",
+        ));
+        assert!(!workspace.current(moved, &split));
+    }
+
+    #[test]
+    fn an_unseen_or_future_revision_is_never_current() {
+        let mut workspace = Workspace::new();
+        let first = workspace.vessel(0);
+        workspace.apply(rename(
+            voyager_contract::RenameTarget::Fleet {
+                id: workspace.fleet(1),
+            },
+            "Other",
+        ));
+        let edit = rename(voyager_contract::RenameTarget::Vessel { id: first }, "Name");
+        let now = workspace.revision.structure;
+        assert!(workspace.current(now, &edit));
+        assert!(!workspace.current(now + 1, &edit));
+        assert!(!workspace.current(1, &edit));
+    }
+
+    #[test]
+    fn an_owner_only_action_with_an_older_revision_is_refused() {
+        let mut workspace = Workspace::new();
+        let planned = workspace.revision.structure;
+        workspace.apply(rename(
+            voyager_contract::RenameTarget::Fleet {
+                id: workspace.fleet(1),
+            },
+            "Other",
+        ));
+        let confirm = Action::ConfirmVoyageClose {
+            id: workspace.layout.voyages[0].id.clone(),
+            plan: "plan".into(),
+        };
+        assert!(!workspace.current(planned, &confirm));
+        assert!(workspace.current(workspace.revision.structure, &confirm));
+    }
+
+    #[test]
+    fn the_oldest_seen_revision_is_forgotten_past_the_bound() {
+        let mut workspace = Workspace::new();
+        let oldest = workspace.revision.structure;
+        let first = workspace.vessel(0);
+        for turn in 0..SEEN {
+            workspace.apply(rename(
+                voyager_contract::RenameTarget::Fleet {
+                    id: workspace.fleet(1),
+                },
+                &format!("Other {turn}"),
+            ));
+        }
+        let edit = rename(voyager_contract::RenameTarget::Vessel { id: first }, "Name");
+        assert!(!workspace.current(oldest, &edit));
+        assert!(workspace.current(oldest + 1, &edit));
     }
 
     #[test]

@@ -445,8 +445,12 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             false
         );
         let mut changed = saved.value.clone();
-        let next: u64 = changed["nextId"].as_str().unwrap().parse().unwrap();
-        changed["nextId"] = (next + 1).to_string().into();
+        changed["vessels"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|item| item["id"] == ids[0].0)
+            .unwrap()["shellIntent"] = serde_json::json!("external");
         external
             .document_set("voyager-layout-v2", &changed, saved.version)
             .unwrap();

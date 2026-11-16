@@ -2,6 +2,7 @@ use crate::{
     core::{Core, Error, MAX_INPUT_BYTES, Pending, TerminalList},
     core_shapes::{InterruptResult, ReadResult, SendResult, Terminal},
     core_state::TerminalState,
+    layout_parts::Part,
     scope,
 };
 use std::sync::Arc;
@@ -287,6 +288,16 @@ impl Effect {
                 stop_result(target, observed)
             }
         }
+    }
+}
+
+pub(crate) fn parts(action: &ProcessAction) -> Vec<Part> {
+    match action {
+        ProcessAction::List => vec![Part::Vessels],
+        ProcessAction::Read { vessel_id, .. }
+        | ProcessAction::Send { vessel_id, .. }
+        | ProcessAction::Interrupt { vessel_id, .. }
+        | ProcessAction::Stop { vessel_id, .. } => vec![Part::Vessel(vessel_id.clone())],
     }
 }
 

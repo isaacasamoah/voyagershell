@@ -11,6 +11,7 @@ pub mod core_state;
 pub mod diagnostics;
 mod front_door;
 pub mod launch;
+mod layout_parts;
 mod layout_store;
 pub mod observation;
 mod panels;

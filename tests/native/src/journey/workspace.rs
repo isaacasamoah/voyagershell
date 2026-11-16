@@ -1,5 +1,6 @@
 mod avatar;
 mod model;
+mod plan;
 
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
@@ -46,6 +47,8 @@ cases! {
     SidebarDragMovesWindow => "sidebar-drag-moves-window",
     VoyageDragDoesNotMoveWindow => "voyage-drag-does-not-move-window",
     TerminalSelectionDoesNotMoveWindow => "terminal-selection-does-not-move-window",
+    AgentPlanSurvivesClick => "agent-plan-survives-click",
+    StaleAgentEditRefused => "stale-agent-edit-refused",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -969,7 +972,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restored", &restored)?
             .observed("differences after the relaunch", &reopened)
     })?;
-
     cases.check(native, Case::DragBarMovesWindow, |native| {
         on_bar(native, &start)?;
         let unfilled = native.observe("the empty top bar and the create Fleet button", |seen| {
@@ -1105,7 +1107,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 sent.is_empty(),
             )
             .observed("requests", &sent)
-    })
+    })?;
+    plan::drive(native, cases)
 }
 
 fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
