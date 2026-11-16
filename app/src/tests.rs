@@ -756,7 +756,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     let mut changed = request.clone();
     changed.action = Action::Inspect;
     let refused_identity = client.call(changed).unwrap();
-    let stale = call(Action::SetSidebar { collapsed: true }, initial.version);
+    let stale = call(request.action.clone(), initial.version);
     let final_state = call(Action::Inspect, 0);
     let fleet = &final_state.layout.voyages[0].fleets[0];
     let divided = call(
@@ -1167,7 +1167,7 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
         };
         let mut external = Core::connect(&session).unwrap();
         let mut changed = (*bound.layout).clone();
-        changed.next_id += 1;
+        changed.vessels[0].cwd = "/".into();
         let bumped = external
             .document_set("voyager-layout-v2", &changed, bound.version)
             .unwrap();

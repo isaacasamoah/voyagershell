@@ -1051,7 +1051,7 @@ mod tests {
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             let mut external = Core::connect(&session).unwrap();
             let mut next = (*created.layout).clone();
-            next.next_id += 1;
+            next.vessels.iter_mut().find(|v| v.id == a).unwrap().launch = Some(Default::default());
             let bumped = external.document_set("voyager-layout-v2", &next, created.version);
             callback["id"] = "stale".into();
             callback["params"]["callId"] = "stale".into();

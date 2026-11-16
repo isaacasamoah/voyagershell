@@ -126,7 +126,13 @@ fn navigation_saves_without_a_structure_version_and_reopens_the_last_fleet() {
         let stale_click = call(Action::SelectFleet { id: first }, built);
         assert_eq!(stale_click.status, Outcome::Applied);
         assert_eq!(stale_click.version, closed.version);
-        let stale_edit = call(Action::SetSidebar { collapsed: true }, built);
+        let stale_edit = call(
+            Action::Rename {
+                target: voyager_contract::RenameTarget::Fleet { id: second_fleet },
+                name: "Stale".into(),
+            },
+            built,
+        );
         assert_eq!(stale_edit.status, Outcome::Refused);
     }));
     let mut core = Core::connect(&session).unwrap();

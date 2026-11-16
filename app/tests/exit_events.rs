@@ -358,7 +358,7 @@ fn a_process_read_answered_after_an_effect_names_the_version_it_was_built_from()
             .terminal(content.clone(), client.request_id(), initial.version)
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
-        let terminal = loop {
+        loop {
             let bound = inspect();
             let listed = client
                 .process(
@@ -373,25 +373,17 @@ fn a_process_read_answered_after_an_effect_names_the_version_it_was_built_from()
                 )
                 .unwrap();
             if let Some(ProcessOutput::List { processes, .. }) = &listed.output
-                && let Some(found) = processes.iter().find(|item| item.vessel_id == content)
+                && processes.iter().any(|item| item.vessel_id == content)
             {
-                break found.terminal_id.clone();
+                break;
             }
             assert!(Instant::now() < deadline, "The shell was never listed");
             thread::sleep(Duration::from_millis(20));
-        };
+        }
         let (mut answered, mut raced, mut stale) = (0, 0, Vec::new());
         for round in 0..120u64 {
             let issued = inspect().version;
-            let action = if round % 2 == 0 {
-                ProcessAction::List
-            } else {
-                ProcessAction::Read {
-                    vessel_id: content.clone(),
-                    terminal_id: terminal.clone(),
-                    lines: 20,
-                }
-            };
+            let action = ProcessAction::List;
             let reader = client.clone();
             let read = thread::spawn(move || {
                 let response = reader

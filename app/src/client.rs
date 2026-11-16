@@ -1,8 +1,8 @@
 pub use crate::terminal_lifecycle::Lifecycle;
 use crate::{
     activity::Activity,
-    core::{Core, Error, Viewer, WeakViewer},
-    workspace::Model,
+    core::{Error, Viewer, WeakViewer},
+    workspace::{Model, Part},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -19,6 +19,8 @@ use voyager_contract::{
     Action, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest, VesselId,
 };
 
+#[path = "client_content.rs"]
+mod content_calls;
 #[path = "client_core.rs"]
 mod core_calls;
 #[path = "client_reply.rs"]
@@ -27,8 +29,9 @@ mod reply;
 mod terminal_start;
 use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING};
 use crate::layout_store::{
-    LayoutRevision, begin_save, carry_notice, load, rejected, save, settle_save,
+    LayoutRevision, Seen, begin_save, carry_notice, load, rejected, save, settle_save,
 };
+use content_calls::{configure, select_note};
 pub use core_calls::WorkspaceNotice;
 use core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
@@ -464,6 +467,7 @@ impl Client {
             let mut exits = Vec::<CoreTerminalId>::new();
             let mut layout = Arc::new(Layout::default());
             let mut version = LayoutRevision::default();
+            let mut seen = Seen::default();
             let mut fresh = false;
             let mut door = FrontDoor::<Receipt>::default();
             let mut held = VecDeque::<Message>::new();
@@ -504,6 +508,7 @@ impl Client {
                 {
                     listing.start(current_core, &layout, version, fresh, &core_sender);
                 }
+                seen.note(version, &layout);
                 let waiting = (!door.flying()).then(|| held.pop_front()).flatten();
                 let Ok(message) = waiting.map_or_else(|| receiver.recv_blocking(), Ok) else {
                     break;
@@ -848,6 +853,22 @@ impl Client {
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
+                            let target = crate::content::identity(&request).0;
+                            let access = match &access {
+                                crate::content::Access::Agent {
+                                    scope,
+                                    expected_version,
+                                } if seen.current(*expected_version, version, &layout, || {
+                                    Some(vec![Part::Vessel(target.clone())])
+                                }) =>
+                                {
+                                    crate::content::Access::Agent {
+                                        scope: scope.clone(),
+                                        expected_version: version.structure,
+                                    }
+                                }
+                                other => other.clone(),
+                            };
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
                             if matches!(
                                 request,
@@ -857,9 +878,8 @@ impl Client {
                             ) {
                                 return Ok(select_note(
                                     core,
-                                    &mut layout,
-                                    &mut version,
-                                    &mut fresh,
+                                    (&mut layout, &mut version, &mut fresh),
+                                    &seen,
                                     owner,
                                     &access,
                                     &request,
@@ -871,9 +891,8 @@ impl Client {
                             ) {
                                 return Ok(configure(
                                     core,
-                                    &mut layout,
-                                    &mut version,
-                                    &mut fresh,
+                                    (&mut layout, &mut version, &mut fresh),
+                                    &seen,
                                     owner,
                                     &access,
                                     &request,
@@ -940,7 +959,11 @@ impl Client {
                             layout = Arc::new(current);
                             version = revision;
                             fresh = !missing;
-                            if missing || version.structure != request.expected_version {
+                            if missing
+                                || !seen.current(request.expected_version, version, &layout, || {
+                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                })
+                            {
                                 return Err("Workspace changed; no worktree was removed".into());
                             }
                             if !matches!(&scope, None | Some(Context::Workspace))
@@ -1025,7 +1048,9 @@ impl Client {
                                 if missing {
                                     return Err("Workspace is unavailable".into());
                                 }
-                                if version.structure != request.expected_version {
+                                if !seen.current(request.expected_version, version, &layout, || {
+                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                }) {
                                     return Err("Workspace changed after Git dispatch".into());
                                 }
                                 let current_source = layout
@@ -1155,7 +1180,11 @@ impl Client {
                             if door.crowded(&Envelope::worktree(scope.as_ref(), &request)) {
                                 return Err("A worktree operation is already pending".into());
                             }
-                            if !fresh || version.structure != request.expected_version {
+                            if !fresh
+                                || !seen.current(request.expected_version, version, &layout, || {
+                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                })
+                            {
                                 return Err(
                                     "Inspect the current workspace before using worktrees".into()
                                 );
@@ -1176,7 +1205,11 @@ impl Client {
                                     .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
-                            if missing || version.structure != request.expected_version {
+                            if missing
+                                || !seen.current(request.expected_version, version, &layout, || {
+                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                })
+                            {
                                 return Err(
                                     "Workspace changed; inspect before using worktrees".into()
                                 );
@@ -1329,7 +1362,14 @@ impl Client {
                             Err(rejected(
                                 "Process request limit reached; no effect was queued".into(),
                             ))
-                        } else if !fresh || version.structure != request.input.expected_version {
+                        } else if !fresh
+                            || !seen.current(
+                                request.input.expected_version,
+                                version,
+                                &layout,
+                                || Some(crate::process::parts(&request.input.action)),
+                            )
+                        {
                             Err(rejected(
                                 "Inspect the current workspace revision before using processes"
                                     .into(),
@@ -1339,7 +1379,7 @@ impl Client {
                                 Ok(core) => load(core, &cwd, &layout, version).and_then(|(current, revision, _)| {
                                     layout = Arc::new(current);
                                     version = revision;
-                                    if version.structure != request.input.expected_version {
+                                    if !seen.current(request.input.expected_version, version, &layout, || Some(crate::process::parts(&request.input.action))) {
                                         return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
                                     }
                                     crate::process::start(core, &layout, &scope, &request.input.action)
@@ -1548,7 +1588,9 @@ impl Client {
                             Err(rejected(
                                 "Inspect the workspace before opening a terminal".into(),
                             ))
-                        } else if version.structure != expected_version {
+                        } else if !seen.current(expected_version, version, &layout, || {
+                            Some(vec![Part::Vessel(content.clone())])
+                        }) {
                             Err(rejected(
                                 "Layout changed; inspect before opening a terminal".into(),
                             ))
@@ -1731,9 +1773,14 @@ impl Client {
                                     Err(rejected(
                                         "Inspect the workspace before making a change".into(),
                                     ))
-                                } else if request.expected_version != version.structure
-                                    && !request.action.is_navigation()
+                                } else if !request.action.is_navigation()
                                     && !matches!(request.action, Action::CancelVoyageClose { .. })
+                                    && !seen.current(
+                                        request.expected_version,
+                                        version,
+                                        &layout,
+                                        || crate::workspace::parts(&layout, &request.action),
+                                    )
                                 {
                                     Err(rejected(
                                         "Layout changed; inspect it before making a new request"
@@ -1979,7 +2026,18 @@ impl Client {
                                             load(core, &cwd, &layout, version)?;
                                         layout = Arc::new(current);
                                         version = revision;
-                                        if missing || request.expected_version != version.structure
+                                        if missing
+                                            || !seen.current(
+                                                request.expected_version,
+                                                version,
+                                                &layout,
+                                                || {
+                                                    crate::workspace::parts(
+                                                        &layout,
+                                                        &request.action,
+                                                    )
+                                                },
+                                            )
                                         {
                                             return Err(rejected("Workspace changed; inspect before changing a terminal viewer".into()));
                                         }
@@ -2993,242 +3051,10 @@ fn eligible_contents(
         .collect()
 }
 
-fn select_note(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut LayoutRevision,
-    fresh: &mut bool,
-    owner: &mut crate::content::Owner,
-    access: &crate::content::Access,
-    request: &voyager_contract::content::Request,
-) -> voyager_contract::content::Response {
-    use voyager_contract::content::{NotesConfiguration, NotesFile, Request, Response, Version};
-    let (request_id, vessel_id, expected_version) = match request {
-        Request::MigrateNote {
-            request_id,
-            vessel_id,
-            expected_version,
-            ..
-        }
-        | Request::NewNote {
-            request_id,
-            vessel_id,
-            expected_version,
-            ..
-        }
-        | Request::OpenNote {
-            request_id,
-            vessel_id,
-            expected_version,
-            ..
-        } => (request_id, vessel_id, expected_version),
-        _ => return crate::content::reject(request, "Expected a note selection".into()),
-    };
-    let mut created = None;
-    let selected = (|| {
-        crate::content::admit(owner, layout, version.structure, access, request)?;
-        if *expected_version != version.structure {
-            return Err("Workspace changed; inspect before selecting a note".to_owned());
-        }
-        let directory = crate::content::notes_directory(layout, vessel_id)?;
-        if matches!(request, Request::MigrateNote { .. }) {
-            let current =
-                crate::content::configuration(owner, layout, vessel_id, version.structure)?
-                    .ok_or("Notes configuration is unavailable")?;
-            if current.configuration.notes_file.is_some() {
-                return Err("This note already has a Markdown file".into());
-            }
-            let file = owner.migrate_file(vessel_id, &directory)?;
-            created = Some(directory.join(&file.filename));
-            let snapshot = owner.select_file(vessel_id, file.clone())?;
-            let mut candidate = (**layout).clone();
-            let content = candidate
-                .vessels
-                .iter_mut()
-                .find(|item| item.id == *vessel_id)
-                .ok_or("Content is unavailable")?;
-            let mut configuration = current.configuration;
-            configuration.notes_file = Some(file.clone());
-            content.configuration = Some(
-                serde_json::to_value(&configuration)
-                    .map_err(|error| error.to_string())?
-                    .as_object()
-                    .ok_or("Invalid Notes configuration")?
-                    .clone(),
-            );
-            crate::content::rename::label(&mut candidate, vessel_id, &file.filename);
-            return Ok((candidate, configuration, snapshot));
-        }
-        let filename = match request {
-            Request::NewNote { title, .. } => {
-                let filename = owner.create_file(&directory, title)?;
-                created = Some(directory.join(&filename));
-                filename
-            }
-            Request::OpenNote { filename, .. } => filename.clone(),
-            _ => unreachable!(),
-        };
-        let file = NotesFile {
-            directory: directory.to_string_lossy().into_owned(),
-            filename,
-        };
-        let snapshot = owner.select_file(vessel_id, file.clone())?;
-        let mut candidate = (**layout).clone();
-        let content = candidate
-            .vessels
-            .iter_mut()
-            .find(|item| item.id == *vessel_id)
-            .ok_or("Content is unavailable")?;
-        let mut configuration = content
-            .configuration
-            .as_ref()
-            .map(|value| {
-                serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
-                    value.clone(),
-                ))
-            })
-            .transpose()
-            .map_err(|error| error.to_string())?
-            .unwrap_or_default();
-        configuration.notes_file = Some(file.clone());
-        content.configuration = Some(
-            serde_json::to_value(&configuration)
-                .map_err(|error| error.to_string())?
-                .as_object()
-                .ok_or("Invalid Notes configuration")?
-                .clone(),
-        );
-        crate::content::rename::label(&mut candidate, vessel_id, &file.filename);
-        Ok((candidate, configuration, snapshot))
-    })();
-    let (candidate, configuration, snapshot) = match selected {
-        Ok(value) => value,
-        Err(error) => {
-            if created.is_some() || error.contains("creation is unconfirmed") {
-                *fresh = false;
-                return Response::Uncertain {
-                    version: Version::V1,
-                    request_id: request_id.clone(),
-                    vessel_id: vessel_id.clone(),
-                    expected_revision: expected_version.to_string(),
-                    message: format!(
-                        "Note creation or selection is unconfirmed at {created:?}: {error}; inspect before retry"
-                    ),
-                };
-            }
-            return crate::content::reject(request, error);
-        }
-    };
-    match save(core, &candidate, *version) {
-        Ok(revision) => {
-            *layout = Arc::new(candidate);
-            *version = revision;
-            Response::NoteOpened {
-                version: Version::V1,
-                request_id: request_id.clone(),
-                vessel_id: vessel_id.clone(),
-                snapshot,
-                configuration,
-                workspace_version: revision.structure,
-            }
-        }
-        Err(error) => {
-            *fresh = false;
-            Response::Uncertain {
-                version: Version::V1,
-                request_id: request_id.clone(),
-                vessel_id: vessel_id.clone(),
-                expected_revision: expected_version.to_string(),
-                message: format!(
-                    "Note selection or creation was not confirmed; inspect the selected file and workspace before another attempt: {error:?}"
-                ),
-            }
-        }
-    }
-}
-
-fn configure(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut LayoutRevision,
-    fresh: &mut bool,
-    owner: &mut crate::content::Owner,
-    access: &crate::content::Access,
-    request: &voyager_contract::content::Request,
-) -> voyager_contract::content::Response {
-    use voyager_contract::content::{Request, Response, Version};
-    let Request::Configure {
-        request_id,
-        vessel_id,
-        expected_version,
-        configuration,
-        ..
-    } = request
-    else {
-        return crate::content::reject(request, "Expected a configuration request".into());
-    };
-    let candidate = (|| {
-        crate::content::admit(owner, layout, version.structure, access, request)?;
-        if *expected_version != version.structure {
-            return Err("Workspace changed; inspect before configuring content".into());
-        }
-        owner.require_configure()?;
-        let current = crate::content::configuration(owner, layout, vessel_id, version.structure)?
-            .ok_or("Notes configuration is unavailable")?;
-        if configuration.notes_file != current.configuration.notes_file {
-            return Err("Use a note selection action to change the selected file".into());
-        }
-        let mut candidate = (**layout).clone();
-        candidate
-            .vessels
-            .iter_mut()
-            .find(|content| content.id == *vessel_id)
-            .ok_or("Content is unavailable")?
-            .configuration = Some(
-            serde_json::to_value(configuration)
-                .expect("Configuration serializes")
-                .as_object()
-                .expect("Configuration is an object")
-                .clone(),
-        );
-        Ok(candidate)
-    })();
-    let candidate = match candidate {
-        Ok(candidate) => candidate,
-        Err(message) => return crate::content::reject(request, message),
-    };
-    match save(core, &candidate, *version) {
-        Ok(revision) => {
-            *layout = Arc::new(candidate);
-            *version = revision;
-            Response::Configured {
-                version: Version::V1,
-                request_id: request_id.clone(),
-                vessel_id: vessel_id.clone(),
-                configuration: configuration.clone(),
-                workspace_version: revision.structure,
-            }
-        }
-        Err(Error::Rejected { kind, message }) => {
-            *fresh = false;
-            crate::content::reject(request, format!("{kind}: {message}"))
-        }
-        Err(Error::Uncertain(message)) => {
-            *fresh = false;
-            Response::Uncertain {
-                version: Version::V1,
-                request_id: request_id.clone(),
-                vessel_id: vessel_id.clone(),
-                expected_revision: expected_version.to_string(),
-                message,
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod terminal_outcome_tests {
     use super::*;
+    use crate::core::Core;
     use voyager_contract::Outcome;
 
     #[test]
@@ -3477,7 +3303,7 @@ mod terminal_outcome_tests {
                 },
             };
             let mut changed = (*closed.layout).clone();
-            changed.next_id += 1;
+            changed.voyages[0].fleets[1].name = "Changed outside".into();
             let external = core
                 .document_set("voyager-layout-v2", &changed, closed.version)
                 .unwrap();

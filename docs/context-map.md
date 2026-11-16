@@ -42,6 +42,7 @@ Guide: [docs/workspace.md](workspace.md).
 Owns files:
 
 - `app/src/client.rs`
+- `app/src/client_content.rs`
 - `app/src/client_reply.rs`
 - `app/src/client_terminal.rs`
 - `app/src/front_door.rs`
@@ -96,6 +97,7 @@ Owns files:
 - `app/tests/maximize.rs`
 - `app/tests/shared_panels.rs`
 - `app/tests/navigation.rs`
+- `app/tests/revisions.rs`
 - `app/tests/voyage_close.rs`
 - `contract/src/bin/export.rs`
 - `contract/tests/panels.rs`
