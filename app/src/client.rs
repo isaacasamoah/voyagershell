@@ -29,6 +29,7 @@ use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING}
 use crate::layout_store::{
     LayoutRevision, begin_save, carry_notice, load, rejected, save, settle_save,
 };
+pub use core_calls::WorkspaceNotice;
 use core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
     live_directories, post, relist, reports, unlisted,
@@ -37,14 +38,6 @@ use terminal_start::{CreatedTerminal, require_finished};
 
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct WorkspaceNotice {
-    pub package_revision: u64,
-    pub revision: u64,
-    pub activity_revision: u64,
-    pub close_revision: u64,
-}
 
 enum Message {
     PrepareContext {
@@ -2112,7 +2105,7 @@ impl Client {
                     if package_changed {
                         notices.packages.fetch_add(1, Ordering::Relaxed);
                     }
-                    notices.send(version, closing.revision);
+                    notices.after(previous_version, version, scope.is_some(), closing.revision);
                 }
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
                     && response.status == voyager_contract::Outcome::Applied

@@ -851,8 +851,14 @@ selection, a closed program, a Voyage close) change structure, so they always
 take the new document version. An external write is detected on the next read,
 by comparing structure. So a plan an agent built before the user
 clicked a Fleet still applies, and every check that compares a caller's version
-with the owner's ignores navigation. Change notices still follow the document
-version, so a view redraws after another caller's navigation.
+with the owner's ignores navigation.
+
+Change notices carry the structure revision, and a navigation revision that
+moves only when a scoped caller, such as an agent through the administrator,
+changes navigation alone. The canvas inspects again when either moves past what
+it holds. Its own navigation, including `focus-vessel`, and the native avatar's
+dock reach it through their replies, so they send it no notice and cost it no
+second inspect.
 
 **The navigation record.** `navigation` holds one entry per Voyage: its
 last-used Fleet and, optionally, its last-used Vessel placement. Any change that

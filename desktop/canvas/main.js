@@ -26,7 +26,12 @@ import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
-import { errorMessage, outcome, statusLine } from "./status.js";
+import {
+  changedBesidesRevision,
+  errorMessage,
+  outcome,
+  statusLine,
+} from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
@@ -87,6 +92,7 @@ export default class Canvas extends View {
     this.workspaceNotice = {
       revision: "0",
       closeRevision: "0",
+      navigationRevision: "0",
       packageRevision: "0",
       activityRevision: "0",
     };
@@ -609,18 +615,10 @@ export default class Canvas extends View {
   }
   inspectNotice(cx) {
     const notice = workspace_notice();
-    const packageChanged =
-      notice.packageRevision !== this.workspaceNotice.packageRevision;
-    const closeChanged =
-      notice.closeRevision !== this.workspaceNotice.closeRevision;
+    const changed = changedBesidesRevision(notice, this.workspaceNotice);
     this.workspaceNotice = notice;
     this.refreshRequested = false;
-    if (
-      !packageChanged &&
-      !closeChanged &&
-      BigInt(notice.revision) <= BigInt(this.version)
-    )
-      return;
+    if (!changed && BigInt(notice.revision) <= BigInt(this.version)) return;
     this.automaticRefresh = true;
     try {
       this.run({ operation: "inspect" }, cx);
@@ -1737,8 +1735,7 @@ export default class Canvas extends View {
     }
     if (
       ownerNotice.revision !== this.workspaceNotice.revision ||
-      ownerNotice.closeRevision !== this.workspaceNotice.closeRevision ||
-      ownerNotice.packageRevision !== this.workspaceNotice.packageRevision
+      changedBesidesRevision(ownerNotice, this.workspaceNotice)
     ) {
       this.refreshRequested = true;
       if (!this.busy) this.inspectNotice(cx);

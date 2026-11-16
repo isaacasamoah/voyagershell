@@ -1,4 +1,4 @@
-use super::{LayoutRevision, Message, WorkspaceNotice, save};
+use super::{LayoutRevision, Message, save};
 use crate::{
     activity::{Activity, Event},
     core::{Core, Error},
@@ -66,10 +66,20 @@ pub(super) fn reports(
     activity.take_dirty()
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WorkspaceNotice {
+    pub package_revision: u64,
+    pub revision: u64,
+    pub activity_revision: u64,
+    pub close_revision: u64,
+    pub navigation_revision: u64,
+}
+
 pub(super) struct Notices {
     pub(super) listener: Option<async_channel::Sender<WorkspaceNotice>>,
     pub(super) packages: Arc<AtomicU64>,
     activity: Arc<Mutex<Activity>>,
+    navigation: u64,
 }
 
 impl Notices {
@@ -78,12 +88,14 @@ impl Notices {
             listener: None,
             packages,
             activity,
+            navigation: 0,
         }
     }
 
     pub(super) fn current(&self, revision: LayoutRevision, close_revision: u64) -> WorkspaceNotice {
         WorkspaceNotice {
-            revision: revision.document,
+            revision: revision.structure,
+            navigation_revision: self.navigation,
             close_revision,
             package_revision: self.packages.load(Ordering::Relaxed),
             activity_revision: self
@@ -92,6 +104,19 @@ impl Notices {
                 .map(|activity| activity.revision)
                 .unwrap_or(0),
         }
+    }
+
+    pub(super) fn after(
+        &mut self,
+        before: LayoutRevision,
+        after: LayoutRevision,
+        scoped: bool,
+        close_revision: u64,
+    ) {
+        if scoped && after != before && after.structure == before.structure {
+            self.navigation += 1;
+        }
+        self.send(after, close_revision);
     }
 
     pub(super) fn send(&self, revision: LayoutRevision, close_revision: u64) {
