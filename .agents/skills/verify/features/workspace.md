@@ -57,10 +57,13 @@ the next case needs.
 | `rename-escape-cancels` | Double-click the Fleet's name, type, press Escape | The editor holds the typed text before Escape, the saved name is unchanged, and the drawn name is the saved name |
 | `rename-empty-refused` | Double-click the Vessel's name, press BackSpace, press Return | The editor is empty before Return, the saved name is unchanged, and the drawn name is the saved name |
 | `relaunch-restores-focus` | Click the second Vessel's terminal in the first Fleet, press Ctrl+Q, launch the same profile | Before Ctrl+Q, that Vessel is drawn as `focused-vessel` and the document's `navigation` entry for the selected Voyage and Fleet names it. After the relaunch, the same Voyage and Fleet are selected and the same Vessel is drawn as `focused-vessel` |
+| `maximize-focus-remembered` | Hover the first Vessel's name and click its `maximize-panel` while the second Vessel is focused, press Ctrl+Q, launch the same profile | The maximize draws the first Vessel as `focused-vessel`, and before Ctrl+Q the document's `navigation` entry names it. After the relaunch, the first Fleet is selected and the maximized Vessel is drawn as `focused-vessel`. The case leaves the Fleet maximized, and the next case restores it, so this case does not compare the model |
+| `fleet-tab-focus-remembered` | Click the new Fleet's name, type `echo TAB-$((6*7))` into its Vessel's terminal, press Ctrl+Q, launch the same profile, then click the first Fleet's name and its Vessel's `maximize-panel` to restore it | The tab click draws the new Fleet's Vessel as `focused-vessel`, and its shell prints `TAB-42`. After the relaunch, the new Fleet is selected and the same Vessel is drawn as `focused-vessel`, though no Vessel click saved it |
 | `relaunch-restores` | Press Ctrl+Q, launch the same profile | Before Ctrl+Q, the saved and drawn workspace match the journey's model. The candidate quits with a success status. The layout document and its version are equal before and after. Core and the shells of all four Vessels are the same processes. The Fleet, the Voyage and the Vessel that the journey renamed are saved as `Native Fleet`, `Keyboard Voyage` and `+`. The avatar is docked where the document says. The window draws every Voyage row, every Fleet tab of the selected Voyage, and the name and the terminal of every Vessel of the selected Fleet. Every Voyage row, every Fleet tab and the renamed Vessel's title shows its saved name. After the relaunch the saved and drawn workspace again match the journey's model |
 
-Every case except `relaunch-restores` also ends with the expectation `the
-saved and drawn workspace match the journey's model`, once the case has made
+Every case except `maximize-focus-remembered` and `relaunch-restores` also
+ends with the expectation `the saved and drawn workspace match the journey's
+model`, once the case has made
 its inputs. The journey keeps a model of the whole workspace: the Home Voyage
 as it was at the start, and each Voyage, Fleet and Vessel with its name, in
 order, each Fleet's split arrangement, the selected Voyage and Fleet, and the
