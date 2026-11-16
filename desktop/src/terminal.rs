@@ -172,6 +172,7 @@ impl Pane {
             }),
             cx.on_blur(&focus, window, |pane, _, cx| {
                 pane.selecting = false;
+                pane.press = None;
                 pane.composition.clear();
                 if let Err(error) = pane.viewer.focus(false) {
                     pane.status = format!("Focus: {error:?}");
