@@ -163,6 +163,7 @@ enum Message {
     NoteRenameReady {
         request: Request,
         scope: Option<Context>,
+        program: Option<VesselId>,
         reply: SyncSender<Response>,
         result: Result<Option<String>, CallError>,
     },
@@ -588,9 +589,11 @@ impl Client {
                     Message::NoteRenameReady {
                         request,
                         scope,
+                        program: from,
                         reply,
                         result,
                     } => {
+                        program = from;
                         if renaming.as_ref().is_some_and(|(ticket, _, _)| {
                             *ticket == crate::voyage_close::SaveTicket::new(&request.request_id)
                         }) {
@@ -1645,10 +1648,7 @@ impl Client {
                     step
                 } else {
                     match door.admit(
-                        &program.map_or_else(
-                            || Envelope::workspace(scope.as_ref(), &request),
-                            |vessel| Envelope::program(vessel, &request),
-                        ),
+                        &admission_envelope(program.as_ref(), scope.as_ref(), &request),
                         &request,
                         Receipt::workspace,
                     ) {
@@ -1916,6 +1916,7 @@ impl Client {
                                         let sender = close_sender.clone();
                                         let request = request.clone();
                                         let scope = scope.clone();
+                                        let program = program.clone();
                                         let reply = reply.clone();
                                         thread::spawn(move || {
                                             let result = waiting.recv_blocking().unwrap_or_else(|_| Err(CallError::Unconfirmed("Notes save acknowledgement was lost; inspect before another rename".into())));
@@ -1923,6 +1924,7 @@ impl Client {
                                                 sender.send_blocking(Message::NoteRenameReady {
                                                     request,
                                                     scope,
+                                                    program,
                                                     reply,
                                                     result,
                                                 });
@@ -2874,6 +2876,48 @@ mod voice_scope_tests {
         };
         assert_eq!(request.request_id, "later-navigation");
     }
+
+    #[test]
+    fn a_deferred_rename_resumes_as_the_program_that_asked() {
+        let vessel = VesselId("agent".into());
+        let request = Request {
+            request_id: "rename-1".into(),
+            expected_version: 0,
+            action: Action::Inspect,
+        };
+        let (reply, _) = mpsc::sync_channel(1);
+        let ready = Message::NoteRenameReady {
+            request: request.clone(),
+            scope: None,
+            program: Some(vessel.clone()),
+            reply,
+            result: Ok(None),
+        };
+        let Message::NoteRenameReady {
+            request: resumed,
+            scope,
+            program,
+            ..
+        } = ready
+        else {
+            unreachable!()
+        };
+        let first = admission_envelope(Some(&vessel), None, &request);
+        let again = admission_envelope(program.as_ref(), scope.as_ref(), &resumed);
+        assert_eq!(first, again);
+        assert_ne!(again, admission_envelope(None, None, &resumed));
+    }
+}
+
+fn admission_envelope(
+    program: Option<&VesselId>,
+    scope: Option<&Context>,
+    request: &Request,
+) -> Envelope {
+    program.map_or_else(
+        || Envelope::workspace(scope, request),
+        |vessel| Envelope::program(vessel.clone(), request),
+    )
 }
 
 fn settle_created_content(

@@ -3,6 +3,7 @@ use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, fleets, voyages};
 use crate::system::until;
+use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::json;
@@ -100,6 +101,12 @@ fn voyage_of(layout: &Layout, fleet: &FleetId) -> Option<VoyageId> {
         .map(|voyage| voyage.id.clone())
 }
 
+fn typed(terminal: &Terminal, native: &Native, text: &str) -> Result<()> {
+    terminal.focus(native)?;
+    terminal.echoed(native, text)?;
+    native.press(Key::Return)
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let first = Terminal::first(native)?;
     let (_, layout) = native.document()?.context("Missing saved layout")?;
@@ -107,7 +114,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let voyage = voyage_of(&layout, &fleet).context("The first Fleet has no Voyage")?;
 
     let crew = cases.make(native, Case::AgentInFleet, |native| {
-        first.line(
+        typed(
+            &first,
             native,
             &format!(
                 "hc run --bg --name crew --label voyager.place=fleet:{} claude 'Review x.rs'",
@@ -166,7 +174,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     cases.check(native, Case::AgentInPortal, |native| {
-        first.line(
+        typed(
+            &first,
             native,
             &format!(
                 "hc run --bg --name lookout --label voyager.place=portal:{} claude 'Watch CI'",
@@ -198,8 +207,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     cases.check(native, Case::UnplacedStayHidden, |native| {
-        first.line(native, "hc run --bg --name plain bash")?;
-        first.line(
+        typed(&first, native, "hc run --bg --name plain bash")?;
+        typed(
+            &first,
             native,
             "hc run --bg --name typo --label voyager.place=tab:1 bash",
         )?;
@@ -233,9 +243,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .find(|placement| &placement.id == first.placement())
             .map(|placement| placement.vessel.0.clone())
             .context("The first Vessel is not in the saved layout")?;
-        first.line(native, "voyager status")?;
+        typed(&first, native, "voyager status")?;
         let named = first.printed(native, &format!("\"vessel\": \"{vessel}\""))?;
-        first.line(
+        typed(
+            &first,
             native,
             &format!(
                 "voyager do workspace '{{\"requestId\":\"crew-fleet\",\"expectedVersion\":\"{version}\",\"action\":{{\"operation\":\"create-fleet\",\"voyage\":\"{}\",\"name\":\"{CREW_FLEET}\"}}}}' >/dev/null; echo voyager-exit=$?",

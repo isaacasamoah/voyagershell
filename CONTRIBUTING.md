@@ -35,7 +35,7 @@ npm run vocabulary:check
 cargo fmt --all --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo build --release --locked -p voyager-desktop --bin voyager-shell
+cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
 ```
 
 `npm run architecture:check` gives every Rust and TypeScript source file under

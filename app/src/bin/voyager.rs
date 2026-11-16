@@ -96,6 +96,13 @@ fn code(reply: &SocketReply) -> ExitCode {
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if matches!(arguments.as_slice(), [flag] if flag == "--skill") {
+        match voyager_app::launch::command_path() {
+            Some(path) => print!(
+                "This command is at {}. Run it by that full path when `voyager` is not on PATH, for example in a program started with `hc run`.\n\n",
+                path.display()
+            ),
+            None => print!(""),
+        }
         print!("{GUIDE}");
         return ExitCode::SUCCESS;
     }

@@ -836,7 +836,7 @@ leaves folders without `alive.lock` alone and reports a folder it cannot remove.
 The process ID in a folder name is only for reading, never for liveness.
 
 The commands below exercise the release build in this checkout. Build it first
-with `cargo build --release --locked -p voyager-desktop --bin voyager-shell`.
+with `cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager`.
 
 ```sh
 candidate="$PWD/target/release/voyager-shell"

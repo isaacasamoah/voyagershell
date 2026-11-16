@@ -97,6 +97,28 @@ pub fn command(launch: &Launch, cwd: &str) -> Result<Vec<String>, String> {
     Ok(args)
 }
 
+const COMMAND_NAME: &str = if cfg!(windows) {
+    "voyager.exe"
+} else {
+    "voyager"
+};
+
+pub fn command_path() -> Option<std::path::PathBuf> {
+    let path = std::env::current_exe().ok()?.with_file_name(COMMAND_NAME);
+    path.is_file().then_some(path)
+}
+
+pub fn path_with_command() -> Option<String> {
+    let directory = command_path()?.parent()?.to_path_buf();
+    let rest = std::env::var_os("PATH").unwrap_or_default();
+    let joined = std::env::join_paths(
+        std::iter::once(directory)
+            .chain(std::env::split_paths(&rest).filter(|part| !part.as_os_str().is_empty())),
+    )
+    .ok()?;
+    joined.into_string().ok()
+}
+
 pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>, String> {
     shell_command(launch, command(launch, cwd)?)
 }

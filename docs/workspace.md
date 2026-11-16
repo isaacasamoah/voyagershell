@@ -85,7 +85,10 @@ Adoption adds one terminal Vessel whose backend is that terminal and places it
 at the end of the Fleet's split, or of the Voyage's Portal column, which it
 shows. The Vessel's launch is the program when the first argument names a
 known agent program from `app/src/launch.rs`, such as `claude` or `codex`, and
-a terminal otherwise. The owner never starts or restarts a terminal for it.
+a terminal otherwise. Adoption starts nothing, because the terminal is already
+running. When a later launch finds that the adopted terminal is gone or ended,
+`prepare_reopen` in `app/src/terminal_lifecycle.rs` clears the Vessel's backend
+and gives it a fresh shell, as for any terminal Vessel.
 A terminal that any Vessel already names is skipped, so a repeat report or a
 second snapshot adds nothing. The adopted terminal joins the live bindings, so
 its Vessel closes when its program exits, like any other.
@@ -111,12 +114,16 @@ actions. `voyager --skill` prints its guide,
 their output, so the command offers none of them.
 
 Each placed terminal Vessel has its own Unix socket, opened and closed by
-`app/src/client_socket.rs` as the layout changes. The path is
+`app/src/vessel_socket.rs` as the layout changes. The path is
 `<Core socket directory>/<session>.vessels/<terminal>.sock`, from
 `app/src/vessel_socket.rs`. The command computes the same path from
 `HC_SESSION` and `HC_TERMINAL_ID`, which Core already sets in every terminal.
-Voyager injects nothing, because Core starts an `hc run` child with Core's own
-environment, so an injected variable would never reach an adopted terminal.
+Voyager sets no identity variable, because Core starts an `hc run` child with
+Core's own environment, so such a variable would never reach an adopted
+terminal. Voyager does put the folder that holds `voyager` first on `PATH` for
+each terminal it starts and for a Core that it starts. An `hc run` child of an
+already running Core has Core's `PATH`, so `voyager --skill` prints the full
+path of the command.
 The socket closes when its Vessel has no placement or its backend changes.
 
 A connection sends one JSON line, a `SocketRequest`, and reads one JSON line,
