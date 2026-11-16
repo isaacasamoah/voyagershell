@@ -4,7 +4,7 @@ This is the Rust slice of the maintained native fixture. It runs the journeys in
 its journey registry on an owned Linux X11 display. The journeys are
 `terminal-scrolling`, `workspace`, which covers Voyages, Fleets and Vessels,
 `quit-restore` and `terminal-input`, which covers typing, keys, output,
-selection and copy and paste in a terminal.
+selection, copy and paste and clicks in a terminal.
 The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
@@ -127,8 +127,13 @@ Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
 process. A journey judges these values as expectations. `Native::context_click`
 aims at a control the way `click` does and presses the secondary button,
-which the X11 adapter sends as button 3. A journey names the intent, not the
-button number.
+which the X11 adapter sends as button 3. `Native::middle_click` does the same
+with the middle button, which the adapter sends as button 2. A journey names
+the intent, not the button number. The display acknowledges the middle click.
+No run shows that the app received it, because the app does nothing with a
+middle click today. Two presses at one point in quick succession make a double
+or triple click. Six drags in a row that started at the same point each selected the whole
+word, and drags that started at different points did not.
 
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
@@ -977,6 +982,43 @@ driver refuses a point that is outside the control or under the avatar. It
 presses at the first point, moves to the second in 4 equal steps and releases,
 and it releases the button even when a move fails.
 
+`Native::click_at` clicks one point inside a control, in device pixels relative
+to the window. It refuses a point that is outside the control or under the
+avatar, as `drag_between` does. It moves to the point, asks the display where
+the pointer is and presses once only if the display reports the point. The
+display's answer is recorded as a `pointer-at` event in `actions.jsonl`, with
+the expected and the seen point, and a different answer is a fixture error.
+`Terminal::cell` gives the rectangle of one terminal cell in the same pixels
+and `Terminal::click_cell` clicks the centre of that cell. `column` and `row`
+count from 0. The app does not publish its cell size, so the verifier derives
+it. It reads `cols` and `rows` from Core's `terminal.get` for the bound
+terminal and takes the terminal element's area from the latest frame. It
+removes the padding, which is 8 logical pixels times `window.scale`, from each
+edge. A cell is the inner width divided by `cols` and the inner height
+divided by `rows`, each rounded down, and the first cell starts inside the
+padding. A cell outside the grid is refused as a fixture error, never as a
+product failure. The derivation matched the drawn text at scale 2 with the
+app's font, where a cell is 16 by 36 device pixels. The check covers cells 0,
+6 and 7 of row 0 only. At another scale the cell may not be a whole number of
+device pixels. The derived width is then short of the app's by up to one pixel
+for each column, so a cell far from the left edge may be off. No run has
+tried another scale. Two observations support `click_cell`, and neither goes through the
+app's selection. The display reports the pointer at the cell's centre, which
+`pointer-at` records. And `drag-selects-text` checks the derivation on every
+run against the text that the terminal drew. Cell 0 must start where the
+drawn box starts, and a text of seven cells must end between cell 6 and
+cell 7. A mismatch ends the run `inconclusive`, blamed on the fixture.
+
+The app's own pointer-to-cell mapping does not agree with where it draws the
+cells. A drag inside cell 3 of a drawn line highlights and copies cell 2, and
+the same shift appears for cells 5 and 9. This is tracked as
+[Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196).
+Until it is fixed, a one-character selection through `click_cell` copies the
+neighbour on the left, so no committed case judges a selection by cell. The
+run that showed it stays in the evidence of the pull request that added
+`click_cell`. Do not read a selection from the app as a check of
+`click_cell`. A click-to-move case may share the offset, which no run has checked.
+
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
@@ -1072,14 +1114,27 @@ copy and a paste inside the app prove nothing about X.
 
 Only the owner's thread waits on that connection, for events and for replies.
 The journey's thread sends it a command through a channel and wakes it with a
-ClientMessage to the owner's window. `own` takes CLIPBOARD and confirms the
-owner with `GetSelectionOwner`. The thread answers `TARGETS`, listing
-`TARGETS` and `UTF8_STRING`, and it answers `UTF8_STRING`. It refuses any
-other target with the property None. `read` converts CLIPBOARD to
-`UTF8_STRING` and gives the owner of the clipboard 4 s. It returns the text,
-`refused` or `unanswered`. `owner` returns the window that owns CLIPBOARD.
-The thread records each request that it served or refused, with the name of
-the target, the requestor and the time, and each `SelectionClear`.
+ClientMessage to the owner's window. Each command names a `Selection`, which
+is CLIPBOARD or PRIMARY, and the two are independent. `own` takes the
+selection and confirms the owner with `GetSelectionOwner`. `disown` gives it
+up, after it checks that the verifier owns it, and confirms that nobody owns
+it. The X server sends the verifier's own `SelectionClear` for the PRIMARY it
+gave up, so a `disown` appears in the record as a `cleared` exchange. The
+thread answers `TARGETS`, listing `TARGETS` and `UTF8_STRING`, and it
+answers `UTF8_STRING`, only for a selection that it owns. It refuses any
+other target, and any other selection, with the property None. `read`
+converts the selection to `UTF8_STRING` and gives its owner 4 s. It returns
+the text, `refused` or `unanswered`. A selection that nobody owns answers at
+once with `refused`, so a read of PRIMARY from a candidate that never takes
+PRIMARY returns `refused`. `owner` returns the window that owns the selection.
+`Clip::own`, `read` and `owner` act on CLIPBOARD, so the journeys that
+predate PRIMARY did not change. `Clip::own_in`, `read_in`, `owner_in` and
+`disown_in` take the `Selection`.
+The thread records each request that it served or refused, with the selection,
+the name of the target, the requestor and the time, and each `SelectionClear`
+with its selection. The selection is empty for an atom that is neither
+CLIPBOARD nor PRIMARY. The `own`, `read` and `disown` commands appear in
+`actions.jsonl` with the selection too.
 `Native::clipboard` writes that record to `actions.jsonl` as `clipboard`
 events when a journey reads it and again at cleanup. Every wait has a
 deadline. The owner's connection gives the display 5 s to answer, as the
@@ -1090,8 +1145,11 @@ Cleanup stops the clipboard owner first, before the viewer, Core and the
 display. It sends the thread a stop command, wakes it, joins it and then drops
 the connection. The first connection is still open then, so the display does
 not lose its last client. A thread that failed is a cleanup error. Before its
-first case, `terminal-input` owns a canary text and reads it back. A canary
-that does not come back ends the run `inconclusive`, blamed on the fixture.
+first case, `terminal-input` owns a canary text and reads it back, then does
+the same for PRIMARY and gives PRIMARY up. A canary that does not come back,
+or a PRIMARY that the verifier still owns afterwards, ends the run
+`inconclusive`, blamed on the fixture. Giving PRIMARY up leaves a read of
+PRIMARY after a drag to show only what the candidate took.
 
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply

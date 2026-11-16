@@ -1,5 +1,5 @@
 use super::{Defect, GLANCE, Native, Wheel, pid, placed};
-use crate::inspection::{Target, Unseen, region};
+use crate::inspection::{Target, Unseen, centre, region};
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Geometry, Key, Pixels};
 use anyhow::{Context, Result, ensure};
@@ -498,6 +498,31 @@ impl Terminal {
         native.wheel(&self.target(), direction, WHEEL_CLICKS)
     }
 
+    pub fn cell(&self, native: &Native, column: u16, row: u16) -> Result<Geometry> {
+        let reported = native
+            .system
+            .rpc("terminal.get", json!({"terminal":self.address}))?;
+        let count = |name: &str| {
+            reported[name]
+                .as_u64()
+                .and_then(|count| u16::try_from(count).ok())
+                .with_context(|| format!("Core reports no {name} for {}", self.target()))
+        };
+        let (columns, rows) = (count("cols")?, count("rows")?);
+        let target = self.target();
+        let (area, scale) = native.wait_for(&target.to_string(), PATIENCE, |frame| {
+            Some((
+                region(frame, &target.find(frame)?.bounds),
+                frame.window.scale,
+            ))
+        })?;
+        Grid::new(area, scale, columns, rows)?.cell(column, row)
+    }
+
+    pub fn click_cell(&self, native: &Native, column: u16, row: u16) -> Result<()> {
+        native.click_at(&self.target(), centre(self.cell(native, column, row)?))
+    }
+
     pub fn origin(&self, native: &Native) -> Result<(i16, i16)> {
         let target = self.target();
         native.wait_for(&target.to_string(), PATIENCE, |frame| {
@@ -597,7 +622,63 @@ fn foreground_name(reported: &serde_json::Value) -> Option<String> {
 }
 
 fn inset(frame: &Frame) -> u16 {
-    (PADDING * frame.window.scale).ceil() as u16
+    inset_at(frame.window.scale)
+}
+
+fn inset_at(scale: f32) -> u16 {
+    (PADDING * scale).ceil() as u16
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Grid {
+    area: Geometry,
+    inset: u16,
+    columns: u16,
+    rows: u16,
+}
+
+impl Grid {
+    fn new(area: Geometry, scale: f32, columns: u16, rows: u16) -> Result<Self> {
+        ensure!(
+            columns > 0 && rows > 0,
+            "Core reports a terminal grid of {columns} by {rows} cells"
+        );
+        Ok(Self {
+            area,
+            inset: inset_at(scale),
+            columns,
+            rows,
+        })
+    }
+
+    fn cell(&self, column: u16, row: u16) -> Result<Geometry> {
+        ensure!(
+            column < self.columns && row < self.rows,
+            "cell ({column}, {row}) is outside the terminal's grid of {} columns by {} rows",
+            self.columns,
+            self.rows
+        );
+        let inner = |length: u16| length.saturating_sub(2 * self.inset);
+        let width = inner(self.area.width) / self.columns;
+        let height = inner(self.area.height) / self.rows;
+        ensure!(
+            width > 0 && height > 0,
+            "the terminal's area {:?} is too small for {} columns by {} rows",
+            self.area,
+            self.columns,
+            self.rows
+        );
+        let place = |origin: i16, index: u16, length: u16| {
+            (i32::from(origin) + i32::from(self.inset) + i32::from(index) * i32::from(length))
+                as i16
+        };
+        Ok(Geometry {
+            x: place(self.area.x, column, width),
+            y: place(self.area.y, row, height),
+            width,
+            height,
+        })
+    }
 }
 
 fn placement_of<'a>(layout: &'a Layout, content: &VesselId) -> Option<&'a PlacementId> {
@@ -820,6 +901,73 @@ mod tests {
         );
         assert!(repainted(&before, &screen(&[]), GREEN, 1).is_empty());
         assert!(repainted(&before, &selected, [1, 2, 3], 1).is_empty());
+    }
+
+    fn grid(scale: f32) -> Grid {
+        let area = Geometry {
+            x: 20,
+            y: 200,
+            width: 1450,
+            height: 900,
+        };
+        let inner = |length: u16| length - 2 * inset_at(scale);
+        let (columns, rows) = (
+            inner(area.width) / (8 * scale as u16),
+            inner(area.height) / (18 * scale as u16),
+        );
+        Grid::new(area, scale, columns, rows).unwrap()
+    }
+
+    #[test]
+    fn a_cell_lies_inside_the_scaled_padding_at_scale_two() {
+        assert_eq!(
+            grid(2.).cell(3, 0).unwrap(),
+            Geometry {
+                x: 84,
+                y: 216,
+                width: 16,
+                height: 36
+            }
+        );
+        assert_eq!(
+            grid(2.).cell(0, 23).unwrap(),
+            Geometry {
+                x: 36,
+                y: 1044,
+                width: 16,
+                height: 36
+            }
+        );
+        assert_eq!(
+            grid(1.).cell(3, 0).unwrap(),
+            Geometry {
+                x: 52,
+                y: 208,
+                width: 8,
+                height: 18
+            }
+        );
+    }
+
+    #[test]
+    fn a_cell_outside_the_grid_is_refused_by_the_verifier() {
+        let grid = grid(2.);
+        for (column, row) in [(grid.columns, 0), (0, grid.rows), (u16::MAX, u16::MAX)] {
+            let error = grid.cell(column, row).unwrap_err();
+            assert!(
+                error.downcast_ref::<Defect>().is_none(),
+                "({column}, {row}) blamed the product: {error:#}"
+            );
+            assert!(format!("{error:#}").contains("outside"), "{error:#}");
+        }
+        assert!(grid.cell(grid.columns - 1, grid.rows - 1).is_ok());
+    }
+
+    #[test]
+    fn an_empty_grid_has_no_cells() {
+        let area = grid(2.).area;
+        assert!(Grid::new(area, 2., 0, 24).is_err());
+        assert!(Grid::new(area, 2., 80, 0).is_err());
     }
 
     #[test]
