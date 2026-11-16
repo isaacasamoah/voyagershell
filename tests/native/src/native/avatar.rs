@@ -38,9 +38,11 @@ impl Sharpness {
 }
 
 pub fn artwork() -> Result<RgbaImage> {
-    Ok(image::load_from_memory_with_format(ARTWORK, ImageFormat::Png)
-        .context("The shipped avatar artwork")?
-        .into_rgba8())
+    Ok(
+        image::load_from_memory_with_format(ARTWORK, ImageFormat::Png)
+            .context("The shipped avatar artwork")?
+            .into_rgba8(),
+    )
 }
 
 fn lanczos(source: &RgbaImage, side: u32) -> RgbaImage {
@@ -55,11 +57,9 @@ fn lanczos(source: &RgbaImage, side: u32) -> RgbaImage {
     for pixel in resized.pixels_mut() {
         let alpha = u32::from(pixel.0[3]);
         for channel in &mut pixel.0[..3] {
-            *channel = if alpha == 0 {
-                0
-            } else {
-                ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
-            };
+            *channel = (u32::from(*channel) * 255 + alpha / 2)
+                .checked_div(alpha)
+                .map_or(0, |value| value.min(255) as u8);
         }
     }
     resized
@@ -68,7 +68,8 @@ fn lanczos(source: &RgbaImage, side: u32) -> RgbaImage {
 fn bilinear(source: &RgbaImage, side: u32) -> RgbaImage {
     let (width, height) = source.dimensions();
     let tap = |at: f32, length: u32, limit: u32| {
-        let position = ((at + 0.5) * length as f32 / side as f32 - 0.5).clamp(0., (limit - 1) as f32);
+        let position =
+            ((at + 0.5) * length as f32 / side as f32 - 0.5).clamp(0., (limit - 1) as f32);
         let low = position.floor() as u32;
         (low, (low + 1).min(limit - 1), position - low as f32)
     };
@@ -193,9 +194,10 @@ mod tests {
     use image::Rgba;
 
     fn drawn_with(reference: &RgbaImage, at: [u32; 2]) -> RgbaImage {
-        let mut canvas = RgbaImage::from_fn(reference.width() + 20, reference.height() + 20, |x, y| {
-            Rgba([(x * 3) as u8, (y * 2) as u8, 90, 255])
-        });
+        let mut canvas =
+            RgbaImage::from_fn(reference.width() + 20, reference.height() + 20, |x, y| {
+                Rgba([(x * 3) as u8, (y * 2) as u8, 90, 255])
+            });
         for (x, y, pixel) in reference.enumerate_pixels() {
             let alpha = u32::from(pixel.0[3]);
             let below = canvas.get_pixel_mut(x + at[0], y + at[1]);
