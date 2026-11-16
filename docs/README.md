@@ -42,7 +42,7 @@ build the release binary:
 ```sh
 python3 desktop/prepare-sdk.py
 npm ci --ignore-scripts
-cargo build --release --locked -p voyager-desktop --bin voyager-shell
+cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
 ```
 
 The last line of output starts with `Finished` and names the `release` profile.

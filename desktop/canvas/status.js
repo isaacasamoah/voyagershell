@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
+import { take_placement_notice } from "voyager_workspace";
 export function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -16,6 +17,10 @@ export function outcome(reply) {
   if (reply.status === "uncertain")
     return `Uncertain. ${reply.message || "The result was not confirmed."}`;
   return reply.message || "";
+}
+export function noticed(owner) {
+  owner.status = take_placement_notice() ?? owner.status;
+  return owner.status;
 }
 export function statusLine(text, refresh) {
   const view = div()

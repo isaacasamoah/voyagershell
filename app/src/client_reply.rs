@@ -1,5 +1,5 @@
 use super::{CallError, Client};
-use voyager_contract::{Action, Request, Response, Unanswered};
+use voyager_contract::{Action, Request, Response, Unanswered, VesselId};
 
 impl Client {
     pub fn inspect(&self) -> Result<Response, Unanswered> {
@@ -10,12 +10,32 @@ impl Client {
         })
     }
 
+    pub fn take_placement_notice(&self) -> Option<String> {
+        self.placement_notice
+            .lock()
+            .ok()
+            .and_then(|mut notice| notice.take())
+    }
+
     pub fn call(&self, request: Request) -> Result<Response, Unanswered> {
+        self.answer(None, request)
+    }
+
+    pub(crate) fn program_call(
+        &self,
+        vessel: VesselId,
+        request: Request,
+    ) -> Result<Response, Unanswered> {
+        self.answer(Some(vessel), request)
+    }
+
+    fn answer(&self, program: Option<VesselId>, request: Request) -> Result<Response, Unanswered> {
         let id = request.request_id.clone();
-        self.ask(None, request).map_err(|error| match error {
-            CallError::Rejected(message) => Unanswered::refused(id, message),
-            CallError::Unconfirmed(message) => Unanswered::uncertain(id, message),
-        })
+        self.ask(None, program, request)
+            .map_err(|error| match error {
+                CallError::Rejected(message) => Unanswered::refused(id, message),
+                CallError::Unconfirmed(message) => Unanswered::uncertain(id, message),
+            })
     }
 }
 
@@ -46,6 +66,7 @@ mod tests {
             identity: "reply-test".into(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
+            placement_notice: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         (client, queue)
@@ -63,7 +84,7 @@ mod tests {
         (0..8)
             .map(|filler| {
                 client
-                    .queue_workspace(None, inspect(&format!("filler-{filler}")))
+                    .queue_workspace(None, None, inspect(&format!("filler-{filler}")))
                     .unwrap()
             })
             .collect()
@@ -213,8 +234,9 @@ mod tests {
     #[test]
     fn a_request_still_queued_when_its_wait_ends_is_cancelled_and_refused() {
         let (client, queue) = detached();
-        let PendingCall(receive, _, claim) =
-            client.queue_workspace(None, inspect("queued")).unwrap();
+        let PendingCall(receive, _, claim) = client
+            .queue_workspace(None, None, inspect("queued"))
+            .unwrap();
         let waited = PendingCall(receive, std::time::Duration::from_millis(20), claim).wait();
         assert!(matches!(waited, Err(CallError::Rejected(message)) if message == CANCELLED));
         let Ok(Message::Workspace { claim, .. }) = queue.try_recv() else {

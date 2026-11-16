@@ -1,8 +1,8 @@
 use crate::panels;
 use voyager_contract::{
-    Action, ContentDestination, Context, Fleet, FleetId, LastUsed, Layout, Placement, PlacementId,
-    PlacementOwner, PortalLayout, RenameTarget, Split, Vessel, VesselId, Voyage, VoyageId,
-    WorkspaceView,
+    Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, Layout,
+    Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget, Split,
+    Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
 };
 
 #[derive(Default)]
@@ -142,6 +142,69 @@ impl Model {
         content.launch = Some(voyager_contract::launch::Launch::Terminal);
         content.shell_intent = Some(intent.into());
         Ok(())
+    }
+
+    fn insert(
+        &mut self,
+        owner: &PlacementOwner,
+        insertion: PlacementInsertion,
+        panel: Placement,
+    ) -> Result<(), String> {
+        panels::insert(
+            panels::group_mut(&mut self.layout, owner)?,
+            owner,
+            insertion,
+            panel,
+        )?;
+        if let PlacementOwner::Portals { voyage } = owner {
+            self.layout
+                .containers_mut()
+                .find(|item| &item.id == voyage)
+                .and_then(|item| item.portal_layout.as_mut())
+                .ok_or("Portal arrangement not found")?
+                .visible = true;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn adopt(
+        &mut self,
+        owner: &PlacementOwner,
+        terminal: &CoreTerminalId,
+        cwd: String,
+        launch: Launch,
+    ) -> Result<bool, String> {
+        if self
+            .layout
+            .vessels
+            .iter()
+            .any(|content| content.backend.as_ref() == Some(terminal))
+        {
+            return Ok(false);
+        }
+        let open = self.layout.containers().any(|voyage| {
+            !voyage.closed
+                && match owner {
+                    PlacementOwner::Fleet { id } => voyage
+                        .fleets
+                        .iter()
+                        .any(|fleet| &fleet.id == id && !fleet.closed),
+                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
+                }
+        });
+        if !open {
+            return Err(match owner {
+                PlacementOwner::Fleet { id } => format!("no open Fleet {}", id.0),
+                PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
+            });
+        }
+        let name = panels::default_name(panels::group(&self.layout, owner)?.members, "terminal");
+        let panel = self.placement(cwd, "terminal".into(), name, Some(launch))?;
+        if let Some(content) = self.layout.vessels.last_mut() {
+            content.backend = Some(terminal.clone());
+        }
+        self.insert(owner, PlacementInsertion::Empty, panel)?;
+        Ok(true)
     }
 
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
@@ -461,20 +524,7 @@ impl Model {
                 let name =
                     panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);
                 let panel = self.placement(cwd, type_id, name, launch)?;
-                panels::insert(
-                    panels::group_mut(&mut self.layout, &owner)?,
-                    &owner,
-                    insertion,
-                    panel,
-                )?;
-                if let PlacementOwner::Portals { voyage } = owner {
-                    self.layout
-                        .containers_mut()
-                        .find(|item| item.id == voyage)
-                        .and_then(|item| item.portal_layout.as_mut())
-                        .ok_or("Portal arrangement not found")?
-                        .visible = true;
-                }
+                self.insert(&owner, insertion, panel)?;
             }
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();
@@ -766,6 +816,75 @@ mod tests {
         let before = model.layout.clone();
         assert!(model.apply(Action::FocusVessel { id: elsewhere }).is_err());
         assert_eq!(before, model.layout);
+    }
+
+    #[test]
+    fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let voyage = model.layout.voyages[0].id.clone();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let agent = Launch::Program {
+            argv: vec!["claude".into()],
+        };
+        let into_fleet = PlacementOwner::Fleet { id: fleet.clone() };
+        let t5 = CoreTerminalId("t5".into());
+        assert_eq!(
+            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone()),
+            Ok(true)
+        );
+        assert_eq!(
+            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone()),
+            Ok(false)
+        );
+        let adopted = model.layout.vessels.last().unwrap().clone();
+        assert_eq!(adopted.backend, Some(t5));
+        assert_eq!(adopted.launch, Some(agent));
+        assert_eq!(adopted.cwd, "/work");
+        let placements = &model.layout.voyages[0].fleets[0];
+        assert_eq!(placements.placements.len(), 2);
+        assert!(panels::contains(
+            &placements.root,
+            &placements.placements[1].id
+        ));
+        let t6 = CoreTerminalId("t6".into());
+        let portal = PlacementOwner::Portals {
+            voyage: voyage.clone(),
+        };
+        assert_eq!(
+            model.adopt(&portal, &t6, "/work".into(), Launch::Terminal),
+            Ok(true)
+        );
+        let column = model.layout.voyages[0].portal_layout.as_ref().unwrap();
+        assert!(column.visible);
+        assert_eq!(model.layout.voyages[0].portals.len(), 1);
+        let unknown = PlacementOwner::Fleet {
+            id: FleetId("fleet-404".into()),
+        };
+        let t7 = CoreTerminalId("t7".into());
+        assert!(
+            model
+                .adopt(&unknown, &t7, "/".into(), Launch::Terminal)
+                .is_err()
+        );
+        model.layout.voyages[0].fleets[0].closed = true;
+        assert!(
+            model
+                .adopt(&into_fleet, &t7, "/".into(), Launch::Terminal)
+                .is_err()
+        );
+        assert!(
+            !model
+                .layout
+                .vessels
+                .iter()
+                .any(|content| content.backend.as_ref() == Some(&t7))
+        );
     }
 
     #[test]

@@ -119,6 +119,7 @@ pub(crate) enum Caller {
     Canvas,
     Avatar { focus: Context },
     Content { vessel: VesselId },
+    Program { vessel: VesselId },
     Core { machine: Machine },
 }
 
@@ -163,6 +164,24 @@ impl Envelope {
             target: Target::Workspace,
             expected: Some(Revision::Layout(request.expected_version)),
             effect: !matches!(request.action, Action::Inspect),
+        }
+    }
+
+    pub(crate) fn admitted(
+        program: Option<&VesselId>,
+        scope: Option<&Context>,
+        request: &Request,
+    ) -> Self {
+        program.map_or_else(
+            || Self::workspace(scope, request),
+            |vessel| Self::program(vessel.clone(), request),
+        )
+    }
+
+    pub(crate) fn program(vessel: VesselId, request: &Request) -> Self {
+        Self {
+            caller: Caller::Program { vessel },
+            ..Self::workspace(None, request)
         }
     }
 

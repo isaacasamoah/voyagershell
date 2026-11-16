@@ -153,6 +153,9 @@ pub(super) fn open_terminal(
                     cwd: Some(cwd.clone()),
                     no_parent: true,
                     labels: HashMap::from([(LABEL.into(), operation.clone())]),
+                    env: crate::launch::path_with_command()
+                        .map(|path| HashMap::from([("PATH".into(), path)]))
+                        .unwrap_or_default(),
                     ..Default::default()
                 };
                 match core.terminal_run_with(params) {

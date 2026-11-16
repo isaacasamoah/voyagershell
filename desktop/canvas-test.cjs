@@ -2092,6 +2092,8 @@ function statusModule() {
     if (name === "gpui-kit") return { div: element };
     if (name === "voyager_native")
       return { Marker: MarkerStub, Status: { new: element } };
+    if (name === "voyager_workspace")
+      return { take_placement_notice: () => null };
     throw Error(name);
   });
   return exports;
