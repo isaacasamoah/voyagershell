@@ -16,6 +16,8 @@ pub const RUNTIME: &str = "/voyager/runtime";
 pub const CORE: &str = "/voyager/bin/hc";
 pub const PROVIDER: &str = "/voyager/bin/codex";
 pub const CORE_RELAY: &str = "/voyager/bin/hc-delay";
+pub const AGENT: &str = "/voyager/bin/claude";
+pub const COMMAND: &str = "/voyager/bin/voyager";
 pub const PROVIDER_SOCKET: &str = "/voyager/runtime/provider.sock";
 pub const DISPLAY: &str = ":99";
 const SHELL_STARTUP: [&str; 4] = [".bashrc", ".bash_profile", ".profile", ".inputrc"];
@@ -61,8 +63,12 @@ impl Sandbox<'_> {
             }
         }
         command.extend(["--ro-bind".into(), text(self.core)?, CORE.into()]);
-        for relay in [PROVIDER, CORE_RELAY] {
+        for relay in [PROVIDER, CORE_RELAY, AGENT] {
             command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
+        }
+        let command_line = self.candidate.with_file_name("voyager");
+        if command_line.is_file() {
+            command.extend(["--ro-bind".into(), text(&command_line)?, COMMAND.into()]);
         }
         for path in [
             Some(self.verifier),

@@ -158,6 +158,27 @@ Core runs again and reports the program finished, the layout must hold the
 Vessel closed within 1 s. The pause does not make Core send a `missed`
 snapshot, so no journey covers one.
 
+The `adopt-by-label` journey proves that a program an agent starts with Core
+becomes a Vessel when it carries a `voyager.place` label, and that the
+`voyager` command reaches the workspace through its Vessel's socket. Every case
+types into the first terminal, as an agent in that Vessel would.
+
+- `agent-in-fleet` starts the stand-in `claude` with `--label
+  voyager.place=fleet:<id>` for the first terminal's Fleet. It passes when the
+  terminal is drawn as a Vessel in that Fleet, the saved Vessel records the
+  `claude` launch and the Vessel shows the stand-in's own output.
+- `dock-agent` drags the avatar onto that Vessel's name. It passes when the
+  saved context is that Vessel and the avatar is drawn on it.
+- `agent-in-portal` starts the stand-in with `voyager.place=portal:<Voyage
+  id>`. It passes when the terminal is drawn as a Portal of that Voyage.
+- `unplaced-stay-hidden` starts one `bash` with no label and one with
+  `voyager.place=tab:1`. It passes when neither becomes a Vessel and the status
+  line names the misplaced terminal.
+- `command-creates-fleet` runs `voyager status`, then `voyager do workspace`
+  with a `create-fleet` request at the saved layout version. It passes when
+  the status names the first Vessel, the new Fleet is saved and drawn as a tab,
+  and the command prints the applied result.
+
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result is settled by reading Core, with nothing done twice. It
 declares the Core delay `arm`, so the relay is in the path and each case arms
@@ -775,6 +796,10 @@ The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.
 
+The `adopt-by-label` patch restores the old drop rule: a `created` report for a
+terminal that no Vessel names is dropped even when it carries the label.
+`agent-in-fleet` then fails, because no Vessel appears for the labelled agent.
+
 The `slow-list` patch makes a `finished` event never report an exit.
 `exit-closes-during-held-list` then fails on the expectation `the exited
 shell's Vessel was saved closed in under half of the hold on Core's terminal
@@ -847,6 +872,8 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
 | `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. |
+| `/voyager/bin/claude` | The verifier binary itself, read-only. Under that name it runs as a stand-in agent: it prints the task it was given and echoes each line it reads, so a journey can start a known agent program with no model. |
+| `/voyager/bin/voyager` | The candidate's sibling `voyager` command, read-only, when the candidate's folder holds one. Its hash is not pinned. |
 | `/voyager/bin/hc-delay` | The verifier binary itself, read-only. Under that name it runs as the Core reply relay. It does nothing unless `--core-delay` names it as the app's Core bridge. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
 | `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |

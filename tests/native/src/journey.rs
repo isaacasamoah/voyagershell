@@ -1,3 +1,4 @@
+mod adopt_by_label;
 mod arrangement;
 mod chat;
 mod core_events;
@@ -123,6 +124,7 @@ journeys! {
     Outcomes => "outcomes" in outcomes, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     CoreEvents => "core-events" in core_events, sidebar: None, window: None;
     SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
 }
 
 impl Journey {
