@@ -53,7 +53,10 @@ native Cargo or Node checks. Later Cargo commands use that configuration
 normally. `python3 desktop/prepare-sdk.py --check` verifies the prepared source
 and configuration without changing them. Existing unrelated source or Cargo
 configuration is preserved with an explicit error. The cache path includes
-the revision and patch digest and is shared by matching worktrees. Keep the
+the revision and patch digest and is shared by matching worktrees. The
+configuration is checked on every native build by `desktop/build.rs`, which fails
+when it points at an SDK prepared from an older patch list. Rerun the script in
+an existing worktree to refresh it. Keep the
 machine-local `.cargo/config.toml` out of commits. The SDK patch adds one native
 view slot below sheets/dialogs; application code still owns Voyager's avatar.
 
