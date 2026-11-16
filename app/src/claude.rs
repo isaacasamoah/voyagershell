@@ -100,7 +100,7 @@ fn command(executable: &Path, options: &Options) -> Command {
 }
 
 #[derive(Default)]
-pub(crate) struct Turn {
+struct Turn {
     id: String,
     pending: Option<(u64, Operation)>,
     interrupt: Option<String>,
@@ -223,7 +223,7 @@ fn disconnected(stderr: &Mutex<String>) -> String {
     }
 }
 
-pub(crate) fn user_message(text: &str, focus: &Value) -> Value {
+fn user_message(text: &str, focus: &Value) -> Value {
     json!({"type":"user","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"text","text":text},{"type":"text","text":format!("voyager.focus: {focus}")}]}})
 }
 
@@ -254,7 +254,7 @@ fn result_text(content: &Value) -> String {
     }
 }
 
-pub(crate) fn decode(value: &Value, turn: &mut Turn) -> Vec<Event> {
+fn decode(value: &Value, turn: &mut Turn) -> Vec<Event> {
     let mut events = Vec::new();
     match value["type"].as_str() {
         Some("user") if value["isReplay"] == true => {
