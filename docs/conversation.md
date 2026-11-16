@@ -14,16 +14,22 @@ effort and system prompt:
 ```
 
 Every field is optional, and a null field counts as missing. A missing provider
-is Codex. A missing model or effort
-is the provider adapter's default, which for Codex is its pinned model with high
-effort. A missing prompt is the built-in administrator policy in
-app/src/conversation_client.rs. A configured prompt replaces that policy for the
-text conversation, so it should restate any rule the owner still wants. The
-built-in policy carries no personal reply marker; an owner who wants one puts it
-in the configured prompt. Native voice keeps its own built-in instructions.
-These settings change only this private administrator connection. A build that
-predates a field refuses a file that names it, before any runtime starts, so an
-older build never runs a provider or prompt it cannot honour. C2 restores the supported native shell tool
+is Codex. A missing model or effort is the provider adapter's default, which for
+Codex is its pinned model with high effort. A missing prompt is the built-in
+administrator policy in app/src/conversation_client.rs. A configured prompt
+replaces that policy for the text conversation, so it should restate any rule
+the owner still wants. The built-in policy carries no personal reply marker. An
+owner who wants one puts it in the configured prompt. Native voice keeps its own
+built-in instructions. These settings change only this private administrator
+connection.
+
+A build that predates a field refuses a file that names it at the first Send,
+before any runtime starts. It shows "Conversation settings require valid model
+and effort strings; no turn was submitted" and keeps the typed message. An older
+build therefore never runs a provider or prompt it does not support. Removing the
+newer fields restores it.
+
+C2 restores the supported native shell tool
 for file and search inspection while retaining the read-only sandbox,
 never-approval policy and disabled internal agents. Instructions keep project
 and extension-source changes with working Vessels. These instructions are
