@@ -469,6 +469,9 @@ impl Pane {
     }
 
     fn release(&mut self, point: gpui::Point<gpui::Pixels>, cx: &mut gpui::App) -> Result<()> {
+        if !self.selecting {
+            return Ok(());
+        }
         self.selecting = false;
         self.select(Select::Release, point)?;
         if let Some(text) = self.screen.selection_text()? {

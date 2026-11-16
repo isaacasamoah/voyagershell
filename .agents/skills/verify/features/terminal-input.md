@@ -77,13 +77,6 @@ fixture.
   `DURING-42` and its terminal must draw it while Core still reports `yes` or
   `timeout` in the first terminal's foreground. Ctrl+C in the first terminal
   must end the flood and leave its shell the same program.
-- `a-click-sends-no-bytes-and-a-middle-click-pastes-primary` runs the `keys`
-  probe with bracketed paste while the verifier owns PRIMARY with
-  `PASTEβ界`, a newline and `line2`. It clicks cell 3 of row 0 with
-  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
-  received exactly `ESC[200~`, the text, `ESC[201~` and `x`, so the click sent
-  no byte and the middle click sent the paste. A client other than the
-  verifier must have asked the verifier's PRIMARY for the text.
 - `a-drag-inside-one-cell-copies-that-cell` clears the screen, prints
   `ABCDEFGHIJ` on row 0 and `KLMNOPQRST` on row 1, and gives CLIPBOARD to the
   verifier. It drags from 2 pixels inside the top-left corner of cell 3 of
@@ -96,11 +89,23 @@ fixture.
   previous case copied, and clicks cell 8 of row 0. The click must clear the
   drawn selection, the verifier must still own both and read the sentinel from
   both, and neither selection may have been cleared.
+- `a-click-sends-no-bytes-and-a-middle-click-pastes-primary` runs the `keys`
+  probe with bracketed paste while the verifier owns PRIMARY with
+  `PASTEβ界`, a newline and `line2`. It clicks cell 3 of row 0 with
+  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
+  received exactly `ESC[200~`, the text, `ESC[201~` and `x`, so the click sent
+  no byte and the middle click sent the paste. A client other than the
+  verifier must have asked the verifier's PRIMARY for the text.
 - `a-middle-click-refuses-primary-over-64-kib` gives PRIMARY 70 KiB to the
   verifier and middle-clicks. A client other than the verifier must ask for the
   text, the terminal must draw its error banner, and the probe must have
   received exactly the `x` typed afterwards. The 64 KiB limit is the paste
   limit of `Screen::paste_bytes`.
+- `a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection`
+  prints `STALEWORD` in the first terminal and drags across it, so that
+  terminal holds a selection. It then takes CLIPBOARD and PRIMARY for the
+  verifier, drags from the second terminal to a point over the first, and
+  releases. Neither selection may read the first terminal's older text.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
