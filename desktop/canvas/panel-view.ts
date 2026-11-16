@@ -7,13 +7,41 @@ import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
 import { visiblePanels } from "./panels.js";
+import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
 import type Canvas from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
-import type { Context as UIContext, NativeElement } from "gpui-kit";
+import type {
+  AsyncContext,
+  Context as UIContext,
+  NativeElement,
+} from "gpui-kit";
 import type { Action } from "../../contract/generated/request";
 import type { Context, Placement } from "../../contract/generated/response";
+
+function noteFocus(
+  workspace: Canvas,
+  id: string,
+  cx: UIContext | AsyncContext,
+) {
+  if (workspace.layout?.view !== "fleet") return;
+  cx.spawn(() =>
+    invoke({ operation: "focus-vessel", id }, workspace.version).catch(
+      () => null,
+    ),
+  );
+}
+
+export function moveFocus(
+  workspace: Canvas,
+  id: string | null,
+  cx: UIContext | AsyncContext,
+) {
+  const changed = id !== workspace.focused;
+  workspace.focused = id;
+  if (id && changed) noteFocus(workspace, id, cx);
+}
 
 export function renderPanel(
   workspace: Canvas,
@@ -123,7 +151,7 @@ export function renderPanel(
           const changed = workspace.focused !== placement.id;
           workspace.focused = placement.id;
           if (changed) {
-            workspace.noteFocus(placement.id, cx);
+            noteFocus(workspace, placement.id, cx);
             cx.spawn((task) => workspace.readObservation(task));
           }
           cx.notify();

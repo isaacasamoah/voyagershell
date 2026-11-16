@@ -36,7 +36,7 @@ import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
 import { CreationPicker } from "./creation.js";
-import { renderPanel } from "./panel-view.js";
+import { moveFocus, renderPanel } from "./panel-view.js";
 import {
   renderSidebar,
   renderFleets,
@@ -125,17 +125,6 @@ export default class Canvas extends View {
         await task.sleep(CONTEXT_REFRESH_MS);
       }
     });
-  }
-  noteFocus(id, cx) {
-    if (this.layout?.view !== "fleet") return;
-    cx.spawn(() =>
-      invoke({ operation: "focus-vessel", id }, this.version).catch(() => null),
-    );
-  }
-  moveFocus(id, cx) {
-    const changed = id !== this.focused;
-    this.focused = id;
-    if (id && changed) this.noteFocus(id, cx);
   }
   activePlacement() {
     if (!this.layout) return;
@@ -554,7 +543,7 @@ export default class Canvas extends View {
             );
             const opened = rememberedPlacement(current, shown) || shown[0];
             if (changesSelection) this.focused = opened?.id || null;
-            else if (creating && created) this.moveFocus(created.id, task);
+            else if (creating && created) moveFocus(this, created.id, task);
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
@@ -562,7 +551,7 @@ export default class Canvas extends View {
                   ? created
                   : opened;
               if (target && (maximization || splitMaximized))
-                this.moveFocus(target.id, task);
+                moveFocus(this, target.id, task);
               if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
             }
           } catch (error) {
@@ -658,7 +647,8 @@ export default class Canvas extends View {
       !this.layoutName &&
       !window.has_active_dialog()
     ) {
-      this.moveFocus(
+      moveFocus(
+        this,
         (rememberedPlacement(result.layout, shown) || shown[0])?.id || null,
         task,
       );

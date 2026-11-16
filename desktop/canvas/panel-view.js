@@ -7,7 +7,21 @@ import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
 import { visiblePanels } from "./panels.js";
+import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
+function noteFocus(workspace, id, cx) {
+  if (workspace.layout?.view !== "fleet") return;
+  cx.spawn(() =>
+    invoke({ operation: "focus-vessel", id }, workspace.version).catch(
+      () => null,
+    ),
+  );
+}
+export function moveFocus(workspace, id, cx) {
+  const changed = id !== workspace.focused;
+  workspace.focused = id;
+  if (id && changed) noteFocus(workspace, id, cx);
+}
 export function renderPanel(workspace, placement, scope, group) {
   const colors = projection();
   const content = workspace.layout?.vessels.find(
@@ -111,7 +125,7 @@ export function renderPanel(workspace, placement, scope, group) {
           const changed = workspace.focused !== placement.id;
           workspace.focused = placement.id;
           if (changed) {
-            workspace.noteFocus(placement.id, cx);
+            noteFocus(workspace, placement.id, cx);
             cx.spawn((task) => workspace.readObservation(task));
           }
           cx.notify();
