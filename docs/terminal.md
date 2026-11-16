@@ -537,7 +537,9 @@ methods and features this adapter uses, without pinning the Core version or
 rejecting additive fields. Dispatched replies must have the expected JSON-RPC
 version and identity and exactly one valid result or structured error. A known
 refusal retains its Core kind. Malformed, ambiguous, internal and unknown errors
-remain uncertain without an automatic replay.
+remain uncertain until the effect owner settles them by reading Core, as
+`docs/workspace.md` describes. A start or a terminal input that a read cannot
+settle is never replayed.
 
 ## Earlier explicit new-shell mechanism
 

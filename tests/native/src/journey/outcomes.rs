@@ -19,6 +19,8 @@ cases! {
     CloseRefused => "close-refused-says-why",
     StopDropped => "stop-dropped-retried",
     StopHeld => "stop-held-closed",
+    RenameUncertain => "rename-uncertain-declines-second-enter",
+    CloseUnanswered => "close-unanswered-offers-no-second-confirm",
     StartHeld => "start-held-adopted",
     StartStalled => "start-stalled-not-repeated",
 }
@@ -43,6 +45,10 @@ const ASK_BEHIND: &str = "Rename the Fleet while I look at the close dialog";
 const BEHIND: &str = "Renamed Behind";
 const BEHIND_ITEM: &str = "stand-in-behind";
 const STALLED: &str = "Held Fleet";
+const DECLINED: &str = "Name change not confirmed";
+const INSPECT: &str = "Voyage remains open. Inspect before another close";
+const SILENT: Duration = Duration::from_secs(60);
+const SILENT_NAME: &str = "Silent Fleet";
 const NOT_REPEATED: &str = "so it was not repeated";
 const DROPPED: &str = "Retried Fleet";
 const TOO_LONG: usize = 129;
@@ -289,6 +295,92 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .observed("programs", json!({"stopped":programs,"live":live}))
         })?;
     }
+    cases.check(native, Case::RenameUncertain, |native| {
+        if !is_open(&saved(native)?, &voyage) {
+            reopen(native, &voyage)?;
+        }
+        let typed = type_name(native, &fleet, SILENT_NAME)?;
+        let (status, again) = native.with_core_paused(|native| {
+            native.press(Key::Return)?;
+            let status = native.drawn_label(
+                &Target::STATUS,
+                SILENT,
+                "an uncertain result in the status line while Core stays paused",
+                |label| label.starts_with(UNCERTAIN),
+            )?;
+            native.keep_window("rename-uncertain")?;
+            native.press(Key::Return)?;
+            let again = native.screen_status(
+                "the canvas declining to send the same name again",
+                |label| !label.starts_with(UNCERTAIN),
+            )?;
+            Ok((status, again))
+        })?;
+        let landed = native.watch(|native| {
+            Ok(native.document()?.and_then(|(version, layout)| {
+                (fleet_name(&layout, &fleet).as_deref() == Some(SILENT_NAME)).then_some(version)
+            }))
+        })?;
+        native.press(Key::Escape)?;
+        native.click(&Target::REFRESH)?;
+        let (settled, _) = renamed(native, &fleet, SILENT_NAME)?;
+        Verdict::new()
+            .expect(
+                "the status line said Uncertain while Core stayed silent past the owner's read",
+                status.starts_with(UNCERTAIN),
+            )
+            .expect(
+                "a second Enter on the same name was declined and not sent",
+                again.contains(DECLINED),
+            )
+            .expect(
+                "after Refresh the canvas draws the Fleet under the saved name",
+                settled,
+            )
+            .expect(
+                "Core saved the name once after it resumed",
+                landed == Some(typed + 1),
+            )
+            .observed("status", &status)?
+            .observed("secondEnter", &again)?
+            .observed("versions", json!({"before":typed,"landed":landed}))
+    })?;
+
+    cases.check(native, Case::CloseUnanswered, |native| {
+        if !is_open(&saved(native)?, &voyage) {
+            reopen(native, &voyage)?;
+        }
+        open_dialog(native, &voyage)?;
+        let status = native.with_core_paused(|native| {
+            native.click(&Target::voyage_close_confirm(&voyage))?;
+            let status = native.drawn_label(
+                &message,
+                SILENT,
+                "the close dialog's inspect-first message while Core stays paused",
+                |label| label.contains(INSPECT),
+            )?;
+            native.keep_window("close-unanswered")?;
+            Ok(status)
+        })?;
+        let (open, offered, kept) = at_rest(native, &voyage, &message)?;
+        native.click(&Target::voyage_close_cancel(&voyage))?;
+        native.observe("the close dialog dismissed", |seen| {
+            (!seen.shows(&Target::voyage_close_cancel(&voyage))).then_some(())
+        })?;
+        Verdict::new()
+            .expect(
+                "the close dialog said the Voyage remains open and to inspect before another close",
+                status.contains(INSPECT),
+            )
+            .expect("the Voyage is still open while the stop is unconfirmed", open)
+            .expect(
+                "the dialog keeps that message and offers no second confirmation",
+                !offered && kept.as_deref().is_some_and(|kept| kept.contains(INSPECT)),
+            )
+            .observed("status", &status)?
+            .observed("atRest", json!({"open":open,"confirmOffered":offered,"message":kept}))
+    })?;
+
     cases.check(native, Case::StartHeld, |native| {
         let (born, arm) = create_fleet(native, &voyage, Fault::Hold { ms: HELD_MS })?;
         let labels = native.drawn_labels(&Target::STATUS, CORE_DEADLINE)?;

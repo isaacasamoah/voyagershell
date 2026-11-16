@@ -78,6 +78,16 @@ deadline, so a run takes about four minutes.
   stop for 21 seconds. The read shows the program ended. In both, the close
   dialog must never say `Uncertain.`, the Voyage must close, and none of its
   programs may still run.
+- `rename-uncertain-declines-second-enter` stops Core with SIGSTOP and presses
+  Enter on a new name. The owner's save and its read both go unanswered, so
+  the status line must say `Uncertain.`. A second Enter must be declined with
+  "Name change not confirmed", and after Core resumes the document must be
+  exactly one version on.
+- `close-unanswered-offers-no-second-confirm` stops Core and confirms a Voyage
+  close. The dialog must say the Voyage remains open and to inspect before
+  another close. After Core resumes the Voyage must still be open and the dialog
+  must not offer Confirm again. The close inspects the workspace before it
+  stops anything, so no stop reaches Core in this case.
 
 ## What a failure means
 

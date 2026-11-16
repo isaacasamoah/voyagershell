@@ -179,10 +179,19 @@ one fault for the next request of one method, as
   start is adopted with one terminal for its label. `start-stalled-not-repeated`
   stalls the start and the requests behind it for 22 s and passes when the start
   keeps its marker and Core holds one terminal for its label.
+- `rename-uncertain-declines-second-enter` stops Core through the owner's read and
+  the canvas's ask, until the status line says `Uncertain.`. A second Enter on
+  the same name must be declined with "Name change not confirmed", and Core
+  saves the name once after it resumes. `close-unanswered-offers-no-second-confirm`
+  confirms a Voyage close while Core is stopped: the dialog says the Voyage
+  remains open and to inspect before another close, and after Core resumes the
+  Voyage is still open and the dialog offers no second confirmation. A stop that
+  stays uncertain through its read cannot be reached here, because the close
+  inspects the workspace first and Core is silent for that too.
 
 Limits. No case drives the avatar's or the administrator's ask through a late
-reply, or a request cancelled while it waited in the queue. Five cases wait for
-Core's deadline, so a run takes about four minutes. The journey reads labels, so
+reply, or a request cancelled while it waited in the queue. Seven cases wait for
+Core's deadline, so a run takes about six minutes. The journey reads labels, so
 it does not judge the one frame that the canvas fails to draw when a notice
 arrives while it is idle.
 
