@@ -512,8 +512,18 @@ fn reopen(native: &Native, voyage: &VoyageId) -> Result<()> {
         |open| *open,
     )?;
     native
-        .watch(|native| Ok((!programs(native, voyage)?.is_empty()).then_some(())))?
-        .context("The reopened Voyage has no live program")
+        .watch(|native| {
+            let live = programs(native, voyage)?;
+            let mut placed = !live.is_empty();
+            for program in &live {
+                let seen = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":program}))?;
+                placed &= seen["foreground"]["cwd"].is_string();
+            }
+            Ok(placed.then_some(()))
+        })?
+        .context("The reopened Voyage has no live program in a known folder")
 }
 
 fn open_dialog(native: &Native, voyage: &VoyageId) -> Result<()> {
