@@ -192,10 +192,11 @@ mod tests {
     fn a_request_the_owner_takes_and_never_answers_is_uncertain() {
         let (client, queue) = detached();
         let owner = thread::spawn(move || {
-            let Ok(Message::Workspace { claim, .. }) = queue.recv_blocking() else {
+            let Ok(Message::Workspace { claim, reply, .. }) = queue.recv_blocking() else {
                 panic!("Expected one workspace request");
             };
             assert!(claim.take());
+            drop(reply);
         });
         let unanswered = client.call(inspect("lost")).unwrap_err();
         owner.join().unwrap();
@@ -229,10 +230,17 @@ mod tests {
     fn a_caller_whose_wait_ended_asks_the_owner_by_the_same_request_identity() {
         let (client, queue) = detached();
         let owner = thread::spawn(move || {
-            let Ok(Message::Workspace { claim, request, .. }) = queue.recv_blocking() else {
+            let Ok(Message::Workspace {
+                claim,
+                request,
+                reply: unanswered,
+                ..
+            }) = queue.recv_blocking()
+            else {
                 panic!("Expected the first request");
             };
             assert!(claim.take());
+            drop(unanswered);
             let Ok(Message::Workspace {
                 claim,
                 request: asked,
