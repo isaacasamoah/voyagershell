@@ -468,6 +468,25 @@ impl Pane {
         self.input_sent()
     }
 
+    fn release(&mut self, point: gpui::Point<gpui::Pixels>, cx: &mut gpui::App) -> Result<()> {
+        if !self.selecting {
+            return Ok(());
+        }
+        self.selecting = false;
+        self.select(Select::Release, point)?;
+        if let Some(text) = self.screen.selection_text()? {
+            copy_selection(cx, text);
+        }
+        Ok(())
+    }
+
+    fn paste_primary(&mut self, cx: &gpui::App) -> Result<()> {
+        match primary_text(cx) {
+            Some(text) => self.paste_text(&text),
+            None => Ok(()),
+        }
+    }
+
     fn select(&mut self, step: Select, point: gpui::Point<gpui::Pixels>) -> Result<()> {
         let Some(bounds) = self.bounds.get() else {
             return Ok(());
@@ -500,6 +519,22 @@ impl Pane {
         self.dirty = true;
         Ok(())
     }
+}
+
+fn copy_selection(cx: &mut gpui::App, text: String) {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    cx.write_to_primary(gpui::ClipboardItem::new_string(text.clone()));
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn primary_text(cx: &gpui::App) -> Option<String> {
+    cx.read_from_primary().and_then(|item| item.text())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+fn primary_text(_: &gpui::App) -> Option<String> {
+    None
 }
 
 fn key_code(key: &str) -> Key {

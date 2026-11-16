@@ -329,7 +329,15 @@ uses Ghostty's current bracketed-paste mode and sanitization. Linux uses
 Ctrl+Shift+C and Ctrl+Shift+V, while macOS uses its Command key. Clipboard text
 whose encoded form exceeds the existing 64 KiB terminal input limit is refused
 before invoking the input callback. Bracketed-paste markers count toward that
-limit. One accepted callback is not a claim of an atomic PTY write. Ctrl+C continues to be terminal input. Wheel input preserves fractional
+limit.
+
+A left release that leaves a non-empty selection copies it to CLIPBOARD and, on
+Linux, to PRIMARY, so Ctrl+Shift+V and a middle click both paste it. A press
+replaces the selection, so a click without a drag leaves both unchanged. An
+empty selection writes nothing. A middle click focuses the terminal and pastes
+PRIMARY through the same paste path as Ctrl+Shift+V, with the same bracketed-paste
+handling and 64 KiB refusal. Without PRIMARY, which only Linux and FreeBSD offer,
+a middle click does nothing. One accepted callback is not a claim of an atomic PTY write. Ctrl+C continues to be terminal input. Wheel input preserves fractional
 scroll movement; typing returns the viewport to the current screen.
 
 GPUI's native input handler retains a local UTF-16 composition preview and draws
@@ -358,8 +366,10 @@ saturated-output responsiveness and latency still require native evidence.
 
 The native `terminal-input` journey in `tests/native` covers typed commands,
 keys as bytes, keys under application cursor mode, output drawn without input,
-drag selection, copy to the X clipboard, paste with and without bracketed paste,
-and input to one split while another floods. Its recipe,
+drag selection, the copy on release to CLIPBOARD and PRIMARY, copy with
+Ctrl+Shift+C, paste with and without bracketed paste, a middle click that pastes
+PRIMARY, the refusal of 70 KiB in PRIMARY, and input to one split while another
+floods. Its recipe,
 `.agents/skills/verify/features/terminal-input.md`, lists what it does not
 cover.
 The retained Python terminal-grid journey still covers shell grid resize, split

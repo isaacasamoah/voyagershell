@@ -21,11 +21,15 @@ cases! {
     KeysFollowProgramModes => "keys-follow-program-modes",
     OutputDrawnWithoutInput => "output-drawn-without-input",
     DragSelectsText => "drag-selects-text",
+    ReleaseCopiesToBoth => "release-copies-the-selection-to-clipboard-and-primary",
     CopyToClipboard => "copy-puts-the-selection-on-the-clipboard",
     PasteSendsText => "paste-sends-another-clients-text",
     InputDuringFlood => "input-reaches-one-terminal-while-another-floods",
-    ClicksSendNoBytes => "clicks-send-no-bytes-to-a-program-that-asked-for-none",
     DragInOneCellCopiesIt => "a-drag-inside-one-cell-copies-that-cell",
+    ClickKeepsCopy => "a-click-without-a-drag-leaves-clipboard-and-primary-unchanged",
+    MiddleClickPastesPrimary => "a-click-sends-no-bytes-and-a-middle-click-pastes-primary",
+    OversizedPrimaryRefused => "a-middle-click-refuses-primary-over-64-kib",
+    ReleaseOverAnotherTerminalKeepsClipboard => "a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection",
 }
 
 pub const CONTROL: Case = Case::CopyToClipboard;
@@ -43,6 +47,8 @@ const CELL: (u16, u16) = (3, 1);
 const CELL_TEXT: &str = "N";
 const SENTINEL: &str = "VERIFIER-SENTINEL";
 const PASTED: &str = "PASTEβ界\nline2";
+const OVERSIZED: usize = 70 * 1024;
+const STATUS: [u8; 3] = [0x35, 0x1e, 0x25];
 const TEXT_TARGET: &str = "UTF8_STRING";
 const ENDED: &str = "Ctrl+D ended the program";
 
@@ -373,11 +379,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 }),
             )
             .observed("colours after the drag", &colours)?
-            .observed("changed", altered)?
-            .observed(
-                "PRIMARY after the drag",
-                native.clipboard()?.read_in(Owned::Primary)?,
-            )?;
+            .observed("changed", altered)?;
         let selection = Selection {
             plain,
             source: *source,
@@ -388,6 +390,31 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let Some(selection) = selection else {
         return Ok(());
     };
+
+    cases.check(native, Case::ReleaseCopiesToBoth, |native| {
+        let verifier = native.clipboard()?.window();
+        let sent = native.system.acted();
+        poll(EXPECTATION, LOOK, true, || {
+            let taken = native.clipboard()?.owner()? != Some(verifier)
+                && native.clipboard()?.owner_in(Owned::Primary)?.is_some();
+            Ok(taken.then_some(()))
+        })?;
+        let inputs = native.system.acted() - sent;
+        let clipboard = native.clipboard()?.read()?;
+        let primary = native.clipboard()?.read_in(Owned::Primary)?;
+        Verdict::new()
+            .expect(
+                "after the release and with no key pressed, another X client reads exactly COPYβ界 from CLIPBOARD",
+                clipboard == Reading::Text(COPIED.into()) && inputs == 0,
+            )
+            .expect(
+                "after the release and with no key pressed, another X client reads exactly COPYβ界 from PRIMARY",
+                primary == Reading::Text(COPIED.into()) && inputs == 0,
+            )
+            .observed("clipboard", &clipboard)?
+            .observed("primary", &primary)?
+            .observed("inputs sent after the release", inputs)
+    })?;
 
     cases.check(native, Case::CopyToClipboard, |native| {
         let verifier = native.clipboard()?.window();
@@ -463,6 +490,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("boxes after typing", boxes(&typed, COPY, TOLERANCE))
     })?;
 
+    let mut second = None;
     cases.check(native, Case::InputDuringFlood, |native| {
         let before = native.observe("the workspace at rest", |seen| Some(seen.document.clone()))?;
         let (after, _, _) = split_right(native, &before, terminal.placement())?;
@@ -470,6 +498,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             return Err(Defect("the split did not create exactly one Vessel".into()).into());
         };
         let other = Terminal::bind(native, &made.id)?;
+        second = Some(made.id.clone());
         terminal.line(native, "timeout 30 yes flood")?;
         until("the flood in the first terminal's foreground", || {
             Ok(flooding(&terminal.foreground(native)?).then_some(()))
@@ -514,28 +543,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("first shell", &shell)
     })?;
 
-    cases.check(native, Case::ClicksSendNoBytes, |native| {
-        let probe = Probe::new(native, "clicks", "keys")?;
-        probe.type_command(native, &terminal)?;
-        probe.ready(native, &terminal)?;
-        native.clipboard()?.own_in(Owned::Primary, PASTED)?;
-        let held = native.clipboard()?.exchanges()?.len();
-        terminal.click_cell(native, 3, 0)?;
-        native.middle_click(&terminal.target())?;
-        native.type_text("x")?;
-        let received = probe.received(b"x")?;
-        let ended = probe.end(native)?;
-        let exchanges = native.clipboard()?.exchanges()?;
-        Verdict::new()
-            .expect(
-                "after a click at a cell and a middle click, the program had received only the x typed after them",
-                received == b"x",
-            )
-            .expect(ENDED, ended)
-            .observed("received", escaped(&received))?
-            .observed("exchanges", &exchanges[held..])
-    })?;
-
     cases.check(native, Case::DragInOneCellCopiesIt, |native| {
         terminal.focus(native)?;
         terminal.echoed(native, "printf '\\033[2J\\033[H%s%s\\n%s%s\\n' ABCDE FGHIJ KLMNO PQRST")?;
@@ -564,7 +571,172 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("cell", cell)?
             .observed("changed", changed(&before, &after))?
             .observed("copied", &read)
+    })?;
+
+    cases.check(native, Case::ClickKeepsCopy, |native| {
+        let verifier = native.clipboard()?.window();
+        let before = terminal.settled(native, "keeps-before", |look| Lines::of(look).count() >= 2)?;
+        native.clipboard()?.own(SENTINEL)?;
+        native.clipboard()?.own_in(Owned::Primary, SENTINEL)?;
+        let held = native.clipboard()?.exchanges()?.len();
+        terminal.click_cell(native, 8, 0)?;
+        let after = terminal.settled(native, "keeps-after", |look| {
+            changed(&before, look).is_some()
+        })?;
+        let clipboard = native.clipboard()?.read()?;
+        let primary = native.clipboard()?.read_in(Owned::Primary)?;
+        let owners = (
+            native.clipboard()?.owner()?,
+            native.clipboard()?.owner_in(Owned::Primary)?,
+        );
+        let exchanges = native.clipboard()?.exchanges()?;
+        let lost = exchanges[held..]
+            .iter()
+            .any(|exchange| matches!(exchange, Exchange::Cleared { .. }));
+        Verdict::new()
+            .expect(
+                "the click reached the app and cleared the drawn selection",
+                changed(&before, &after).is_some(),
+            )
+            .expect(
+                "the verifier still owns CLIPBOARD and PRIMARY after the click and neither was taken",
+                owners == (Some(verifier), Some(verifier)) && !lost,
+            )
+            .expect(
+                "another X client still reads exactly VERIFIER-SENTINEL from CLIPBOARD and from PRIMARY",
+                clipboard == Reading::Text(SENTINEL.into())
+                    && primary == Reading::Text(SENTINEL.into()),
+            )
+            .observed("clipboard", &clipboard)?
+            .observed("primary", &primary)?
+            .observed("exchanges", &exchanges[held..])
+    })?;
+
+    cases.check(native, Case::MiddleClickPastesPrimary, |native| {
+        let probe = Probe::new(native, "clicks", "keys --bracketed-paste")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        let verifier = native.clipboard()?.window();
+        native.clipboard()?.own_in(Owned::Primary, PASTED)?;
+        let held = native.clipboard()?.exchanges()?.len();
+        terminal.click_cell(native, 3, 0)?;
+        native.middle_click(&terminal.target())?;
+        let wrapped = format!("\x1b[200~{PASTED}\x1b[201~");
+        native.type_text("x")?;
+        let expected = [wrapped.as_bytes(), b"x"].concat();
+        let received = probe.received(&expected)?;
+        let ended = probe.end(native)?;
+        let served = served_to_others(&native.clipboard()?.exchanges()?[held..], verifier, Owned::Primary);
+        Verdict::new()
+            .expect(
+                "after a click at a cell and a middle click, the program received only ESC[200~ PASTEβ界 LF line2 ESC[201~ and the x typed after them",
+                received == expected,
+            )
+            .expect(
+                "a client other than the verifier asked the verifier's PRIMARY for the text",
+                served > 0,
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&received))?
+            .observed("PRIMARY requests served", served)
+    })?;
+
+    cases.check(native, Case::OversizedPrimaryRefused, |native| {
+        let probe = Probe::new(native, "oversized", "keys")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        let verifier = native.clipboard()?.window();
+        let before = terminal.settled(native, "oversized-before", |look| {
+            boxes(look, STATUS, TOLERANCE).is_empty()
+        })?;
+        native
+            .clipboard()?
+            .own_in(Owned::Primary, &"A".repeat(OVERSIZED))?;
+        let held = native.clipboard()?.exchanges()?.len();
+        native.middle_click(&terminal.target())?;
+        let served = poll(PATIENCE, LOOK, true, || {
+            let seen = native.clipboard()?.exchanges()?;
+            let count = served_to_others(&seen[held..], verifier, Owned::Primary);
+            Ok((count > 0).then_some(count))
+        })?;
+        let banner = terminal.settled(native, "oversized-banner", |look| {
+            !boxes(look, STATUS, TOLERANCE).is_empty()
+        })?;
+        native.type_text("x")?;
+        let received = probe.received(b"x")?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "another X client asked for the 70 KiB in PRIMARY",
+                served.is_some(),
+            )
+            .expect(
+                "the terminal drew its error banner after the middle click",
+                boxes(&before, STATUS, TOLERANCE).is_empty()
+                    && !boxes(&banner, STATUS, TOLERANCE).is_empty(),
+            )
+            .expect(
+                "the program received only the x typed after the middle click",
+                received == b"x",
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&received))?
+            .observed("PRIMARY requests served", served)
+    })?;
+
+    cases.check(native, Case::ReleaseOverAnotherTerminalKeepsClipboard, |native| {
+        let other = Terminal::bind(native, second.as_ref().context("no second terminal")?)?;
+        let verifier = native.clipboard()?.window();
+        terminal.focus(native)?;
+        terminal.echoed(native, "printf '\\033[2J\\033[H%s%s\\n' STALE WORD")?;
+        native.press(Key::Return)?;
+        terminal.shows(native, "STALEWORD")?;
+        native.clipboard()?.own(SENTINEL)?;
+        let (start, end) = (terminal.cell(native, 0, 0)?, terminal.cell(native, 8, 0)?);
+        native.drag_between(&terminal.target(), centre(start), centre(end))?;
+        poll(EXPECTATION, LOOK, true, || {
+            Ok((native.clipboard()?.owner()? != Some(verifier)).then_some(()))
+        })?;
+        let first = native.clipboard()?.read()?;
+        other.focus(native)?;
+        native.clipboard()?.own(SENTINEL)?;
+        native.clipboard()?.own_in(Owned::Primary, SENTINEL)?;
+        let held = native.clipboard()?.exchanges()?.len();
+        native.drag(&other.target(), &terminal.target())?;
+        let _ = poll(EXPECTATION, LOOK, true, || {
+            Ok((native.clipboard()?.owner()? != Some(verifier)).then_some(()))
+        });
+        let clipboard = native.clipboard()?.read()?;
+        let primary = native.clipboard()?.read_in(Owned::Primary)?;
+        let exchanges = native.clipboard()?.exchanges()?;
+        Verdict::new()
+            .expect(
+                "the first drag in the first terminal copied text of its own",
+                matches!(&first, Reading::Text(text) if text.starts_with("STALEWO")),
+            )
+            .expect(
+                "after a drag that starts in the second terminal and is released over the first, CLIPBOARD does not hold the first terminal's older selection",
+                clipboard != first,
+            )
+            .expect(
+                "after that drag, PRIMARY does not hold the first terminal's older selection",
+                primary != first,
+            )
+            .observed("first copy", &first)?
+            .observed("clipboard", &clipboard)?
+            .observed("primary", &primary)?
+            .observed("exchanges", &exchanges[held..])
     })
+}
+
+fn served_to_others(exchanges: &[Exchange], verifier: u32, selection: Owned) -> usize {
+    exchanges
+        .iter()
+        .filter(|exchange| {
+            matches!(exchange, Exchange::Served { selection: served, target, requestor, .. }
+                if *served == selection && target == TEXT_TARGET && *requestor != verifier)
+        })
+        .count()
 }
 
 fn paste(
@@ -578,13 +750,11 @@ fn paste(
     let held = native.clipboard()?.exchanges()?.len();
     native.press(Key::Char('v').ctrl().shift())?;
     let received = probe.received(expected)?;
-    let served = native.clipboard()?.exchanges()?[held..]
-        .iter()
-        .filter(|exchange| {
-            matches!(exchange, Exchange::Served { target, requestor, .. }
-                if target == TEXT_TARGET && *requestor != verifier)
-        })
-        .count();
+    let served = served_to_others(
+        &native.clipboard()?.exchanges()?[held..],
+        verifier,
+        Owned::Clipboard,
+    );
     let ended = probe.end(native)?;
     Ok(Paste {
         received,
