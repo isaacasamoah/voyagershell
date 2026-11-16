@@ -849,7 +849,7 @@ takes the new document version. The workspace queue compares the layouts before
 and after its save. The owner's other saves (a terminal binding, a Notes
 selection, a closed program, a Voyage close) change structure, so they always
 take the new document version. An external write is detected on the next read,
-by comparing structure. So a plan an agent built before Isaac
+by comparing structure. So a plan an agent built before the user
 clicked a Fleet still applies, and every check that compares a caller's version
 with the owner's ignores navigation. Change notices still follow the document
 version, so a view redraws after another caller's navigation.
