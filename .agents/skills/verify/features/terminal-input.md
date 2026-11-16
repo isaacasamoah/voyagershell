@@ -9,7 +9,9 @@ selects text and draws the selection. Releasing the button copies a non-empty
 selection to CLIPBOARD and PRIMARY, and a click without a drag copies nothing.
 Ctrl+Shift+C puts the selection on the X clipboard, Ctrl+Shift+V sends another
 client's clipboard text to the program, and a middle click sends PRIMARY.
-Typing into one terminal works while another terminal floods.
+A click on the cursor's row moves the cursor there, and a click anywhere that
+would need Up or Down, or while the program owns the mouse or the screen, sends
+nothing. Typing into one terminal works while another terminal floods.
 
 ## How to get to it (user POV)
 
@@ -106,6 +108,28 @@ fixture.
   terminal holds a selection. It then takes CLIPBOARD and PRIMARY for the
   verifier, drags from the second terminal to a point over the first, and
   releases. Neither selection may read the first terminal's older text.
+- `a-click-in-the-shell-input-line-moves-the-cursor-there` sets the prompt to
+  `> `, clears the screen and types `echo abcdef` without Enter. It clicks the
+  `c`, types `X` and presses Enter. Core's screen must hold a line that is
+  exactly `abXcdef` and no line that starts `abcdefX`, which is what a candidate
+  without click-to-move prints.
+- `a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column`
+  runs the `line` probe, which stands in for an agent's composer. It reads
+  `ab界cdef` on its third row with its cursor at the end. A click on the `c`
+  must make it receive four `ESC[D` and nothing else, and an `X` typed after
+  must land before the `c`.
+- `a-click-across-a-wide-character-sends-one-arrow-per-character` clicks the
+  `a`, which must send seven `ESC[D` (eight if it counted cells), and then the
+  `c`, which must send three `ESC[C` (four if it counted cells).
+- `a-click-on-a-row-above-the-cursor-sends-no-arrow-bytes` clicks the probe's
+  rows above its cursor row. It must receive nothing. A click on its cursor row
+  afterwards must send four `ESC[D`, so the silence came from the gate.
+- `a-click-under-mouse-tracking-sends-no-arrow-bytes` runs the `line` probe
+  with `--mouse-tracking`, on the main screen. A click on its cursor row must
+  send nothing, and an `X` typed afterwards must arrive at the end of its line.
+- `a-click-on-the-cursor-row-of-an-alternate-screen-program-sends-no-arrow-bytes`
+  clicks the cursor's row of the `keys` probe and types `x`. The probe must
+  receive only the `x`.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
@@ -157,6 +181,14 @@ journey claims it.
 - A Ctrl+Shift+V paste over 64 KiB and a selection of more than one row, by
   word or by line. The desktop unit test `a_release_without_selected_text_yields_nothing_to_copy`
   covers a release with no text to copy, which no journey case drives.
+- A click while the program has scrolled back, during a selection or an input
+  method composition, across a hard newline, or while prompt marks show a
+  running command. Desktop unit tests in `desktop/src/terminal_click.rs` cover
+  each of them, and no journey case drives them.
+- A click on the cursor's row of a program that reads a line without line
+  editing, such as `cat`. The app sends it the arrow bytes, and no case reads
+  what the program did with them.
+- A shell with ble.sh. The click-to-move cases cover plain Bash only.
 - A middle click on a platform without PRIMARY. The journey covers Linux X11
   only.
 - Selecting one cell by pointer. The app selects the cell to the left of the

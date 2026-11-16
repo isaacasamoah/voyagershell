@@ -5,7 +5,7 @@ use crate::native::{
     Defect, EXPECTATION, LOOK, Lines, Native, Patch, Terminal, boxes, changed, pid, quote,
     repainted, state, vessels,
 };
-use crate::probe::{BLOCKS, READY, SIGNALS, WAITING};
+use crate::probe::{BLOCKS, COMPOSER, COMPOSER_ROW, READY, SIGNALS, WAITING, composer_column};
 use crate::sandbox;
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Chord, Exchange, Geometry, Key, Pixels, Reading, Selection as Owned};
@@ -30,6 +30,12 @@ cases! {
     MiddleClickPastesPrimary => "a-click-sends-no-bytes-and-a-middle-click-pastes-primary",
     OversizedPrimaryRefused => "a-middle-click-refuses-primary-over-64-kib",
     ReleaseOverAnotherTerminalKeepsClipboard => "a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection",
+    ClickMovesShellCursor => "a-click-in-the-shell-input-line-moves-the-cursor-there",
+    ClickMovesComposerCursor => "a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column",
+    ClickCountsCharacters => "a-click-across-a-wide-character-sends-one-arrow-per-character",
+    ClickAboveCursorSendsNothing => "a-click-on-a-row-above-the-cursor-sends-no-arrow-bytes",
+    ClickUnderMouseTrackingSendsNothing => "a-click-under-mouse-tracking-sends-no-arrow-bytes",
+    ClickInAlternateScreenSendsNothing => "a-click-on-the-cursor-row-of-an-alternate-screen-program-sends-no-arrow-bytes",
 }
 
 pub const CONTROL: Case = Case::CopyToClipboard;
@@ -51,6 +57,11 @@ const OVERSIZED: usize = 70 * 1024;
 const STATUS: [u8; 3] = [0x35, 0x1e, 0x25];
 const TEXT_TARGET: &str = "UTF8_STRING";
 const ENDED: &str = "Ctrl+D ended the program";
+const LEFT: &[u8] = b"\x1b[D";
+const RIGHT: &[u8] = b"\x1b[C";
+const SHELL_LINE: &str = "echo abcdef";
+const SHELL_PROMPT: u16 = 2;
+const SHELL_CLICK: u16 = SHELL_PROMPT + 7;
 
 struct Probe {
     name: &'static str,
@@ -726,6 +737,163 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("clipboard", &clipboard)?
             .observed("primary", &primary)?
             .observed("exchanges", &exchanges[held..])
+    })?;
+
+    cases.check(native, Case::ClickMovesShellCursor, |native| {
+        terminal.line(native, "PS1='> '")?;
+        terminal.line(native, "printf '\\033[2J\\033[H'")?;
+        terminal.echoed(native, SHELL_LINE)?;
+        let typed = terminal.settled(native, "click-move-typed", |_| true)?;
+        terminal.click_cell(native, SHELL_CLICK, 0)?;
+        native.type_text("X")?;
+        let moved = terminal.settled(native, "click-move-after-x", |look| {
+            changed(&typed, look).is_some()
+        })?;
+        native.press(Key::Return)?;
+        let printed = terminal.printed(native, "\nabXcdef")?;
+        let screen = terminal.screen(native)?;
+        Verdict::new()
+            .expect(
+                "after a click on the c of the typed echo abcdef, an X, and Enter, the shell printed abXcdef",
+                printed,
+            )
+            .expect(
+                "the shell did not print abcdefX, which is where the X lands without the click",
+                !screen.contains("\nabcdefX"),
+            )
+            .expect(
+                "the terminal drew the X inside the typed line",
+                changed(&typed, &moved).is_some(),
+            )
+            .observed("screen", &screen)
+    })?;
+
+    cases.check(native, Case::ClickMovesComposerCursor, |native| {
+        let probe = Probe::new(native, "composer", "line")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        let before = terminal.settled(native, "composer-before", |_| true)?;
+        terminal.click_cell(native, composer_column(3), COMPOSER_ROW)?;
+        let expected = LEFT.repeat(4);
+        let received = probe.received(&expected)?;
+        native.type_text("X")?;
+        let typed = probe.received(&[expected.as_slice(), b"X"].concat())?;
+        terminal.settled(native, "composer", |look| changed(&before, look).is_some())?;
+        let line = state(&probe.path)?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "a click on the c of ab界cdef made the line-reading program receive four ESC[D and nothing else",
+                received == expected,
+            )
+            .expect(
+                "an X typed after the click went in before the c, as ab界Xcdef with its cursor after the X",
+                typed.ends_with(b"X")
+                    && line["text"] == "ab界Xcdef"
+                    && line["cursor"] == 4,
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&typed))?
+            .observed("line", &line)
+    })?;
+
+    cases.check(native, Case::ClickCountsCharacters, |native| {
+        let probe = Probe::new(native, "characters", "line")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        let characters = COMPOSER.chars().count();
+        terminal.click_cell(native, composer_column(0), COMPOSER_ROW)?;
+        let left = LEFT.repeat(characters);
+        let first = probe.received(&left)?;
+        let at_start = state(&probe.path)?["cursor"].clone();
+        terminal.click_cell(native, composer_column(3), COMPOSER_ROW)?;
+        let expected = [left.as_slice(), &RIGHT.repeat(3)].concat();
+        let second = probe.received(&expected)?;
+        let line = state(&probe.path)?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "a click on the a of ab界cdef sent seven ESC[D, one per character, not eight, one per cell",
+                first == left && at_start == 0,
+            )
+            .expect(
+                "a click on the c from there sent three ESC[C, one per character that it passes, not four",
+                second == expected && line["cursor"] == 3,
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&second))?
+            .observed("line", &line)
+    })?;
+
+    cases.check(native, Case::ClickAboveCursorSendsNothing, |native| {
+        let probe = Probe::new(native, "above", "line")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        terminal.click_cell(native, 6, 0)?;
+        terminal.click_cell(native, composer_column(3), COMPOSER_ROW - 1)?;
+        let silent = probe.received(&[])?;
+        terminal.click_cell(native, composer_column(3), COMPOSER_ROW)?;
+        let expected = LEFT.repeat(4);
+        let moved = probe.received(&expected)?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "clicks on the rows above the composer's cursor row sent the program no byte",
+                silent.is_empty(),
+            )
+            .expect(
+                "a click on the composer's row afterwards sent four ESC[D, so the program was able to receive arrows",
+                moved == expected,
+            )
+            .expect(ENDED, ended)
+            .observed("received after the clicks above", escaped(&silent))?
+            .observed("received after the click on the row", escaped(&moved))
+    })?;
+
+    cases.check(native, Case::ClickUnderMouseTrackingSendsNothing, |native| {
+        let probe = Probe::new(native, "tracking", "line --mouse-tracking")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        terminal.click_cell(native, composer_column(3), COMPOSER_ROW)?;
+        let silent = probe.received(&[])?;
+        native.type_text("X")?;
+        let typed = probe.received(b"X")?;
+        let line = state(&probe.path)?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "a click on the composer's cursor row while the program tracked the mouse sent no arrow byte",
+                silent.is_empty(),
+            )
+            .expect(
+                "the program was alive, and the X typed afterwards went in at the end of ab界cdef",
+                typed == b"X" && line["text"] == "ab界cdefX",
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&typed))?
+            .observed("line", &line)
+    })?;
+
+    cases.check(native, Case::ClickInAlternateScreenSendsNothing, |native| {
+        let probe = Probe::new(native, "alternate", "keys")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        terminal.click_cell(native, 1, 0)?;
+        let silent = probe.received(&[])?;
+        native.type_text("x")?;
+        let typed = probe.received(b"x")?;
+        let ended = probe.end(native)?;
+        Verdict::new()
+            .expect(
+                "a click on the cursor's row in the alternate screen sent the program no byte",
+                silent.is_empty(),
+            )
+            .expect(
+                "the program was alive, and received the x typed after the click",
+                typed == b"x",
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&typed))
     })
 }
 

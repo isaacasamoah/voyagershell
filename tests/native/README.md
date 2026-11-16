@@ -1401,8 +1401,8 @@ holds after `foreign-exit` because that case leaves the layout unchanged.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
-The probe has four modes, parsed into `Mode` in `src/probe.rs`. `arrows` and
-`mouse` serve `terminal-scrolling`. `keys` and `draw` serve `terminal-input`.
+The probe has five modes, parsed into `Mode` in `src/probe.rs`. `arrows` and
+`mouse` serve `terminal-scrolling`. `keys`, `draw` and `line` serve `terminal-input`.
 Every mode puts the terminal in raw mode and restores its modes when it ends.
 In raw mode Ctrl+C arrives as a byte and raises no signal. `keys` enters the
 alternate screen, asks for application cursor keys with `--application-cursor`
@@ -1415,7 +1415,16 @@ and `end`. On `go` it enters the alternate screen and draws two blocks of text
 at fixed rows and columns. On `back` it leaves the alternate screen. Its state
 file names the stage that it reached.
 
-A journey types to a `keys` probe only after it sees the ready block in a
+`line` stays on the main screen and stands in for a line editor such as an
+agent's composer. It draws a ready block on the first row and the text
+`ab界cdef` after a `> ` prompt on the third row, with its cursor at the end. It
+moves that cursor on Left and Right in either cursor-key form, inserts printable
+text at it, ignores every other sequence and every mouse report, and saves the
+bytes that it read, the text and the cursor's index in characters to its state
+file. It clears the screen when it ends, because it draws on the main screen. `--mouse-tracking` asks for mouse reports before it draws. `composer_column`
+gives the cell column where a character of the text starts, for `click_cell`.
+
+A journey types to a `keys` or `line` probe only after it sees the ready block in a
 capture. The app parses output in order, so a drawn block shows that the app
 has parsed the modes that the probe set before it. The state file alone shows
 only that the probe wrote them. A journey also checks that no ready block is

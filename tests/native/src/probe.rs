@@ -12,6 +12,9 @@ pub const SCROLL_LINES: usize = 30;
 pub const WAITING: [u8; 3] = [150, 110, 20];
 const END: u8 = 0x04;
 pub const SIGNALS: [&str; 3] = ["go", "back", "end"];
+pub const COMPOSER: &str = "ab界cdef";
+pub const COMPOSER_ROW: u16 = 2;
+const PROMPT: &str = "> ";
 
 pub struct Block {
     pub rgb: [u8; 3],
@@ -47,16 +50,21 @@ pub enum Mode {
         bracketed_paste: bool,
     },
     Draw,
+    Line {
+        mouse_tracking: bool,
+    },
 }
 
 impl Mode {
     pub fn parse(arguments: &[String]) -> Result<Self> {
         let (name, options) = arguments.split_first().context("Probe needs a mode")?;
-        let (mut application_cursor, mut bracketed_paste) = (false, false);
+        let (mut application_cursor, mut bracketed_paste, mut mouse_tracking) =
+            (false, false, false);
         for option in options {
             let chosen = match (name.as_str(), option.as_str()) {
                 ("keys", "--application-cursor") => &mut application_cursor,
                 ("keys", "--bracketed-paste") => &mut bracketed_paste,
+                ("line", "--mouse-tracking") => &mut mouse_tracking,
                 _ => bail!("The {name} probe takes no option {option}"),
             };
             ensure!(!*chosen, "Repeated probe option {option}");
@@ -66,6 +74,7 @@ impl Mode {
             "arrows" => Ok(Mode::Arrows),
             "mouse" => Ok(Mode::Mouse),
             "draw" => Ok(Mode::Draw),
+            "line" => Ok(Mode::Line { mouse_tracking }),
             "keys" => Ok(Mode::Keys {
                 application_cursor,
                 bracketed_paste,
@@ -80,6 +89,7 @@ impl Mode {
             Mode::Mouse => "mouse",
             Mode::Keys { .. } => "keys",
             Mode::Draw => "draw",
+            Mode::Line { .. } => "line",
         }
     }
 }
@@ -113,6 +123,7 @@ pub fn run(path: &Path, mode: Mode) -> Result<()> {
             bracketed_paste,
         } => keys(path, application_cursor, bracketed_paste),
         Mode::Draw => draw(path),
+        Mode::Line { mouse_tracking } => line(path, mouse_tracking),
     }
 }
 
@@ -190,6 +201,135 @@ fn keys(path: &Path, application_cursor: bool, bracketed_paste: bool) -> Result<
     save(
         path,
         &json!({"pid":std::process::id(),"mode":"keys","received":received,"ended":true}),
+    )
+}
+
+pub fn composer_column(characters: usize) -> u16 {
+    PROMPT.len() as u16 + COMPOSER.chars().take(characters).map(columns).sum::<u16>()
+}
+
+fn columns(character: char) -> u16 {
+    if u32::from(character) >= 0x1100 { 2 } else { 1 }
+}
+
+struct Composer {
+    text: Vec<char>,
+    cursor: usize,
+}
+
+impl Composer {
+    fn new() -> Self {
+        let text: Vec<char> = COMPOSER.chars().collect();
+        Self {
+            cursor: text.len(),
+            text,
+        }
+    }
+
+    fn edit(&mut self, pending: &mut Vec<u8>) {
+        while let Some(&first) = pending.first() {
+            let used = match first {
+                0x1b => match pending.get(1) {
+                    None => return,
+                    Some(b'[') => {
+                        let Some(end) = pending[2..]
+                            .iter()
+                            .position(|byte| (0x40..=0x7e).contains(byte))
+                        else {
+                            return;
+                        };
+                        self.arrow(pending[2 + end]);
+                        end + 3
+                    }
+                    Some(b'O') => {
+                        let Some(&key) = pending.get(2) else { return };
+                        self.arrow(key);
+                        3
+                    }
+                    Some(_) => 1,
+                },
+                0x00..=0x1f | 0x7f => 1,
+                lead => {
+                    let length = match lead {
+                        0xf0.. => 4,
+                        0xe0.. => 3,
+                        0xc0.. => 2,
+                        _ => 1,
+                    };
+                    if pending.len() < length {
+                        return;
+                    }
+                    if let Ok(text) = std::str::from_utf8(&pending[..length]) {
+                        for character in text.chars() {
+                            self.text.insert(self.cursor, character);
+                            self.cursor += 1;
+                        }
+                    }
+                    length
+                }
+            };
+            pending.drain(..used);
+        }
+    }
+
+    fn arrow(&mut self, key: u8) {
+        match key {
+            b'D' => self.cursor = self.cursor.saturating_sub(1),
+            b'C' => self.cursor = (self.cursor + 1).min(self.text.len()),
+            _ => {}
+        }
+    }
+
+    fn draw(&self) -> String {
+        let column = PROMPT.len() as u16
+            + self.text[..self.cursor]
+                .iter()
+                .copied()
+                .map(columns)
+                .sum::<u16>();
+        format!(
+            "\x1b[{row};1H\x1b[2K{PROMPT}{text}\x1b[{row};{column}H",
+            row = COMPOSER_ROW + 1,
+            text = self.text.iter().collect::<String>(),
+            column = column + 1,
+        )
+    }
+}
+
+fn line(path: &Path, mouse_tracking: bool) -> Result<()> {
+    let mut composer = Composer::new();
+    write!(
+        stdout(),
+        "\x1b[2J\x1b[H{}{}{}",
+        painted(READY, "    "),
+        if mouse_tracking {
+            "\x1b[?1000h\x1b[?1006h"
+        } else {
+            ""
+        },
+        composer.draw()
+    )?;
+    stdout().flush()?;
+    let (mut received, mut pending, mut ended) = (Vec::new(), Vec::new(), false);
+    while !ended {
+        save(
+            path,
+            &json!({"pid":std::process::id(),"mode":"line","received":received,"text":composer.text.iter().collect::<String>(),"cursor":composer.cursor,"ended":false}),
+        )?;
+        let mut bytes = [0; 512];
+        let count = stdin().read(&mut bytes)?;
+        let before = received.len();
+        ended = count == 0 || keep(&mut received, &bytes[..count]);
+        pending.extend_from_slice(&received[before..]);
+        composer.edit(&mut pending);
+        write!(stdout(), "{}", composer.draw())?;
+        stdout().flush()?;
+    }
+    write!(stdout(), "\x1b[2J\x1b[H")?;
+    stdout().flush()?;
+    save(
+        path,
+        &json!({"pid":std::process::id(),"mode":"line","received":received,"text":composer.text.iter().collect::<String>(),"cursor":composer.cursor,"ended":true}),
     )
 }
 
@@ -348,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn a_probe_mode_is_its_name_and_only_the_keys_probe_takes_options() -> Result<()> {
+    fn a_probe_mode_is_its_name_and_only_keys_and_line_take_options() -> Result<()> {
         assert_eq!(parse(&["arrows"])?, Mode::Arrows);
         assert_eq!(parse(&["mouse"])?, Mode::Mouse);
         assert_eq!(parse(&["draw"])?, Mode::Draw);
@@ -356,6 +496,18 @@ mod tests {
             application_cursor,
             bracketed_paste,
         };
+        assert_eq!(
+            parse(&["line"])?,
+            Mode::Line {
+                mouse_tracking: false
+            }
+        );
+        assert_eq!(
+            parse(&["line", "--mouse-tracking"])?,
+            Mode::Line {
+                mouse_tracking: true
+            }
+        );
         assert_eq!(parse(&["keys"])?, keys(false, false));
         assert_eq!(parse(&["keys", "--application-cursor"])?, keys(true, false));
         assert_eq!(parse(&["keys", "--bracketed-paste"])?, keys(false, true));
@@ -369,6 +521,9 @@ mod tests {
             &["arrows", "--bracketed-paste"],
             &["draw", "now"],
             &["keys", "--mouse"],
+            &["line", "--bracketed-paste"],
+            &["line", "--mouse-tracking", "--mouse-tracking"],
+            &["keys", "--mouse-tracking"],
             &["keys", "--bracketed-paste", "--bracketed-paste"],
             &[
                 "keys",
@@ -379,7 +534,15 @@ mod tests {
         ] {
             assert!(parse(refused).is_err(), "accepted {refused:?}");
         }
-        for mode in [Mode::Arrows, Mode::Mouse, Mode::Draw, keys(true, true)] {
+        for mode in [
+            Mode::Arrows,
+            Mode::Mouse,
+            Mode::Draw,
+            Mode::Line {
+                mouse_tracking: true,
+            },
+            keys(true, true),
+        ] {
             assert_eq!(parse(&[mode.name()])?.name(), mode.name());
         }
         Ok(())
@@ -394,6 +557,53 @@ mod tests {
         assert_eq!(received, b"aZ\x1b[A\x03\r~");
         assert!(keep(&mut received, &[END]));
         assert_eq!(received, b"aZ\x1b[A\x03\r~");
+    }
+
+    fn composed(input: &[u8]) -> (String, usize) {
+        let mut composer = Composer::new();
+        let mut pending = input.to_vec();
+        composer.edit(&mut pending);
+        assert!(pending.is_empty());
+        (composer.text.iter().collect(), composer.cursor)
+    }
+
+    #[test]
+    fn the_line_probe_moves_its_cursor_by_characters_and_inserts_at_it() {
+        assert_eq!(composed(b""), ("ab界cdef".into(), 7));
+        assert_eq!(
+            composed(b"\x1b[D\x1b[D\x1b[D\x1b[DX"),
+            ("ab界Xcdef".into(), 4)
+        );
+        assert_eq!(
+            composed(b"\x1bOD\x1bOD\x1bOC\x1bOC\x1bOCY"),
+            ("ab界cdefY".into(), 8)
+        );
+        assert_eq!(composed(&b"\x1b[D".repeat(20)), ("ab界cdef".into(), 0));
+        assert_eq!(composed("é".as_bytes()), ("ab界cdefé".into(), 8));
+    }
+
+    #[test]
+    fn the_line_probe_ignores_mouse_reports_and_waits_for_an_unfinished_sequence() {
+        assert_eq!(
+            composed(b"\x1b[<0;5;3M\x1b[<0;5;3m"),
+            ("ab界cdef".into(), 7)
+        );
+        let mut composer = Composer::new();
+        let mut pending = b"\x1b[".to_vec();
+        composer.edit(&mut pending);
+        assert_eq!(pending, b"\x1b[");
+        pending.push(b'D');
+        composer.edit(&mut pending);
+        assert!(pending.is_empty());
+        assert_eq!(composer.cursor, 6);
+    }
+
+    #[test]
+    fn the_line_probe_draws_its_cursor_at_the_column_a_click_must_reach() {
+        assert_eq!(composer_column(0), 2);
+        assert_eq!(composer_column(3), 6);
+        assert_eq!(composer_column(7), 10);
+        assert!(Composer::new().draw().ends_with("\x1b[3;11H"));
     }
 
     #[test]

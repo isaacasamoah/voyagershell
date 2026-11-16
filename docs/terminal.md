@@ -317,7 +317,7 @@ Its proof-size gate remains held.
 
 The continuation separates native stream/focus/resize mechanics in terminal.rs,
 the VT screen and cache in terminal_screen.rs, presentation and pointer routing
-in terminal_view.rs, and operating-system text composition in terminal_input.rs.
+in terminal_view.rs, click-to-move planning in terminal_click.rs, and operating-system text composition in terminal_input.rs.
 These are private native implementation modules behind the same registration
 boundary. No application contract, process owner or terminal parser was added.
 
@@ -339,6 +339,45 @@ PRIMARY through the same paste path as Ctrl+Shift+V, with the same bracketed-pas
 handling and 64 KiB refusal. Without PRIMARY, which only Linux and FreeBSD offer,
 a middle click does nothing. One accepted callback is not a claim of an atomic PTY write. Ctrl+C continues to be terminal input. Wheel input preserves fractional
 scroll movement; typing returns the viewport to the current screen.
+
+A left click on the cursor's row moves the program's cursor there. The press and
+the release hit the same cell, the press has `click_count` 1, and the release
+leaves no selection. The app sends Left or Right arrows through the key encoder
+that the wheel uses, so they follow the program's cursor-key mode. The count is
+characters, not cells. A wide character and its spacer tail count once, and a
+click on a spacer tail counts as a click on its wide character. A cursor with a
+pending wrap counts as one cell past the last column. The click may land on any
+row of the cursor's soft-wrapped line, and the count runs through every wrapped
+row between. Up and Down are never sent, because Bash and ble.sh step history on
+them.
+
+Nothing is sent when any of these holds, and each has a desktop unit test in
+`desktop/src/terminal_click.rs`.
+
+- The alternate screen is active.
+- The program tracks the mouse. Those clicks belong to the program, and
+  reporting them is a separate gap.
+- The viewport is scrolled away from the live edge.
+- The press was a double or triple click, the release was on another cell, or a
+  selection exists.
+- An input-method composition is active.
+- The clicked row is not the cursor's row or on its soft-wrapped line, so the
+  path to it crosses a hard newline.
+- Prompt marks are on screen and show a running command: the cursor is not at a
+  prompt or input area, and a row at or above the cursor carries an OSC 133 mark.
+
+The gates need no prompt marks. Bash 5.3 with ble.sh emits none, so the
+cursor-row gate carries the feature there. Marks add the last gate only when a
+shell emits them. Marks left on screen by an earlier program, such as
+a remote shell with integration, hold clicks back until they scroll off.
+
+A click on the cursor's row also reaches any program that reads a line without
+line editing, such as `cat` or `read`. The program receives the arrow bytes as
+input and edits nothing on screen. The same applies to an inline
+agent composer, which is the intended case when it edits its own line. A click to
+the right of the text on the cursor's row sends Right arrows that a line editor
+ignores at the end of the line. An autosuggestion that a shell draws after the
+cursor, as ble.sh does, may accept on Right.
 
 GPUI's native input handler retains a local UTF-16 composition preview and draws
 it at the actual terminal cursor. The running program receives only committed UTF-8
@@ -368,7 +407,9 @@ The native `terminal-input` journey in `tests/native` covers typed commands,
 keys as bytes, keys under application cursor mode, output drawn without input,
 drag selection, the copy on release to CLIPBOARD and PRIMARY, copy with
 Ctrl+Shift+C, paste with and without bracketed paste, a middle click that pastes
-PRIMARY, the refusal of 70 KiB in PRIMARY, and input to one split while another
+PRIMARY, the refusal of 70 KiB in PRIMARY, a click that moves the cursor of a
+shell's input line and of a line-reading program, the clicks that send nothing
+(another row, mouse tracking, the alternate screen), and input to one split while another
 floods. Its recipe,
 `.agents/skills/verify/features/terminal-input.md`, lists what it does not
 cover.
