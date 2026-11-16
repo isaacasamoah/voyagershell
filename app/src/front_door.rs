@@ -4,6 +4,8 @@ use crate::core::{Core, Error, PROCESS_EFFECTS, PROCESS_READS};
 use crate::terminal_lifecycle::Lifecycle;
 use serde::Serialize;
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use voyager_contract::administrator::{ProcessAction, ProcessRequest};
 use voyager_contract::{
     Action, Context, CoreTerminalId, Request, TerminalRequest, VesselId, VoyageId,
@@ -12,6 +14,29 @@ use voyager_contract::{
 const IDENTITY_LIMIT: usize = 128;
 const KEPT: usize = 32;
 pub(crate) const WAITING: usize = 8;
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Claim(Arc<AtomicU8>);
+
+impl Claim {
+    const QUEUED: u8 = 0;
+    const TAKEN: u8 = 1;
+    const CANCELLED: u8 = 2;
+
+    pub(crate) fn take(&self) -> bool {
+        self.settle(Self::TAKEN)
+    }
+
+    pub(crate) fn cancel(&self) -> bool {
+        self.settle(Self::CANCELLED)
+    }
+
+    fn settle(&self, to: u8) -> bool {
+        self.0
+            .compare_exchange(Self::QUEUED, to, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub(crate) enum Kind {
@@ -775,6 +800,16 @@ mod tests {
         assert!(!door.crowded(&process(200, ProcessAction::List).0));
         assert!(door.crowded(&stop(PROCESS_EFFECTS).0));
         assert!(!door.crowded(&create("request-1", "one").0));
+    }
+
+    #[test]
+    fn a_queued_request_is_either_taken_or_cancelled_never_both() {
+        let claim = Claim::default();
+        assert!(claim.clone().take(), "the owner takes a queued request");
+        assert!(!claim.cancel(), "a taken request cannot be cancelled");
+        let claim = Claim::default();
+        assert!(claim.cancel(), "a caller cancels a request still queued");
+        assert!(!claim.take(), "the owner skips a cancelled request");
     }
 
     #[test]

@@ -159,38 +159,42 @@ Vessel closed within 1 s. The pause does not make Core send a `missed`
 snapshot, so no journey covers one.
 
 The `outcomes` journey proves that a refusal shows its reason and that an
-uncertain result shows as uncertain and is not sent again. It declares
-`terminal.kill=21000` for its last case and refuses a run that holds that
-reply for 20 seconds or less.
+uncertain result is settled by reading Core, with nothing done twice. It
+declares the Core delay `arm`, so the relay is in the path and each case arms
+one fault for the next request of one method, as
+[armed faults](#armed-faults) describes. The verify skill's
+`features/outcomes.md` lists the cases and what each failure means.
 
-- `refused-shows-reason` renames a Fleet to 129 bytes. It passes when the
-  status line starts with `Refused.` and holds the owner's reason, and the
-  Fleet keeps its saved name.
-- `tool-refusal-carries-reason` plays a scripted rename to an empty name
-  through the stand-in provider. It passes when the tool result holds
-  `"status":"refused"` with the same reason.
-- `uncertain-not-replayed` pauses Core and submits a Fleet rename. It passes
-  when the status line shows the owner's uncertain answer, a second Enter on
-  the same name is declined, Core's layout document is one version on with the
-  typed name after Core resumes, and it is still at that version after Refresh.
-- `close-refused-says-why` plays a scripted rename behind the open close
-  dialog and then confirms. It passes when the dialog's message starts with
-  `Refused.` and holds the owner's reason, the Voyage stays open and every
-  program still runs.
-- `close-uncertain-not-retried` confirms a Voyage close while the relay holds
-  Core's reply to the program stop past Core's deadline. It passes when the
-  dialog's message starts with `Uncertain.`, and after the reply is released
-  the Voyage is still open and the dialog offers no second confirmation.
+- `refused-shows-reason` and `tool-refusal-carries-reason` show a refusal's
+  reason in the status line and in the tool result.
+- `rename-stalled-applied` stops Core for 24 s across a Fleet rename, past Core's
+  20 s deadline and the canvas's 22 s wait. `rename-dropped-retried` drops the
+  rename's `doc.set`. Both pass when the status line never says `Uncertain.`, the
+  rename ends applied and Core's document is exactly one version on.
+- `close-refused-says-why` shows a stale close plan's refusal.
+  `stop-dropped-retried` drops the first `terminal.kill` of a close, and
+  `stop-held-closed` holds its reply for 21 s. Both pass when the dialog never
+  says `Uncertain.`, the Voyage closes and none of its programs runs.
+- `start-held-adopted` holds a `terminal.run` reply for 21 s and passes when the
+  start is adopted with one terminal for its label. `start-stalled-not-repeated`
+  stalls the start and the requests behind it for 22 s and passes when the start
+  keeps its marker and Core holds one terminal for its label.
+- `rename-uncertain-declines-second-enter` stops Core through the owner's read and
+  the canvas's ask, until the status line says `Uncertain.`. A second Enter on
+  the same name must be declined with "Name change not confirmed", and Core
+  saves the name once after it resumes. `close-unanswered-stops-nothing`
+  confirms a Voyage close while Core is stopped and a drop is armed on
+  `terminal.kill`. The dialog refuses, and the arm stays unspent, so no stop was
+  sent. After Core resumes the Voyage is open and its programs still run. The
+  dialog may offer Confirm again, because nothing happened. A stop that stays
+  uncertain through its read cannot be reached here, because the close inspects
+  the workspace first and Core is silent for that too.
 
-Limits. `uncertain-not-replayed` reads what Core holds after it resumes and
-not which requests the app sent while Core was paused. The last case does not
-prove that no second stop was sent, because a second stop's reply would be held
-past the end of the case. The journey never reaches a reply that the app's
-owner did not answer, because the owner answers at Core's 20-second deadline
-and the caller waits 22 seconds. Two cases wait for that deadline, so a run
-takes about a minute. The journey reads labels, so it does not judge the one
-frame that the canvas fails to draw when a notice arrives while it is idle. The
-`close-uncertain` capture shows that frame's `Render failed` banner.
+Limits. No case drives the avatar's or the administrator's ask through a late
+reply, or a request cancelled while it waited in the queue. Seven cases wait for
+Core's deadline, so a run takes about six minutes. The journey reads labels, so
+it does not judge the one frame that the canvas fails to draw when a notice
+arrives while it is idle.
 
 A held gesture keeps the primary button down across steps. `Native::hold`
 presses at a control's aim point and returns a `Held`. `Held::toward` moves in
@@ -510,6 +514,29 @@ identity together.
 
 `checks.json` records the delays as `coreDelay`.
 
+#### Armed faults
+
+A delay of `arm`, alone or beside `METHOD=MS` entries, puts the relay in the
+path with nothing held. A journey then arms one fault at a time with
+`System::arm_core`. It appends the arm to `core-relay-arms.jsonl` and writes
+it to `core-relay-arm.json`, which the relay reads as each request passes. The
+next request of the armed method takes the fault and the relay deletes the
+file, so an arm applies once.
+
+- `drop` never forwards the request. The relay writes a `dropped` line with the
+  arm.
+- `hold` forwards the request and holds its reply, like a delay. Its `held` and
+  `released` lines carry the arm.
+- `stall` waits before it forwards the request, which also delays every request
+  behind it in the same order. The relay writes a `stalled` line with
+  `forwardedAtMs`.
+
+The audit checks each line that carries an arm against `core-relay-arms.jsonl`.
+A line whose arm nobody armed, whose method or fault differs from the arm, or an
+arm applied to two requests ends the run `inconclusive`, blamed on the verifier.
+`System::arm_spent` finds the line for an arm, and a case that never sees one
+fails the same way, because it did not reach the state it judges.
+
 After the journey the driver reads that ledger and audits it against the delays
 that the flag asked for, with its own lookup into the parsed flag and not the
 relay's `CoreDelay::hold`. A line that does not parse as one of these events, or
@@ -547,8 +574,8 @@ from its hello reply. A method that Core does not offer ends the run
 that check does not stop the app from starting.
 
 Limits. The relay reads only channel 0, so it holds replies to requests and
-never the terminal data frames or events that arrive on other channels. It
-cannot hold a request, reorder requests or drop a frame. It sits in front of the
+never the terminal data frames or events that arrive on other channels. Only
+an armed fault drops or stalls a request, and it never reorders requests. It sits in front of the
 one `hc connect` that the app starts, so each further bridge process is its own
 relay with its own ledger lines. The app limits itself to eleven pending Core
 requests, so a long delay on a busy method can make the app refuse new requests

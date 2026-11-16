@@ -23,12 +23,15 @@ use voyager_contract::{
 mod core_calls;
 #[path = "client_reply.rs"]
 mod reply;
-use crate::front_door::{Admission, Envelope, FrontDoor, Outcome, WAITING};
-use crate::layout_store::{begin_save, carry_notice, load, save};
+#[path = "client_terminal.rs"]
+mod terminal_start;
+use crate::front_door::{Admission, Claim, Envelope, FrontDoor, Outcome, WAITING};
+use crate::layout_store::{begin_save, carry_notice, load, rejected, save, settle_save};
 use core_calls::{
-    Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, live,
+    Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
     live_directories, post, relist, reports, unlisted,
 };
+use terminal_start::{CreatedTerminal, require_finished};
 
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
@@ -133,6 +136,7 @@ enum Message {
         request: ProcessRequest,
         reply: SyncSender<Arc<ProcessResponse>>,
         queued_at: std::time::Instant,
+        claim: Claim,
     },
     ProcessDone {
         request_id: String,
@@ -144,12 +148,14 @@ enum Message {
         scope: Option<Context>,
         reply: SyncSender<Response>,
         queued_at: std::time::Instant,
+        claim: Claim,
     },
     NoteExit {
         view: crate::content::ViewBinding,
         revision: String,
         request: Request,
         reply: SyncSender<Response>,
+        claim: Claim,
     },
     NoteRenameReady {
         request: Request,
@@ -162,6 +168,7 @@ enum Message {
         request_id: String,
         expected_version: u64,
         reply: SyncSender<Result<Viewer, Error>>,
+        claim: Claim,
     },
     Saved {
         result: Result<u64, Error>,
@@ -249,6 +256,7 @@ impl Receipt {
 struct Departure {
     before: Arc<Layout>,
     candidate: Layout,
+    expected: u64,
     reopening: Vec<VesselId>,
     created_notes: bool,
 }
@@ -317,48 +325,36 @@ impl Message {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct CreatedTerminal {
-    id: VesselId,
-    launch: voyager_contract::launch::Launch,
-    backend: Option<CoreTerminalId>,
-    shell_intent: Option<String>,
-}
-
-impl CreatedTerminal {
-    fn matches(&self, content: &voyager_contract::Vessel) -> bool {
-        self.id == content.id
-            && self.backend == content.backend
-            && self.shell_intent == content.shell_intent
-            && &self.launch
-                == content
-                    .launch
-                    .as_ref()
-                    .unwrap_or(&voyager_contract::launch::Launch::Terminal)
-    }
-
-    fn eligible(&self, content: &voyager_contract::Vessel) -> bool {
-        self.matches(content)
-            && content.type_id == "terminal"
-            && (content.backend.is_none() || self.shell_intent.is_some())
-            && content.start_pending.is_none()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum CallError {
     Rejected(String),
     Unconfirmed(String),
 }
 
-pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration);
+pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration, Claim);
 
 impl PendingCall {
     pub(crate) fn wait(self) -> Result<Response, CallError> {
-        self.0.recv_timeout(self.1).map_err(|_| {
-            CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
-        })
+        answer(&self.0, self.1, &self.2, "Workspace")
     }
+}
+
+fn answer<T>(
+    receive: &mpsc::Receiver<T>,
+    within: Duration,
+    claim: &Claim,
+    what: &str,
+) -> Result<T, CallError> {
+    receive.recv_timeout(within).map_err(|_| {
+        if claim.cancel() {
+            CallError::Rejected(format!(
+                "Workspace busy; the {} request was still queued when its wait ended, so it was cancelled and nothing was sent",
+                what.to_lowercase()
+            ))
+        } else {
+            CallError::Unconfirmed(format!("{what} result unconfirmed; do not repeat the request"))
+        }
+    })
 }
 
 #[derive(Clone)]
@@ -467,7 +463,7 @@ impl Client {
                     let _ = activity_sender.try_send(Message::CoreReported);
                 }));
             }
-            let mut core = Core::connect_activity(&session, observed_activity.clone());
+            let mut core = connect(&session, observed_activity.clone());
             let mut subscription = Subscription::default();
             subscription.begin(&mut core, false, &core_sender);
             let mut exits = Vec::<CoreTerminalId>::new();
@@ -1281,7 +1277,11 @@ impl Client {
                         request,
                         reply,
                         queued_at,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
                             eprintln!(
                                 "voyager_timing request={} family=process phase=actor-receive queued_us={}",
@@ -1289,10 +1289,10 @@ impl Client {
                                 queued_at.elapsed().as_micros()
                             );
                         }
-                        let refused = |message: String| {
+                        let answered = |status: Status, message: String| {
                             Arc::new(ProcessResponse {
                                 request_id: request.request_id.clone(),
-                                status: Status::Rejected,
+                                status,
                                 version,
                                 fresh,
                                 output: None,
@@ -1309,8 +1309,12 @@ impl Client {
                                 let _ = reply.send(first);
                                 continue;
                             }
-                            Admission::Pending(message) | Admission::Refused(message) => {
-                                let _ = reply.send(refused(message));
+                            Admission::Pending(message) => {
+                                let _ = reply.send(answered(Status::Uncertain, message));
+                                continue;
+                            }
+                            Admission::Refused(message) => {
+                                let _ = reply.send(answered(Status::Rejected, message));
                                 continue;
                             }
                         };
@@ -1367,6 +1371,7 @@ impl Client {
                         completed,
                         reply,
                     } => {
+                        let completed = completed.settle(core.as_mut().ok());
                         let outcome = process_response(
                             request_id.clone(),
                             completed.read_at.unwrap_or(version),
@@ -1391,9 +1396,16 @@ impl Client {
                         let Departure {
                             before,
                             candidate,
+                            expected,
                             reopening,
                             created_notes,
                         } = *departure;
+                        let result = match (result, core.as_mut()) {
+                            (Err(Error::Uncertain(message)), Ok(connected)) => {
+                                settle_save(connected, &candidate, expected, message)
+                            }
+                            (result, _) => result,
+                        };
                         landed = Some(result.map_err(|error| unbound(created_notes, error)).map(
                             |revision| {
                                 created_vessels.extend(reopening.into_iter().map(|id| {
@@ -1464,7 +1476,11 @@ impl Client {
                         scope,
                         reply,
                         queued_at,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
                             eprintln!(
                                 "voyager_timing request={} family=workspace phase=actor-receive queued_us={}",
@@ -1479,7 +1495,11 @@ impl Client {
                         revision,
                         request,
                         reply,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         note_exit = Some((view, revision));
                         (request, None, reply)
                     }
@@ -1488,7 +1508,11 @@ impl Client {
                         request_id,
                         expected_version,
                         reply,
+                        claim,
                     } => {
+                        if !claim.take() {
+                            continue;
+                        }
                         let request = TerminalRequest {
                             request_id,
                             vessel_id: content.clone(),
@@ -1504,7 +1528,11 @@ impl Client {
                                 let _ = reply.send(first.and_then(|viewer| viewer.upgrade()));
                                 continue;
                             }
-                            Admission::Pending(message) | Admission::Refused(message) => {
+                            Admission::Pending(message) => {
+                                let _ = reply.send(Err(Error::Uncertain(message)));
+                                continue;
+                            }
+                            Admission::Refused(message) => {
                                 let _ = reply.send(Err(rejected(message)));
                                 continue;
                             }
@@ -1532,7 +1560,7 @@ impl Client {
                             ))
                         } else {
                             match core.as_mut() {
-                                Ok(core) => open_terminal(
+                                Ok(core) => terminal_start::open_terminal(
                                     core,
                                     &mut layout,
                                     &mut version,
@@ -1988,6 +2016,7 @@ impl Client {
                                         Ok(Step::Save(Box::new(Departure {
                                             before: Arc::clone(&layout),
                                             candidate: candidate.layout,
+                                            expected: version,
                                             reopening,
                                             created_notes,
                                         })))
@@ -2452,15 +2481,17 @@ impl Client {
         request: Request,
     ) -> Result<Response, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
+        let claim = Claim::default();
         self.sender
             .try_send(Message::NoteExit {
                 view,
                 revision,
                 request,
                 reply,
+                claim: claim.clone(),
             })
             .map_err(|_| CallError::Rejected("Workspace busy; Notes Exit was not queued".into()))?;
-        PendingCall(receive, Duration::from_secs(20)).wait()
+        PendingCall(receive, Duration::from_secs(20), claim).wait()
     }
 
     pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {
@@ -2497,7 +2528,19 @@ impl Client {
     }
 
     pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
-        self.queue_workspace(Some(scope), request)?.wait()
+        self.ask(Some(scope), request)
+    }
+
+    fn ask(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {
+        let first = self
+            .queue_workspace(scope.clone(), request.clone())
+            .and_then(PendingCall::wait);
+        if !matches!(first, Err(CallError::Unconfirmed(_))) {
+            return first;
+        }
+        self.queue_workspace(scope, request)
+            .and_then(PendingCall::wait)
+            .or(first)
     }
 
     pub fn worktree(
@@ -2527,22 +2570,34 @@ impl Client {
         scope: Context,
         request: ProcessRequest,
     ) -> Result<Arc<ProcessResponse>, CallError> {
+        let first = self.queue_process(scope.clone(), request.clone());
+        if !matches!(first, Err(CallError::Unconfirmed(_))) {
+            return first;
+        }
+        self.queue_process(scope, request).or(first)
+    }
+
+    fn queue_process(
+        &self,
+        scope: Context,
+        request: ProcessRequest,
+    ) -> Result<Arc<ProcessResponse>, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
+        let claim = Claim::default();
         self.sender
             .try_send(Message::Process {
                 scope,
                 request,
                 reply,
                 queued_at: std::time::Instant::now(),
+                claim: claim.clone(),
             })
             .map_err(|_| {
                 CallError::Rejected(
                     "Workspace busy or unavailable; no process request was queued".into(),
                 )
             })?;
-        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
-            CallError::Unconfirmed("Process result unconfirmed; do not repeat the request".into())
-        })
+        answer(&receive, Duration::from_secs(25), &claim, "Process")
     }
 
     pub(crate) fn queue_inspection(&self) -> Result<PendingCall, CallError> {
@@ -2567,17 +2622,19 @@ impl Client {
         } else {
             WORKSPACE_WAIT
         };
+        let claim = Claim::default();
         self.sender
             .try_send(Message::Workspace {
                 request,
                 scope,
                 reply,
                 queued_at: std::time::Instant::now(),
+                claim: claim.clone(),
             })
             .map_err(|_| {
                 CallError::Rejected("Workspace busy or unavailable; nothing was queued".into())
             })?;
-        Ok(PendingCall(receive, timeout))
+        Ok(PendingCall(receive, timeout, claim))
     }
 
     pub fn terminal(
@@ -2586,19 +2643,33 @@ impl Client {
         request_id: String,
         expected_version: u64,
     ) -> Result<Viewer, Error> {
-        let (reply, receive) = mpsc::sync_channel(1);
-        self.sender
-            .try_send(Message::Terminal {
-                content,
-                request_id,
-                expected_version,
-                reply,
-            })
-            .map_err(|_| {
-                rejected("Workspace busy or unavailable; no terminal was started".into())
-            })?;
-        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
-            Error::Uncertain("Terminal result unconfirmed; no request was repeated".into())
+        let open = || -> Result<Result<Viewer, Error>, CallError> {
+            let (reply, receive) = mpsc::sync_channel(1);
+            let claim = Claim::default();
+            self.sender
+                .try_send(Message::Terminal {
+                    content: content.clone(),
+                    request_id: request_id.clone(),
+                    expected_version,
+                    reply,
+                    claim: claim.clone(),
+                })
+                .map_err(|_| {
+                    CallError::Rejected(
+                        "Workspace busy or unavailable; no terminal was started".into(),
+                    )
+                })?;
+            answer(&receive, Duration::from_secs(25), &claim, "Terminal")
+        };
+        let first = open();
+        let answered = if matches!(first, Err(CallError::Unconfirmed(_))) {
+            open().or(first)
+        } else {
+            first
+        };
+        answered.map_err(|error| match error {
+            CallError::Rejected(message) => rejected(message),
+            CallError::Unconfirmed(message) => Error::Uncertain(message),
         })?
     }
 }
@@ -2813,18 +2884,6 @@ fn visible_content(layout: &Layout, content: &VesselId) -> bool {
     })
 }
 
-fn require_finished(
-    observed: &crate::core_shapes::Terminal,
-    expected: &CoreTerminalId,
-) -> Result<(), Error> {
-    if observed.address != expected.0 || !observed.has_ended() {
-        return Err(rejected(
-            "The selected program is not confirmed ended; no new shell was authorized".into(),
-        ));
-    }
-    Ok(())
-}
-
 fn reopen_backend<'a>(
     layout: &'a Layout,
     id: &voyager_contract::PlacementId,
@@ -2953,197 +3012,6 @@ fn eligible_contents(
         .filter(|pending| projection.vessels.iter().any(|item| pending.eligible(item)))
         .map(|pending| pending.id.clone())
         .collect()
-}
-
-fn open_terminal(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut u64,
-    fresh: &mut bool,
-    unconfirmed: &mut HashMap<String, String>,
-    created_vessels: &mut Vec<CreatedTerminal>,
-    request: &TerminalRequest,
-) -> Result<Viewer, Error> {
-    let content = &request.vessel_id;
-    let request_id = &request.request_id;
-    let target = layout
-        .vessels
-        .iter()
-        .find(|item| &item.id == content)
-        .ok_or_else(|| rejected("Terminal content not found".into()))?;
-    if target.type_id != "terminal" {
-        return Err(rejected("Content is not a terminal".into()));
-    }
-    if let Some(operation) = &target.start_pending {
-        return Err(Error::Uncertain(format!(
-            "Terminal start {operation} is unconfirmed. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
-        )));
-    }
-    let cwd = target.cwd.clone();
-    let launch = target.launch.clone().unwrap_or_default();
-    let accepted = created_vessels
-        .iter()
-        .find(|pending| &pending.id == content);
-    let new_shell = target.shell_intent.is_some() && accepted.is_some();
-    if accepted.is_some_and(|pending| !pending.matches(target)) {
-        return Err(rejected(
-            "The creation launch changed; no program was started".into(),
-        ));
-    }
-    if new_shell {
-        let backend = target
-            .backend
-            .as_ref()
-            .ok_or_else(|| rejected("New shell intent lost its original binding".into()))?;
-        require_finished(&core.terminal_get(&backend.0)?, backend)?;
-    }
-    if target.backend.is_none()
-        && (target.shell_intent.is_some()
-            || !matches!(launch, voyager_contract::launch::Launch::Terminal))
-        && accepted.is_none()
-    {
-        return Err(rejected(
-            "This saved worker has no new-creation permission; no command was restarted".into(),
-        ));
-    }
-    let mut created = false;
-    let terminal = if let Some(address) = &target.backend
-        && !new_shell
-    {
-        core.terminal_get(&address.0)?
-    } else {
-        let operation = format!("voyager-start-{request_id}");
-        let mut pending = (**layout).clone();
-        let item = pending
-            .vessels
-            .iter_mut()
-            .find(|item| &item.id == content)
-            .ok_or_else(|| rejected("Terminal content disappeared".into()))?;
-        item.start_pending = Some(operation.clone());
-        match save(core, &pending, *version) {
-            Ok(saved) => {
-                *layout = Arc::new(pending);
-                *version = saved;
-            }
-            Err(error) => {
-                *fresh = false;
-                return Err(match error {
-                    Error::Rejected { kind, message } => Error::Rejected {
-                        kind,
-                        message: format!(
-                            "Terminal start marker was refused: {message}; no start was issued"
-                        ),
-                    },
-                    Error::Uncertain(message) => Error::Uncertain(format!(
-                        "Terminal start marker was not confirmed: {message}; no start was issued"
-                    )),
-                });
-            }
-        }
-        let run = crate::launch::terminal_command(&launch, &cwd)
-            .map_err(rejected)
-            .and_then(|argv| {
-                core.terminal_run_with(crate::core_shapes::RunParams {
-                    argv,
-                    cwd: Some(cwd.clone()),
-                    no_parent: true,
-                    labels: HashMap::from([("voyager-operation".into(), operation.clone())]),
-                    ..Default::default()
-                })
-            });
-        if !matches!(run, Err(Error::Rejected { .. })) {
-            created_vessels.retain(|item| &item.id != content);
-        }
-        let started = match run {
-            Ok(result) => result,
-            Err(Error::Uncertain(message)) => {
-                let message = format!(
-                    "Terminal start {operation} is unconfirmed: {message}. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
-                );
-                unconfirmed.insert(content.0.clone(), message.clone());
-                return Err(Error::Uncertain(message));
-            }
-            Err(error) => {
-                let mut cleared = (**layout).clone();
-                if let Some(item) = cleared.vessels.iter_mut().find(|item| &item.id == content) {
-                    item.start_pending = None;
-                }
-                match save(core, &cleared, *version) {
-                    Ok(saved) => {
-                        *layout = Arc::new(cleared);
-                        *version = saved;
-                    }
-                    Err(cleanup) => {
-                        *fresh = false;
-                        return Err(Error::Uncertain(format!(
-                            "Terminal start was refused but marker cleanup is unconfirmed: {cleanup:?}"
-                        )));
-                    }
-                }
-                return Err(error);
-            }
-        };
-        let address = started.address.clone();
-        if started.lifecycle().is_unknown() || started.start_unconfirmed() {
-            let message = format!(
-                "Terminal {address} for {operation} has an unconfirmed start; inspect it in Core. No start was repeated"
-            );
-            unconfirmed.insert(content.0.clone(), message.clone());
-            return Err(Error::Uncertain(message));
-        }
-        let mut candidate = (**layout).clone();
-        let item = candidate
-            .vessels
-            .iter_mut()
-            .find(|item| &item.id == content)
-            .ok_or_else(|| Error::Uncertain("Terminal content disappeared after start".into()))?;
-        item.backend = Some(CoreTerminalId(address.clone()));
-        item.start_pending = None;
-        item.shell_intent = None;
-        match save(core, &candidate, *version) {
-            Ok(saved) => {
-                *layout = Arc::new(candidate);
-                *version = saved;
-                created = true;
-            }
-            Err(error) => {
-                *fresh = false;
-                let message = format!(
-                    "Terminal {address} started but workspace save failed: {error:?}; no start was repeated"
-                );
-                unconfirmed.insert(content.0.clone(), message.clone());
-                return Err(Error::Uncertain(message));
-            }
-        }
-        started
-    };
-    let address = &terminal.address;
-    let attached = core
-        .terminal_attach(&terminal)
-        .map_err(|error| attach_failure(error, created, address))?;
-    core.viewer(&attached)
-}
-
-pub(crate) fn rejected(message: String) -> Error {
-    Error::Rejected {
-        kind: "invalid_workspace".into(),
-        message,
-    }
-}
-
-fn attach_failure(error: Error, created: bool, address: &str) -> Error {
-    match (created, error) {
-        (true, Error::Rejected { kind, message }) => Error::Rejected {
-            kind,
-            message: format!(
-                "Terminal {address} started and its binding was saved, but viewer attachment was refused: {message}. No start was repeated"
-            ),
-        },
-        (true, Error::Uncertain(message)) => Error::Uncertain(format!(
-            "Terminal {address} started and its binding was saved, but viewer attachment is unconfirmed: {message}. No start was repeated"
-        )),
-        (false, error) => error,
-    }
 }
 
 fn select_note(
@@ -3962,7 +3830,7 @@ mod terminal_outcome_tests {
 
     #[test]
     fn known_finished_attach_is_not_an_unconfirmed_start() {
-        let error = attach_failure(
+        let error = terminal_start::attach_failure(
             Error::Rejected {
                 kind: "finished".into(),
                 message: "Terminal has exited".into(),
@@ -3974,7 +3842,7 @@ mod terminal_outcome_tests {
             matches!(error, Error::Rejected { kind, message } if kind == "finished" && message.contains("t1"))
         );
         assert!(matches!(
-            attach_failure(Error::Uncertain("connection lost".into()), true, "t1"),
+            terminal_start::attach_failure(Error::Uncertain("connection lost".into()), true, "t1"),
             Error::Uncertain(_)
         ));
     }
@@ -4005,6 +3873,7 @@ mod content_admission_tests {
                         },
                         scope: None,
                         reply,
+                        claim: Claim::default(),
                         queued_at: std::time::Instant::now(),
                     })
                     .is_ok()

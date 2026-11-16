@@ -740,7 +740,7 @@ contexts:
     name: Application queue and front door
     summary: 'Takes every request from a view, a Vessel or an agent, orders the effects and reports each outcome.'
     guide: docs/workspace.md
-    owns: [app/src/client.rs, app/src/client_reply.rs, app/src/front_door.rs, app/src/layout_store.rs, app/src/process.rs, app/src/launch.rs, app/src/activity.rs, app/src/diagnostics.rs, app/src/observation.rs, app/src/lib.rs, app/src/terminal_lifecycle.rs, app/src/tests.rs, app/tests/exit_events.rs, app/tests/front_door.rs, app/tests/launch.rs, app/tests/quit.rs, app/tests/selected_stop.rs, contract/src/activity.rs, contract/src/launch.rs, contract/src/observation.rs]
+    owns: [app/src/client.rs, app/src/client_reply.rs, app/src/client_terminal.rs, app/src/front_door.rs, app/src/layout_store.rs, app/src/process.rs, app/src/launch.rs, app/src/activity.rs, app/src/diagnostics.rs, app/src/observation.rs, app/src/lib.rs, app/src/terminal_lifecycle.rs, app/src/tests.rs, app/tests/exit_events.rs, app/tests/front_door.rs, app/tests/launch.rs, app/tests/quit.rs, app/tests/selected_stop.rs, contract/src/activity.rs, contract/src/launch.rs, contract/src/observation.rs]
     uses: [Placement, Vessel, Context, Core terminal, Program]
   - id: placement
     name: Placement
@@ -801,7 +801,7 @@ terms:
     meaning: 'A known outcome. The application declined the Operation and nothing changed.'
   - term: Uncertain effect
     context: application-queue
-    meaning: 'An outcome the application could not confirm. Never replay it and never restore it automatically.'
+    meaning: 'An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically.'
   - term: Voyage
     context: placement
     meaning: 'A space for one project. It holds Fleets and a Portal column.'

@@ -769,6 +769,28 @@ impl Native {
         })
     }
 
+    pub fn drawn_labels(&self, target: &Target, during: Duration) -> Result<Vec<String>> {
+        let x11 = self.x11()?;
+        let path = self.inspection();
+        let mut seen: Vec<String> = Vec::new();
+        poll(during, Duration::from_millis(10), true, || {
+            let window = x11.geometry(self.window)?;
+            if let Some(label) = inspection::read(&path)?
+                .filter(|frame| drawn_for(frame, window))
+                .and_then(|frame| {
+                    target
+                        .find(&frame)
+                        .and_then(|element| element.label.clone())
+                })
+                && seen.last() != Some(&label)
+            {
+                seen.push(label);
+            }
+            Ok(None::<()>)
+        })?;
+        Ok(seen)
+    }
+
     pub fn with_core_paused<T>(&self, during: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
         let core = self.core()?;
         core.verify()?;

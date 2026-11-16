@@ -18,6 +18,16 @@ use voyager_contract::{
     observation::WorkspaceObservation,
 };
 
+pub(super) fn connect(session: &str, activity: Arc<Mutex<Activity>>) -> Result<Core, Error> {
+    Core::connect_activity(session, activity).map_err(|error| match error {
+        Error::Uncertain(message) => Error::Rejected {
+            kind: "disconnected".into(),
+            message: format!("Core is not connected, so nothing was sent: {message}"),
+        },
+        refused => refused,
+    })
+}
+
 pub(super) fn post<R: serde::de::DeserializeOwned + Send + 'static>(
     sender: &async_channel::Sender<Message>,
     pending: crate::core::Pending<R>,

@@ -100,7 +100,9 @@ One workspace effect may run at a time, off the conversation loop. Interrupt
 remains available. A new human Send waits until an accepted application effect
 has returned, so it cannot inherit another request's context. Callback loss or
 dismissing chat does not cancel an accepted effect. Results retain their actual
-request identity and bound context. Unconfirmed results are not retried.
+request identity and bound context. The conversation provider cannot be asked
+about a request by its id, so an unconfirmed conversation result is not
+retried. An unconfirmed application effect is settled by the owner first.
 Tool arguments are limited to 8 KiB, structured results to 24 KiB and each turn
 to 32 call identities with at most four waiting response IDs per call. Oversized
 layout results report the actual effect outcome and explicitly omit the layout.
@@ -139,8 +141,8 @@ Send uses Core's actual paste-and-submit operation and returns its observed
 status, turn and optional started result. It establishes submission, not task
 completion. Interrupt is a separate explicit Core operation and returns the
 actual key and observed outcome, including unknown or still_working. The
-application never combines interrupt and send, retries an uncertain effect,
-resumes or restarts a program. Selected Stop has a separate T4 checkpoint;
+application never combines interrupt and send, retries input whose arrival a
+read cannot show, resumes or restarts a program. Selected Stop has a separate T4 checkpoint;
 whole-session Quit and reopen retain their separate lifecycle gates.
 
 Selected Stop uses Core's terminal.kill, not server.stop or OS signals from
@@ -148,9 +150,11 @@ Voyager. It ends that terminal's program and descendants; Interrupt remains the
 program's stop key without escalation. The request carries the inspected content,
 terminal and PID, while the result retains both the inspected target and Core's
 observed record. Only a finished record is described as "Program ended". A live
-record with the same PID is reported as still running. A malformed response,
-unexpected terminal/PID/state or lost confirmation is unconfirmed and is never
-automatically repeated. The placement, backend address and final screen remain.
+record with the same PID is reported as still running. A lost confirmation is
+settled by reading the terminal: no longer live is applied, the same program
+still live gets one more stop, and a different program is refused with nothing
+sent. A malformed response, an unexpected terminal, PID or state, or a read
+that fails stays unconfirmed and is never automatically repeated. The placement, backend address and final screen remain.
 
 The application rechecks the running PID immediately before dispatch. Core's
 kill schema accepts a terminal address but no expected PID, so this is not an
