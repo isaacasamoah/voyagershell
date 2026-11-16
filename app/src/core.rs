@@ -203,7 +203,6 @@ impl Core {
             .env("HC_SESSION", session)
             .env("HC_SOCKET", crate::core_endpoint::endpoint(session))
             .env_remove("HC_TERMINAL_ID")
-            .envs(crate::launch::path_with_command().map(|path| ("PATH", path)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

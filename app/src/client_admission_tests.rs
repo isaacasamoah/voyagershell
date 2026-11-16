@@ -255,3 +255,34 @@ fn reads_wait_for_queue_space_and_cancel_without_replaying_effects() {
     assert!(receive.is_empty());
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn a_deferred_rename_resumes_as_the_program_that_asked() {
+    let vessel = VesselId("agent".into());
+    let request = Request {
+        request_id: "rename-1".into(),
+        expected_version: 0,
+        action: Action::Inspect,
+    };
+    let (reply, _) = mpsc::sync_channel(1);
+    let ready = Message::NoteRenameReady {
+        request: request.clone(),
+        scope: None,
+        program: Some(vessel.clone()),
+        reply,
+        result: Ok(None),
+    };
+    let Message::NoteRenameReady {
+        request: resumed,
+        scope,
+        program,
+        ..
+    } = ready
+    else {
+        unreachable!()
+    };
+    let first = Envelope::admitted(Some(&vessel), None, &request);
+    let again = Envelope::admitted(program.as_ref(), scope.as_ref(), &resumed);
+    assert_eq!(first, again);
+    assert_ne!(again, Envelope::admitted(None, None, &resumed));
+}

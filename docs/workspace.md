@@ -121,9 +121,8 @@ Each placed terminal Vessel has its own Unix socket, opened and closed by
 Voyager sets no identity variable, because Core starts an `hc run` child with
 Core's own environment, so such a variable would never reach an adopted
 terminal. Voyager does put the folder that holds `voyager` first on `PATH` for
-each terminal it starts and for a Core that it starts. An `hc run` child of an
-already running Core has Core's `PATH`, so `voyager --skill` prints the full
-path of the command.
+each terminal it starts. An `hc run` child gets Core's environment, not its
+parent's, so `voyager --skill` prints the full path of the command.
 The socket closes when its Vessel has no placement or its backend changes.
 
 A connection sends one JSON line, a `SocketRequest`, and reads one JSON line,

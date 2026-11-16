@@ -167,6 +167,17 @@ impl Envelope {
         }
     }
 
+    pub(crate) fn admitted(
+        program: Option<&VesselId>,
+        scope: Option<&Context>,
+        request: &Request,
+    ) -> Self {
+        program.map_or_else(
+            || Self::workspace(scope, request),
+            |vessel| Self::program(vessel.clone(), request),
+        )
+    }
+
     pub(crate) fn program(vessel: VesselId, request: &Request) -> Self {
         Self {
             caller: Caller::Program { vessel },

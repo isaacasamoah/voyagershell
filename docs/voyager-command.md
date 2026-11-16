@@ -11,10 +11,9 @@ content placed in a Fleet, or as a Portal across a Voyage.
 ## Find the command
 
 `voyager --skill` begins with the full path of the command. VoyagerShell puts
-that folder first on `PATH` for each terminal it starts, and for a Core that it
-starts itself. A program that you start with `hc run` gets the environment of
-Core, not of your terminal, so `voyager` may not be on its `PATH`. Run it by
-the full path there.
+that folder first on `PATH` for each terminal it starts. A program that you
+start with `hc run` gets the environment of Core, not of your terminal, so
+`voyager` may not be on its `PATH`. Run it by the full path there.
 
 ## Find where you are
 
