@@ -1,3 +1,4 @@
+use crate::experience;
 use crate::journey::Journey;
 use anyhow::{Context, Result, bail, ensure};
 use globset::{Glob, GlobSetBuilder};
@@ -243,11 +244,14 @@ pub fn run(args: &[String]) -> Result<i32> {
         .map(String::from)
         .collect();
     registry.validate(&files, &Journey::names(), &python_journeys(root)?)?;
+    let ids = registry.feature.iter().map(|f| f.id.as_str()).collect();
+    let model = experience::load(root, &ids, &Journey::case_ids())?;
     let readme_path = root.join(TABLE_FILE);
     match args {
         [] => {
             print!("{}", registry.table());
             eprintln!("{}", registry.counts());
+            eprintln!("{}", model.counts());
         }
         [flag] if flag == "--check" => {
             let readme = std::fs::read_to_string(&readme_path)?;

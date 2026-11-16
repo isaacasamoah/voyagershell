@@ -2,6 +2,7 @@ mod agent;
 mod battery;
 mod core_relay;
 mod diagnosis;
+mod experience;
 mod features;
 mod frames;
 mod inspection;
@@ -520,6 +521,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/battery.rs", include_bytes!("battery.rs")),
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
+    ("src/experience.rs", include_bytes!("experience.rs")),
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/frames.rs", include_bytes!("frames.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
