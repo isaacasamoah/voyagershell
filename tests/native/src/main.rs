@@ -1,4 +1,5 @@
 mod battery;
+mod claude;
 mod core_relay;
 mod diagnosis;
 mod features;
@@ -9,7 +10,6 @@ mod native;
 mod probe;
 mod profile;
 mod proof;
-mod claude;
 mod provider;
 mod sandbox;
 #[cfg(test)]

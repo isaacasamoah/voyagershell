@@ -1,4 +1,4 @@
-use crate::sandbox::{CLAUDE, PROVIDER, PROVIDER_SOCKET, CLAUDE_SOCKET};
+use crate::sandbox::{CLAUDE, CLAUDE_SOCKET, PROVIDER, PROVIDER_SOCKET};
 use crate::system::{PATIENCE, TimedOut};
 use anyhow::{Context, Result};
 use anyhow::{bail, ensure};

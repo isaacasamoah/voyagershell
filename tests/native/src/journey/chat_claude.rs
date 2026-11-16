@@ -320,7 +320,10 @@ mod tests {
     fn the_sent_text_and_focus_are_read_from_the_users_message() {
         let user = json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":FIRST},{"type":"text","text":"voyager.focus: {\"scope\":{\"kind\":\"workspace\"},\"path\":[],\"cwd\":null,\"revision\":\"3\"}"}]}});
         assert_eq!(sent_text(&user), Some(FIRST));
-        assert_eq!(focus_of(&user).map(|focus| focus.scope), Some(Context::Workspace));
+        assert_eq!(
+            focus_of(&user).map(|focus| focus.scope),
+            Some(Context::Workspace)
+        );
         assert!(focus_of(&json!({})).is_none());
     }
 }
