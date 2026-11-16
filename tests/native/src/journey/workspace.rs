@@ -41,14 +41,14 @@ cases! {
     MaximizeFocusRemembered => "maximize-focus-remembered",
     FleetTabFocusRemembered => "fleet-tab-focus-remembered",
     Relaunch => "relaunch-restores",
-    AgentPlanSurvivesClick => "agent-plan-survives-click",
-    StaleAgentEditRefused => "stale-agent-edit-refused",
     DragBarMovesWindow => "drag-bar-moves-window",
     TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
     DoubleClickMaximises => "double-click-bar-maximises-window",
     SidebarDragMovesWindow => "sidebar-drag-moves-window",
     VoyageDragDoesNotMoveWindow => "voyage-drag-does-not-move-window",
     TerminalSelectionDoesNotMoveWindow => "terminal-selection-does-not-move-window",
+    AgentPlanSurvivesClick => "agent-plan-survives-click",
+    StaleAgentEditRefused => "stale-agent-edit-refused",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -972,8 +972,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restored", &restored)?
             .observed("differences after the relaunch", &reopened)
     })?;
-    plan::drive(native, cases)?;
-
     cases.check(native, Case::DragBarMovesWindow, |native| {
         on_bar(native, &start)?;
         let unfilled = native.observe("the empty top bar and the create Fleet button", |seen| {
@@ -1109,7 +1107,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 sent.is_empty(),
             )
             .observed("requests", &sent)
-    })
+    })?;
+    plan::drive(native, cases)
 }
 
 fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
