@@ -481,14 +481,17 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("left", &left)?
             .observed("returned", &returned)?;
-        if !restored.passed() {
-            return Ok(restored);
-        }
-        select(native, &RenameTarget::Fleet { id: start.fleet.clone() }, |seen| {
-            seen.document.selected_fleet.as_ref() == Some(&start.fleet)
-        })?;
+        model.fleet = second.id.clone();
         modelled(native, &model, restored)
     })?;
+    select(
+        native,
+        &RenameTarget::Fleet {
+            id: start.fleet.clone(),
+        },
+        |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+    )?;
+    model.fleet = start.fleet.clone();
 
     let first_fleet = RenameTarget::Fleet {
         id: start.fleet.clone(),
