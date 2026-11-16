@@ -873,6 +873,24 @@ logical pixels wide, under client decorations when the window is neither
 maximized nor fullscreen. A press on a grip asks the window manager to start a
 resize from that edge.
 
+The empty parts of the top bar move the window. `dragFiller` in
+`navigation-view.ts` draws one filler after the Fleet tabs, in the Home strip and
+in the sidebar's top row, each marked `window_control_area("drag")`. The Fleet
+tabs no longer grow, so the filler takes the empty space. A left press on a
+filler, dragged, asks the window manager to start a move, and a double-click
+maximises or restores the window. Only a filler carries the drag area. A Fleet
+tab, a button or a Vessel never does, because a drag area on an ancestor of the
+tabs would also fire during a tab drag and hijack its reordering.
+
+The press must begin on a filler. The reviewed `gpui-shell-window-drag.patch`
+makes a press on a drag area arm the move, a move with the left button held
+while armed start it, and a release, a press anywhere else, a double-click or
+the move itself disarm it. Without it the SDK started a move on any held mouse
+move over a drag area, so a Fleet tab, Voyage or Vessel drag, or a terminal
+selection, carried across a filler moved the window. The same arming serves
+every press origin, because the SDK handler is the only place that sees the
+pointer over the filler.
+
 ### Restoring the window position
 
 GPUI reports the client window's root-relative origin. An X11 ConfigureRequest

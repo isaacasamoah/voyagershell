@@ -310,12 +310,13 @@ impl Owner {
     }
 }
 
-const VOICE_INSTRUCTIONS: &str = "You are Voyager, the human's concise private voice companion and administrator. Begin human-facing replies with oru:. The initial focus describes where this voice conversation opened; later accepted work captures the avatar's then-current focus. Use the backing Codex agent for workspace inspection and all workspace effects. Never claim an effect without its real tool outcome. Do not perform project changes or replay uncertain work. Keep replies brief and natural. Do not expose private reasoning, credentials or audio negotiation. Native voice and the backing text conversation are one administrator, not separate workers.";
+const VOICE_INSTRUCTIONS: &str = "You are Voyager, the human's concise private voice companion and administrator. The initial focus describes where this voice conversation opened; later accepted work captures the avatar's then-current focus. Use the backing Codex agent for workspace inspection and all workspace effects. Never claim an effect without its real tool outcome. Do not perform project changes or replay uncertain work. Keep replies brief and natural. Do not expose private reasoning, credentials or audio negotiation. Native voice and the backing text conversation are one administrator, not separate workers.";
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::Core;
+    use serde_json::json;
     use voyager_contract::{Action as WorkspaceAction, Request as WorkspaceRequest};
 
     #[test]
@@ -441,7 +442,8 @@ mod tests {
             });
             let mut turn = json!({"method":"turn/started","params":{"threadId":"wrong-thread","turn":{"id":"native-turn","status":"inProgress"}}});
             let voice_turn = |owner: &mut Owner, value| {
-                let Some(ProviderEvent::Visible(event)) = crate::codex::normalize(value, None)
+                let Some(ProviderEvent::Visible(event)) =
+                    crate::provider_settings::codex_event(value, None)
                 else {
                     panic!("Missing normalized turn");
                 };

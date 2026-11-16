@@ -1,12 +1,9 @@
 #[path = "codex_protocol.rs"]
 mod protocol;
-use crate::provider::{
-    Capabilities, Command as ProviderCommand, Event, Operation, Support, ToolReply,
-};
+use crate::provider::{Command as ProviderCommand, Event, Operation, Provider, ToolReply};
 use crate::voice_host::Package;
-pub(crate) use protocol::decode as normalize;
 #[cfg(test)]
-pub(crate) use protocol::tool_reply as encode_tool_reply;
+pub(crate) use protocol::{decode as normalize, reported_version, tool_reply as encode_tool_reply};
 use serde_json::{Value, json};
 use std::{
     env,
@@ -18,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) const DEFAULT_MODEL: &str = "gpt-6.1-sol";
+pub(crate) const DEFAULT_EFFORT: &str = "high";
 const CONTENT_FRAME_LIMIT: usize = 2 * crate::content::ENVELOPE_LIMIT + 4096;
 
 fn decode(bytes: &[u8]) -> Result<Value, String> {
@@ -51,18 +50,8 @@ pub(crate) struct Codex {
     pending: Arc<Mutex<Option<(u64, Operation)>>>,
 }
 
-pub(crate) fn reported_version(result: &Value) -> Option<&str> {
-    let token = result
-        .get("userAgent")?
-        .as_str()?
-        .split_whitespace()
-        .next()?;
-    let (originator, version) = token.rsplit_once('/')?;
-    (!originator.is_empty() && !version.is_empty()).then_some(version)
-}
-
 impl Codex {
-    pub(crate) fn executable() -> Result<PathBuf, String> {
+    fn executable() -> Result<PathBuf, String> {
         let selected = env::var_os("VOYAGER_CODEX_BIN").unwrap_or_else(|| "codex".into());
         let path = PathBuf::from(&selected);
         if path.components().count() > 1 || path.is_absolute() {
@@ -120,7 +109,7 @@ impl Codex {
                 match parsed {
                     Ok(value) => {
                         let expected = reading.lock().ok().and_then(|pending| *pending);
-                        if let Some(event) = normalize(value, expected)
+                        if let Some(event) = protocol::decode(value, expected)
                             && events.send(Ok(event)).is_err()
                         {
                             break;
@@ -146,13 +135,6 @@ impl Codex {
         self.write_bounded(value, 65536)
     }
 
-    pub(crate) fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String> {
-        self.write_bounded(
-            protocol::tool_reply(reply),
-            if content { CONTENT_FRAME_LIMIT } else { 65536 },
-        )
-    }
-
     fn write_bounded(&mut self, value: Value, limit: usize) -> Result<(), String> {
         let bytes = encode(&value, limit)?;
         self.input.write_all(&bytes).map_err(|e| e.to_string())?;
@@ -160,7 +142,18 @@ impl Codex {
         self.input.flush().map_err(|e| e.to_string())
     }
 
-    pub(crate) fn request(&mut self, id: u64, command: ProviderCommand) -> Result<(), String> {
+    pub(crate) fn voice_capability() -> voyager_contract::voice::Capability {
+        match Self::executable().and_then(|path| Package::discover(&path)) {
+            Ok(package) => voyager_contract::voice::Capability::Candidate {
+                version: package.version,
+            },
+            Err(reason) => voyager_contract::voice::Capability::Unavailable { reason },
+        }
+    }
+}
+
+impl Provider for Codex {
+    fn request(&mut self, id: u64, command: ProviderCommand) -> Result<(), String> {
         let operation = command.operation();
         let (method, params) = protocol::encode(command)?;
         *self
@@ -173,45 +166,25 @@ impl Codex {
         )
     }
 
-    pub(crate) fn initialized(&mut self, version: Option<String>) -> Result<(), String> {
+    fn initialized(&mut self, version: Option<String>) -> Result<(), String> {
         self.version = version;
         self.write(json!({"method":"initialized"}))
     }
 
-    pub(crate) fn voice_package(&self) -> Result<Package, String> {
+    fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String> {
+        self.write_bounded(
+            protocol::tool_reply(reply),
+            if content { CONTENT_FRAME_LIMIT } else { 65536 },
+        )
+    }
+
+    fn voice_package(&self) -> Result<Package, String> {
         let package = Package::discover(&self.executable)?;
         package.check_provider(self.version.as_deref())?;
         Ok(package)
     }
 
-    pub(crate) fn voice_capability() -> voyager_contract::voice::Capability {
-        match Self::executable().and_then(|path| Package::discover(&path)) {
-            Ok(package) => voyager_contract::voice::Capability::Candidate {
-                version: package.version,
-            },
-            Err(reason) => voyager_contract::voice::Capability::Unavailable { reason },
-        }
-    }
-
-    pub(crate) fn capabilities(voice: voyager_contract::voice::Capability) -> Capabilities {
-        let support = if Self::executable().is_ok() {
-            Support::Protocol
-        } else {
-            Support::Unavailable
-        };
-        Capabilities {
-            text: support,
-            tools: support,
-            interruption: support,
-            voice,
-        }
-    }
-
-    pub(crate) fn close(mut self) -> Result<(), String> {
-        self.shutdown()
-    }
-
-    pub(crate) fn shutdown(&mut self) -> Result<(), String> {
+    fn shutdown(&mut self) -> Result<(), String> {
         if self.child.try_wait().map_err(|e| e.to_string())?.is_none() {
             self.child.kill().map_err(|e| e.to_string())?;
         }

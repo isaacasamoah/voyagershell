@@ -11,9 +11,6 @@ known:
   - id: 'no-child-cycles: rs:voyager_app::client <-> rs:voyager_app::client::core_calls'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_app::codex <-> rs:voyager_app::codex::protocol'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::description'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
@@ -73,7 +70,7 @@ known:
     owner: isaac
     reason: 'voyage_close uses client while client uses voyage_close. Removing the use clears it.'
   - id: 'file-size: app/src/administrator.rs'
-    limit: 1476
+    limit: 1475
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
@@ -85,7 +82,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/conversation_client.rs'
-    limit: 1105
+    limit: 1040
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/tests.rs'
@@ -97,7 +94,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/src/avatar.rs'
-    limit: 1276
+    limit: 1270
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'

@@ -5,9 +5,13 @@
 A typed command runs in the shell and its output is drawn. Keys reach a
 program as the bytes a terminal sends, and they follow the modes that the
 program asked for. Output is drawn when it arrives, without any input. A drag
-selects text and draws the selection. Ctrl+Shift+C puts the selection on the X
-clipboard, and Ctrl+Shift+V sends another client's clipboard text to the
-program. Typing into one terminal works while another terminal floods.
+selects text and draws the selection. Releasing the button copies a non-empty
+selection to CLIPBOARD and PRIMARY, and a click without a drag copies nothing.
+Ctrl+Shift+C puts the selection on the X clipboard, Ctrl+Shift+V sends another
+client's clipboard text to the program, and a middle click sends PRIMARY.
+A click on the cursor's row moves the cursor there, and a click anywhere that
+would need Up or Down, or while the program owns the mouse or the screen, sends
+nothing. Typing into one terminal works while another terminal floods.
 
 ## How to get to it (user POV)
 
@@ -51,13 +55,14 @@ fixture.
 - `drag-selects-text` prints `COPYβ界` on a truecolor background and drags
   from one pixel inside the left edge of that box to one pixel inside its
   right edge. Every pixel that had the background colour must take one other
-  colour, and nothing outside the row may change. It also reads PRIMARY and
-  records the result as `PRIMARY after the drag`. No expectation judges that
-  value, because the app does not copy to PRIMARY. Before the drag the case
+  colour, and nothing outside the row may change. Before the drag the case
   checks the verifier's own cell grid against the drawn text. The first cell
   must start where the box starts, and the seventh cell must lie inside the
   box and the eighth outside it. A mismatch ends the run `inconclusive`,
   blamed on the fixture.
+- `release-copies-the-selection-to-clipboard-and-primary` presses no key after
+  the drag. Another X client must read exactly `COPYβ界` from CLIPBOARD and
+  from PRIMARY, and the case counts the inputs sent since the release.
 - `copy-puts-the-selection-on-the-clipboard` gives CLIPBOARD to the verifier
   with the text `VERIFIER-SENTINEL` and presses Ctrl+Shift+C. The verifier's
   clipboard client must lose CLIPBOARD and then read exactly `COPYβ界` from
@@ -74,12 +79,6 @@ fixture.
   `DURING-42` and its terminal must draw it while Core still reports `yes` or
   `timeout` in the first terminal's foreground. Ctrl+C in the first terminal
   must end the flood and leave its shell the same program.
-- `clicks-send-no-bytes-to-a-program-that-asked-for-none` runs the `keys`
-  probe while the verifier owns PRIMARY, clicks cell 3 of row 0 with
-  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
-  received exactly `x`, so neither click sent it a byte. The case does not
-  prove that either click reached the app. It does not judge what the app does
-  with PRIMARY, and `exchanges` lists any request for it.
 - `a-drag-inside-one-cell-copies-that-cell` clears the screen, prints
   `ABCDEFGHIJ` on row 0 and `KLMNOPQRST` on row 1, and gives CLIPBOARD to the
   verifier. It drags from 2 pixels inside the top-left corner of cell 3 of
@@ -87,6 +86,50 @@ fixture.
   Another X client must read exactly `N` from the clipboard. A pointer mapping
   that is off by a column or a row selects a different cell or spans two rows,
   and `copied` records that text.
+- `a-click-without-a-drag-leaves-clipboard-and-primary-unchanged` takes
+  CLIPBOARD and PRIMARY for the verifier with `VERIFIER-SENTINEL` after the
+  previous case copied, and clicks cell 8 of row 0. The click must clear the
+  drawn selection, the verifier must still own both and read the sentinel from
+  both, and neither selection may have been cleared.
+- `a-click-sends-no-bytes-and-a-middle-click-pastes-primary` runs the `keys`
+  probe with bracketed paste while the verifier owns PRIMARY with
+  `PASTEβ界`, a newline and `line2`. It clicks cell 3 of row 0 with
+  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
+  received exactly `ESC[200~`, the text, `ESC[201~` and `x`, so the click sent
+  no byte and the middle click sent the paste. A client other than the
+  verifier must have asked the verifier's PRIMARY for the text.
+- `a-middle-click-refuses-primary-over-64-kib` gives PRIMARY 70 KiB to the
+  verifier and middle-clicks. A client other than the verifier must ask for the
+  text, the terminal must draw its error banner, and the probe must have
+  received exactly the `x` typed afterwards. The 64 KiB limit is the paste
+  limit of `Screen::paste_bytes`.
+- `a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection`
+  prints `STALEWORD` in the first terminal and drags across it, so that
+  terminal holds a selection. It then takes CLIPBOARD and PRIMARY for the
+  verifier, drags from the second terminal to a point over the first, and
+  releases. Neither selection may read the first terminal's older text.
+- `a-click-in-the-shell-input-line-moves-the-cursor-there` sets the prompt to
+  `> `, clears the screen and types `echo abcdef` without Enter. It clicks the
+  `c`, types `X` and presses Enter. Core's screen must hold a line that is
+  exactly `abXcdef` and no line that starts `abcdefX`, which is what a candidate
+  without click-to-move prints.
+- `a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column`
+  runs the `line` probe, which stands in for an agent's composer. It reads
+  `ab界cdef` on its third row with its cursor at the end. A click on the `c`
+  must make it receive four `ESC[D` and nothing else, and an `X` typed after
+  must land before the `c`.
+- `a-click-across-a-wide-character-sends-one-arrow-per-character` clicks the
+  `a`, which must send seven `ESC[D` (eight if it counted cells), and then the
+  `c`, which must send three `ESC[C` (four if it counted cells).
+- `a-click-on-a-row-above-the-cursor-sends-no-arrow-bytes` clicks the probe's
+  rows above its cursor row. It must receive nothing. A click on its cursor row
+  afterwards must send four `ESC[D`, so the silence came from the gate.
+- `a-click-under-mouse-tracking-sends-no-arrow-bytes` runs the `line` probe
+  with `--mouse-tracking`, on the main screen. A click on its cursor row must
+  send nothing, and an `X` typed afterwards must arrive at the end of its line.
+- `a-click-on-the-cursor-row-of-an-alternate-screen-program-sends-no-arrow-bytes`
+  clicks the cursor's row of the `keys` probe and types `x`. The probe must
+  receive only the `x`.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
@@ -135,11 +178,19 @@ journey claims it.
   The driver keeps 1 ms between key events and types a long shell line in
   pieces, each echoed before the next, so no case types such a burst.
 - A shell with a line editor such as ble.sh, or with any startup file.
-- A paste over 64 KiB, a copy with no selection, and a selection of more than
-  one row, by word or by line.
-- PRIMARY and middle-click paste, which the app does not offer. The verifier
-  can own and read PRIMARY and can middle-click, and no case judges the app's
-  use of either.
+- A Ctrl+Shift+V paste over 64 KiB and a selection of more than one row, by
+  word or by line. The desktop unit test `a_release_without_selected_text_yields_nothing_to_copy`
+  covers a release with no text to copy, which no journey case drives.
+- A click while the program has scrolled back, during a selection or an input
+  method composition, across a hard newline, or while prompt marks show a
+  running command. Desktop unit tests in `desktop/src/terminal_click.rs` cover
+  each of them, and no journey case drives them.
+- A click on the cursor's row of a program that reads a line without line
+  editing, such as `cat`. The app sends it the arrow bytes, and no case reads
+  what the program did with them.
+- A shell with ble.sh. The click-to-move cases cover plain Bash only.
+- A middle click on a platform without PRIMARY. The journey covers Linux X11
+  only.
 - Selecting one cell by pointer. The app selects the cell to the left of the
   pointer, which
   [Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196)

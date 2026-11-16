@@ -141,7 +141,9 @@ Owns files:
 - `app/src/conversation.rs`
 - `app/src/conversation_client.rs`
 - `app/src/conversation_audio.rs`
+- `app/src/conversation_provider_tests.rs`
 - `app/src/provider.rs`
+- `app/src/provider_settings.rs`
 - `app/src/codex.rs`
 - `app/src/codex_protocol.rs`
 - `app/src/voice.rs`

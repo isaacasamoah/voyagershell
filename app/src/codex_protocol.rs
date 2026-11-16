@@ -5,6 +5,16 @@ use crate::provider::{
 use serde_json::{Value, json};
 use voyager_contract::conversation::{Phase, Role};
 
+pub(crate) fn reported_version(result: &Value) -> Option<&str> {
+    let token = result
+        .get("userAgent")?
+        .as_str()?
+        .split_whitespace()
+        .next()?;
+    let (originator, version) = token.rsplit_once('/')?;
+    (!originator.is_empty() && !version.is_empty()).then_some(version)
+}
+
 fn text(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)?
@@ -82,7 +92,7 @@ fn outcome(value: &Value, operation: Operation) -> Outcome {
     };
     let answer = match operation {
         Operation::Initialize => Some(Answer::Initialized {
-            version: super::reported_version(result).map(str::to_owned),
+            version: reported_version(result).map(str::to_owned),
         }),
         Operation::OpenConversation => result
             .get("thread")
@@ -254,7 +264,75 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ToolResult;
     use voyager_contract::{Context, conversation::Focus};
+
+    #[test]
+    fn codex_normalizes_visible_identity_and_filters_private_items() {
+        let event = json!({"method":"item/completed","params":{"threadId":"private","turnId":"turn","item":{"type":"agentMessage","id":"answer","text":"visible"}}});
+        assert!(
+            matches!(decode(event.clone(), None), Some(Event::Visible(Visible::Message { thread, turn, item, text, complete: true })) if thread == "private" && turn == "turn" && item == "answer" && text == "visible")
+        );
+        let mut reasoning = event;
+        reasoning["params"]["item"]["type"] = "reasoning".into();
+        assert!(decode(reasoning, None).is_none());
+        assert!(decode(json!({"method":"item/agentMessage/delta","params":{"threadId":"private","itemId":"answer","delta":"unbound"}}), None).is_none());
+    }
+
+    #[test]
+    fn codex_normalizes_only_the_correlated_reply_and_exact_callback_identity() {
+        let reply = json!({"id":7,"result":{"turn":{"id":"actual-turn"}}});
+        assert!(decode(reply.clone(), Some((6, Operation::StartTurn))).is_none());
+        assert!(
+            matches!(decode(reply, Some((7, Operation::StartTurn))), Some(Event::Response { id: 7, outcome: Outcome::Applied(Answer::Turn { id }) }) if id == "actual-turn")
+        );
+        assert!(matches!(
+            decode(json!({"id":7,"result":{}}), Some((7, Operation::StartTurn))),
+            Some(Event::Response {
+                outcome: Outcome::Unconfirmed(_),
+                ..
+            })
+        ));
+        assert!(
+            matches!(decode(json!({"id":7,"error":{"message":"known refusal"}}), Some((7, Operation::StopAudio))), Some(Event::Response { outcome: Outcome::Rejected(message), .. }) if message == "known refusal")
+        );
+        for id in [json!("callback"), json!(u64::MAX)] {
+            let callback = json!({"id":id,"method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"inspect"}}}});
+            let Some(Event::Tool(call)) = decode(callback.clone(), None) else {
+                panic!("Missing normalized tool call");
+            };
+            assert_eq!(call.id, id);
+            assert_eq!(
+                (&call.thread, &call.turn, &call.call, &call.name),
+                (
+                    &"thread".into(),
+                    &"turn".into(),
+                    &"call".into(),
+                    &"voyager_workspace".into()
+                )
+            );
+            assert_eq!(call.arguments, callback["params"]["arguments"]);
+            let reply = tool_reply(&ToolReply::Result {
+                id: call.id,
+                result: ToolResult {
+                    success: false,
+                    text: "Rejected".into(),
+                },
+            });
+            assert_eq!(reply["id"], id);
+            assert_eq!(reply["result"]["success"], false);
+            assert_eq!(reply["result"]["contentItems"][0]["text"], "Rejected");
+        }
+        let error = tool_reply(&ToolReply::Error {
+            id: json!("callback"),
+            code: -32001,
+            message: "Response capacity reached".into(),
+        });
+        assert_eq!(
+            error,
+            json!({"id":"callback","error":{"code":-32001,"message":"Response capacity reached"}})
+        );
+    }
 
     #[test]
     fn native_audio_keeps_the_subscription_route_and_captured_focus() {
@@ -327,11 +405,11 @@ mod tests {
         .unwrap();
         assert_eq!(captured, focus);
         let (method, params) = encode(Command::OpenConversation {
-            model: "gpt-6.1-sol".into(),
+            model: "configured-model".into(),
             effort: "high".into(),
             cwd: "/tmp/private".into(),
             tools: crate::administrator::catalog().unwrap(),
-            instructions: "administrator policy",
+            instructions: "administrator policy".into(),
         })
         .unwrap();
         assert_eq!(method, "thread/start");

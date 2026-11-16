@@ -1,6 +1,8 @@
+mod avatar;
 mod input;
 mod terminal;
 
+pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -25,10 +27,13 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::layout_document::{DOCUMENT, Reading, read};
 use voyager_contract::{Fleet, Layout, Placement, Voyage};
+
+const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
+const REQUEST_QUIET: Duration = Duration::from_millis(750);
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -449,6 +454,10 @@ impl Native {
         )
     }
 
+    pub fn look_at(&self, region: Geometry) -> Result<Pixels> {
+        self.x11()?.capture(self.window, region)
+    }
+
     pub fn watch<T>(&self, mut read: impl FnMut(&Self) -> Result<Option<T>>) -> Result<Option<T>> {
         poll(PATIENCE, GLANCE, true, || read(self))
     }
@@ -690,6 +699,17 @@ impl Native {
         self.decorate()
     }
 
+    pub fn launch_as(&mut self, decorations: Decorations) -> Result<()> {
+        if self.running() && self.surface.decorations == decorations {
+            return Ok(());
+        }
+        if self.running() {
+            self.close()?;
+        }
+        self.decorate_as(decorations)?;
+        self.launch()
+    }
+
     pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
         let Some(requests) = &self.requests else {
             return Ok(Vec::new());
@@ -704,6 +724,22 @@ impl Native {
             .into_iter()
             .filter(|seen| seen.request.window() == self.window)
             .collect())
+    }
+
+    pub fn requests_after(&mut self, seen: usize, count: usize) -> Result<Vec<Observed>> {
+        let deadline = Instant::now() + REQUEST_PATIENCE;
+        loop {
+            let all = self.window_requests()?;
+            if all.len() >= seen + count || Instant::now() >= deadline {
+                return Ok(all.into_iter().skip(seen).take(count).collect());
+            }
+            sleep(Duration::from_millis(50));
+        }
+    }
+
+    pub fn requests_through_quiet(&mut self, seen: usize) -> Result<Vec<Observed>> {
+        sleep(REQUEST_QUIET);
+        Ok(self.window_requests()?.into_iter().skip(seen).collect())
     }
 
     fn release_requests(&mut self) -> Result<()> {

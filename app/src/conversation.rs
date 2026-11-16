@@ -225,7 +225,7 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     fn notification(state: &mut Snapshot, value: &Value, request: &str) -> bool {
-        match crate::codex::normalize(value.clone(), None) {
+        match crate::provider_settings::codex_event(value.clone(), None) {
             Some(crate::provider::Event::Visible(event)) => {
                 super::notification(state, &event, request)
             }
@@ -234,7 +234,7 @@ mod tests {
     }
 
     fn defer(state: &mut Snapshot, events: &mut VecDeque<Visible>, value: Value) -> bool {
-        match crate::codex::normalize(value, None) {
+        match crate::provider_settings::codex_event(value, None) {
             Some(crate::provider::Event::Visible(event)) => super::defer(state, events, event),
             _ => false,
         }

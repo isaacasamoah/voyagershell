@@ -31,10 +31,10 @@ pub mod wire;
 pub mod core_shapes {
     typify::import_types!("core-schema.json");
 }
-mod codex;
 pub mod conversation;
 pub mod conversation_client;
 pub mod provider;
+mod provider_settings;
 
 mod voice;
 mod voice_host;

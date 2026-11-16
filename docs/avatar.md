@@ -137,6 +137,44 @@ for exactly 2,000 ms. It has no alternate docking renderer. Changing frames requ
 animation frames; long holds use one cancellable view wake, invalidated by the
 motion generation on replacement. Settled or hidden views request neither.
 
+## Sharp drawing
+
+The decoded PNG is the source and stays unchanged on disk and in memory. A source
+is 512 pixels square and is drawn at 66.24 or 25.92 logical pixels, which is a
+reduction of 4.6 to 19.8 times on the laptop display at 1.667 times scale and on
+external displays at 1. GPUI uploads one mip level
+and samples it with bilinear filtering, which reads two by two texels per device
+pixel and skips the rest of a source that is reduced by more than two times. Thin
+lines then alias and shimmer under the idle float.
+
+`desktop/src/avatar_sharp.rs` derives a copy of each source for each device size
+that the painter asks for. The painter computes that size from the pose's drawn
+width and height in logical pixels and the window's scale factor, rounded to whole
+pixels. A request for a size that is not smaller than the source in both
+dimensions draws the source. The copy is resampled with `image::imageops::resize`
+and `FilterType::Lanczos3` in premultiplied alpha, then returned to straight alpha,
+because the GPUI sprite shader premultiplies when it blends. Resampling straight
+alpha would pull the colour of transparent pixels into the edge.
+
+`Compiled` owns one `Sharp` cache. Its key is the source image, the device size
+and the scale factor that the size was built for. Poses that share an image, such
+as the 120 float poses, share one copy. The count of copies is therefore the number
+of distinct images times the sizes that presentations draw, at the scales in use.
+The first paint of a size resamples on the UI thread, once for each distinct image.
+
+The cache remembers the scale factor of each window that paints. When a window
+reports a different scale from its last paint, the cache retires every copy built
+for a scale that no window reports now. A second window that still draws at the
+old scale keeps those copies. The painter hands the retired images to
+`Window::on_next_frame`, which calls `App::drop_image` after the current frame is
+presented, so the frame that retired them can still draw any copy it already
+painted. An animation reload drains the cache with the old pack's sources and drops
+every copy through the same call. A copy is never edited after creation, and the
+pack's source images never reach the atlas at a reduced size.
+
+The shipped PNGs are not resized. Smaller files would fork the artwork and still be
+wrong at the next scale.
+
 The profile's `avatar/` folder contains `configuration.json`, its named pack JSON,
 PNG assets and generated schemas. Configuration selects `restPose` and nullable
 `hover`, `click`, `dock` and `undock` clip bindings. Defaults enable hover stretch

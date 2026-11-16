@@ -33,7 +33,7 @@ The environment is not yet accepted as a complete implementation of that design.
 | Seeded, live-edited and shared run profile, and a second identified build | Implemented by the `profile` journey. Checks the theme background only. See Profile fixtures below. |
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
-| Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. No journey asserts on them yet. See Client decorations and window requests below. |
+| Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. `quit-restore` asserts the window buttons, the corner grip and the close button, and `workspace` asserts the drag, the double-click and the tab drag. See Client decorations and window requests below. |
 | Window-manager behavior, IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
 
@@ -462,7 +462,7 @@ asserts the hints `[2, 0, 0, 0, 0]` after each launch. Any other hints end the r
 take effect. `Native::decorate_as` switches a run between `server` and `client`
 while the app is closed, so a case can pick the surface it needs. The
 `quit-restore` journey does this for the window buttons, the corner grip, the close
-button and the absent controls.
+button and the absent controls. The `workspace` journey relaunches under client decorations after its relaunch case and sends its drags to the `window-drag` fillers, so a held drag, a double-click and a Fleet tab drag are judged by the requests that reach the observer.
 
 Before the app starts, a verifier-owned test client sends one move request for
 the observer's own window. The observer must see it with direction 8 within the
@@ -1108,6 +1108,19 @@ screen's text. A terminal that has lost the keyboard fails the same way. After
 terminal that already holds the keyboard, because a click would start a new
 selection.
 
+The `workspace` journey judges the avatar's sharpness in `avatar-sharp`,
+`avatar-float` and `avatar-small`. `native/avatar.rs` reduces the shipped
+`idle.png` to the avatar's device size with Lanczos3 in premultiplied alpha, and
+separately with a two by two bilinear sample, which is what GPUI draws from an
+unreduced source. A case captures the avatar's region, takes the best fit over a few
+device pixels, and compares the fully opaque interior of the reference with the
+capture after fitting one gain and one base for the whole region, because the
+avatar is drawn dimmed over the terminal. The distance is the mean absolute
+difference of the fitted channels. A case passes when the distance is within
+`SHARP_TOLERANCE` and the Lanczos reference is nearer than the bilinear one. The
+verifier runs at scale 2, so the reduction is 3.9 and 9.8 times. A capture on
+another scale is not pixel matched, and the cases do not cover a fractional scale.
+
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A second connection belongs to the verifier's clipboard
 owner, described below, and carries nothing else. A terminal capture is the `terminal` element's area, with
@@ -1415,8 +1428,8 @@ holds after `foreign-exit` because that case leaves the layout unchanged.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
-The probe has four modes, parsed into `Mode` in `src/probe.rs`. `arrows` and
-`mouse` serve `terminal-scrolling`. `keys` and `draw` serve `terminal-input`.
+The probe has five modes, parsed into `Mode` in `src/probe.rs`. `arrows` and
+`mouse` serve `terminal-scrolling`. `keys`, `draw` and `line` serve `terminal-input`.
 Every mode puts the terminal in raw mode and restores its modes when it ends.
 In raw mode Ctrl+C arrives as a byte and raises no signal. `keys` enters the
 alternate screen, asks for application cursor keys with `--application-cursor`
@@ -1429,7 +1442,16 @@ and `end`. On `go` it enters the alternate screen and draws two blocks of text
 at fixed rows and columns. On `back` it leaves the alternate screen. Its state
 file names the stage that it reached.
 
-A journey types to a `keys` probe only after it sees the ready block in a
+`line` stays on the main screen and stands in for a line editor such as an
+agent's composer. It draws a ready block on the first row and the text
+`ab界cdef` after a `> ` prompt on the third row, with its cursor at the end. It
+moves that cursor on Left and Right in either cursor-key form, inserts printable
+text at it, ignores every other sequence and every mouse report, and saves the
+bytes that it read, the text and the cursor's index in characters to its state
+file. It clears the screen when it ends, because it draws on the main screen. `--mouse-tracking` asks for mouse reports before it draws. `composer_column`
+gives the cell column where a character of the text starts, for `click_cell`.
+
+A journey types to a `keys` or `line` probe only after it sees the ready block in a
 capture. The app parses output in order, so a drawn block shows that the app
 has parsed the modes that the probe set before it. The state file alone shows
 only that the probe wrote them. A journey also checks that no ready block is

@@ -43,6 +43,7 @@ export function renderSidebar(workspace, layout, voyage) {
       .justify_end()
       .pr(2)
       .flex_shrink_0()
+      .child(dragFiller("sidebar"))
       .child(workspace.sidebarToggle()),
   );
   if (!workspace.sidebar)
@@ -421,6 +422,15 @@ function windowButton(id, label, role, glyph, run) {
     .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
     .on_click(run);
 }
+function dragFiller(key) {
+  return div()
+    .id(`window-drag-${key}`)
+    .flex_1()
+    .min_w(0)
+    .h_full()
+    .window_control_area("drag")
+    .child(Marker.new("window-drag", key));
+}
 function windowControls() {
   if (!client_decorated()) return [];
   return [
@@ -471,14 +481,14 @@ export function renderFleets(workspace, layout, voyage, fleet) {
             : [],
         ),
       )
-      .child(div().flex_1())
+      .child(dragFiller("home"))
       .children(voyage ? [portalControls(workspace, voyage)] : [])
       .children(windowControls());
-  if (!voyage) return strip.child(div().flex_1()).children(windowControls());
+  if (!voyage)
+    return strip.child(dragFiller("fleets")).children(windowControls());
   const tabs = div()
     .id("fleet-tabs")
     .flex()
-    .flex_1()
     .items_center()
     .min_w(0)
     .h_full()
@@ -567,7 +577,8 @@ export function renderFleets(workspace, layout, voyage, fleet) {
           .left(workspace.drag.side ? 0 : workspace.drag.bounds.width - 2)
           .w(2)
           .h(workspace.drag.bounds.height)
-          .bg("#b3d2e5"),
+          .bg("#b3d2e5")
+          .child(Marker.new("fleet-drop", item.id)),
       );
     tabs.child(
       workspace.contextMenu(
@@ -602,6 +613,7 @@ export function renderFleets(workspace, layout, voyage, fleet) {
   );
   return strip
     .child(tabs)
+    .child(dragFiller("fleets"))
     .child(portalControls(workspace, voyage))
     .children(windowControls());
 }

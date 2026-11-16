@@ -562,11 +562,16 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/workspace.rs"),
     ),
     (
+        "src/journey/workspace/avatar.rs",
+        include_bytes!("journey/workspace/avatar.rs"),
+    ),
+    (
         "src/journey/workspace/model.rs",
         include_bytes!("journey/workspace/model.rs"),
     ),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/native.rs", include_bytes!("native.rs")),
+    ("src/native/avatar.rs", include_bytes!("native/avatar.rs")),
     ("src/native/input.rs", include_bytes!("native/input.rs")),
     (
         "src/native/terminal.rs",
