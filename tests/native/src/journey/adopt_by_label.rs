@@ -30,10 +30,14 @@ struct Adopted {
 
 fn address(native: &Native, name: &str) -> Result<String> {
     until(&format!("Core naming the terminal {name}"), || {
-        let reported = native
-            .system
-            .watch("terminal.get", json!({"terminal":name}))?;
-        Ok(reported["address"].as_str().map(str::to_owned))
+        let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+        Ok(listed["terminals"].as_array().and_then(|terminals| {
+            terminals
+                .iter()
+                .find(|terminal| terminal["name"] == name)
+                .and_then(|terminal| terminal["address"].as_str())
+                .map(str::to_owned)
+        }))
     })
 }
 
@@ -234,7 +238,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         first.line(
             native,
             &format!(
-                "voyager do workspace '{{\"requestId\":\"crew-fleet\",\"expectedVersion\":\"{version}\",\"action\":{{\"operation\":\"create-fleet\",\"voyage\":\"{}\",\"name\":\"{CREW_FLEET}\"}}}}'",
+                "voyager do workspace '{{\"requestId\":\"crew-fleet\",\"expectedVersion\":\"{version}\",\"action\":{{\"operation\":\"create-fleet\",\"voyage\":\"{}\",\"name\":\"{CREW_FLEET}\"}}}}' >/dev/null; echo voyager-exit=$?",
                 voyage.0
             ),
         )?;
@@ -246,7 +250,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .map(|item| seen.shows(&Target::name(&RenameTarget::Fleet { id: item.id.clone() })))
                 .filter(|drawn| *drawn)
         })?;
-        let applied = first.printed(native, "\"status\": \"applied\"")?;
+        let applied = first.printed(native, "voyager-exit=0")?;
         native.keep_window("command-creates-fleet")?;
         Verdict::new()
             .expect("voyager status names the calling Vessel", named)
@@ -254,7 +258,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "voyager do workspace created the Fleet, drawn as a tab",
                 created,
             )
-            .expect("the command printed the applied result", applied)
+            .expect("the command exited 0, the applied code", applied)
             .observed("vessel", &vessel)?
             .observed("expectedVersion", version)
     })

@@ -177,7 +177,7 @@ types into the first terminal, as an agent in that Vessel would.
 - `command-creates-fleet` runs `voyager status`, then `voyager do workspace`
   with a `create-fleet` request at the saved layout version. It passes when
   the status names the first Vessel, the new Fleet is saved and drawn as a tab,
-  and the command prints the applied result.
+  and the command exits 0, its applied code.
 
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result is settled by reading Core, with nothing done twice. It
