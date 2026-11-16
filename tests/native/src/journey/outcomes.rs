@@ -372,13 +372,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the close dialog said the Voyage remains open and to inspect before another close",
                 status.contains(INSPECT),
             )
-            .expect("the Voyage is still open while the stop is unconfirmed", open)
+            .expect(
+                "the Voyage is still open while the stop is unconfirmed",
+                open,
+            )
             .expect(
                 "the dialog keeps that message and offers no second confirmation",
                 !offered && kept.as_deref().is_some_and(|kept| kept.contains(INSPECT)),
             )
             .observed("status", &status)?
-            .observed("atRest", json!({"open":open,"confirmOffered":offered,"message":kept}))
+            .observed(
+                "atRest",
+                json!({"open":open,"confirmOffered":offered,"message":kept}),
+            )
     })?;
 
     cases.check(native, Case::StartHeld, |native| {
