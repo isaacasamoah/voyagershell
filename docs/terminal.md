@@ -505,6 +505,20 @@ from painting beyond the space allocated to their columns without changing the
 font, padding or row height. The clipping correction still requires native
 verification against the recorded footer and a resize.
 
+The pane's text area is its content box, inside the 8-pixel padding. Cell
+(0, 0) starts at that box's origin. The pane measures it with an absolutely
+positioned canvas. The layout engine places that canvas at the content box
+origin, because its insets are unset. It sizes the canvas from the padding
+box, because its size is a percentage. So the text area takes the canvas
+origin unchanged and its size less 16 pixels on each axis. Selection, wheel
+reports to mouse-mode programs and the input method's cursor rectangle each
+subtract that origin from a pointer or add it to a cell. A pointer at that
+origin is in cell (0, 0). Adding the padding to the origin again moved every
+mapped pointer 8 pixels left and 8 pixels up. At the default font that is one
+column and about half a row, so a drag selected the cell before the one under
+the pointer. The terminal-input case
+`a-drag-inside-one-cell-copies-that-cell` checks the mapping on both axes.
+
 The Core child receives an explicit dedicated-session endpoint rather than an
 inherited `HC_SOCKET` or shared fixed-socket setting. On Unix this follows the
 pinned Core's runtime-directory and session-state fallback; on Windows it uses

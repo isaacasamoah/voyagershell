@@ -80,6 +80,13 @@ fixture.
   received exactly `x`, so neither click sent it a byte. The case does not
   prove that either click reached the app. It does not judge what the app does
   with PRIMARY, and `exchanges` lists any request for it.
+- `a-drag-inside-one-cell-copies-that-cell` clears the screen, prints
+  `ABCDEFGHIJ` on row 0 and `KLMNOPQRST` on row 1, and gives CLIPBOARD to the
+  verifier. It drags from 2 pixels inside the top-left corner of cell 3 of
+  row 1 to 3 pixels inside its bottom-right corner, then presses Ctrl+Shift+C.
+  Another X client must read exactly `N` from the clipboard. A pointer mapping
+  that is off by a column or a row selects a different cell or spans two rows,
+  and `copied` records that text.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
