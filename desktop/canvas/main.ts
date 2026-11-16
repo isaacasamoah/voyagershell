@@ -29,6 +29,7 @@ import { Chat } from "./chat.js";
 import { errorMessage, outcome, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
+import { agentsShown } from "./agents.js";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
@@ -82,6 +83,7 @@ import type {
 import type { TerminalResponse } from "../../contract/generated/terminalResponse";
 
 const CONTEXT_REFRESH_MS = 3000;
+const PROCESS_QUIET_MS = 250;
 
 type VesselContext = Extract<DockContext, { kind: "vessel" | "portal" }>;
 
@@ -166,6 +168,7 @@ export default class Canvas extends View {
   declare hoveredFleet: string | null;
   processes: ProcessInfo[] = [];
   declare processPending: boolean;
+  declare processStale: boolean;
   private processRead: {
     version: string;
     pending: Promise<ProcessInfo[]>;
@@ -220,6 +223,7 @@ export default class Canvas extends View {
     this.hoveredPanel = null;
     this.hoveredFleet = null;
     this.processPending = false;
+    this.processStale = false;
     this.processError = "Loading agent status";
     this.splitReset = 0;
     this.splitSession = request_id();
@@ -234,18 +238,7 @@ export default class Canvas extends View {
       while (true) {
         await this.readContext(task);
         await this.readObservation(task);
-        if (
-          this.layout &&
-          activeGroups(this.layout).some((group) =>
-            visiblePanels(group, true).some((panel) =>
-              this.layout?.vessels.some(
-                (content) =>
-                  content.id === panel.vessel && content.typeId === "agents",
-              ),
-            ),
-          )
-        )
-          await this.readProcesses(task);
+        if (agentsShown(this.layout)) await this.readProcesses(task);
         await task.sleep(CONTEXT_REFRESH_MS);
       }
     });
@@ -435,6 +428,7 @@ export default class Canvas extends View {
   }
 
   async readProcesses(cx: AsyncContext) {
+    this.processStale = this.processPending;
     if (this.processPending) return;
     const version = this.version;
     this.processPending = true;
@@ -459,8 +453,10 @@ export default class Canvas extends View {
         }
       }
     } finally {
+      if (this.processStale) await cx.sleep(PROCESS_QUIET_MS);
       this.processPending = false;
     }
+    if (this.processStale) await this.readProcesses(cx);
   }
 
   private async processSnapshot(version: string): Promise<ProcessInfo[]> {
@@ -1342,7 +1338,7 @@ export default class Canvas extends View {
     });
   }
 
-  readActivity(revision: string) {
+  readActivity(revision: string, cx: UIContext) {
     if (this.activityRevision === revision) return;
     const value: unknown = JSON.parse(reported_activity());
     if (!validateReportedActivity(value))
@@ -1352,6 +1348,7 @@ export default class Canvas extends View {
       ? (value.reason ?? "Bound terminal observation limit exceeded")
       : null;
     this.activityRevision = revision;
+    if (agentsShown(this.layout)) cx.spawn((task) => this.readProcesses(task));
   }
 
   action(
@@ -1984,7 +1981,7 @@ export default class Canvas extends View {
     const ownerNotice = workspace_notice();
     if (ownerNotice.activityRevision !== undefined) {
       try {
-        this.readActivity(ownerNotice.activityRevision);
+        this.readActivity(ownerNotice.activityRevision, cx);
       } catch (error) {
         this.status = errorMessage(error);
       }

@@ -22,7 +22,10 @@ Browser embedding and additional provider implementations remain separate work.
 
 ## The front door
 
-Every request passes `app/src/front_door.rs` on the owner thread, in this order.
+Every request that carries an identity passes `app/src/front_door.rs` on the
+owner thread, in this order. View registration, content binding, workspace
+observations and change subscriptions carry no identity and change nothing, so
+they do not pass it.
 
 1. **Envelope.** The owner builds one `Envelope` from the bound caller and the
    request. It holds the request id, the kind, the caller, the target, the
@@ -49,8 +52,16 @@ is not stored, so nothing but the first answer can ever be replayed. An
 uncertain answer is stored like any other and is never run again.
 
 Later steps of an admitted effect use the same gate. Those are the worktree
-removal preflight, the worktree completion, and the Core terminal list that
-closes Vessels whose programs ended. That list result carries the Core caller.
+removal preflight and the worktree completion.
+
+Core's reports pass the same door. Each event on Core's subscription becomes an
+envelope with the Core caller and the terminal's address as its target. A
+report has no effect, so the gate passes it, and the owner keeps it only when a
+Vessel's backend names that terminal. Closing a Vessel whose program exited is
+the Core caller's one effect. It uses the gate too, whether the exit came from
+an event, a snapshot or the observation's terminal list. A report never enters
+the ledger, because Core's event sequence already tells one report from the
+next. [The Core adapter](terminal.md#core-adapter) describes the whole path.
 
 ### What the caller is told
 
@@ -114,6 +125,11 @@ then. While that save is in flight:
 When the reply lands, the owner installs the saved layout only if its revision
 is newer than the layout it holds. An inspect during the flight may already
 have loaded it.
+
+A `terminal.list` that an effect needs first departs the same way: the check
+before a worktree removal, the plan of a Voyage close, and a Voyage or Fleet
+created from a live directory. When the list lands, the request is decided
+again from the start with the list in hand.
 
 The other saves still block the owner: opening a terminal, selecting or
 configuring a Note, the last step of a Voyage close or a worktree change, the
@@ -691,9 +707,10 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most eleven pending RPCs: at most eight admitted process effects, the one shared
-terminal list that observations and the exit check wait on, the one workspace
-save in flight, and one ordinary owner call. Process admissions remain counted
+most eighteen pending RPCs: at most eight admitted process effects, at most
+three process reads at two calls each, the one shared terminal list that observations
+wait on, the one workspace save or list in flight, the activity subscription
+and one ordinary owner call. Process admissions remain counted
 until the owner reconciles completion. The [front door](#the-front-door) ledger
 keeps every pending request and evicts settled entries only. Replies received after a caller has gone away
 are ignored without disconnecting unrelated viewers. Disconnects release all

@@ -23,9 +23,12 @@ use voyager_contract::{
 mod core_calls;
 #[path = "client_reply.rs"]
 mod reply;
-use crate::front_door::{Admission, Envelope, FrontDoor, Kind, Outcome, WAITING};
+use crate::front_door::{Admission, Envelope, FrontDoor, Outcome, WAITING};
 use crate::layout_store::{begin_save, carry_notice, load, save};
-use core_calls::{Listing, Observer, changed_layout, commit, live, next_message, post};
+use core_calls::{
+    Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, live,
+    live_directories, post, relist, reports, unlisted,
+};
 
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
@@ -52,10 +55,11 @@ enum Message {
         reply: SyncSender<Response>,
         result: Result<(), Error>,
     },
-    ActivityChanged,
+    CoreReported,
     RefreshActivity {
         reply: async_channel::Sender<()>,
     },
+    Subscribed,
     Quit {
         operation: Lifecycle,
         reply: async_channel::Sender<Result<(), Error>>,
@@ -111,8 +115,11 @@ enum Message {
         scope: Option<Context>,
         request: voyager_contract::worktree::Request,
         source_directory: String,
-        checkout: voyager_contract::worktree::Checkout,
-        reply: SyncSender<Result<(), String>>,
+        reply: SyncSender<Result<Vec<String>, String>>,
+    },
+    RemovalListed {
+        reply: SyncSender<Result<Vec<String>, String>>,
+        terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
     WorktreeDone {
         scope: Option<Context>,
@@ -129,7 +136,7 @@ enum Message {
     },
     ProcessDone {
         request_id: String,
-        result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+        completed: crate::process::Completed,
         reply: SyncSender<Arc<ProcessResponse>>,
     },
     Workspace {
@@ -158,6 +165,12 @@ enum Message {
     },
     Saved {
         result: Result<u64, Error>,
+    },
+    Relisted {
+        request: Request,
+        scope: Option<Context>,
+        reply: SyncSender<Response>,
+        terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
 }
 
@@ -250,6 +263,7 @@ struct Flight {
 enum Step {
     Done,
     Deferred,
+    List,
     Save(Box<Departure>),
 }
 
@@ -283,8 +297,11 @@ impl Message {
             | Self::NoteRenameReady { .. } => return true,
             Self::PrepareContext { .. }
             | Self::CloseSaves { .. }
-            | Self::ActivityChanged
+            | Self::CoreReported
             | Self::RefreshActivity { .. }
+            | Self::Subscribed
+            | Self::RemovalListed { .. }
+            | Self::Relisted { .. }
             | Self::Launches { .. }
             | Self::RefreshContentViews
             | Self::RegisterView { .. }
@@ -445,12 +462,15 @@ impl Client {
         let close_sender = sender.clone();
         let core_sender = sender.clone();
         thread::spawn(move || {
-            let mut core = Core::connect_activity(&session, observed_activity.clone());
-            if let Ok(core) = &mut core {
-                core.observe_activity(Box::new(move || {
-                    let _ = activity_sender.try_send(Message::ActivityChanged);
+            if let Ok(mut activity) = observed_activity.lock() {
+                activity.wake_with(Box::new(move || {
+                    let _ = activity_sender.try_send(Message::CoreReported);
                 }));
             }
+            let mut core = Core::connect_activity(&session, observed_activity.clone());
+            let mut subscription = Subscription::default();
+            subscription.begin(&mut core, false, &core_sender);
+            let mut exits = Vec::<CoreTerminalId>::new();
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
             let mut fresh = false;
@@ -462,44 +482,49 @@ impl Client {
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut listing = Listing::default();
-            let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
+            let mut notices = Notices::new(observed_activity.clone(), published_packages);
             let mut closing = crate::voyage_close::Closing::default();
             let mut renaming: Option<(
                 crate::voyage_close::SaveTicket,
                 crate::content::rename::Plan,
                 crate::voyage_close::RenameRelease,
             )> = None;
-            while let Ok(message) = next_message(
-                (!door.flying()).then(|| held.pop_front()).flatten(),
-                &receiver,
-                &observed_activity,
-                &layout,
-                WorkspaceNotice {
-                    revision: version,
-                    package_revision: published_packages.load(Ordering::Relaxed),
-                    activity_revision: 0,
-                    close_revision: closing.revision,
-                },
-                workspace_listener.as_ref(),
-            ) {
-                if door.flying() && message.waits(held.len()) {
-                    held.push_back(message);
-                    continue;
+            loop {
+                let reported = reports(&observed_activity, &layout, &mut exits, |event| {
+                    door.gate(&Envelope::report(event)).is_ok()
+                });
+                let before = version;
+                if !door.flying() && !exits.is_empty() {
+                    let closure = Envelope::observed(close_client.request_id(), version);
+                    if door.gate(&closure).is_err() {
+                        exits.clear();
+                    } else if fresh && let Ok(current_core) = core.as_mut() {
+                        let live = live(&live_bindings, &closing);
+                        let ended = std::mem::take(&mut exits);
+                        let saved = (&mut layout, &mut version, &mut fresh);
+                        close_exited(current_core, saved, &ended, &live);
+                    }
                 }
-                if observed_activity
-                    .lock()
-                    .is_ok_and(|mut activity| activity.take_ended())
-                {
-                    listing.exit();
+                if reported || version != before {
+                    notices.send(version, closing.revision);
                 }
                 if !door.quitting()
                     && let Ok(current_core) = core.as_mut()
                 {
                     listing.start(current_core, &layout, version, fresh, &core_sender);
                 }
+                let waiting = (!door.flying()).then(|| held.pop_front()).flatten();
+                let Ok(message) = waiting.map_or_else(|| receiver.recv_blocking(), Ok) else {
+                    break;
+                };
+                if door.flying() && message.waits(held.len()) {
+                    held.push_back(message);
+                    continue;
+                }
                 let previous_version = version;
                 let previous_close_revision = closing.revision;
                 let mut landed = None;
+                let mut listed = None;
                 let mut note_exit = None;
                 let mut rename_ready = None;
                 let mut rename_rebind = None;
@@ -618,28 +643,17 @@ impl Client {
                                 close_plan: plan,
                             }),
                         );
-                        if let Some(listener) = &workspace_listener {
-                            let _ = listener.try_send(WorkspaceNotice {
-                                revision: version,
-                                close_revision: closing.revision,
-                                package_revision: published_packages.load(Ordering::Relaxed),
-                                activity_revision: core
-                                    .as_ref()
-                                    .map(Core::activity_revision)
-                                    .unwrap_or(0),
-                            });
-                        }
+                        notices.send(version, closing.revision);
                         let _ = reply.send(response);
                         continue;
                     }
-                    Message::ActivityChanged => continue,
+                    Message::CoreReported => continue,
                     Message::RefreshActivity { reply } => {
-                        if !door.quitting()
-                            && let Ok(core) = &mut core
-                        {
-                            core.refresh_activity();
-                        }
-                        let _ = reply.try_send(());
+                        subscription.refresh(&mut core, door.quitting(), &core_sender, reply);
+                        continue;
+                    }
+                    Message::Subscribed => {
+                        subscription.landed();
                         continue;
                     }
                     Message::Quit { operation, reply } => {
@@ -683,11 +697,8 @@ impl Client {
                             active,
                             reply,
                         };
-                        match core.as_mut() {
-                            Ok(current_core) if !door.quitting() => {
-                                listing.observe(observer);
-                                listing.start(current_core, &layout, version, fresh, &core_sender);
-                            }
+                        match &core {
+                            Ok(_) if !door.quitting() => listing.observe(observer),
                             _ => observer.answer(&layout, version, fresh, None),
                         }
                         continue;
@@ -714,15 +725,7 @@ impl Client {
                                     &mut fresh,
                                     candidate,
                                 )?;
-                                if let Some(listener) = &workspace_listener {
-                                    let _ = listener.try_send(WorkspaceNotice {
-                                        revision: version,
-                                        close_revision: closing.revision,
-                                        package_revision: published_packages
-                                            .load(Ordering::Relaxed),
-                                        activity_revision: current_core.activity_revision(),
-                                    });
-                                }
+                                notices.send(version, closing.revision);
                             }
                             if current {
                                 live_bindings = terminals
@@ -735,28 +738,15 @@ impl Client {
                         })();
                         let listed = closed.map(|()| terminals.as_deref());
                         listing.answer(begun, listed, &layout, version, fresh);
-                        if !door.quitting()
-                            && let Ok(current_core) = core.as_mut()
-                        {
-                            listing.start(current_core, &layout, version, fresh, &core_sender);
-                        }
                         continue;
                     }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
-                        let current = WorkspaceNotice {
-                            close_revision: closing.revision,
-                            revision: version,
-                            activity_revision: core
-                                .as_ref()
-                                .map(Core::activity_revision)
-                                .unwrap_or(0),
-                            package_revision: published_packages.load(Ordering::Relaxed),
-                        };
+                        let current = notices.current(version, closing.revision);
                         if after != Some(current) {
                             let _ = send.try_send(current);
                         }
-                        workspace_listener = Some(send);
+                        notices.listener = Some(send);
                         let _ = reply.try_send(receive);
                         continue;
                     }
@@ -926,18 +916,8 @@ impl Client {
                         {
                             owner.refresh_views();
                         }
-                        if version != previous_version
-                            && let Some(listener) = &workspace_listener
-                        {
-                            let _ = listener.try_send(WorkspaceNotice {
-                                close_revision: closing.revision,
-                                package_revision: published_packages.load(Ordering::Relaxed),
-                                revision: version,
-                                activity_revision: core
-                                    .as_ref()
-                                    .map(Core::activity_revision)
-                                    .unwrap_or(0),
-                            });
+                        if version != previous_version {
+                            notices.send(version, closing.revision);
                         }
                         door.record(ticket, Receipt::Content(Arc::clone(&response)));
                         reply.deliver(response);
@@ -947,10 +927,9 @@ impl Client {
                         scope,
                         request,
                         source_directory,
-                        checkout,
                         reply,
                     } => {
-                        let preflight = (|| -> Result<(), String> {
+                        let preflight = (|| -> Result<_, String> {
                             door.gate(&Envelope::worktree(scope.as_ref(), &request))
                                 .map_err(|_| {
                                     "Voyager is quitting; no worktree was removed".to_owned()
@@ -989,27 +968,25 @@ impl Client {
                                         .into(),
                                 );
                             }
-                            let mut live = Vec::new();
-                            for terminal in core.terminal_list().map_err(|error| {
-                                format!("Cannot check live process directories: {error:?}")
-                            })? {
-                                if terminal.is_live() {
-                                    if terminal.cwd.is_empty() {
-                                        return Err("A live terminal directory is unavailable; no worktree was removed".into());
-                                    }
-                                    live.push(terminal.cwd);
-                                    let foreground = terminal.foreground.ok_or("A live foreground process directory is unavailable; no worktree was removed")?;
-                                    if foreground.cwd.is_empty() {
-                                        return Err("A live foreground process directory is unavailable; no worktree was removed".into());
-                                    }
-                                    live.push(foreground.cwd);
-                                }
-                            }
-                            crate::worktrees::check_live_directories(&checkout.path, &live)
-                                .map_err(|error| format!("{error:?}"))?;
-                            Ok(())
+                            core.begin_terminal_list().map_err(unlisted)
                         })();
-                        let _ = reply.send(preflight);
+                        match preflight {
+                            Ok(pending) => {
+                                door.depart();
+                                post(&core_sender, pending, move |listed| {
+                                    Message::RemovalListed {
+                                        reply,
+                                        terminals: listed.map(|listed| listed.terminals),
+                                    }
+                                });
+                            }
+                            Err(error) => drop(reply.send(Err(error))),
+                        }
+                        continue;
+                    }
+                    Message::RemovalListed { reply, terminals } => {
+                        door.land();
+                        let _ = reply.send(live_directories(terminals));
                         continue;
                     }
                     Message::WorktreeDone {
@@ -1116,15 +1093,7 @@ impl Client {
                                 if let Some(owner) = content.as_mut() {
                                     owner.refresh_views();
                                 }
-                                if let Some(listener) = &workspace_listener {
-                                    let _ = listener.try_send(WorkspaceNotice {
-                                        close_revision: closing.revision,
-                                        revision: version,
-                                        package_revision: published_packages
-                                            .load(Ordering::Relaxed),
-                                        activity_revision: core.activity_revision(),
-                                    });
-                                }
+                                notices.send(version, closing.revision);
                                 Ok(())
                             })();
                             if let Err(error) = completion {
@@ -1181,7 +1150,7 @@ impl Client {
                             }
                         };
                         let prepared = (|| -> Result<(String, Vec<String>), String> {
-                            if door.pending(Kind::Worktree) > 0 {
+                            if door.crowded(&Envelope::worktree(scope.as_ref(), &request)) {
                                 return Err("A worktree operation is already pending".into());
                             }
                             if !fresh || version != request.expected_version {
@@ -1255,8 +1224,19 @@ impl Client {
                                                 ));
                                             }
                                             let (approval, receive) = mpsc::sync_channel(1);
-                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), checkout: checkout.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
-                                            receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
+                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
+                                            let live = receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
+                                            crate::worktrees::check_live_directories(
+                                                &checkout.path,
+                                                &live,
+                                            )
+                                            .map_err(
+                                                |error| {
+                                                    crate::worktrees::Error::Rejected(format!(
+                                                        "{error:?}"
+                                                    ))
+                                                },
+                                            )?;
                                             crate::worktrees::remove(
                                                 std::path::Path::new(&directory),
                                                 &checkout.path,
@@ -1334,12 +1314,7 @@ impl Client {
                                 continue;
                             }
                         };
-                        let result = if door.pending(Kind::Process) >= 8
-                            && !matches!(
-                                request.input.action,
-                                voyager_contract::administrator::ProcessAction::List
-                                    | voyager_contract::administrator::ProcessAction::Read { .. }
-                            ) {
+                        let result = if door.crowded(&Envelope::process(&scope, &request)) {
                             Err(rejected(
                                 "Process request limit reached; no effect was queued".into(),
                             ))
@@ -1361,28 +1336,27 @@ impl Client {
                                 Err(error) => Err(error.clone()),
                             }
                         };
-                        let settled = match result {
-                            Ok(crate::process::Started::Waiting(effect)) => {
+                        let error = match result {
+                            Ok(effect) => {
                                 door.open(ticket);
                                 let sender = process_sender.clone();
                                 thread::spawn(move || {
-                                    let result = effect.wait();
+                                    let completed = effect.wait(version);
                                     let _ = sender.send_blocking(Message::ProcessDone {
                                         request_id: request.request_id,
-                                        result,
+                                        completed,
                                         reply,
                                     });
                                 });
                                 continue;
                             }
-                            Ok(crate::process::Started::Ready(output)) => Ok(output),
-                            Err(error) => Err(error),
+                            Err(error) => error,
                         };
                         let answer = process_response(
                             request.request_id.clone(),
                             version,
                             &mut fresh,
-                            settled.into(),
+                            Err(error).into(),
                         );
                         door.record(ticket, Receipt::Process(Arc::clone(&answer)));
                         let _ = reply.send(answer);
@@ -1390,14 +1364,14 @@ impl Client {
                     }
                     Message::ProcessDone {
                         request_id,
-                        result,
+                        completed,
                         reply,
                     } => {
                         let outcome = process_response(
                             request_id.clone(),
-                            version,
+                            completed.read_at.unwrap_or(version),
                             &mut fresh,
-                            result.into(),
+                            completed.result.into(),
                         );
                         door.settle(&request_id, Receipt::Process(Arc::clone(&outcome)));
                         let _ = reply.send(outcome);
@@ -1472,6 +1446,17 @@ impl Client {
                                 Step::Done
                             },
                         ));
+                        (request, scope, reply)
+                    }
+                    Message::Relisted {
+                        request,
+                        scope,
+                        reply,
+                        terminals,
+                    } => {
+                        door.land();
+                        door.forget(&request.request_id);
+                        listed = Some(terminals);
                         (request, scope, reply)
                     }
                     Message::Workspace {
@@ -1722,12 +1707,15 @@ impl Client {
                                         .map_err(rejected)?;
                                     match &request.action {
                                         Action::CloseVoyage { id } => {
+                                            let Some(terminals) = listed.take() else {
+                                                return Ok(Step::List);
+                                            };
                                             closing.prepare(
                                                 &layout,
                                                 version,
                                                 id,
                                                 &request.request_id,
-                                                core,
+                                                &terminals?,
                                             )?;
                                             response.message = Some(
                                                 "Confirm the Voyage shutdown; no work has stopped"
@@ -1925,11 +1913,14 @@ impl Client {
                                             source,
                                             voyager_contract::DirectorySource::Live { .. }
                                         ) {
-                                            Some(core.terminal_list().map_err(|error| {
-                                            rejected(format!(
-                                                "Live directory observation unavailable: {error:?}"
-                                            ))
-                                        })?)
+                                            let Some(terminals) = listed.take() else {
+                                                return Ok(Step::List);
+                                            };
+                                            Some(terminals.map_err(|error| {
+                                                rejected(format!(
+                                                    "Live directory observation unavailable: {error:?}"
+                                                ))
+                                            })?)
                                         } else {
                                             None
                                         };
@@ -2020,6 +2011,18 @@ impl Client {
                         });
                         continue;
                     }
+                    Ok(Step::List) => {
+                        match relist(&mut core, &core_sender, &request, scope.as_ref(), &reply) {
+                            Ok(()) => {
+                                if let Some(ticket) = ticket {
+                                    door.open(ticket);
+                                }
+                                door.depart();
+                                continue;
+                            }
+                            Err(error) => Err(error),
+                        }
+                    }
                     other => other,
                 };
                 let deferred = matches!(step, Ok(Step::Deferred));
@@ -2059,20 +2062,9 @@ impl Client {
                     || closing.revision != previous_close_revision
                 {
                     if package_changed {
-                        let next = published_packages.load(Ordering::Relaxed).saturating_add(1);
-                        published_packages.store(next, Ordering::Relaxed);
+                        notices.packages.fetch_add(1, Ordering::Relaxed);
                     }
-                    if let Some(listener) = &workspace_listener {
-                        let _ = listener.try_send(WorkspaceNotice {
-                            package_revision: published_packages.load(Ordering::Relaxed),
-                            revision: version,
-                            activity_revision: core
-                                .as_ref()
-                                .map(Core::activity_revision)
-                                .unwrap_or(0),
-                            close_revision: closing.revision,
-                        });
-                    }
+                    notices.send(version, closing.revision);
                 }
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
                     && response.status == voyager_contract::Outcome::Applied

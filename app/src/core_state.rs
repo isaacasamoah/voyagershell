@@ -63,8 +63,12 @@ impl Terminal {
     }
 
     pub fn has_exited(&self) -> bool {
-        self.has_ended() && self.reason.as_deref() == Some(EXITED)
+        exited(Some(&self.state), self.reason.as_deref())
     }
+}
+
+pub(crate) fn exited(state: Option<&str>, reason: Option<&str>) -> bool {
+    state == Some(FINISHED) && reason == Some(EXITED)
 }
 
 #[cfg(test)]

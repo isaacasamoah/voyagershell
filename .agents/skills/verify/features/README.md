@@ -32,6 +32,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Stored layout across builds | covered | none | none | covered | layout-compat, layout-refused, layout-corrupt | - | linux |
 | Front door | covered | none | none | covered | slow-save | - | linux |
 | Refused and uncertain results | covered | none | none | covered | outcomes | - | linux |
+| Core reports and slow reads | covered | none | none | covered | core-events, slow-list | - | linux |
 <!-- features:end -->
 
 Recipes: [terminal-scrolling.md](terminal-scrolling.md),

@@ -1,10 +1,11 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_theme";
+import { Marker } from "voyager_native";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";
-import { visiblePanels } from "./panels.js";
+import { activeGroups, visiblePanels } from "./panels.js";
 import type { Context, NativeElement } from "gpui-kit";
 import type { Layout, PlacementOwner } from "../../contract/generated/response";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
@@ -73,6 +74,20 @@ type Row = {
   group: string;
   status: keyof typeof STATES;
 };
+
+export function agentsShown(layout: Layout | null | undefined): boolean {
+  return (
+    !!layout &&
+    activeGroups(layout).some((group) =>
+      visiblePanels(group, true).some((panel) =>
+        layout.vessels.some(
+          (content) =>
+            content.id === panel.vessel && content.typeId === "agents",
+        ),
+      ),
+    )
+  );
+}
 
 export function agentsView(
   layout: Layout,
@@ -210,11 +225,12 @@ export function agentsView(
         });
       }
   }
-  const row = (item: Row): NativeElement =>
-    Button.new(`vessel-${item.id}`)
-      .accessibility_label(
-        [item.name, item.program, item.detail].filter(Boolean).join(", "),
-      )
+  const row = (item: Row): NativeElement => {
+    const label = [item.name, item.program, item.detail]
+      .filter(Boolean)
+      .join(", ");
+    return Button.new(`vessel-${item.id}`)
+      .accessibility_label(label)
       .tooltip(item.hint)
       .w_full()
       .justify_start()
@@ -260,7 +276,9 @@ export function agentsView(
                 ]
               : [],
           ),
-      );
+      )
+      .child(Marker.new("agents-row", item.id, label));
+  };
   const section = (id: string, title: string, items: Row[]): NativeElement => {
     const collapsed = options?.collapsed.has(id) || false;
     return div()

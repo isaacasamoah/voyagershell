@@ -497,6 +497,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/arrangement.rs"),
     ),
     ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
+    (
+        "src/journey/core_events.rs",
+        include_bytes!("journey/core_events.rs"),
+    ),
     ("src/journey/input.rs", include_bytes!("journey/input.rs")),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
@@ -534,6 +538,10 @@ const SOURCES: &[(&str, &[u8])] = &[
     (
         "src/journey/scrolling.rs",
         include_bytes!("journey/scrolling.rs"),
+    ),
+    (
+        "src/journey/slow_list.rs",
+        include_bytes!("journey/slow_list.rs"),
     ),
     (
         "src/journey/slow_save.rs",

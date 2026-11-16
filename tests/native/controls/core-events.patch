@@ -1,0 +1,16 @@
+diff --git a/app/src/activity.rs b/app/src/activity.rs
+index ee584f0..208d6ee 100644
+--- a/app/src/activity.rs
++++ b/app/src/activity.rs
+@@ -276,10 +276,7 @@ impl Activity {
+                 self.record(address, fact);
+                 Vec::new()
+             }
+-            (Report::Foreground, Some(_)) => {
+-                self.changed();
+-                Vec::new()
+-            }
++            (Report::Foreground, Some(_)) => Vec::new(),
+             (Report::Lost | Report::Removed, Some(address)) => {
+                 self.record(address, unknown(ENDED));
+                 Vec::new()

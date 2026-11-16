@@ -106,6 +106,7 @@ roles! {
     WindowMinimize => "window-minimize",
     WindowMaximize => "window-maximize",
     WindowClose => "window-close",
+    AgentsRow => "agents-row",
 }
 
 #[cfg(test)]

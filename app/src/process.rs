@@ -1,6 +1,6 @@
 use crate::{
-    core::{Core, Error, MAX_INPUT_BYTES, Pending},
-    core_shapes::{InterruptResult, SendResult, Terminal},
+    core::{Core, Error, MAX_INPUT_BYTES, Pending, TerminalList},
+    core_shapes::{InterruptResult, ReadResult, SendResult, Terminal},
     core_state::TerminalState,
     scope,
 };
@@ -18,7 +18,8 @@ fn refused(message: &str) -> Error {
 }
 
 fn info(content: &VesselId, terminal: Terminal, layout: &Layout) -> ProcessInfo {
-    let reported_activity = Some(Arc::new(Core::reported_activity(&terminal)));
+    let reported = serde_json::to_value(&terminal).unwrap_or_default();
+    let reported_activity = Some(Arc::new(crate::activity::Activity::inspect(reported)));
     let agent_name = crate::observation::conversation_name(&terminal).or_else(|| {
         layout
             .vessels
@@ -96,20 +97,117 @@ fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutp
     Ok(ProcessOutput::Stop { target, observed })
 }
 
-pub(crate) enum Started {
-    Ready(ProcessOutput),
-    Waiting(Effect),
-}
-
 pub(crate) enum Effect {
+    List(Arc<Layout>, Pending<TerminalList>),
+    Read {
+        visible: Arc<Layout>,
+        vessel: VesselId,
+        terminal: CoreTerminalId,
+        observed: Pending<Terminal>,
+        text: Pending<ReadResult>,
+    },
     Send(ProcessInfo, Pending<SendResult>),
     Interrupt(ProcessInfo, Pending<InterruptResult>),
     Stop(ProcessInfo, Pending<Terminal>, Arc<Layout>),
 }
 
+fn identified(terminal: Terminal, address: &CoreTerminalId) -> Result<Terminal, Error> {
+    if terminal.address == address.0 {
+        Ok(terminal)
+    } else {
+        Err(refused(
+            "Core returned a different terminal identity; nothing was submitted",
+        ))
+    }
+}
+
+fn running(
+    core: &mut Core,
+    content: &VesselId,
+    address: &CoreTerminalId,
+    visible: &Layout,
+    pid: u32,
+    unsent: &str,
+) -> Result<ProcessInfo, Error> {
+    let observed = identified(core.terminal_get(&address.0)?, address)?;
+    let target = info(content, observed, visible);
+    if !is_live(&target.state) || pid == 0 || target.pid != Some(pid) {
+        return Err(refused(&format!(
+            "The inspected running process identity has changed or ended; {unsent}"
+        )));
+    }
+    Ok(target)
+}
+
+fn listed(visible: &Layout, listed: Vec<Terminal>) -> ProcessOutput {
+    let mut processes = Vec::new();
+    let mut unavailable = Vec::new();
+    for binding in visible
+        .vessels
+        .iter()
+        .filter(|item| item.type_id == "terminal")
+    {
+        if let Some(address) = &binding.backend {
+            if let Some(terminal) = listed.iter().find(|terminal| terminal.address == address.0) {
+                processes.push(info(&binding.id, terminal.clone(), visible));
+            } else {
+                unavailable.push(binding.id.clone());
+            }
+        }
+    }
+    ProcessOutput::List {
+        processes,
+        unavailable,
+    }
+}
+
+fn read(target: ProcessInfo, read: ReadResult) -> ProcessOutput {
+    let limited = read.text.len() > 16 * 1024;
+    let text = if limited {
+        read.text[read.text.ceil_char_boundary(read.text.len() - 16 * 1024)..].to_owned()
+    } else {
+        read.text
+    };
+    ProcessOutput::Read {
+        target,
+        text,
+        complete: read.complete && !limited,
+        how: read.how,
+        why: read.why,
+        limited,
+    }
+}
+
+pub(crate) struct Completed {
+    pub(crate) read_at: Option<u64>,
+    pub(crate) result: Result<ProcessOutput, Error>,
+}
+
 impl Effect {
-    pub(crate) fn wait(self) -> Result<ProcessOutput, Error> {
+    pub(crate) fn wait(self, dispatched: u64) -> Completed {
+        let read_at = match &self {
+            Self::List(..) | Self::Read { .. } => Some(dispatched),
+            Self::Send(..) | Self::Interrupt(..) | Self::Stop(..) => None,
+        };
+        Completed {
+            read_at,
+            result: self.settle(),
+        }
+    }
+
+    fn settle(self) -> Result<ProcessOutput, Error> {
         match self {
+            Self::List(visible, pending) => Ok(listed(&visible, pending.wait()?.terminals)),
+            Self::Read {
+                visible,
+                vessel,
+                terminal,
+                observed,
+                text,
+            } => {
+                let observed = identified(observed.wait()?, &terminal)?;
+                Ok(read(info(&vessel, observed, &visible), text.wait()?))
+            }
             Self::Send(target, pending) => {
                 let sent = pending.wait()?;
                 Ok(ProcessOutput::Send {
@@ -141,7 +239,7 @@ pub(crate) fn start(
     layout: &Arc<Layout>,
     context: &Context,
     action: &ProcessAction,
-) -> Result<Started, Error> {
+) -> Result<Effect, Error> {
     let visible = scope::project(layout, Some(context));
     if visible.containers().next().is_none() {
         return Err(refused("The request's captured focus no longer exists"));
@@ -195,90 +293,54 @@ pub(crate) fn start(
                 "Process input exceeds the owner's byte limit; nothing was submitted",
             ));
         }
-        let terminal = core.terminal_get(&address.0)?;
-        if terminal.address != address.0 {
-            return Err(refused(
-                "Core returned a different terminal identity; nothing was submitted",
-            ));
-        }
-        let target = info(content, terminal, &visible);
         match action {
-            ProcessAction::Read { lines, .. } => {
-                let read = core.terminal_read(&address.0, *lines)?;
-                let limited = read.text.len() > 16 * 1024;
-                let text = if limited {
-                    read.text[read.text.ceil_char_boundary(read.text.len() - 16 * 1024)..]
-                        .to_owned()
-                } else {
-                    read.text
-                };
-                Ok(Started::Ready(ProcessOutput::Read {
-                    target,
-                    text,
-                    complete: read.complete && !limited,
-                    how: read.how,
-                    why: read.why,
-                    limited,
-                }))
-            }
+            ProcessAction::Read { lines, .. } => Ok(Effect::Read {
+                visible,
+                vessel: content.clone(),
+                terminal: address.clone(),
+                observed: core.begin_terminal_get(&address.0)?,
+                text: core.begin_terminal_read(&address.0, *lines)?,
+            }),
             ProcessAction::Send { pid, text, .. } => {
-                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
-                    return Err(refused(
-                        "The inspected running process identity has changed or ended; nothing was submitted",
-                    ));
-                }
-                Ok(Started::Waiting(Effect::Send(
+                let target = running(
+                    core,
+                    content,
+                    address,
+                    &visible,
+                    *pid,
+                    "nothing was submitted",
+                )?;
+                Ok(Effect::Send(
                     target,
                     core.begin_terminal_send(&address.0, text)?,
-                )))
+                ))
             }
             ProcessAction::Interrupt { pid, .. } => {
-                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
-                    return Err(refused(
-                        "The inspected running process identity has changed or ended; no interrupt was sent",
-                    ));
-                }
-                Ok(Started::Waiting(Effect::Interrupt(
+                let target = running(
+                    core,
+                    content,
+                    address,
+                    &visible,
+                    *pid,
+                    "no interrupt was sent",
+                )?;
+                Ok(Effect::Interrupt(
                     target,
                     core.begin_terminal_interrupt(&address.0)?,
-                )))
+                ))
             }
             ProcessAction::Stop { pid, .. } => {
-                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
-                    return Err(refused(
-                        "The inspected running process identity has changed or ended; no stop was sent",
-                    ));
-                }
-                Ok(Started::Waiting(Effect::Stop(
+                let target = running(core, content, address, &visible, *pid, "no stop was sent")?;
+                Ok(Effect::Stop(
                     target,
                     core.begin_terminal_kill(&address.0)?,
                     visible,
-                )))
+                ))
             }
             ProcessAction::List => Err(refused("This operation does not target one terminal")),
         }
     } else {
-        let listed = core.terminal_list()?;
-        let mut processes = Vec::new();
-        let mut unavailable = Vec::new();
-        for binding in visible
-            .vessels
-            .iter()
-            .filter(|item| item.type_id == "terminal")
-        {
-            if let Some(address) = &binding.backend {
-                if let Some(terminal) = listed.iter().find(|terminal| terminal.address == address.0)
-                {
-                    processes.push(info(&binding.id, terminal.clone(), &visible));
-                } else {
-                    unavailable.push(binding.id.clone());
-                }
-            }
-        }
-        Ok(Started::Ready(ProcessOutput::List {
-            processes,
-            unavailable,
-        }))
+        Ok(Effect::List(visible, core.begin_terminal_list()?))
     }
 }
 
