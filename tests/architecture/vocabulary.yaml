@@ -764,7 +764,7 @@ contexts:
     name: Desktop presentation
     summary: 'Draws the Canvas and the Avatar and binds the native window to the application owners.'
     guide: docs/terminal.md
-    owns: [desktop/src/, desktop/canvas/, contract/src/avatar_animation.rs, contract/src/inspection.rs]
+    owns: [desktop/build.rs, desktop/src/, desktop/canvas/, contract/src/avatar_animation.rs, contract/src/inspection.rs]
     uses: [Placement, Portal, Vessel, Context, Operation, Core terminal, Region]
   - id: verification
     name: Verification

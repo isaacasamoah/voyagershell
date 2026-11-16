@@ -172,6 +172,7 @@ Guide: [docs/terminal.md](terminal.md).
 
 Owns files:
 
+- `desktop/build.rs`
 - `desktop/src/`
 - `desktop/canvas/`
 - `contract/src/avatar_animation.rs`

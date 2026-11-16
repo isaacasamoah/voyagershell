@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -93,6 +94,12 @@ def reviewed_tree():
         return git("write-tree", env=env).strip()
 
 
+def generated_by_older_patches(existing, config):
+    cache = re.escape(str(CHECKOUT.parent))
+    shape = lambda text: re.sub(cache + r'/[^"]+', "SDK", text)
+    return shape(existing) == shape(config)
+
+
 def prepare(check):
     previous = f'[patch."{URL}"]\n' + "".join(
         f"{package} = {{ path = {json.dumps(str(CHECKOUT / 'crates' / folder))} }}\n"
@@ -103,7 +110,17 @@ def prepare(check):
         f'gpui-pre-linux = {{ path = {json.dumps(str(LINUX_SOURCE))} }}\n'
     )
     existing = CONFIG.read_text() if CONFIG.exists() else None
-    if existing is not None and existing != config and (check or existing != previous):
+    stale = (
+        existing is not None
+        and existing != config
+        and generated_by_older_patches(existing, config)
+    )
+    if stale and check:
+        raise RuntimeError(
+            f"{CONFIG} points at an SDK prepared from an older patch list, so builds "
+            "would miss newer patches. Run python3 desktop/prepare-sdk.py to refresh it."
+        )
+    if existing is not None and existing != config and not stale and (check or existing != previous):
         raise RuntimeError(f"Preserving existing Cargo configuration: {CONFIG}")
     if not CHECKOUT.exists():
         if check:
