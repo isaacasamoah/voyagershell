@@ -132,6 +132,11 @@ export default class Canvas extends View {
       invoke({ operation: "focus-vessel", id }, this.version).catch(() => null),
     );
   }
+  moveFocus(id, cx) {
+    const changed = id !== this.focused;
+    this.focused = id;
+    if (id && changed) this.noteFocus(id, cx);
+  }
   activePlacement() {
     if (!this.layout) return;
     const shown = shownPanels(this.layout);
@@ -549,7 +554,7 @@ export default class Canvas extends View {
             );
             const opened = rememberedPlacement(current, shown) || shown[0];
             if (changesSelection) this.focused = opened?.id || null;
-            else if (creating && created) this.focused = created.id;
+            else if (creating && created) this.moveFocus(created.id, task);
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
@@ -557,7 +562,7 @@ export default class Canvas extends View {
                   ? created
                   : opened;
               if (target && (maximization || splitMaximized))
-                this.focused = target.id;
+                this.moveFocus(target.id, task);
               if (target) this.terminals.get(target.vessel)?.focusIfUnchanged();
             }
           } catch (error) {
@@ -653,7 +658,10 @@ export default class Canvas extends View {
       !this.layoutName &&
       !window.has_active_dialog()
     ) {
-      this.focused = shown[0]?.id || null;
+      this.moveFocus(
+        (rememberedPlacement(result.layout, shown) || shown[0])?.id || null,
+        task,
+      );
       this.focus.focus();
     }
     this.closeVoyage.observe(result.closePlan);
