@@ -482,12 +482,57 @@ still in the path, so zero measures the relay and not its absence. A run without
 `--core-delay` has no relay. The driver's own requests to Core, including its
 `doc.get` and `terminal.list` reads, go to the socket directly and are never
 held, so an observation sees the true state while the app sees the delayed one.
+Core accepts and answers those requests within 5 s each. When it does not, the
+error reads "Core did not accept METHOD" or "Core did not answer METHOD", then
+"within 5000 ms on the verifier's own connection", with the operating system's
+error 11 after it, and the run is not blamed on the relay.
 
-Each held reply adds a line to `core-relay.jsonl` in the evidence folder when it
-is released. The line holds the method, the request identity, the delay, and the
-times in milliseconds since the Unix epoch at which the request was seen, the
-reply arrived and the reply was released. `checks.json` records the delays as
-`coreDelay`. After the journey the driver reads that ledger, and a line whose method or delay the flag did not ask for ends the run `inconclusive`, blamed on the verifier even when a case failed first.
+Each relay process writes lines to `core-relay.jsonl` in the evidence folder.
+Every line is one JSON object tagged by `event` and carries `relay`, the pid and
+start time of the relay process that wrote it. The app starts a new relay on each
+launch and kills it when it closes its Core connection, and request identities
+restart with each launch, so a hold is identified by its relay and its request
+identity together.
+
+- `alive` is written every 250 ms for as long as the relay runs, with `atMs`.
+- `held` is written when a held reply arrives from Core. It holds the method,
+  the request identity, the delay, and the times in milliseconds since the Unix
+  epoch at which the request was seen and the reply arrived.
+- `released` repeats those fields and adds `releasedAtMs`. It is written only
+  after the relay has written the reply to the app's socket.
+- `undelivered` repeats those fields and adds `undeliveredAtMs` and the error
+  kind, in place of a release when the write fails.
+
+`checks.json` records the delays as `coreDelay`.
+
+After the journey the driver reads that ledger and audits it against the delays
+that the flag asked for, with its own lookup into the parsed flag and not the
+relay's `CoreDelay::hold`. A line that does not parse as one of these events, or
+a ledger that cannot be read, ends the run the same way. Any of these ends the
+run `inconclusive`, blamed on the verifier, even when a case failed first.
+
+- A line whose method or delay the flag did not ask for. A relay that holds every
+  method fails here.
+- A `released` line written more than 1000 ms after `repliedAtMs` plus the
+  delay. A relay that waits several times its delay fails here. In 40 runs of
+  `slow-save` and `outcomes` the release was at most 3 ms late with the machine
+  quiet and at most 8 ms late under 18 busy loops. In 7 runs of `quit-restore`
+  it was at most 119 ms late, while other heavy builds ran on the machine, so the
+  bound leaves room for that.
+- A `held` line with no `released` or `undelivered` line from the same relay,
+  when that relay was still writing `alive` lines more than 1000 ms after the
+  hold was due. A relay that loses a held reply fails here. A relay that was
+  killed before the hold was due did not lose it, which is what happens to a
+  hold in flight when the app closes its Core connection.
+- An `undelivered` line whose error is not `BrokenPipe`. A broken pipe means the
+  app closed its end, which is the app's doing.
+
+Gaps the audit does not close. A relay that overruns its delay by less than
+1000 ms is not caught. A reply lost in the last 1000 ms of a relay's life is not
+caught. A relay that writes a `released` line without writing the reply is
+caught only by the journeys' own checks. `slow-save` reads `released` lines by
+`releasedAtMs` and `outcomes` by `event`, and neither journey fails when either
+filter is removed, so those two filters are unproved.
 
 The driver refuses a delay it cannot apply. A method must be written in lower
 case with dots and underscores, named once, and held for at most 30000 ms. After

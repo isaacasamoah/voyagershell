@@ -208,6 +208,7 @@ fn held_save(native: &Native, asked: u64) -> Result<Held> {
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .filter(|line| {
             line["method"] == METHOD
+                && line["releasedAtMs"].is_u64()
                 && line["requestedAtMs"]
                     .as_u64()
                     .is_some_and(|requested| requested <= asked)

@@ -388,10 +388,7 @@ fn drive(plan: Plan) -> Result<i32> {
         plan.core_delay.as_ref().map(|delay| {
             (
                 "core-relay-ledger",
-                delay.audit(
-                    &fs::read_to_string(native.system.evidence.join("core-relay.jsonl"))
-                        .unwrap_or_default(),
-                ),
+                delay.audit_file(&native.system.evidence),
             )
         }),
         Some((
