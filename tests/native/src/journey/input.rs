@@ -25,6 +25,7 @@ cases! {
     PasteSendsText => "paste-sends-another-clients-text",
     InputDuringFlood => "input-reaches-one-terminal-while-another-floods",
     ClicksSendNoBytes => "clicks-send-no-bytes-to-a-program-that-asked-for-none",
+    DragInOneCellCopiesIt => "a-drag-inside-one-cell-copies-that-cell",
 }
 
 pub const CONTROL: Case = Case::CopyToClipboard;
@@ -38,6 +39,8 @@ const COPIED: &str = "COPYβ界";
 const CANARY: &str = "VERIFIER-CANARY";
 const PRIMARY_CANARY: &str = "VERIFIER-PRIMARY-CANARY";
 const COPIED_CELLS: u16 = 7;
+const CELL: (u16, u16) = (3, 1);
+const CELL_TEXT: &str = "N";
 const SENTINEL: &str = "VERIFIER-SENTINEL";
 const PASTED: &str = "PASTEβ界\nline2";
 const TEXT_TARGET: &str = "UTF8_STRING";
@@ -531,6 +534,36 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(ENDED, ended)
             .observed("received", escaped(&received))?
             .observed("exchanges", &exchanges[held..])
+    })?;
+
+    cases.check(native, Case::DragInOneCellCopiesIt, |native| {
+        terminal.focus(native)?;
+        terminal.echoed(native, "printf '\\033[2J\\033[H%s%s\\n%s%s\\n' ABCDE FGHIJ KLMNO PQRST")?;
+        native.press(Key::Return)?;
+        terminal.shows(native, "KLMNOPQRST")?;
+        let before = terminal.settled(native, "cell-before", |look| Lines::of(look).count() >= 2)?;
+        let cell = terminal.cell(native, CELL.0, CELL.1)?;
+        let (right, bottom) = (
+            cell.x + cell.width as i16 - 3,
+            cell.y + cell.height as i16 - 3,
+        );
+        let verifier = native.clipboard()?.window();
+        native.clipboard()?.own(SENTINEL)?;
+        native.drag_between(&terminal.target(), (cell.x + 2, cell.y + 2), (right, bottom))?;
+        native.press(Key::Char('c').ctrl().shift())?;
+        poll(EXPECTATION, LOOK, true, || {
+            Ok((native.clipboard()?.owner()? != Some(verifier)).then_some(()))
+        })?;
+        let read = native.clipboard()?.read()?;
+        let after = terminal.settled(native, "cell-after", |_| true)?;
+        Verdict::new()
+            .expect(
+                "another X client reads exactly N, the character in cell 3 of row 1, from the clipboard",
+                read == Reading::Text(CELL_TEXT.into()),
+            )
+            .observed("cell", cell)?
+            .observed("changed", changed(&before, &after))?
+            .observed("copied", &read)
     })
 }
 
