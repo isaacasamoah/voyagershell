@@ -801,7 +801,7 @@ terms:
     meaning: 'A known outcome. The application declined the Operation and nothing changed.'
   - term: Uncertain effect
     context: application-queue
-    meaning: 'An outcome the application could not confirm. Never replay it and never restore it automatically.'
+    meaning: 'An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically.'
   - term: Voyage
     context: placement
     meaning: 'A space for one project. It holds Fleets and a Portal column.'
