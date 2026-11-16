@@ -65,16 +65,16 @@ fn effect_script() -> Script {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct Chat {
-    composer: Option<String>,
+pub(super) struct Chat {
+    pub(super) composer: Option<String>,
     send: Option<String>,
-    status: bool,
-    error: Option<String>,
-    messages: Vec<(String, String)>,
+    pub(super) status: bool,
+    pub(super) error: Option<String>,
+    pub(super) messages: Vec<(String, String)>,
 }
 
 impl Chat {
-    fn of(seen: &Seen) -> Self {
+    pub(super) fn of(seen: &Seen) -> Self {
         Self {
             composer: seen.label(&Target::CHAT_COMPOSER).map(str::to_owned),
             send: seen.label(&Target::CHAT_SEND).map(str::to_owned),
@@ -95,22 +95,22 @@ impl Chat {
         }
     }
 
-    fn reply(&self, item: &str) -> Option<&str> {
+    pub(super) fn reply(&self, item: &str) -> Option<&str> {
         self.messages
             .iter()
             .find(|(key, _)| key == item)
             .map(|(_, text)| text.as_str())
     }
 
-    fn says(&self, text: &str) -> bool {
+    pub(super) fn says(&self, text: &str) -> bool {
         self.messages.iter().any(|(_, shown)| shown == text)
     }
 
-    fn sending(&self) -> bool {
+    pub(super) fn sending(&self) -> bool {
         self.send.as_deref() == Some("Send")
     }
 
-    fn interrupting(&self) -> bool {
+    pub(super) fn interrupting(&self) -> bool {
         self.send.as_deref() == Some("Interrupt")
     }
 }
@@ -483,7 +483,7 @@ pub(super) fn saved_name(native: &Native, fleet: &FleetId) -> Result<Option<Stri
     }))
 }
 
-fn type_draft(native: &Native, text: &str) -> Result<Option<String>> {
+pub(super) fn type_draft(native: &Native, text: &str) -> Result<Option<String>> {
     native.click(&Target::CHAT_COMPOSER)?;
     native.type_text(text)?;
     native.settle(
@@ -501,7 +501,7 @@ fn focus_of(turn: &Turn) -> Option<Focus> {
     serde_json::from_str(value).ok()
 }
 
-fn parent_of(pid: u32) -> Option<u32> {
+pub(super) fn parent_of(pid: u32) -> Option<u32> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after = stat.rsplit_once(')')?.1;
     after.split_whitespace().nth(1)?.parse().ok()

@@ -17,6 +17,8 @@ pub const CORE: &str = "/voyager/bin/hc";
 pub const PROVIDER: &str = "/voyager/bin/codex";
 pub const CORE_RELAY: &str = "/voyager/bin/hc-delay";
 pub const PROVIDER_SOCKET: &str = "/voyager/runtime/provider.sock";
+pub const CLAUDE: &str = "/voyager/bin/claude-avatar";
+pub const CLAUDE_SOCKET: &str = "/voyager/runtime/claude.sock";
 pub const DISPLAY: &str = ":99";
 const SHELL_STARTUP: [&str; 4] = [".bashrc", ".bash_profile", ".profile", ".inputrc"];
 
@@ -26,6 +28,7 @@ pub const ENVIRONMENT: &[(&str, &str)] = &[
     ("SHELL", "/bin/bash"),
     ("LANG", "C.UTF-8"),
     ("XDG_RUNTIME_DIR", RUNTIME),
+    ("VOYAGER_CLAUDE_BIN", CLAUDE),
     ("LIBGL_ALWAYS_SOFTWARE", "1"),
     (
         "__EGL_VENDOR_LIBRARY_FILENAMES",
@@ -61,7 +64,7 @@ impl Sandbox<'_> {
             }
         }
         command.extend(["--ro-bind".into(), text(self.core)?, CORE.into()]);
-        for relay in [PROVIDER, CORE_RELAY] {
+        for relay in [PROVIDER, CLAUDE, CORE_RELAY] {
             command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
         }
         for path in [

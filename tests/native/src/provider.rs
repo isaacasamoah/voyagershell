@@ -1,4 +1,4 @@
-use crate::sandbox::PROVIDER_SOCKET;
+use crate::sandbox::{CLAUDE, PROVIDER, PROVIDER_SOCKET, CLAUDE_SOCKET};
 use crate::system::{PATIENCE, TimedOut};
 use anyhow::{Context, Result};
 use anyhow::{bail, ensure};
@@ -13,19 +13,28 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const RELAY_NAME: &str = "codex";
+const RELAYS: [(&str, &str); 2] = [(PROVIDER, PROVIDER_SOCKET), (CLAUDE, CLAUDE_SOCKET)];
+const SESSION_VARIABLES: [&str; 5] = [
+    "HC_SESSION",
+    "HC_SOCKET",
+    "HC_TERMINAL_ID",
+    "HC_SCOPE",
+    "HC_TERMINAL_SOCKET",
+];
 const THREAD: &str = "stand-in-thread";
 const USER_AGENT: &str = "voyager-stand-in/0.0.0";
 
-pub fn invoked_as_relay() -> bool {
-    std::env::args_os()
-        .next()
-        .and_then(|name| Path::new(&name).file_name().map(|name| name == RELAY_NAME))
-        .unwrap_or(false)
+pub fn relay_socket() -> Option<&'static str> {
+    let invoked = std::env::args_os().next()?;
+    let name = Path::new(&invoked).file_name()?;
+    RELAYS
+        .iter()
+        .find(|(path, _)| Path::new(path).file_name() == Some(name))
+        .map(|(_, socket)| *socket)
 }
 
-pub fn relay() -> i32 {
-    match relay_lines() {
+pub fn relay(socket: &str) -> i32 {
+    match relay_lines(socket) {
         Ok(()) => 0,
         Err(error) => {
             eprintln!("Stand-in relay: {error:#}");
@@ -34,14 +43,18 @@ pub fn relay() -> i32 {
     }
 }
 
-fn relay_lines() -> Result<()> {
-    let socket = UnixStream::connect(PROVIDER_SOCKET).context("Stand-in provider socket")?;
+fn relay_lines(path: &str) -> Result<()> {
+    let socket = UnixStream::connect(path).context("Stand-in provider socket")?;
     let mut upstream = socket.try_clone()?;
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let environment: serde_json::Map<String, Value> = SESSION_VARIABLES
+        .iter()
+        .filter_map(|name| Some(((*name).to_owned(), json!(std::env::var(name).ok()?))))
+        .collect();
     writeln!(
         upstream,
         "{}",
-        json!({"relay":"hello","pid":std::process::id(),"args":args})
+        json!({"relay":"hello","pid":std::process::id(),"args":args,"environment":environment,"cwd":std::env::current_dir()?})
     )?;
     thread::spawn(move || {
         for line in io::stdin().lock().lines() {

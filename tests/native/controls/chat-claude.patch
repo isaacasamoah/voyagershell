@@ -1,0 +1,13 @@
+diff --git a/app/src/claude.rs b/app/src/claude.rs
+index 13f6dd9..d8dac4c 100644
+--- a/app/src/claude.rs
++++ b/app/src/claude.rs
+@@ -14,7 +14,7 @@ use voyager_contract::{conversation::Phase, voice::Capability};
+ 
+ pub(crate) const DEFAULT_MODEL: &str = "opus";
+ pub(crate) const DEFAULT_EFFORT: &str = "high";
+-const ALLOWED: [&str; 2] = ["Bash(hc *)", "Bash(voyager *)"];
++const ALLOWED: [&str; 1] = ["Bash"];
+ const THREAD: &str = "claude";
+ const LINE_LIMIT: usize = 1024 * 1024;
+ const SHOWN_OUTPUT: usize = 2048;

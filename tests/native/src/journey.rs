@@ -1,5 +1,6 @@
 mod arrangement;
 mod chat;
+mod chat_claude;
 mod core_events;
 mod input;
 mod layout;
@@ -113,6 +114,7 @@ journeys! {
     Arrangement => "arrangement" in arrangement, sidebar: Some(Sidebar::Open), window: None;
     Portals => "portals" in portals, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     Chat => "chat" in chat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    ChatClaude => "chat-claude" in chat_claude, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     TerminalInput => "terminal-input" in input, sidebar: None, window: None;
     Profile => "profile" in profile, sidebar: None, window: None;
     ProfileUpdates => "profile-updates" in profile_updates, sidebar: None, window: None;

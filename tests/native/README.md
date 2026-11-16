@@ -456,7 +456,8 @@ error.
 The app starts its private conversation by running `codex app-server` from
 `PATH`. In the sandbox that finds the verifier binary, which sees its own name
 and runs as a relay. The relay connects to `/voyager/runtime/provider.sock`,
-sends a hello line with its PID and arguments, then copies the app's stdin lines
+sends a hello line with its PID, arguments, working folder and the Core session
+variables it was given, then copies the app's stdin lines
 to the socket and the socket's lines to its stdout. It does not exit when stdin
 closes, only when the socket closes or the app stops it.
 
@@ -470,6 +471,30 @@ frame in both directions is recorded in `provider.jsonl` in the evidence folder,
 with its connection number. The frames are written by hand, so they are only as
 faithful as the shapes in `app/src/codex_protocol.rs`. No pinned app-server
 schema checks them yet.
+
+#### Stand-in Claude
+
+The sandbox sets `VOYAGER_CLAUDE_BIN=/voyager/bin/claude-avatar`, another bind
+of the verifier binary, so a profile whose `conversation.json` selects
+`claude` starts the same relay against `/voyager/runtime/claude.sock`. The name
+stays apart from `claude` on `PATH`, which agent Vessels run.
+`Claude::listen` in `src/claude.rs` owns that socket. It answers nothing by
+itself: the journey reads each line the app writes with `next`, echoes a user
+line back as the CLI's replay with `replay`, and scripts the turn with
+`start_message`, `delta`, `tool_use`, `tool_result`, `control_success` and
+`result`, in the stream-json shapes documented in docs/conversation.md. Every
+line in both directions is recorded in `claude.jsonl`. The stand-in does not run
+the commands it reports. Its `voyager status` output is a fixed string, so the
+journey proves the conversation draws Claude's own command and its output, not
+that the command reached VoyagerShell.
+
+The `chat-claude` journey checks the exact argument list the app gives the
+CLI, the Core session variables and folder the child receives, the typed text
+and dock focus of the user line, streamed text, a `voyager status` command and
+its output drawn as Workspace rows, and an interruption that sends the CLI's
+interrupt control request and ends with Send drawn. Its control patch widens
+the allowed commands to every Bash command, the realistic regression, and fails
+`send-message`.
 
 ### Core reply relay
 

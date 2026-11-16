@@ -9,6 +9,7 @@ mod native;
 mod probe;
 mod profile;
 mod proof;
+mod claude;
 mod provider;
 mod sandbox;
 #[cfg(test)]
@@ -33,8 +34,8 @@ fn main() {
     if core_relay::invoked_as_relay() {
         std::process::exit(core_relay::relay());
     }
-    if provider::invoked_as_relay() {
-        std::process::exit(provider::relay());
+    if let Some(socket) = provider::relay_socket() {
+        std::process::exit(provider::relay(socket));
     }
     match entry() {
         Ok(code) => std::process::exit(code),
@@ -485,6 +486,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/main.rs", include_bytes!("main.rs")),
     ("src/battery.rs", include_bytes!("battery.rs")),
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
+    ("src/claude.rs", include_bytes!("claude.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
@@ -494,6 +496,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/arrangement.rs"),
     ),
     ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
+    (
+        "src/journey/chat_claude.rs",
+        include_bytes!("journey/chat_claude.rs"),
+    ),
     (
         "src/journey/core_events.rs",
         include_bytes!("journey/core_events.rs"),

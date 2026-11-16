@@ -1,13 +1,13 @@
 diff --git a/app/src/conversation.rs b/app/src/conversation.rs
-index dc30412..8f497e8 100644
+index 3737613..c04f15f 100644
 --- a/app/src/conversation.rs
 +++ b/app/src/conversation.rs
-@@ -171,7 +171,7 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str)
-                 if *complete {
-                     message.text.clone_from(text);
-                 } else {
--                    message.text.push_str(text);
-+                    message.text.clone_from(text);
-                 }
-             } else {
-                 let context = state
+@@ -161,7 +161,7 @@ fn append(
+         if complete {
+             text.clone_into(&mut message.text);
+         } else {
+-            message.text.push_str(text);
++            text.clone_into(&mut message.text);
+         }
+     } else {
+         let context = state
