@@ -1,10 +1,10 @@
 use crate::avatar_sharp::Sharp;
 use anyhow::{Context as _, Result, bail};
-use gpui::RenderImage;
+use gpui::{App, RenderImage};
 use image::{DynamicImage, Frame, ImageDecoder, ImageFormat, ImageReader, Limits};
 use serde::de::DeserializeOwned;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -32,6 +32,20 @@ pub struct Compiled {
     pub bindings: [Option<usize>; 4],
     pub rest: usize,
     pub sharp: Sharp,
+}
+
+impl Compiled {
+    pub fn release_images(&self, cx: &mut App) {
+        let mut images = HashSet::new();
+        for pose in &self.poses {
+            if images.insert(pose.image.id) {
+                cx.drop_image(Arc::clone(&pose.image), None);
+            }
+        }
+        for image in self.sharp.drain() {
+            cx.drop_image(image, None);
+        }
+    }
 }
 
 #[derive(Clone)]

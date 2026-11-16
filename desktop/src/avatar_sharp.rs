@@ -78,6 +78,7 @@ impl Sharp {
         Sharpened { image, retired }
     }
 
+    #[cfg(test)]
     pub fn count(&self) -> usize {
         self.cache().copies.len()
     }
@@ -101,11 +102,9 @@ fn unpremultiply(pixels: &mut RgbaImage) {
     for pixel in pixels.pixels_mut() {
         let alpha = u32::from(pixel.0[3]);
         for channel in &mut pixel.0[..3] {
-            *channel = if alpha == 0 {
-                0
-            } else {
-                ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
-            };
+            *channel = (u32::from(*channel) * 255 + alpha / 2)
+                .checked_div(alpha)
+                .map_or(0, |value| value.min(255) as u8);
         }
     }
 }
@@ -235,8 +234,10 @@ mod tests {
         let image = Arc::new(RenderImage::new(vec![Frame::new(pixels)]));
         let drawn = sharp.copy(&image, [5, 5], WindowId::from(1), 1.);
         let bytes = drawn.image.as_bytes(0).unwrap();
-        let edge: Vec<&[u8]> = bytes
-            .chunks_exact(4)
+        let edge: Vec<&[u8; 4]> = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|pixel| pixel[3] > 0 && pixel[3] < 255)
             .collect();
         assert!(!edge.is_empty());
