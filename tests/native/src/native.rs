@@ -1,6 +1,8 @@
+mod avatar;
 mod input;
 mod terminal;
 
+pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -447,6 +449,10 @@ impl Native {
                 ..window
             },
         )
+    }
+
+    pub fn look_at(&self, region: Geometry) -> Result<Pixels> {
+        self.x11()?.capture(self.window, region)
     }
 
     pub fn watch<T>(&self, mut read: impl FnMut(&Self) -> Result<Option<T>>) -> Result<Option<T>> {

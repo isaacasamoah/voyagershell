@@ -2,6 +2,7 @@ mod arrangement;
 mod avatar;
 mod avatar_motion;
 mod avatar_pack;
+mod avatar_sharp;
 mod banner;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
