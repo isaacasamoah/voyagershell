@@ -16,7 +16,7 @@ This is an application for extensible content, not only a terminal manager. A te
 - Inspect the branch and dirty state before editing. Preserve unrelated work and running sessions.
 - Work in small, complete, user-visible increments. Verify the intended interaction and one relevant failure.
 - Keep authority, avatar focus, placement, content state, process identity and derived knowledge distinct.
-- A received request is not a completed effect. Never automatically replay an uncertain operation or restore an uncertain process.
+- A received request is not a completed effect. Settle an uncertain operation by asking the provider of that hop: Core for the app, the app for the canvas and the avatar. Retry only when the read proves the effect did not happen and the retry cannot double it, and report what a read cannot settle. Never restore an uncertain process.
 - Keep changed source comment-free. Put mechanisms and invariants in the owning technical document.
 - Prefer explicit types and a small number of modules. Add a dependency only for a primitive required now.
 - Keep runtime profiles, transcripts, credentials, private task documents and evidence out of Git.
@@ -52,7 +52,7 @@ Establish the intended user-visible behavior before designing recovery or protec
 
 Explain concrete risks reachable through supported user, content, client, provider or process actions. Distinguish an observed failure, a reachable risk and a speculative contingency. Use the smallest sufficient safeguard that preserves the agreed workflow, and assess its UX cost. Verify the intended interaction and the relevant failure rather than expanding the design to cover every imagined case.
 
-Detaching or hiding a view must not stop its backend. Explicit stop must target only the verified selected program. Preserve authority checks and honest uncertain outcomes without automatic replay or restoration. If a concrete fix requires changing an agreed interaction, explain that scenario to Isaac before making the choice.
+Detaching or hiding a view must not stop its backend. Explicit stop must target only the verified selected program. Preserve authority checks. Settle an uncertain outcome by reading its provider, retry only what the read proves did not happen, report what stays uncertain honestly, and never restore an uncertain process. If a concrete fix requires changing an agreed interaction, explain that scenario to Isaac before making the choice.
 
 Use feature/<name> or experiment/<name> branches with matching .worktrees/feature-<name> or .worktrees/experiment-<name> paths. Existing imported branch names remain valid. Use a native GitHub PR stack for dependent increments. Never use an admin bypass or merge without the owner's applicable approval.
 

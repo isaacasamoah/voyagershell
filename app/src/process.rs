@@ -178,9 +178,60 @@ fn read(target: ProcessInfo, read: ReadResult) -> ProcessOutput {
     }
 }
 
+fn unread(error: Error) -> Error {
+    match error {
+        Error::Uncertain(message) => Error::Uncertain(format!(
+            "{message}. A read cannot show whether the input arrived, so read the terminal before sending it again"
+        )),
+        refused => refused,
+    }
+}
+
 pub(crate) struct Completed {
     pub(crate) read_at: Option<u64>,
     pub(crate) result: Result<ProcessOutput, Error>,
+    stopping: Option<Box<(ProcessInfo, Arc<Layout>)>>,
+}
+
+impl Completed {
+    pub(crate) fn settle(self, core: Option<&mut Core>) -> Self {
+        match (self.stopping, core, self.result) {
+            (Some(stopping), Some(core), Err(Error::Uncertain(message))) => Self {
+                read_at: self.read_at,
+                result: settle_stop(core, stopping.0, &stopping.1, message),
+                stopping: None,
+            },
+            (stopping, _, result) => Self {
+                read_at: self.read_at,
+                result,
+                stopping,
+            },
+        }
+    }
+}
+
+fn settle_stop(
+    core: &mut Core,
+    target: ProcessInfo,
+    visible: &Layout,
+    message: String,
+) -> Result<ProcessOutput, Error> {
+    let address = target.terminal_id.0.clone();
+    let Ok(observed) = core.terminal_get(&address) else {
+        return Err(Error::Uncertain(message));
+    };
+    let observed = info(&target.vessel_id, observed, visible);
+    match (is_live(&observed.state), observed.pid == target.pid) {
+        (true, true) => {
+            let stopped = core.begin_terminal_kill(&address)?.wait()?;
+            let stopped = info(&target.vessel_id, stopped, visible);
+            stop_result(target, stopped)
+        }
+        (true, false) => Err(refused(
+            "A different program now runs in this terminal; no stop was sent",
+        )),
+        (false, _) => stop_result(target, observed),
+    }
 }
 
 impl Effect {
@@ -189,9 +240,14 @@ impl Effect {
             Self::List(..) | Self::Read { .. } => Some(dispatched),
             Self::Send(..) | Self::Interrupt(..) | Self::Stop(..) => None,
         };
+        let stopping = match &self {
+            Self::Stop(target, _, visible) => Some(Box::new((target.clone(), Arc::clone(visible)))),
+            _ => None,
+        };
         Completed {
             read_at,
             result: self.settle(),
+            stopping,
         }
     }
 
@@ -209,7 +265,7 @@ impl Effect {
                 Ok(read(info(&vessel, observed, &visible), text.wait()?))
             }
             Self::Send(target, pending) => {
-                let sent = pending.wait()?;
+                let sent = pending.wait().map_err(unread)?;
                 Ok(ProcessOutput::Send {
                     target,
                     turn: sent.turn,
@@ -218,7 +274,7 @@ impl Effect {
                 })
             }
             Self::Interrupt(target, pending) => {
-                let interrupted = pending.wait()?;
+                let interrupted = pending.wait().map_err(unread)?;
                 Ok(ProcessOutput::Interrupt {
                     target,
                     key: interrupted.key,

@@ -1,4 +1,4 @@
-use crate::core_relay::CoreDelay;
+use crate::core_relay::{self, Arm, CoreDelay, Fault};
 use crate::sandbox;
 use anyhow::{Context, Result, anyhow, ensure};
 use serde::{Deserialize, Serialize};
@@ -319,6 +319,41 @@ impl System {
     pub fn delay_core(&mut self, delay: &CoreDelay) {
         delay.install(self);
         self.core_delay = delay.clone();
+    }
+
+    pub fn arm_core(&self, method: &str, fault: Fault) -> Result<Arm> {
+        ensure!(
+            self.core_delay.armed(),
+            "This journey did not declare an armed Core relay"
+        );
+        let arms = self.evidence.join(core_relay::ARMS);
+        let id = std::fs::read_to_string(&arms)
+            .map(|text| text.lines().count() as u64)
+            .unwrap_or(0)
+            + 1;
+        let arm = Arm {
+            id,
+            method: method.into(),
+            fault,
+        };
+        let text = serde_json::to_string(&arm)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(&arms)?;
+        writeln!(file, "{text}")?;
+        file.sync_data()?;
+        let staged = self.evidence.join(format!("{}.staged", core_relay::ARM));
+        std::fs::write(&staged, &text)?;
+        std::fs::rename(&staged, self.evidence.join(core_relay::ARM))?;
+        self.record(json!({"event":"Core-armed","arm":arm}))?;
+        Ok(arm)
+    }
+
+    pub fn arm_spent(&self, arm: &Arm) -> Result<Option<Value>> {
+        let ledger =
+            std::fs::read_to_string(self.evidence.join(core_relay::LEDGER)).unwrap_or_default();
+        Ok(ledger
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|line| line["arm"].as_u64() == Some(arm.id)))
     }
 
     pub fn vet_core_delay(&self) -> Result<()> {

@@ -222,7 +222,7 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
         let inspected = inspect();
         let elapsed = started.elapsed();
         let duplicate = client.process(Context::Workspace, request.clone()).unwrap();
-        assert_eq!(duplicate.status, Status::Rejected);
+        assert_eq!(duplicate.status, Status::Uncertain);
         assert!(
             duplicate
                 .message

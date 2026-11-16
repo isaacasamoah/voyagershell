@@ -1,4 +1,4 @@
-use super::{CallError, Client, PendingCall};
+use super::{CallError, Client};
 use voyager_contract::{Action, Request, Response, Unanswered};
 
 impl Client {
@@ -12,10 +12,7 @@ impl Client {
 
     pub fn call(&self, request: Request) -> Result<Response, Unanswered> {
         let id = request.request_id.clone();
-        let answer = self
-            .queue_workspace(None, request)
-            .and_then(PendingCall::wait);
-        answer.map_err(|error| match error {
+        self.ask(None, request).map_err(|error| match error {
             CallError::Rejected(message) => Unanswered::refused(id, message),
             CallError::Unconfirmed(message) => Unanswered::uncertain(id, message),
         })
@@ -24,7 +21,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Message;
+    use super::super::{Message, PendingCall};
     use super::*;
     use crate::core::Error;
     use crate::voyage_close::{Confirmed, execute};
@@ -39,6 +36,7 @@ mod tests {
 
     const BUSY: &str = "Workspace busy or unavailable; nothing was queued";
     const SILENT: &str = "Workspace result unconfirmed; do not repeat the request";
+    const CANCELLED: &str = "Workspace busy; the workspace request was still queued when its wait ended, so it was cancelled and nothing was sent";
 
     fn detached() -> (Client, async_channel::Receiver<Message>) {
         let (sender, queue) = async_channel::bounded(8);
@@ -193,7 +191,12 @@ mod tests {
     #[test]
     fn a_request_the_owner_takes_and_never_answers_is_uncertain() {
         let (client, queue) = detached();
-        let owner = thread::spawn(move || drop(queue.recv_blocking()));
+        let owner = thread::spawn(move || {
+            let Ok(Message::Workspace { claim, .. }) = queue.recv_blocking() else {
+                panic!("Expected one workspace request");
+            };
+            assert!(claim.take());
+        });
         let unanswered = client.call(inspect("lost")).unwrap_err();
         owner.join().unwrap();
         assert_eq!(
@@ -203,6 +206,54 @@ mod tests {
         assert_eq!(
             serde_json::to_value(Reply::from(Err(unanswered))).unwrap(),
             json!({"requestId": "lost", "status": "uncertain", "message": SILENT})
+        );
+    }
+
+    #[test]
+    fn a_request_still_queued_when_its_wait_ends_is_cancelled_and_refused() {
+        let (client, queue) = detached();
+        let PendingCall(receive, _, claim) =
+            client.queue_workspace(None, inspect("queued")).unwrap();
+        let waited = PendingCall(receive, std::time::Duration::from_millis(20), claim).wait();
+        assert!(matches!(waited, Err(CallError::Rejected(message)) if message == CANCELLED));
+        let Ok(Message::Workspace { claim, .. }) = queue.try_recv() else {
+            panic!("Expected the cancelled request in the queue");
+        };
+        assert!(
+            !claim.take(),
+            "the owner skips a request its caller cancelled"
+        );
+    }
+
+    #[test]
+    fn a_caller_whose_wait_ended_asks_the_owner_by_the_same_request_identity() {
+        let (client, queue) = detached();
+        let owner = thread::spawn(move || {
+            let Ok(Message::Workspace { claim, request, .. }) = queue.recv_blocking() else {
+                panic!("Expected the first request");
+            };
+            assert!(claim.take());
+            let Ok(Message::Workspace {
+                claim,
+                request: asked,
+                reply,
+                ..
+            }) = queue.recv_blocking()
+            else {
+                panic!("Expected the ask");
+            };
+            assert!(claim.take());
+            assert_eq!(
+                asked, request,
+                "the ask repeats the request and its identity"
+            );
+            reply.send(inspected(asked)).unwrap();
+        });
+        let answered = client.call(inspect("asked")).unwrap();
+        owner.join().unwrap();
+        assert_eq!(
+            (answered.request_id.as_str(), answered.status),
+            ("asked", Outcome::Applied)
         );
     }
 

@@ -1,5 +1,5 @@
 use crate::core::{Core, Error, LayoutKeep, Pending};
-use crate::core_shapes::DocSetResult;
+use crate::core_shapes::{DocGetResult, DocSetResult};
 use crate::workspace::Model;
 use serde_json::Value;
 use voyager_contract::layout_document::{
@@ -7,7 +7,7 @@ use voyager_contract::layout_document::{
 };
 use voyager_contract::{Action, Layout, Outcome, Response};
 
-fn rejected(message: String) -> Error {
+pub(crate) fn rejected(message: String) -> Error {
     Error::Rejected {
         kind: "invalid_workspace".into(),
         message,
@@ -91,7 +91,10 @@ pub(crate) fn carry_notice(notice: &mut Option<String>, action: &Action, respons
 }
 
 pub(crate) fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
-    Ok(begin_save(core, layout, version)?.wait()?.version)
+    match begin_save(core, layout, version)?.wait() {
+        Err(Error::Uncertain(message)) => settle_save(core, layout, version, message),
+        saved => Ok(saved?.version),
+    }
 }
 
 pub(crate) fn begin_save(
@@ -99,11 +102,57 @@ pub(crate) fn begin_save(
     layout: &Layout,
     version: u64,
 ) -> Result<Pending<DocSetResult>, Error> {
-    let value: Value = write(layout, &core.layout.kept).map_err(|error| Error::Rejected {
+    let value = written(core, layout)?;
+    core.begin_document_set(DOCUMENT, &value, version)
+}
+
+pub(crate) fn settle_save(
+    core: &mut Core,
+    layout: &Layout,
+    version: u64,
+    message: String,
+) -> Result<u64, Error> {
+    let value = written(core, layout)?;
+    let read = |core: &mut Core| match core.document_get(DOCUMENT) {
+        Ok(read) => landing(&read, &value, version),
+        Err(_) => Landing::Unknown,
+    };
+    let unsettled = || Error::Uncertain(format!("{message}; a read of Core did not settle it"));
+    match read(core) {
+        Landing::Applied(saved) => Ok(saved),
+        Landing::Unknown => Err(unsettled()),
+        Landing::Missing => match core.begin_document_set(DOCUMENT, &value, version)?.wait() {
+            Err(Error::Rejected { kind, .. }) if kind == "conflict" => match read(core) {
+                Landing::Applied(saved) => Ok(saved),
+                _ => Err(unsettled()),
+            },
+            retried => Ok(retried?.version),
+        },
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum Landing {
+    Applied(u64),
+    Missing,
+    Unknown,
+}
+
+fn landing(read: &DocGetResult, written: &Value, expected: u64) -> Landing {
+    if read.version == expected {
+        Landing::Missing
+    } else if read.version > expected && read.value == *written {
+        Landing::Applied(read.version)
+    } else {
+        Landing::Unknown
+    }
+}
+
+fn written(core: &Core, layout: &Layout) -> Result<Value, Error> {
+    write(layout, &core.layout.kept).map_err(|error| Error::Rejected {
         kind: "invalid".into(),
         message: error.to_string(),
-    })?;
-    core.begin_document_set(DOCUMENT, &value, version)
+    })
 }
 
 #[cfg(test)]
@@ -129,6 +178,29 @@ mod tests {
 
     fn held() -> Option<String> {
         Some(NOTICE.into())
+    }
+
+    fn document(version: u64, value: Value) -> DocGetResult {
+        DocGetResult { value, version }
+    }
+
+    #[test]
+    fn a_read_settles_an_unconfirmed_save_without_doubling_it() {
+        let ours = serde_json::json!({"name": "Held Fleet"});
+        let theirs = serde_json::json!({"name": "Other"});
+        assert_eq!(
+            landing(&document(8, ours.clone()), &ours, 7),
+            Landing::Applied(8)
+        );
+        assert_eq!(
+            landing(&document(7, theirs.clone()), &ours, 7),
+            Landing::Missing
+        );
+        assert_eq!(landing(&document(8, theirs), &ours, 7), Landing::Unknown);
+        assert_eq!(
+            landing(&document(6, ours.clone()), &ours, 7),
+            Landing::Unknown
+        );
     }
 
     #[test]

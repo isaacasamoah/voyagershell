@@ -612,13 +612,14 @@ impl Core {
     }
 
     pub(crate) fn begin_terminal_list(&mut self) -> Result<Pending<TerminalList>, Error> {
-        self.begin(
-            "terminal.list",
-            ListParams {
-                all: true,
-                ..Default::default()
-            },
-        )
+        self.begin_labelled_list(HashMap::new())
+    }
+
+    pub(crate) fn begin_labelled_list(
+        &mut self,
+        labels: HashMap<String, String>,
+    ) -> Result<Pending<TerminalList>, Error> {
+        self.begin("terminal.list", ListParams { all: true, labels })
     }
 
     pub fn terminal_read(&mut self, terminal: &str, lines: u32) -> Result<ReadResult, Error> {

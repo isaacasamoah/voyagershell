@@ -191,7 +191,7 @@ connection and compares that ID. Display name, release text and compatible
 additional metadata do not identify a different Core. Core owns its programs,
 holders and descendant cleanup. The app then stops and reaps its own connector
 child, allowing five seconds for confirmed exit. A lost or malformed result
-remains uncertain, and no second stop is sent automatically.
+remains uncertain, and no second session stop is sent automatically.
 
 The private conversation receives shutdown on its existing bounded queue. It
 rejects later requests and discards undispatched callbacks. Already dispatched
@@ -227,16 +227,19 @@ restart. The original avatar and other corrective histories remain binding.
 Before requesting a new terminal, the application saves an operation identity
 in the versioned workspace document and supplies the same identity as a Core
 terminal label. A known refusal clears the marker through a confirmed document
-write. An uncertain start or a failed subsequent layout save retains the marker
-and reports the address or label for inspection. The app does not repeat the
-start automatically, including after reopening the profile.
+write. An uncertain start is settled by listing Core's terminals for the label,
+as [settling an uncertain result](workspace.md#settling-an-uncertain-result)
+describes. One terminal is adopted. Otherwise the start, like a failed
+subsequent layout save, retains the marker and reports the label for
+inspection. The app does not repeat the start, including after reopening the
+profile, because a list cannot prove that a start did not happen.
 
 A confirmed marker-save refusal occurs before any terminal start and remains a
 known refusal. If Core has already started and saved a terminal but refuses its
 attachment, the response retains that refusal and the actual terminal address.
 An attachment transport failure remains unconfirmed. The view retries a known
 refusal only after an explicit Refresh has obtained a fresh workspace snapshot;
-it does not use Refresh to replay an uncertain start.
+it does not use Refresh to repeat a start that stayed uncertain.
 
 The generated terminal request carries a request ID, Vessel ID and expected
 workspace revision. The response returns both identities and a typed applied,

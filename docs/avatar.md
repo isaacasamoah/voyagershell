@@ -39,7 +39,11 @@ Window intentions carry a monotonically advancing local epoch. A late float
 creation cannot replace a newer dock or float intention. Failed creation uses the
 existing visible status path. Confirmed application snapshots are
 accepted only at the newest displayed revision. Refused and unconfirmed outcomes
-remain visible even when their layout snapshot is older.
+remain visible even when their layout snapshot is older. When the dock's wait
+for the app ends without an answer, the dock asks the app about the same
+request id once, as
+[settling an uncertain result](workspace.md#settling-an-uncertain-result)
+describes.
 
 Floating gestures move that same owned popup through X11 ConfigureWindow. The
 controller retains one latest requested device-space point and its actual native

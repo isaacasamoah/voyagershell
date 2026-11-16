@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
@@ -15,18 +15,47 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const RELAY_NAME: &str = "hc-delay";
 const DELAY_ENV: &str = "VOYAGER_CORE_DELAY";
 const LEDGER_ENV: &str = "VOYAGER_CORE_RELAY_LEDGER";
-const LEDGER: &str = "core-relay.jsonl";
+const ARM_ENV: &str = "VOYAGER_CORE_RELAY_ARM";
+pub const LEDGER: &str = "core-relay.jsonl";
+pub const ARM: &str = "core-relay-arm.json";
+pub const ARMS: &str = "core-relay-arms.jsonl";
+const ARMED: &str = "arm";
 const LONGEST_DELAY_MS: u64 = 30_000;
 const LATE_MS: u64 = 1_000;
 const HEARTBEAT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct CoreDelay(BTreeMap<String, u64>);
+pub struct CoreDelay {
+    held: BTreeMap<String, u64>,
+    #[serde(default)]
+    armed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum Fault {
+    Drop,
+    Hold { ms: u64 },
+    Stall { ms: u64 },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Arm {
+    pub id: u64,
+    pub method: String,
+    pub fault: Fault,
+}
 
 impl CoreDelay {
     pub fn parse(text: &str) -> Result<Self> {
         let mut held = BTreeMap::new();
+        let mut armed = false;
         for entry in text.split(',') {
+            if entry == ARMED {
+                ensure!(!armed, "Core delay names {ARMED} twice");
+                armed = true;
+                continue;
+            }
             let (method, milliseconds) = entry
                 .split_once('=')
                 .with_context(|| format!("Core delay {entry:?} is METHOD=MS"))?;
@@ -49,23 +78,28 @@ impl CoreDelay {
                 "Core delay names {method} twice"
             );
         }
-        Ok(Self(held))
+        Ok(Self { held, armed })
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.held.is_empty() && !self.armed
+    }
+
+    pub fn armed(&self) -> bool {
+        self.armed
     }
 
     fn encode(&self) -> String {
-        self.0
+        self.held
             .iter()
             .map(|(method, milliseconds)| format!("{method}={milliseconds}"))
+            .chain(self.armed.then(|| ARMED.to_owned()))
             .collect::<Vec<_>>()
             .join(",")
     }
 
     pub fn hold(&self, method: &str) -> Option<Duration> {
-        self.0
+        self.held
             .get(method)
             .filter(|milliseconds| **milliseconds > 0)
             .map(|milliseconds| Duration::from_millis(*milliseconds))
@@ -82,23 +116,49 @@ impl CoreDelay {
                 LEDGER_ENV,
                 system.evidence.join(LEDGER).display().to_string(),
             ),
+            (ARM_ENV, system.evidence.join(ARM).display().to_string()),
         ] {
             system.env.insert(key.into(), value);
         }
     }
 
     pub fn audit_file(&self, evidence: &Path) -> Result<()> {
-        let ledger = match fs::read_to_string(evidence.join(LEDGER)) {
-            Ok(ledger) => ledger,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Err(error).context("The Core relay ledger could not be read"),
+        let read = |name: &str| match fs::read_to_string(evidence.join(name)) {
+            Ok(text) => Ok(text),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+            Err(error) => {
+                Err(error).with_context(|| format!("The Core relay's {name} could not be read"))
+            }
         };
-        self.audit(&ledger)
+        self.audit(&read(LEDGER)?, &read(ARMS)?)
     }
 
-    fn due(&self, hold: &Hold) -> Result<u64> {
+    fn armed_by<'a>(&self, arms: &'a [Arm], id: u64, method: &str) -> Result<&'a Arm> {
+        let arm = arms
+            .iter()
+            .find(|arm| arm.id == id)
+            .with_context(|| format!("The Core relay applied arm {id}, which nobody armed"))?;
+        ensure!(
+            self.armed && arm.method == method,
+            "The Core relay applied arm {id} to {method}, which differs from {arm:?}"
+        );
+        Ok(arm)
+    }
+
+    fn due(&self, hold: &Hold, arms: &[Arm]) -> Result<u64> {
+        if let Some(id) = hold.arm {
+            let arm = self.armed_by(arms, id, &hold.method)?;
+            ensure!(
+                arm.fault == (Fault::Hold { ms: hold.delay_ms }),
+                "The Core relay held {} for {} ms under arm {id}, which asked for {:?}",
+                hold.method,
+                hold.delay_ms,
+                arm.fault
+            );
+            return Ok(hold.replied_at_ms + hold.delay_ms);
+        }
         let asked = self
-            .0
+            .held
             .get(&hold.method)
             .copied()
             .filter(|delay| *delay > 0 && *delay == hold.delay_ms);
@@ -112,16 +172,58 @@ impl CoreDelay {
         Ok(hold.replied_at_ms + asked)
     }
 
-    pub fn audit(&self, ledger: &str) -> Result<()> {
+    pub fn audit(&self, ledger: &str, arms: &str) -> Result<()> {
+        let arms: Vec<Arm> = arms
+            .lines()
+            .map(|line| serde_json::from_str(line).context("Core relay arm line"))
+            .collect::<Result<_>>()?;
+        let mut applied: HashMap<u64, (Instance, u64)> = HashMap::new();
         let mut alive: HashMap<Instance, u64> = HashMap::new();
         let mut waiting: HashMap<(Instance, u64), (String, u64)> = HashMap::new();
         for (number, line) in ledger.lines().enumerate() {
             let entry: Entry = serde_json::from_str(line)
                 .with_context(|| format!("Core relay ledger line {} is malformed", number + 1))?;
+            if let Some((arm, relay, id)) = entry.arm() {
+                ensure!(
+                    *applied.entry(arm).or_insert((relay, id)) == (relay, id),
+                    "The Core relay applied arm {arm} to more than one request"
+                );
+            }
             let (relay, at) = match entry {
                 Entry::Alive { relay, at_ms } => (relay, at_ms),
+                Entry::Dropped {
+                    relay,
+                    method,
+                    arm,
+                    at_ms,
+                    ..
+                } => {
+                    let armed = self.armed_by(&arms, arm, &method)?;
+                    ensure!(
+                        armed.fault == Fault::Drop,
+                        "The Core relay dropped {method} under arm {arm}, which asked for {:?}",
+                        armed.fault
+                    );
+                    (relay, at_ms)
+                }
+                Entry::Stalled {
+                    relay,
+                    method,
+                    arm,
+                    delay_ms,
+                    forwarded_at_ms,
+                    ..
+                } => {
+                    let armed = self.armed_by(&arms, arm, &method)?;
+                    ensure!(
+                        armed.fault == (Fault::Stall { ms: delay_ms }),
+                        "The Core relay stalled {method} for {delay_ms} ms under arm {arm}, which asked for {:?}",
+                        armed.fault
+                    );
+                    (relay, forwarded_at_ms)
+                }
                 Entry::Held(hold) => {
-                    let due = self.due(&hold)?;
+                    let due = self.due(&hold, &arms)?;
                     waiting.insert((hold.relay, hold.id), (hold.method, due));
                     (hold.relay, hold.replied_at_ms)
                 }
@@ -129,7 +231,7 @@ impl CoreDelay {
                     hold,
                     released_at_ms,
                 } => {
-                    let due = self.due(&hold)?;
+                    let due = self.due(&hold, &arms)?;
                     ensure!(
                         released_at_ms <= due + LATE_MS,
                         "The Core relay released {} {} ms after its hold ended, past the {LATE_MS} ms bound",
@@ -144,7 +246,7 @@ impl CoreDelay {
                     undelivered_at_ms,
                     error,
                 } => {
-                    self.due(&hold)?;
+                    self.due(&hold, &arms)?;
                     waiting.remove(&(hold.relay, hold.id));
                     ensure!(
                         error == "BrokenPipe",
@@ -175,7 +277,7 @@ impl CoreDelay {
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        for method in self.0.keys() {
+        for method in self.held.keys() {
             ensure!(
                 offered.contains(&method.as_str()),
                 "Core has no method {method}, so its delay could never apply"
@@ -217,7 +319,8 @@ fn run() -> Result<i32> {
         .context("Core bridge")?;
     let mut to_core = core.stdin.take().context("Core bridge input")?;
     let from_core = core.stdout.take().context("Core bridge output")?;
-    let relay = Arc::new(Relay::new(delay, ledger));
+    let arm = std::env::var_os(ARM_ENV).map(PathBuf::from);
+    let relay = Arc::new(Relay::new(delay, arm, ledger));
     let beating = Arc::clone(&relay);
     thread::spawn(move || {
         loop {
@@ -240,6 +343,8 @@ fn run() -> Result<i32> {
 struct Asked {
     method: String,
     at: u64,
+    hold: Duration,
+    arm: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -258,6 +363,8 @@ struct Hold {
     delay_ms: u64,
     requested_at_ms: u64,
     replied_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    arm: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -272,6 +379,21 @@ enum Entry {
         at_ms: u64,
     },
     Held(Hold),
+    Dropped {
+        relay: Instance,
+        method: String,
+        id: u64,
+        arm: u64,
+        at_ms: u64,
+    },
+    Stalled {
+        relay: Instance,
+        method: String,
+        id: u64,
+        arm: u64,
+        delay_ms: u64,
+        forwarded_at_ms: u64,
+    },
     Released {
         #[serde(flatten)]
         hold: Hold,
@@ -285,17 +407,33 @@ enum Entry {
     },
 }
 
+impl Entry {
+    fn arm(&self) -> Option<(u64, Instance, u64)> {
+        match self {
+            Self::Alive { .. } => None,
+            Self::Dropped { relay, id, arm, .. } | Self::Stalled { relay, id, arm, .. } => {
+                Some((*arm, *relay, *id))
+            }
+            Self::Held(hold) | Self::Released { hold, .. } | Self::Undelivered { hold, .. } => {
+                hold.arm.map(|arm| (arm, hold.relay, hold.id))
+            }
+        }
+    }
+}
+
 struct Relay {
     delay: CoreDelay,
+    arm: Option<PathBuf>,
     instance: Instance,
     asked: Mutex<HashMap<u64, Asked>>,
     ledger: Mutex<File>,
 }
 
 impl Relay {
-    fn new(delay: CoreDelay, ledger: File) -> Self {
+    fn new(delay: CoreDelay, arm: Option<PathBuf>, ledger: File) -> Self {
         Self {
             delay,
+            arm,
             instance: Instance {
                 pid: std::process::id(),
                 started_at_ms: now(),
@@ -311,15 +449,22 @@ impl Relay {
             .expect("the relay's request table is never held across a panic")
     }
 
-    fn hold(&self, id: u64, asked: &Asked, replied: u64, hold: Duration) -> Hold {
+    fn hold(&self, id: u64, asked: &Asked, replied: u64) -> Hold {
         Hold {
             relay: self.instance,
             method: asked.method.clone(),
             id,
-            delay_ms: hold.as_millis() as u64,
+            delay_ms: asked.hold.as_millis() as u64,
             requested_at_ms: asked.at,
             replied_at_ms: replied,
+            arm: asked.arm,
         }
+    }
+
+    fn take_arm(&self, method: &str) -> Option<Arm> {
+        let path = self.arm.as_ref()?;
+        let arm: Arm = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
+        (arm.method == method && fs::remove_file(path).is_ok()).then_some(arm)
     }
 
     fn record(&self, entry: &Entry) {
@@ -395,15 +540,56 @@ fn forward_requests(mut from: impl BufRead, to: &mut impl Write, relay: &Relay) 
     while let Some(frame) = Frame::read(&mut from)? {
         if let Some(message) = frame.message()
             && let (Some(id), Some(method)) = (message["id"].as_u64(), message["method"].as_str())
-            && relay.delay.hold(method).is_some()
         {
-            relay.asked().insert(
-                id,
-                Asked {
-                    method: method.to_owned(),
-                    at: now(),
-                },
-            );
+            let armed = relay.take_arm(method);
+            let hold = match &armed {
+                Some(Arm {
+                    id: arm,
+                    fault: Fault::Drop,
+                    ..
+                }) => {
+                    relay.record(&Entry::Dropped {
+                        relay: relay.instance,
+                        method: method.to_owned(),
+                        id,
+                        arm: *arm,
+                        at_ms: now(),
+                    });
+                    continue;
+                }
+                Some(Arm {
+                    id: arm,
+                    fault: Fault::Stall { ms },
+                    ..
+                }) => {
+                    thread::sleep(Duration::from_millis(*ms));
+                    relay.record(&Entry::Stalled {
+                        relay: relay.instance,
+                        method: method.to_owned(),
+                        id,
+                        arm: *arm,
+                        delay_ms: *ms,
+                        forwarded_at_ms: now(),
+                    });
+                    None
+                }
+                Some(Arm {
+                    fault: Fault::Hold { ms },
+                    ..
+                }) => Some(Duration::from_millis(*ms)),
+                None => relay.delay.hold(method),
+            };
+            if let Some(hold) = hold {
+                relay.asked().insert(
+                    id,
+                    Asked {
+                        method: method.to_owned(),
+                        at: now(),
+                        hold,
+                        arm: armed.map(|arm| arm.id),
+                    },
+                );
+            }
         }
         frame.write(to)?;
     }
@@ -426,17 +612,14 @@ fn forward_replies<W: Write + Send + 'static>(
             .message()
             .filter(|message| message.get("result").is_some() || message.get("error").is_some())
             .and_then(|message| message["id"].as_u64());
-        let delayed = reply.and_then(|id| {
-            let asked = relay.asked().remove(&id)?;
-            let hold = relay.delay.hold(&asked.method)?;
-            Some((id, asked, hold))
-        });
-        let Some((id, asked, hold)) = delayed else {
+        let delayed = reply.and_then(|id| Some((id, relay.asked().remove(&id)?)));
+        let Some((id, asked)) = delayed else {
             frame.write(&mut *locked(to))?;
             continue;
         };
         let replied = now();
-        let entry = relay.hold(id, &asked, replied, hold);
+        let entry = relay.hold(id, &asked, replied);
+        let hold = asked.hold;
         relay.record(&Entry::Held(entry.clone()));
         let (to, relay) = (Arc::clone(to), Arc::clone(relay));
         held.push(thread::spawn(move || {
@@ -513,6 +696,7 @@ mod tests {
         let ledger = File::create(folder.join(LEDGER)).expect("a ledger file");
         Arc::new(Relay::new(
             CoreDelay::parse(text).expect("a valid delay"),
+            Some(folder.join(ARM)),
             ledger,
         ))
     }
@@ -653,6 +837,135 @@ mod tests {
         assert_eq!(parsed.encode(), "doc.set=2000,terminal.list=500");
         assert_eq!(parsed.hold("doc.set"), Some(Duration::from_millis(2000)));
         assert_eq!(parsed.hold("doc.get"), None);
+        assert!(
+            CoreDelay::parse("arm,arm").is_err(),
+            "arm twice must be refused"
+        );
+        let armed = CoreDelay::parse("arm").expect("an armed relay");
+        assert!(armed.armed() && !armed.is_empty() && armed.hold("doc.set").is_none());
+    }
+
+    fn arm(folder: &Path, id: u64, method: &str, fault: Fault) -> String {
+        let arm = Arm {
+            id,
+            method: method.into(),
+            fault,
+        };
+        let text = serde_json::to_string(&arm).expect("a serializable arm");
+        std::fs::write(folder.join(ARM), &text).expect("an arm file");
+        text
+    }
+
+    #[test]
+    fn a_drop_arm_withholds_one_request_and_is_spent() {
+        let folder = Scratch::new("core-relay").expect("a scratch folder");
+        let relay = relay_of("arm", folder.path());
+        let armed = arm(folder.path(), 1, "doc.set", Fault::Drop);
+        let mut to_core = Vec::new();
+        forward_requests(
+            &requests(&[("doc.get", 1), ("doc.set", 2), ("doc.set", 3)])[..],
+            &mut to_core,
+            &relay,
+        )
+        .expect("requests forward");
+        assert_eq!(
+            to_core,
+            requests(&[("doc.get", 1), ("doc.set", 3)]),
+            "only the first doc.set after arming is withheld"
+        );
+        assert!(!folder.path().join(ARM).exists(), "the arm is spent");
+        let ledger = std::fs::read_to_string(folder.path().join(LEDGER)).expect("a ledger");
+        let lines = ledger_lines(&ledger);
+        assert_eq!(
+            (
+                lines[0]["event"].as_str(),
+                lines[0]["arm"].as_u64(),
+                lines[0]["id"].as_u64()
+            ),
+            (Some("dropped"), Some(1), Some(2))
+        );
+        let delay = CoreDelay::parse("arm").expect("a valid delay");
+        assert!(delay.audit(&ledger, &armed).is_ok());
+        assert!(
+            delay.audit(&ledger, "").is_err(),
+            "an unarmed drop is caught"
+        );
+        let held = r#"{"id":1,"method":"doc.set","fault":{"kind":"hold","ms":5}}"#;
+        assert!(
+            delay.audit(&ledger, held).is_err(),
+            "a different fault is caught"
+        );
+    }
+
+    #[test]
+    fn a_stall_arm_delays_that_request_and_every_later_one_in_order() {
+        let folder = Scratch::new("core-relay").expect("a scratch folder");
+        let relay = relay_of("arm", folder.path());
+        let armed = arm(folder.path(), 2, "terminal.run", Fault::Stall { ms: 200 });
+        let asked = [("terminal.run", 1), ("terminal.list", 2)];
+        let started = Instant::now();
+        let mut to_core = Vec::new();
+        forward_requests(&requests(&asked)[..], &mut to_core, &relay).expect("requests forward");
+        assert!(
+            started.elapsed() >= Duration::from_millis(200),
+            "the stall held the stream"
+        );
+        assert_eq!(
+            to_core,
+            requests(&asked),
+            "the stalled stream keeps its order"
+        );
+        let ledger = std::fs::read_to_string(folder.path().join(LEDGER)).expect("a ledger");
+        assert!(
+            CoreDelay::parse("arm")
+                .expect("a valid delay")
+                .audit(&ledger, &armed)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_hold_arm_holds_one_reply_and_others_pass() {
+        let folder = Scratch::new("core-relay").expect("a scratch folder");
+        let relay = relay_of("arm", folder.path());
+        let armed = arm(folder.path(), 4, "terminal.run", Fault::Hold { ms: 300 });
+        let asked = [("terminal.run", 1), ("terminal.run", 2)];
+        let mut to_core = Vec::new();
+        forward_requests(&requests(&asked)[..], &mut to_core, &relay).expect("requests forward");
+        assert_eq!(
+            to_core,
+            requests(&asked),
+            "a held request still reaches Core"
+        );
+        let out = Arc::new(Mutex::new(Arrivals::default()));
+        forward_replies(&replies(&[1, 2])[..], &out, &relay).expect("replies forward");
+        let order: Vec<u64> = answered(&out.lock().expect("an unpoisoned output"))
+            .iter()
+            .map(|(_, id)| *id)
+            .collect();
+        assert_eq!(order, [2, 1], "only the armed reply waits");
+        let ledger = std::fs::read_to_string(folder.path().join(LEDGER)).expect("a ledger");
+        assert!(
+            CoreDelay::parse("arm")
+                .expect("a valid delay")
+                .audit(&ledger, &armed)
+                .is_ok()
+        );
+        assert!(
+            CoreDelay::parse("terminal.run=300")
+                .expect("a valid delay")
+                .audit(&ledger, &armed)
+                .is_err(),
+            "an arm applied by a relay that was not armed is caught"
+        );
+        let twice = format!("{ledger}{}", ledger.replace("\"id\":1,", "\"id\":9,"));
+        assert!(
+            CoreDelay::parse("arm")
+                .expect("a valid delay")
+                .audit(&twice, &armed)
+                .is_err(),
+            "one arm applied to two requests is caught"
+        );
     }
 
     fn instance(pid: u32) -> Instance {
@@ -670,6 +983,7 @@ mod tests {
             delay_ms: delay,
             requested_at_ms: replied,
             replied_at_ms: replied,
+            arm: None,
         }
     }
 
@@ -696,7 +1010,7 @@ mod tests {
     fn audit_of(delay: &str, lines: &[String]) -> Result<()> {
         CoreDelay::parse(delay)
             .expect("a valid list")
-            .audit(&lines.join("\n"))
+            .audit(&lines.join("\n"), "")
     }
 
     fn refusal(delay: &str, lines: &[String]) -> String {
@@ -870,7 +1184,7 @@ mod tests {
             let ledger = lost_after_hello(kind);
             assert!(ledger.contains(name), "{ledger}");
             assert!(!ledger.contains("releasedAtMs"), "{ledger}");
-            assert_eq!(delay.audit(&ledger).is_err(), verifier_fault);
+            assert_eq!(delay.audit(&ledger, "").is_err(), verifier_fault);
         }
     }
 

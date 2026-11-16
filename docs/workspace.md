@@ -49,7 +49,9 @@ they do not pass it.
 The ledger keeps the last 32 settled answers of each kind, in the order they
 settled, and never evicts a pending entry. A refusal from the first three stages
 is not stored, so nothing but the first answer can ever be replayed. An
-uncertain answer is stored like any other and is never run again.
+uncertain answer is stored like any other and is never run again. Before the
+owner stores an uncertain answer, it settles the effect as
+[settling an uncertain result](#settling-an-uncertain-result) describes.
 
 Later steps of an admitted effect use the same gate. Those are the worktree
 removal preflight and the worktree completion.
@@ -71,16 +73,19 @@ which.
 - `applied`. The change was made, or the read was answered.
 - `refused`. The application declined the request and nothing changed. The
   `message` gives the reason.
-- `uncertain`. The effect may have happened and was not confirmed. The caller
-  inspects before any other change and never sends the request again.
+- `uncertain`. The effect may have happened and a read of its provider could
+  not settle it. The caller inspects before any other change and never sends
+  the effect again.
 
 The owner's answer is a `Response`. It carries the status, the message and the
 layout the owner holds, whatever the status. A request that the owner never
 answered gets an `Unanswered` reply instead. That reply has the request id, the
 status and the message, and no layout. It is `refused` when the queue was full,
-so nothing was queued. It is `uncertain` when the owner took the request and
-gave no answer within 22 seconds, or within 120 seconds for a confirmed Voyage
-close. That wait is longer than Core's 20-second deadline, so the owner's
+so nothing was queued, or when the request was still queued when the caller's
+wait ended. The caller then cancels it, and the owner skips a cancelled
+request, so nothing was sent. It is `uncertain` when the owner took the request
+and gave no answer within 22 seconds, or within 120 seconds for a confirmed
+Voyage close, and the caller's ask below got no answer either. That wait is longer than Core's 20-second deadline, so the owner's
 answer to a Core timeout reaches the caller before the caller gives up. It is
 shorter than the conversation's 25-second wait, so a chat message that needs an
 inspect still gets the conversation owner's answer. The build fails if either
@@ -108,6 +113,51 @@ An edited canvas script from an earlier build keeps running beside the updated
 answered it shows a type error in place of the reason and marks its layout
 stale, and its close dialog leaves Confirm enabled after an uncertain
 confirmation. It sends nothing by itself in either case.
+
+### Settling an uncertain result
+
+When a request comes back uncertain, its caller asks the provider of that hop
+and settles it. Core is the provider for the app. The app is the provider for
+the canvas and the avatar. The caller retries only when the read proves that the
+effect did not happen and the retry cannot double it. A read that cannot settle
+the effect, or a provider that does not answer, leaves the result uncertain.
+
+| Effect | Read | Landed | Did not land | Otherwise |
+| --- | --- | --- | --- | --- |
+| Workspace save, `doc.set` with a version | `doc.get` of the layout document | The version moved and the value is the one written: applied | The version is unchanged: one retry with the same expected version, and a second read if that retry conflicts | Uncertain |
+| Program start, `terminal.run` labelled `voyager-operation` | `terminal.list` for that label | One terminal: applied, and the start adopts it | Not provable, so no retry | Uncertain, and the marker stays |
+| Program stop by verified identity | `terminal.get` of the terminal | It is no longer live: applied | The same program is still live: one more stop | A different program: refused, nothing sent |
+| Terminal input | None | | | Uncertain, and the message says to read the terminal |
+| A canvas or avatar request | The same request, sent again with its id | The ledger's recorded answer | | The ledger answers that the request is pending |
+
+The owner settles in the effect owner, after Core's 20-second deadline gives
+it an uncertain result, so a request that was not uncertain makes no extra
+call. `settle_save` in `app/src/layout_store.rs` settles every layout save,
+including the save in flight below. `settle_run` in `app/src/client_terminal.rs`
+settles a program start, and `Completed::settle` in `app/src/process.rs`
+settles a stop. Each read waits at most Core's deadline. While it waits, the
+owner's queue waits too, because the owner reads on its own thread.
+
+Each retry is safe only because it cannot double the effect. A save retries
+with the same expected version, so a late original can only make the retry
+fail as a conflict. When the retry conflicts, the owner reads once more, and
+the value it wrote means the late original landed. A start is never retried. A
+list that shows no terminal for the label does not prove that the start did not
+happen. When the start and the list reached Core back to back, Core listed no
+terminal and then ran the start, so a retry would have started a second
+program. The `outcomes` journey's `start-stalled-not-repeated` case shows this.
+A stop runs again only while the same program identity is still live.
+
+The canvas and the avatar ask the app in `Client::call`, `Client::scoped_call`,
+`Client::process` and `Client::terminal` in `app/src/client.rs`. When the
+caller's wait ends without an answer, it sends the same request with the same
+id once more and waits again. The front door's ledger answers the repeat with
+the recorded answer, or that the request is still pending, and never runs the
+effect a second time. A request that was still queued when the wait ended was
+cancelled instead, so it is refused and never asked about.
+
+The conversation provider cannot be asked about a request by its id, so a
+conversation turn that comes back unconfirmed stays unconfirmed.
 
 ### A save in flight
 
