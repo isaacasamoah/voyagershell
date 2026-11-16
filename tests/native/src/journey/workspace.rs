@@ -28,12 +28,17 @@ cases! {
     SwitchFleet => "switch-fleet",
     CreateVoyage => "create-voyage",
     SwitchVoyage => "switch-voyage",
+    SplitFocusRemembered => "split-focus-remembered",
+    ReopenVoyageFleet => "reopen-voyage-restores-fleet",
     RenameFleetEnter => "rename-fleet-enter",
     RenameVoyageBlur => "rename-voyage-blur",
     RenameVesselF2 => "rename-vessel-f2",
     RenameKeyboard => "rename-keyboard",
     RenameEscape => "rename-escape-cancels",
     RenameEmpty => "rename-empty-refused",
+    RelaunchFocus => "relaunch-restores-focus",
+    MaximizeFocusRemembered => "maximize-focus-remembered",
+    FleetTabFocusRemembered => "fleet-tab-focus-remembered",
     Relaunch => "relaunch-restores",
     DragBarMovesWindow => "drag-bar-moves-window",
     TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
@@ -117,6 +122,16 @@ impl Landing {
 struct Step {
     selected: String,
     fleet: Option<FleetId>,
+    #[serde(flatten)]
+    landing: Landing,
+}
+
+#[derive(PartialEq, Serialize)]
+struct Focus {
+    voyage: Option<VoyageId>,
+    fleet: Option<FleetId>,
+    focused: Option<PlacementId>,
+    saved: Option<PlacementId>,
     #[serde(flatten)]
     landing: Landing,
 }
@@ -552,7 +567,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 steps.iter().all(|step| step.landing.stayed(&docked)),
             )
             .expect(
-                "the first Voyage shows its first Fleet again",
+                "the first Voyage shows the Fleet last used in it again",
                 steps
                     .last()
                     .is_some_and(|step| step.fleet.as_ref() == Some(&start.fleet)),
@@ -562,6 +577,116 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         model.fleet = start.fleet.clone();
         modelled(native, &model, verdict)
     })?;
+
+    cases.check(native, Case::SplitFocusRemembered, |native| {
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: other.id.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&other.id),
+        )?;
+        let before = at_rest(native)?.document;
+        let kept = before.selected_fleet.clone();
+        let (after, _, _) = split_right(native, &before, other.shell.placement())?;
+        let created = born(vessels(&before), vessels(&after), |vessel| &vessel.id);
+        let [created] = created[..] else {
+            return Ok(Verdict::new().expect("exactly one Vessel was created", false));
+        };
+        let drawn = native.settle(
+            "the Vessel the split created drawn as focused",
+            |seen| Some(remembered(seen)),
+            |seen| seen.focused.as_ref() == Some(&created.id),
+        )?;
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: start.voyage.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
+        let returned = select(
+            native,
+            &RenameTarget::Voyage {
+                id: other.id.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&other.id),
+        )?;
+        native.close()?;
+        native.launch()?;
+        let relaunched = native.settle(
+            "the relaunched window drawing a focused Vessel",
+            |seen| Some(remembered(seen)),
+            |seen| seen.focused.is_some(),
+        )?;
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: start.voyage.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
+        let verdict = Verdict::new()
+            .expect(
+                "the Vessel the split created is drawn as focused without a click",
+                drawn.focused.as_ref() == Some(&created.id),
+            )
+            .expect(
+                "returning to the Voyage draws the Vessel the split focused, not its first Vessel",
+                returned.fleet == kept && returned.focused.as_ref() == Some(&created.id),
+            )
+            .expect(
+                "the relaunched window draws the same Vessel as focused",
+                relaunched.voyage.as_ref() == Some(&other.id)
+                    && relaunched.focused.as_ref() == Some(&created.id),
+            )
+            .observed("drawn", &drawn)?
+            .observed("returned", &returned)?
+            .observed("relaunched", &relaunched)?;
+        if let Some(fleet) = &kept {
+            model.split_right(fleet, other.shell.placement(), created);
+        }
+        model.voyage = start.voyage.clone();
+        model.fleet = start.fleet.clone();
+        modelled(native, &model, verdict)
+    })?;
+
+    cases.check(native, Case::ReopenVoyageFleet, |native| {
+        let left = select(native, &RenameTarget::Fleet { id: second.id.clone() }, |seen| {
+            seen.document.selected_fleet.as_ref() == Some(&second.id)
+        })?;
+        select(native, &RenameTarget::Voyage { id: other.id.clone() }, |seen| {
+            seen.document.selected_voyage.as_ref() == Some(&other.id)
+        })?;
+        let returned = select(native, &RenameTarget::Voyage { id: start.voyage.clone() }, |seen| {
+            seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+        })?;
+        let restored = Verdict::new()
+            .expect(
+                "returning to the first Voyage opens the Fleet last used in it, not its first Fleet",
+                returned.fleet.as_ref() == Some(&second.id),
+            )
+            .expect(
+                "the Vessel last focused in that Fleet is drawn as focused",
+                returned.focused.as_ref() == Some(second.shell.placement()),
+            )
+            .expect(
+                "the dock stayed on the Vessel",
+                returned.landing.stayed(&docked),
+            )
+            .observed("left", &left)?
+            .observed("returned", &returned)?;
+        model.fleet = second.id.clone();
+        modelled(native, &model, restored)
+    })?;
+    select(
+        native,
+        &RenameTarget::Fleet {
+            id: start.fleet.clone(),
+        },
+        |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+    )?;
+    model.fleet = start.fleet.clone();
 
     let first_fleet = RenameTarget::Fleet {
         id: start.fleet.clone(),
@@ -638,6 +763,141 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::RenameEmpty, |native| {
         let renamed = rename(native, &new_vessel, Open::DoubleClick, "", Finish::Enter)?;
         concluded(native, &mut model, Verdict::new(), renamed, Outcome::Kept)
+    })?;
+
+    cases.check(native, Case::RelaunchFocus, |native| {
+        shell.focus(native)?;
+        let before = native.settle(
+            "the second Vessel of the first Fleet focused and remembered",
+            |seen| Some(remembered(seen)),
+            |seen| seen.focused.as_ref() == Some(shell.placement()) && seen.saved == seen.focused,
+        )?;
+        native.close()?;
+        native.launch()?;
+        let after = native.settle(
+            "the relaunched window drawing a focused Vessel",
+            |seen| Some(remembered(seen)),
+            |seen| seen.focused.is_some(),
+        )?;
+        let verdict = Verdict::new()
+            .expect(
+                "before the relaunch, the clicked Vessel is drawn as focused and saved as last used",
+                before.focused.as_ref() == Some(shell.placement()) && before.saved == before.focused,
+            )
+            .expect(
+                "the relaunched window opens the same Voyage and Fleet",
+                after.voyage == before.voyage && after.fleet == before.fleet,
+            )
+            .expect(
+                "the relaunched window draws the same Vessel as focused",
+                after.focused == before.focused,
+            )
+            .observed("before", &before)?
+            .observed("after", &after)?;
+        modelled(native, &model, verdict)
+    })?;
+
+    let first_vessel = &start.vessel.id;
+
+    cases.check(native, Case::MaximizeFocusRemembered, |native| {
+        let before = native.observe("the first Fleet before the maximize", |seen| {
+            Some(remembered(seen))
+        })?;
+        native.hover(&Target::name(&vessel(first_vessel)))?;
+        native.click(&Target::maximize_panel(first_vessel))?;
+        let maximized = native.settle(
+            "the first Vessel maximized and drawn as focused",
+            |seen| {
+                let fleet = fleet(seen.document, &start.fleet)?;
+                (fleet.maximized_placement.as_ref() == Some(first_vessel)).then(|| remembered(seen))
+            },
+            |seen| seen.focused.as_ref() == Some(first_vessel),
+        )?;
+        let saved = native
+            .watch(|native| {
+                Ok(native
+                    .document()?
+                    .filter(|(_, document)| last_used(document).as_ref() == Some(first_vessel))
+                    .map(drop))
+            })?
+            .is_some();
+        native.close()?;
+        native.launch()?;
+        let after = native.observe(
+            "the relaunched window drawing the maximized Vessel",
+            |seen| {
+                seen.shows(&Target::name(&vessel(first_vessel)))
+                    .then(|| remembered(seen))
+            },
+        )?;
+        Verdict::new()
+            .expect(
+                "before the maximize, another Vessel of the Fleet is focused",
+                before.focused.is_some() && before.focused.as_ref() != Some(first_vessel),
+            )
+            .expect(
+                "the maximize button draws the Vessel it maximized as focused",
+                maximized.focused.as_ref() == Some(first_vessel),
+            )
+            .expect(
+                "before the relaunch, the maximized Vessel is saved as last used in its Voyage",
+                saved,
+            )
+            .expect(
+                "the relaunched window draws the maximized Vessel as focused",
+                after.fleet.as_ref() == Some(&start.fleet)
+                    && after.focused.as_ref() == Some(first_vessel),
+            )
+            .observed("before", &before)?
+            .observed("maximized", &maximized)?
+            .observed("saved", saved)?
+            .observed("after", &after)
+    })?;
+
+    cases.check(native, Case::FleetTabFocusRemembered, |native| {
+        let typed_in = second.shell.placement();
+        let opened = select(
+            native,
+            &RenameTarget::Fleet {
+                id: second.id.clone(),
+            },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&second.id),
+        )?;
+        second.shell.line(native, "echo TAB-$((6*7))")?;
+        let typed = second.shell.printed(native, "TAB-42")?;
+        native.close()?;
+        native.launch()?;
+        let after = native.observe("the relaunched window drawing its selected Fleet", |seen| {
+            let fleet = fleet(seen.document, seen.document.selected_fleet.as_ref()?)?;
+            shown(seen, fleet).then(|| remembered(seen))
+        })?;
+        native.click(&Target::name(&first_fleet))?;
+        native.observe("the first Fleet drawn with its maximized Vessel", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(&start.fleet)
+                && seen.shows(&Target::name(&vessel(first_vessel))))
+            .then_some(())
+        })?;
+        native.hover(&Target::name(&vessel(first_vessel)))?;
+        native.click(&Target::maximize_panel(first_vessel))?;
+        native.observe("the first Fleet restored with every Vessel drawn", |seen| {
+            let fleet = fleet(seen.document, &start.fleet)?;
+            (fleet.maximized_placement.is_none() && shown(seen, fleet)).then_some(())
+        })?;
+        let verdict = Verdict::new()
+            .expect(
+                "the Fleet tab opens with its Vessel drawn as focused",
+                opened.fleet.as_ref() == Some(&second.id)
+                    && opened.focused.as_ref() == Some(typed_in),
+            )
+            .expect("the Vessel's shell printed TAB-42", typed)
+            .expect(
+                "the relaunched window opens the same Fleet and draws the same Vessel as focused",
+                after.fleet.as_ref() == Some(&second.id)
+                    && after.focused.as_ref() == Some(typed_in),
+            )
+            .observed("opened", &opened)?
+            .observed("after", &after)?;
+        modelled(native, &model, verdict)
     })?;
 
     cases.check(native, Case::Relaunch, |native| {
@@ -1185,6 +1445,47 @@ fn start(layout: &Layout) -> Option<Start> {
         fleet: fleet.id.clone(),
         vessel: vessel.clone(),
     })
+}
+
+fn remembered(seen: &Seen) -> Focus {
+    let document = seen.document;
+    let focused = seen
+        .frame
+        .elements
+        .iter()
+        .find(|element| element.role == Role::FocusedVessel)
+        .map(|element| PlacementId(element.key.clone()));
+    Focus {
+        voyage: document.selected_voyage.clone(),
+        fleet: document.selected_fleet.clone(),
+        focused,
+        saved: last_used(document),
+        landing: landing(seen),
+    }
+}
+
+fn last_used(document: &Layout) -> Option<PlacementId> {
+    document
+        .navigation
+        .iter()
+        .find(|entry| Some(&entry.voyage) == document.selected_voyage.as_ref())
+        .filter(|entry| Some(&entry.fleet) == document.selected_fleet.as_ref())
+        .and_then(|entry| entry.vessel.clone())
+}
+
+fn select(native: &Native, subject: &RenameTarget, done: impl Fn(&Seen) -> bool) -> Result<Focus> {
+    native.click(&Target::name(subject))?;
+    native.settle(
+        &format!(
+            "{} selected and drawn with a focused Vessel",
+            Target::name(subject)
+        ),
+        |seen| {
+            let fleet = fleet(seen.document, seen.document.selected_fleet.as_ref()?)?;
+            (done(seen) && shown(seen, fleet)).then(|| remembered(seen))
+        },
+        |focus| focus.focused.is_some(),
+    )
 }
 
 fn step(seen: &Seen, selected: &str) -> Step {

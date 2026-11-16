@@ -846,6 +846,66 @@ It does not establish a general compatibility matrix. Generation, capability
 and minimum-release checks are the admission rule: a newer release is accepted,
 and one older than 0.1.18 is refused.
 
+## Navigation and the structure revision
+
+Navigation is where the user is: the selected Voyage and Fleet, the Home or
+Fleet view, the dock context and the `navigation` record. Everything else in
+`Layout` is structure. `Layout::same_structure` in `contract/src/lib.rs` names
+both sets, and it destructures every field, so a new field does not build until
+it is classified.
+
+`home`, `select-voyage`, `select-fleet`, `focus-vessel` and `dock` are the
+navigation actions. They change only navigation, and the owner skips the
+expected-version check for them, so a click is never refused as stale. They
+still need a fresh layout and the request's scope.
+
+The version every caller sees is the structure revision. `LayoutRevision` in
+`app/src/layout_store.rs` keeps it beside the Core document version, which the
+owner uses only for its `doc.set` compare. A save or a read that leaves the
+structure unchanged keeps the structure revision. A save or read that changes it
+takes the new document version. The workspace queue compares the layouts before
+and after its save. The owner's other saves (a terminal binding, a Notes
+selection, a closed program, a Voyage close) change structure, so they always
+take the new document version. An external write is detected on the next read,
+by comparing structure. So a plan an agent built before the user
+clicked a Fleet still applies, and every check that compares a caller's version
+with the owner's ignores navigation.
+
+Change notices carry the structure revision, and a navigation revision that
+moves only when a scoped caller, such as an agent through the administrator,
+changes navigation alone. The canvas inspects again when either moves past what
+it holds. Its own navigation, including `focus-vessel`, and the native avatar's
+dock reach it through their replies, so they send it no notice and cost it no
+second inspect.
+
+**The navigation record.** `navigation` holds one entry per Voyage: its
+last-used Fleet and, optionally, its last-used Vessel placement. Any change that
+leaves the workspace on a Voyage and Fleet updates that Voyage's entry, and a
+new Fleet clears the remembered Vessel. The owner records a placement only when
+it is in the open Fleet or that Voyage's Portals.
+
+Selecting or reopening a Voyage, or moving to the nearest Voyage after one
+closes, opens its last-used Fleet when that Fleet is still open. Otherwise it
+opens the first open Fleet. Home keeps no entry.
+
+**The canvas's focused placement.** `moveFocus` in
+`desktop/canvas/panel-view.ts` is its only writer. It keeps the placement in a
+store private to that module, and `Canvas.focused` only reads it, so an
+assignment anywhere else does not compile. A move has one of two targets:
+
+- A placement the user chose: a click on a pane, the Maximize or Restore
+  button or menu item, or the Vessel a split or create focuses. When this
+  changes focus in an ordinary Voyage, the canvas sends `focus-vessel`. It sends
+  it outside the action queue, does not wait for it and ignores its reply.
+- The opening placement: the remembered placement when it is shown, and the
+  first shown placement otherwise. The canvas moves here after a selection
+  change, when nothing is focused in an ordinary Voyage, as on the first layout
+  after launch, and when the focused placement is no longer shown. It sends
+  nothing, because the record already names this placement: a Fleet change
+  clears the remembered Vessel, and a Fleet with no remembered Vessel opens on
+  its first shown placement. A tab click therefore costs one save, the
+  selection itself.
+
 ## The stored layout across builds
 
 The whole `Layout` lives in the Core document `voyager-layout-v2`. A build
@@ -891,6 +951,13 @@ The message stays until the workspace applies a change from any caller, which
 clears it. A restart also clears it. A document that parses
 but fails the workspace's own checks is copied to the backup and refused. The
 backup holds one document, so a later unreadable document replaces it.
+
+**Navigation across builds.** `navigation` is an optional field, so this
+build stamps no `minReader`. The selection and dock fields keep their stored
+keys. A build from before it reads the document, keeps `navigation` as an unknown
+root field and writes it back unchanged. That build opens each Voyage on its
+first open Fleet. Its entries can go stale, and a stale entry falls back to the
+first open Fleet here.
 
 **Older documents.** `voyager-layout-v1` is the name before the Vessel and
 Placement vocabulary. A build that finds no v2 document and a v1 document renames

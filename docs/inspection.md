@@ -163,6 +163,7 @@ union all come from that list.
 | `workspace-refresh` | Empty | The Refresh button beside the workspace status line | `statusLine` in `status.ts` |
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |
+| `focused-vessel` | Placement id | The content area of the Vessel or Portal the canvas draws as focused, drawn only while it is | `renderPanel` |
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |
 | `profile-update` | Profile path of the file | One line of the notice that a newer first-party version of an edited or unrecorded profile file is available | `Updates::view` in `banner.rs` |
 | `window-minimize`, `window-maximize`, `window-close` | Empty | The window buttons at the right end of the top strip, drawn only under client decorations | `windowControls` in `navigation-view.ts` |

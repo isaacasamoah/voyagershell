@@ -1,6 +1,6 @@
 use crate::core::{Core, Error, Viewer};
 use crate::core_shapes::{RunParams, Terminal};
-use crate::layout_store::{rejected, save};
+use crate::layout_store::{LayoutRevision, rejected, save};
 use std::{collections::HashMap, sync::Arc};
 use voyager_contract::{CoreTerminalId, Layout, TerminalRequest, VesselId};
 
@@ -63,7 +63,7 @@ fn settle_run(core: &mut Core, operation: &str, message: String) -> Result<Termi
 pub(super) fn open_terminal(
     core: &mut Core,
     layout: &mut Arc<Layout>,
-    version: &mut u64,
+    version: &mut LayoutRevision,
     fresh: &mut bool,
     unconfirmed: &mut HashMap<String, String>,
     created_vessels: &mut Vec<CreatedTerminal>,

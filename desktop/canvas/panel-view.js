@@ -6,8 +6,31 @@ import { Notes } from "voyager_content_view";
 import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
-import { visiblePanels } from "./panels.js";
+import { openingPlacement, visiblePanels } from "./panels.js";
+import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
+function noteFocus(workspace, id, cx) {
+  if (workspace.layout?.view !== "fleet") return;
+  cx.spawn(() =>
+    invoke({ operation: "focus-vessel", id }, workspace.version).catch(
+      () => null,
+    ),
+  );
+}
+const focusedPlacements = new WeakMap();
+export function focusedPlacement(workspace) {
+  return focusedPlacements.get(workspace) ?? null;
+}
+export function moveFocus(workspace, target, cx) {
+  const id =
+    target === "opening"
+      ? (openingPlacement(workspace.layout)?.id ?? null)
+      : target.placement;
+  const changed = id !== focusedPlacement(workspace);
+  focusedPlacements.set(workspace, id);
+  if (id && changed && target !== "opening") noteFocus(workspace, id, cx);
+  return changed;
+}
 export function renderPanel(workspace, placement, scope, group) {
   const colors = projection();
   const content = workspace.layout?.vessels.find(
@@ -61,7 +84,7 @@ export function renderPanel(workspace, placement, scope, group) {
           {
             label: `${maximized ? "Restore" : "Maximize"} ${entity}`,
             choose: (version, cx) => {
-              workspace.focused = placement.id;
+              moveFocus(workspace, { placement: placement.id }, cx);
               workspace.run(
                 {
                   operation: "set-placement-maximized",
@@ -108,9 +131,8 @@ export function renderPanel(workspace, placement, scope, group) {
           cx.notify();
         })
         .on_mouse_down("left", (_event, cx) => {
-          const changed = workspace.focused !== placement.id;
-          workspace.focused = placement.id;
-          if (changed) cx.spawn((task) => workspace.readObservation(task));
+          if (moveFocus(workspace, { placement: placement.id }, cx))
+            cx.spawn((task) => workspace.readObservation(task));
           cx.notify();
         })
         .on_key_down((event, cx) => {
@@ -198,7 +220,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     )
                     .child(Marker.new("maximize-panel", placement.id))
                     .on_click((_event, cx) => {
-                      workspace.focused = placement.id;
+                      moveFocus(workspace, { placement: placement.id }, cx);
                       workspace.run(
                         {
                           operation: "set-placement-maximized",
@@ -241,6 +263,11 @@ export function renderPanel(workspace, placement, scope, group) {
             .children(
               content.typeId === "terminal" && terminal
                 ? [Marker.new("terminal", placement.id)]
+                : [],
+            )
+            .children(
+              workspace.focused === placement.id
+                ? [Marker.new("focused-vessel", placement.id)]
                 : [],
             )
             .child(

@@ -1638,7 +1638,6 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     observedPanels: [panel],
     observation: { panels: [panel] },
     observationRead: 0,
-    focused: "panel",
   });
   const cx = {
     spawn() {},
@@ -1650,6 +1649,11 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   view.acceptSnapshot(
     { version: "2", layout, fresh: true, status: "applied" },
     cx,
+  );
+  assert.equal(
+    view.focused,
+    "panel",
+    "The first layout focuses the first shown placement",
   );
   assert.deepEqual(
     inspected,
@@ -1739,7 +1743,6 @@ test("late active-directory observations cannot replace newer facts", async () =
   );
   const view = Object.assign(new Canvas(), {
     version: "1",
-    focused: "panel",
     observationRead: 0,
     observation: null,
     layout: {

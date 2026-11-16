@@ -520,7 +520,7 @@ mod tests {
                 thread::sleep(Duration::from_millis(5));
             }
             let effect_version = inspect().version;
-            assert_eq!(effect_version, later.version + 1);
+            assert!(effect_version > later.version);
             assert!(owner.event(effect).is_err());
             assert_eq!(inspect().version, effect_version);
             let final_state = workspace

@@ -95,6 +95,7 @@ Owns files:
 - `app/tests/canvas.rs`
 - `app/tests/maximize.rs`
 - `app/tests/shared_panels.rs`
+- `app/tests/navigation.rs`
 - `app/tests/voyage_close.rs`
 - `contract/src/bin/export.rs`
 - `contract/tests/panels.rs`

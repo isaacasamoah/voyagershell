@@ -264,6 +264,15 @@ pub enum WorkspaceView {
     Fleet,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LastUsed {
+    pub voyage: VoyageId,
+    pub fleet: FleetId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vessel: Option<PlacementId>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Layout {
@@ -283,6 +292,8 @@ pub struct Layout {
     #[serde(with = "decimal")]
     #[schemars(with = "String")]
     pub next_id: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub navigation: Vec<LastUsed>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -399,6 +410,9 @@ pub enum Action {
     SelectFleet {
         id: FleetId,
     },
+    FocusVessel {
+        id: PlacementId,
+    },
     CloseFleet {
         id: FleetId,
     },
@@ -449,6 +463,41 @@ impl Layout {
 
     pub fn containers_mut(&mut self) -> impl Iterator<Item = &mut Voyage> {
         self.voyages.iter_mut().chain(self.home.iter_mut())
+    }
+
+    pub fn same_structure(&self, other: &Self) -> bool {
+        let Self {
+            voyages,
+            home,
+            vessels,
+            selected_voyage: _,
+            selected_fleet: _,
+            context: _,
+            canvas,
+            view: _,
+            arrangements,
+            next_id,
+            navigation: _,
+        } = self;
+        voyages == &other.voyages
+            && home == &other.home
+            && vessels == &other.vessels
+            && canvas == &other.canvas
+            && arrangements == &other.arrangements
+            && next_id == &other.next_id
+    }
+}
+
+impl Action {
+    pub fn is_navigation(&self) -> bool {
+        matches!(
+            self,
+            Self::Home
+                | Self::SelectVoyage { .. }
+                | Self::SelectFleet { .. }
+                | Self::FocusVessel { .. }
+                | Self::Dock { .. }
+        )
     }
 }
 
