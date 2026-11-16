@@ -1,5 +1,6 @@
 mod avatar;
 mod model;
+mod plan;
 
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
@@ -40,6 +41,8 @@ cases! {
     MaximizeFocusRemembered => "maximize-focus-remembered",
     FleetTabFocusRemembered => "fleet-tab-focus-remembered",
     Relaunch => "relaunch-restores",
+    AgentPlanSurvivesClick => "agent-plan-survives-click",
+    StaleAgentEditRefused => "stale-agent-edit-refused",
     DragBarMovesWindow => "drag-bar-moves-window",
     TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
     DoubleClickMaximises => "double-click-bar-maximises-window",
@@ -969,6 +972,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restored", &restored)?
             .observed("differences after the relaunch", &reopened)
     })?;
+    plan::drive(native, cases)?;
 
     cases.check(native, Case::DragBarMovesWindow, |native| {
         on_bar(native, &start)?;

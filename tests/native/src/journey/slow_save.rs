@@ -119,18 +119,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 played.len() == 1 && answered >= held.released,
             )
             .expect(
-                "the rename was refused because the layout changed, and Core reported no conflict",
-                text.as_ref().is_some_and(|text| {
-                    text["status"] == "refused"
-                        && text["message"]
-                            .as_str()
-                            .is_some_and(|message| message.contains("Layout changed"))
-                }),
+                "the rename of the inspected Fleet applied, because the new Fleet changed only its Voyage",
+                text.as_ref().is_some_and(|text| text["status"] == "applied"),
             )
             .expect(
-                "the Fleet kept its saved name and Core holds exactly one new Fleet",
-                saved_name(native, &fleet)? == named && fleet_count(native)? == before + 1,
+                "Core holds the inspected Fleet under the scripted name and exactly one new Fleet",
+                saved_name(native, &fleet)?.as_deref() == Some(RENAMED)
+                    && fleet_count(native)? == before + 1,
             )
+            .observed("named", &named)?
             .observed("played", &played)?
             .observed("heldSave", &held.line)?
             .observed("askedAtMs", asked)?
