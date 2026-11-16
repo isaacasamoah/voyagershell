@@ -20,7 +20,7 @@ cases! {
     StopDropped => "stop-dropped-retried",
     StopHeld => "stop-held-closed",
     RenameUncertain => "rename-uncertain-declines-second-enter",
-    CloseUnanswered => "close-unanswered-offers-no-second-confirm",
+    CloseUnanswered => "close-unanswered-stops-nothing",
     StartHeld => "start-held-adopted",
     StartStalled => "start-stalled-not-repeated",
 }
@@ -47,6 +47,7 @@ const BEHIND_ITEM: &str = "stand-in-behind";
 const STALLED: &str = "Held Fleet";
 const DECLINED: &str = "Name change not confirmed";
 const INSPECT: &str = "Voyage remains open. Inspect before another close";
+const STALE: &str = "Inspect the workspace before making a change";
 const SILENT: Duration = Duration::from_secs(60);
 const SILENT_NAME: &str = "Silent Fleet";
 const NOT_REPEATED: &str = "so it was not repeated";
@@ -350,41 +351,41 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         if !is_open(&saved(native)?, &voyage) {
             reopen(native, &voyage)?;
         }
+        let before = programs(native, &voyage)?;
         open_dialog(native, &voyage)?;
+        let arm = native.system.arm_core(STOP, Fault::Drop)?;
         let status = native.with_core_paused(|native| {
             native.click(&Target::voyage_close_confirm(&voyage))?;
             let status = native.drawn_label(
                 &message,
                 SILENT,
-                "the close dialog's inspect-first message while Core stays paused",
-                |label| label.contains(INSPECT),
+                "a refusal in the close dialog while Core stays paused",
+                |label| label.contains(INSPECT) || label.contains(STALE),
             )?;
             native.keep_window("close-unanswered")?;
             Ok(status)
         })?;
-        let (open, offered, kept) = at_rest(native, &voyage, &message)?;
+        let (open, _, kept) = at_rest(native, &voyage, &message)?;
+        let after = programs(native, &voyage)?;
+        let stopped = native.system.arm_spent(&arm)?;
         native.click(&Target::voyage_close_cancel(&voyage))?;
         native.observe("the close dialog dismissed", |seen| {
             (!seen.shows(&Target::voyage_close_cancel(&voyage))).then_some(())
         })?;
         Verdict::new()
             .expect(
-                "the close dialog said the Voyage remains open and to inspect before another close",
-                status.contains(INSPECT),
+                "no terminal.kill reached Core while the close could not inspect the workspace",
+                stopped.is_none(),
             )
+            .expect("the Voyage is still open after Core resumed", open)
             .expect(
-                "the Voyage is still open while the stop is unconfirmed",
-                open,
-            )
-            .expect(
-                "the dialog keeps that message and offers no second confirmation",
-                !offered && kept.as_deref().is_some_and(|kept| kept.contains(INSPECT)),
+                "every program of the Voyage still runs",
+                !before.is_empty() && after == before,
             )
             .observed("status", &status)?
-            .observed(
-                "atRest",
-                json!({"open":open,"confirmOffered":offered,"message":kept}),
-            )
+            .observed("atRest", json!({"open":open,"message":kept}))?
+            .observed("programs", json!({"before":before,"after":after}))?
+            .observed("stop", &stopped)
     })?;
 
     cases.check(native, Case::StartHeld, |native| {

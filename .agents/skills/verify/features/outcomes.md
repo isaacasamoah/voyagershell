@@ -83,11 +83,11 @@ deadline, so a run takes about four minutes.
   the status line must say `Uncertain.`. A second Enter must be declined with
   "Name change not confirmed", and after Core resumes the document must be
   exactly one version on.
-- `close-unanswered-offers-no-second-confirm` stops Core and confirms a Voyage
-  close. The dialog must say the Voyage remains open and to inspect before
-  another close. After Core resumes the Voyage must still be open and the dialog
-  must not offer Confirm again. The close inspects the workspace before it
-  stops anything, so no stop reaches Core in this case.
+- `close-unanswered-stops-nothing` stops Core and confirms a Voyage
+  close with a drop armed on `terminal.kill`. The dialog must refuse, and either
+  refusal text counts. The arm must stay unspent, so no stop was sent. After
+  Core resumes the Voyage must still be open and its programs must still run.
+  The close inspects the workspace before it stops anything.
 
 ## What a failure means
 

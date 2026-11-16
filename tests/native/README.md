@@ -182,12 +182,13 @@ one fault for the next request of one method, as
 - `rename-uncertain-declines-second-enter` stops Core through the owner's read and
   the canvas's ask, until the status line says `Uncertain.`. A second Enter on
   the same name must be declined with "Name change not confirmed", and Core
-  saves the name once after it resumes. `close-unanswered-offers-no-second-confirm`
-  confirms a Voyage close while Core is stopped: the dialog says the Voyage
-  remains open and to inspect before another close, and after Core resumes the
-  Voyage is still open and the dialog offers no second confirmation. A stop that
-  stays uncertain through its read cannot be reached here, because the close
-  inspects the workspace first and Core is silent for that too.
+  saves the name once after it resumes. `close-unanswered-stops-nothing`
+  confirms a Voyage close while Core is stopped and a drop is armed on
+  `terminal.kill`. The dialog refuses, and the arm stays unspent, so no stop was
+  sent. After Core resumes the Voyage is open and its programs still run. The
+  dialog may offer Confirm again, because nothing happened. A stop that stays
+  uncertain through its read cannot be reached here, because the close inspects
+  the workspace first and Core is silent for that too.
 
 Limits. No case drives the avatar's or the administrator's ask through a late
 reply, or a request cancelled while it waited in the queue. Seven cases wait for
