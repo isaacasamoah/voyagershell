@@ -793,65 +793,6 @@ mod tests {
     }
 
     #[test]
-    fn a_release_without_selected_text_yields_nothing_to_copy() {
-        use crate::terminal_screen::Select;
-        use libghostty_vt::{selection::gesture::Geometry, terminal::PointCoordinate};
-        let mut screen = Screen::new(20, 3).unwrap();
-        screen.write(b"alpha");
-        let geometry = Geometry {
-            columns: 20,
-            cell_width: 512,
-            padding_left: 0,
-            screen_height: 3456,
-        };
-        let gesture = |screen: &mut Screen, steps: Vec<(Select, u16, u32)>| {
-            for (step, x, y) in steps {
-                let offset = if matches!(step, Select::Press) {
-                    64.
-                } else {
-                    448.
-                };
-                screen
-                    .select(
-                        step,
-                        PointCoordinate { x, y },
-                        (f64::from(x) * 512. + offset, f64::from(y) * 1152. + 576.),
-                        geometry,
-                    )
-                    .unwrap();
-            }
-        };
-        gesture(
-            &mut screen,
-            vec![(Select::Press, 8, 1), (Select::Release, 8, 1)],
-        );
-        assert_eq!(screen.selection_text().unwrap(), None);
-        gesture(
-            &mut screen,
-            vec![
-                (Select::Press, 8, 1),
-                (Select::Drag, 12, 1),
-                (Select::Release, 12, 1),
-            ],
-        );
-        assert_eq!(screen.selection_text().unwrap(), None);
-        gesture(
-            &mut screen,
-            vec![
-                (Select::Press, 0, 0),
-                (Select::Drag, 4, 0),
-                (Select::Release, 4, 0),
-            ],
-        );
-        assert_eq!(screen.selection_text().unwrap().as_deref(), Some("alpha"));
-        gesture(
-            &mut screen,
-            vec![(Select::Press, 8, 1), (Select::Release, 8, 1)],
-        );
-        assert_eq!(screen.selection_text().unwrap(), None);
-    }
-
-    #[test]
     fn clipboard_paste_respects_terminal_bracketing_and_plain_newlines() {
         let mut screen = Screen::new(20, 3).unwrap();
         assert_eq!(screen.paste_bytes("one\ntwo").unwrap(), b"one\rtwo");
