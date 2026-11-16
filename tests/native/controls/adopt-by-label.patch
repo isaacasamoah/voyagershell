@@ -1,0 +1,20 @@
+diff --git a/app/src/activity.rs b/app/src/activity.rs
+index 720b46e..434b9d9 100644
+--- a/app/src/activity.rs
++++ b/app/src/activity.rs
+@@ -588,11 +588,10 @@ impl Activity {
+                     return Ok(());
+                 }
+                 if let Some(event) = Self::report(notice)?
+-                    && (matches!(event.report, Report::Labelled { .. })
+-                        || event
+-                            .terminal
+-                            .as_ref()
+-                            .is_none_or(|address| self.entries.contains_key(address)))
++                    && event
++                        .terminal
++                        .as_ref()
++                        .is_none_or(|address| self.entries.contains_key(address))
+                 {
+                     self.push(event);
+                 }

@@ -62,7 +62,7 @@ Build from the repository root:
 ```sh
 python3 desktop/prepare-sdk.py
 npm ci --ignore-scripts
-cargo build --release --locked -p voyager-desktop --bin voyager-shell
+cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
 ```
 
 Start the app from the project you want to work in. The first Voyage opens in

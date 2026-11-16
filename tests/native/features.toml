@@ -335,3 +335,16 @@ behavior = "covered"
 performance = "none"
 visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "adopted-vessels"
+name = "Labelled programs as Vessels"
+path = "From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, and create a Fleet with the voyager command."
+sources = ["contract/src/place.rs", "contract/src/socket.rs", "app/src/activity.rs", "app/src/client_core.rs", "app/src/adoption.rs", "app/src/vessel_socket.rs", "app/src/bin/voyager.rs", "app/src/workspace.rs", "docs/voyager-command.md"]
+journeys = ["adopt-by-label"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"

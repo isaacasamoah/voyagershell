@@ -46,7 +46,10 @@ fn main() {
             "notes":schema::<voyager_contract::content::Notes>(),
             "notesConfiguration":schema::<voyager_contract::content::NotesConfiguration>(),
             "voiceState":schema::<voyager_contract::voice::State>(),
-            "launchCatalog":schema::<voyager_contract::launch::Catalog>()}),
+            "launchCatalog":schema::<voyager_contract::launch::Catalog>(),
+            "place":schema::<voyager_contract::place::Place>(),
+            "socketRequest":schema::<voyager_contract::socket::SocketRequest>(),
+            "socketReply":schema::<voyager_contract::socket::SocketReply>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

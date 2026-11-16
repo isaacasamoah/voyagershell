@@ -21,6 +21,7 @@ export function workspace_observation(version: string, active: string | null): P
 export function launches(): Promise<string>;
 export function processes(version: string): Promise<string>;
 export function notice(): { revision: string; closeRevision: string; navigationRevision: string; packageRevision: string; activityRevision: string };
+export function take_placement_notice(): string | null;
 export function reported_activity(): string;
 export function refresh_activity(): Promise<void>;
 export function stop_session(): void;

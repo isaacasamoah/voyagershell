@@ -30,7 +30,8 @@ they do not pass it.
 1. **Envelope.** The owner builds one `Envelope` from the bound caller and the
    request. It holds the request id, the kind, the caller, the target, the
    expected revision and whether the request has an effect. The caller is the
-   canvas, the avatar with its captured focus, a Vessel's own view, or Core. A
+   canvas, the avatar with its captured focus, a Vessel's own view, the program
+   in a Vessel through its socket, or Core. A
    request never names its own caller. An empty id, an id over 128 bytes, or an
    empty or over-long Vessel revision is refused here.
 2. **Ledger.** One list holds every request id with its kind, a fingerprint and
@@ -64,6 +65,84 @@ the Core caller's one effect. It uses the gate too, whether the exit came from
 an event, a snapshot or the observation's terminal list. A report never enters
 the ledger, because Core's event sequence already tells one report from the
 next. [The Core adapter](terminal.md#core-adapter) describes the whole path.
+
+### Labelled terminals become Vessels
+
+Core owns terminals, so an agent starts a program with `hc run` and labels it
+`voyager.place=<value>`. The value is the `Place` contract type in
+`contract/src/place.rs`: `fleet:<Fleet id>` or `portal:<Voyage id>`. Its
+generated schema is `contract/generated/place.schema.json`. The owner parses
+the label where Core's report enters, in `app/src/activity.rs`.
+
+A `created` report for a terminal that no Vessel names is dropped, unless it
+carries the label. A labelled one is adopted. A missed-event snapshot also
+adopts each live labelled terminal that no Vessel names, so a terminal created
+while the subscription was resynchronising is not lost. Adoption is the Core
+caller's second effect and uses the same gate as an exit closure. It waits
+until no request is in flight and the layout is fresh.
+
+Adoption adds one terminal Vessel whose backend is that terminal and places it
+at the end of the Fleet's split, or of the Voyage's Portal column, which it
+shows. The Vessel's launch is the program when the first argument names a
+known agent program from `app/src/launch.rs`, such as `claude` or `codex`, and
+a terminal otherwise. Adoption starts nothing, because the terminal is already
+running. When a later launch finds that the adopted terminal is gone or ended,
+`prepare_reopen` in `app/src/terminal_lifecycle.rs` clears the Vessel's backend
+and gives it a fresh shell, as for any terminal Vessel.
+A terminal that any Vessel already names is skipped, so a repeat report or a
+second snapshot adds nothing. The adopted terminal joins the live bindings, so
+its Vessel closes when its program exits, like any other.
+
+An invalid value, an unknown Fleet or Voyage, or a closed one places nothing.
+The owner writes the reason, which names the terminal, to the canvas status
+line through `take_placement_notice`. It never guesses another place.
+
+The adoption's layout save settles like every other save, through
+`settle_save` (see Settling an uncertain result below). When the save is
+refused, nothing was written, so the owner keeps the adoption and tries it
+again after the next inspect reloads the layout. A terminal that the reloaded
+layout already names is skipped. When the settle read cannot prove the result,
+the owner keeps no second retry. It drops the adoption, marks the layout
+stale and writes a notice naming the terminal to the status line. A later
+missed-event snapshot adopts the terminal if the save did not land.
+
+### The voyager command
+
+`voyager` (`app/src/bin/voyager.rs`) is the agent command for workspace
+actions. `voyager --skill` prints its guide,
+[voyager-command.md](voyager-command.md). Core keeps processes, terminals and
+their output, so the command offers none of them.
+
+Each placed terminal Vessel has its own Unix socket, opened and closed by
+`app/src/vessel_socket.rs` as the layout changes. The path is
+`<Core socket directory>/<session>.vessels/<terminal>.sock`, from
+`app/src/vessel_socket.rs`. The command computes the same path from
+`HC_SESSION` and `HC_TERMINAL_ID`, which Core already sets in every terminal.
+Voyager sets no identity variable, because Core starts an `hc run` child with
+Core's own environment, so such a variable would never reach an adopted
+terminal. Voyager does put the folder that holds `voyager` first on `PATH` for
+each terminal it starts. An `hc run` child gets Core's environment, not its
+parent's, so `voyager --skill` prints the full path of the command.
+The socket closes when its Vessel has no placement or its backend changes.
+
+A connection sends one JSON line, a `SocketRequest`, and reads one JSON line,
+a `SocketReply` (`contract/src/socket.rs`, generated as
+`socketRequest.schema.json` and `socketReply.schema.json`).
+
+- `status` inspects the workspace through the front door and answers with the
+  calling Vessel, its terminal, the layout version and each of its placements.
+- `workspace` carries a workspace `Request`. The socket offers `inspect`,
+  `create-fleet`, `rename`, `move-voyage`, `move-fleet`, `move-placement`,
+  `select-voyage` and `select-fleet`, and refuses any other operation before
+  queueing it. An offered request passes the front door like the canvas's,
+  with no scope, so the program acts with the person's authority.
+
+The socket binds the caller outside the payload: the envelope's caller is
+`Program { vessel }`, taken from the socket that accepted the connection. That
+identity is advisory, and nothing is enforced. Any process of the same user can
+connect to any Vessel's socket, and the directory's 0700 mode only keeps other
+users out. Linux is the verified platform. Windows has no socket yet, so the
+owner opens none there and the command refuses.
 
 ### What the caller is told
 
@@ -148,8 +227,9 @@ terminal and then ran the start, so a retry would have started a second
 program. The `outcomes` journey's `start-stalled-not-repeated` case shows this.
 A stop runs again only while the same program identity is still live.
 
-The canvas and the avatar ask the app in `Client::call`, `Client::scoped_call`,
-`Client::process` and `Client::terminal` in `app/src/client.rs`. When the
+The canvas, the avatar and a Vessel's socket ask the app in `Client::call`,
+`Client::scoped_call`, `Client::program_call`, `Client::process` and
+`Client::terminal` in `app/src/client.rs` and `app/src/client_reply.rs`. When the
 caller's wait ends without an answer, it sends the same request with the same
 id once more and waits again. The front door's ledger answers the repeat with
 the recorded answer, or that the request is still pending, and never runs the

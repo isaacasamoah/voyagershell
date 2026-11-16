@@ -1,3 +1,4 @@
+mod agent;
 mod battery;
 mod core_relay;
 mod diagnosis;
@@ -35,6 +36,9 @@ fn main() {
     }
     if provider::invoked_as_relay() {
         std::process::exit(provider::relay());
+    }
+    if agent::invoked_as_agent() {
+        std::process::exit(agent::run());
     }
     match entry() {
         Ok(code) => std::process::exit(code),
@@ -483,12 +487,17 @@ fn drive(plan: Plan) -> Result<i32> {
 
 const SOURCES: &[(&str, &[u8])] = &[
     ("src/main.rs", include_bytes!("main.rs")),
+    ("src/agent.rs", include_bytes!("agent.rs")),
     ("src/battery.rs", include_bytes!("battery.rs")),
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
     ("src/journey.rs", include_bytes!("journey.rs")),
+    (
+        "src/journey/adopt_by_label.rs",
+        include_bytes!("journey/adopt_by_label.rs"),
+    ),
     (
         "src/journey/arrangement.rs",
         include_bytes!("journey/arrangement.rs"),

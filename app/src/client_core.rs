@@ -1,6 +1,7 @@
 use super::{LayoutRevision, Message, save};
 use crate::{
-    activity::{Activity, Event},
+    activity::{Activity, Event, Report},
+    adoption::Adoptions,
     core::{Core, Error},
     core_shapes::Terminal,
     workspace::Model,
@@ -43,6 +44,7 @@ pub(super) fn reports(
     activity: &Arc<Mutex<Activity>>,
     layout: &Layout,
     exits: &mut Vec<CoreTerminalId>,
+    adoptions: &mut Adoptions,
     admit: impl Fn(&Event) -> bool,
 ) -> bool {
     let Ok(mut activity) = activity.lock() else {
@@ -56,6 +58,11 @@ pub(super) fn reports(
     );
     for event in activity.take() {
         if admit(&event) {
+            match &event.report {
+                Report::Labelled { labelled, .. } => adoptions.found([labelled.clone()]),
+                Report::Snapshot { labelled, .. } => adoptions.found(labelled.iter().cloned()),
+                _ => (),
+            }
             for exited in activity.apply(event).into_iter().map(CoreTerminalId) {
                 if !exits.contains(&exited) {
                     exits.push(exited);
@@ -425,7 +432,13 @@ mod activity_notice_tests {
             .unwrap();
         model.layout.vessels[0].backend = Some(CoreTerminalId("t1".into()));
         let mut exits = Vec::new();
-        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
+        assert!(reports(
+            &activity,
+            &model.layout,
+            &mut exits,
+            &mut Adoptions::new(Arc::default()),
+            |_| true
+        ));
         let event = |seq: u64, kind: &str, terminal: &str, data: serde_json::Value| json!({"jsonrpc":"2.0","method":"event","params":{"seq":seq,"type":kind,"terminal":terminal,"data":data}});
         let done = json!({"status":{"state":"done"},"reported":true});
         {
@@ -439,7 +452,13 @@ mod activity_notice_tests {
             }));
             facts.notification(event(1, "status", "t1", done)).unwrap();
         }
-        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
+        assert!(reports(
+            &activity,
+            &model.layout,
+            &mut exits,
+            &mut Adoptions::new(Arc::default()),
+            |_| true
+        ));
         assert_eq!(
             activity.lock().unwrap().get("t1").state,
             voyager_contract::activity::ActivityState::Done
@@ -449,12 +468,30 @@ mod activity_notice_tests {
             let finished = event(seq, "finished", terminal, exited.clone());
             activity.lock().unwrap().notification(finished).unwrap();
         }
-        assert!(!reports(&activity, &model.layout, &mut exits, |_| false));
+        assert!(!reports(
+            &activity,
+            &model.layout,
+            &mut exits,
+            &mut Adoptions::new(Arc::default()),
+            |_| false
+        ));
         assert!(exits.is_empty());
         let again = event(4, "finished", "t1", exited);
         activity.lock().unwrap().notification(again).unwrap();
-        assert!(reports(&activity, &model.layout, &mut exits, |_| true));
-        assert!(!reports(&activity, &model.layout, &mut exits, |_| true));
+        assert!(reports(
+            &activity,
+            &model.layout,
+            &mut exits,
+            &mut Adoptions::new(Arc::default()),
+            |_| true
+        ));
+        assert!(!reports(
+            &activity,
+            &model.layout,
+            &mut exits,
+            &mut Adoptions::new(Arc::default()),
+            |_| true
+        ));
         assert_eq!(exits, [CoreTerminalId("t1".into())]);
     }
 

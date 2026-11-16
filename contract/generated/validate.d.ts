@@ -10,11 +10,14 @@ export function conversationSnapshot(data: unknown): data is import("./conversat
 export function launchCatalog(data: unknown): data is import("./launchCatalog").Catalog;
 export function notes(data: unknown): data is import("./notes").Notes;
 export function notesConfiguration(data: unknown): data is import("./notesConfiguration").NotesConfiguration;
+export function place(data: unknown): data is import("./place").Place;
 export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;
 export function processTool(data: unknown): data is import("./processTool").ProcessInput;
 export function reportedActivity(data: unknown): data is import("./reportedActivity").Projection;
 export function request(data: unknown): data is import("./request").Request;
 export function response(data: unknown): data is import("./response").Reply;
+export function socketReply(data: unknown): data is import("./socketReply").SocketReply;
+export function socketRequest(data: unknown): data is import("./socketRequest").SocketRequest;
 export function terminalRequest(data: unknown): data is import("./terminalRequest").TerminalRequest;
 export function terminalResponse(data: unknown): data is import("./terminalResponse").TerminalResponse;
 export function voiceState(data: unknown): data is import("./voiceState").State;

@@ -1,5 +1,6 @@
 mod activity;
 mod administrator;
+mod adoption;
 mod canvas;
 pub mod client;
 pub mod content;
@@ -16,6 +17,7 @@ mod panels;
 mod process;
 mod scope;
 mod terminal_lifecycle;
+pub mod vessel_socket;
 pub mod vessel_type;
 pub mod voyage_close;
 pub mod workspace;
