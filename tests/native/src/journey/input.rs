@@ -746,7 +746,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let typed = terminal.settled(native, "click-move-typed", |_| true)?;
         terminal.click_cell(native, SHELL_CLICK, 0)?;
         native.type_text("X")?;
-        let moved = terminal.settled(native, "click-move-after-x", |look| {
+        terminal.settled(native, "click-move-after-x", |look| {
             changed(&typed, look).is_some()
         })?;
         native.press(Key::Return)?;
@@ -760,10 +760,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the shell did not print abcdefX, which is where the X lands without the click",
                 !screen.contains("\nabcdefX"),
-            )
-            .expect(
-                "the terminal drew the X inside the typed line",
-                changed(&typed, &moved).is_some(),
             )
             .observed("screen", &screen)
     })?;
