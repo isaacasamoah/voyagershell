@@ -175,10 +175,10 @@ impl Tools {
         context: Option<&Focus>,
         workspace: &Client,
     ) -> Option<Value> {
-        match crate::codex::normalize(value.clone(), None)? {
+        match crate::provider_settings::codex_event(value.clone(), None)? {
             crate::provider::Event::Tool(call) => self
                 .call(&call, thread, turn, active, context, workspace)
-                .map(|reply| crate::codex::encode_tool_reply(&reply)),
+                .map(|reply| crate::provider_settings::codex_reply(&reply)),
             crate::provider::Event::CallbackError { id, code, message } => {
                 Some(json!({"id":id,"error":{"code":code,"message":message}}))
             }
@@ -974,7 +974,7 @@ mod tests {
             assert_eq!(applied.outcome.status, Status::Applied);
             let applied_content: ContentResponse =
                 serde_json::from_str(
-                    crate::codex::encode_tool_reply(&applied.replies[0])["result"]["contentItems"]
+                    crate::provider_settings::codex_reply(&applied.replies[0])["result"]["contentItems"]
                         [0]["text"]
                         .as_str()
                         .unwrap(),
@@ -1017,7 +1017,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 duplicate["result"],
-                crate::codex::encode_tool_reply(&applied.replies[0])["result"]
+                crate::provider_settings::codex_reply(&applied.replies[0])["result"]
             );
             callback["id"] = "changed".into();
             callback["params"]["arguments"]["action"]["vesselId"] = json!(b);
@@ -1212,14 +1212,13 @@ mod tests {
             )
             .unwrap();
         let numeric_id = serde_json::to_value(&inspection.outcome.callback_ids).unwrap();
-        let observed: Response =
-            serde_json::from_str(
-                crate::codex::encode_tool_reply(&inspection.replies[0])["result"]["contentItems"]
-                    [0]["text"]
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap();
+        let observed: Response = serde_json::from_str(
+            crate::provider_settings::codex_reply(&inspection.replies[0])["result"]["contentItems"]
+                [0]["text"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
         callback["id"] = "callback-two".into();
         callback["params"]["callId"] = "call-two".into();
         callback["params"]["arguments"] = json!({"expectedVersion":observed.version.to_string(),"action":{"operation":"create-fleet","voyage":observed.layout.voyages[0].id,"name":"Delegated"}});
@@ -1372,7 +1371,7 @@ mod tests {
         assert_eq!(replacement_refusal["result"], large_refusal["result"]);
         assert!(invalid_identity && refused && untouched && duplicate_pending);
         assert_eq!(
-            crate::codex::encode_tool_reply(&effect.replies[0])["id"],
+            crate::provider_settings::codex_reply(&effect.replies[0])["id"],
             "callback-two"
         );
         assert_eq!(
@@ -1387,7 +1386,7 @@ mod tests {
         assert!(same_pending.is_none());
         assert_eq!(pending_refused["result"]["success"], false);
         assert_eq!(
-            crate::codex::encode_tool_reply(&effect.replies[0])["result"],
+            crate::provider_settings::codex_reply(&effect.replies[0])["result"],
             duplicate["result"]
         );
         assert_eq!(duplicate["result"], replay["result"]);

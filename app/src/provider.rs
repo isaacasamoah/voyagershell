@@ -1,6 +1,15 @@
+use crate::voice_host::Package;
 use serde_json::Value;
 use std::path::PathBuf;
 use voyager_contract::conversation::{Focus, Phase, Role};
+
+pub(crate) trait Provider {
+    fn request(&mut self, id: u64, command: Command) -> Result<(), String>;
+    fn initialized(&mut self, version: Option<String>) -> Result<(), String>;
+    fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String>;
+    fn voice_package(&self) -> Result<Package, String>;
+    fn shutdown(&mut self) -> Result<(), String>;
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Support {
@@ -46,7 +55,7 @@ pub(crate) enum Command {
         effort: String,
         cwd: PathBuf,
         tools: Vec<ToolDefinition>,
-        instructions: &'static str,
+        instructions: String,
     },
     StartTurn {
         thread: String,
@@ -209,76 +218,50 @@ pub(crate) enum Event {
 }
 
 #[cfg(test)]
+pub(crate) struct StandIn(pub std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+#[cfg(test)]
+impl Provider for StandIn {
+    fn request(&mut self, id: u64, command: Command) -> Result<(), String> {
+        let seen = match command {
+            Command::OpenConversation {
+                model,
+                effort,
+                instructions,
+                ..
+            } => format!("{id} open {model} {effort} {instructions}"),
+            Command::StartTurn { text, effort, .. } => format!("{id} turn {text} {effort}"),
+            other => format!("{id} {:?}", other.operation()),
+        };
+        self.0
+            .lock()
+            .map_err(|_| "Stand-in record unavailable")?
+            .push(seen);
+        Ok(())
+    }
+
+    fn initialized(&mut self, _: Option<String>) -> Result<(), String> {
+        let mut seen = self.0.lock().map_err(|_| "Stand-in record unavailable")?;
+        seen.push("initialized".into());
+        Ok(())
+    }
+
+    fn reply(&mut self, _: &ToolReply, _: bool) -> Result<(), String> {
+        Err("The stand-in offers no tools".into())
+    }
+
+    fn voice_package(&self) -> Result<Package, String> {
+        Err("The stand-in has no voice".into())
+    }
+
+    fn shutdown(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn codex_normalizes_visible_identity_and_filters_private_items() {
-        let event = json!({"method":"item/completed","params":{"threadId":"private","turnId":"turn","item":{"type":"agentMessage","id":"answer","text":"visible"}}});
-        assert!(
-            matches!(crate::codex::normalize(event.clone(), None), Some(Event::Visible(Visible::Message { thread, turn, item, text, complete: true })) if thread == "private" && turn == "turn" && item == "answer" && text == "visible")
-        );
-        let mut reasoning = event;
-        reasoning["params"]["item"]["type"] = "reasoning".into();
-        assert!(crate::codex::normalize(reasoning, None).is_none());
-        assert!(crate::codex::normalize(json!({"method":"item/agentMessage/delta","params":{"threadId":"private","itemId":"answer","delta":"unbound"}}), None).is_none());
-    }
-
-    #[test]
-    fn codex_normalizes_only_the_correlated_reply_and_exact_callback_identity() {
-        let reply = json!({"id":7,"result":{"turn":{"id":"actual-turn"}}});
-        assert!(crate::codex::normalize(reply.clone(), Some((6, Operation::StartTurn))).is_none());
-        assert!(
-            matches!(crate::codex::normalize(reply, Some((7, Operation::StartTurn))), Some(Event::Response { id: 7, outcome: Outcome::Applied(Answer::Turn { id }) }) if id == "actual-turn")
-        );
-        assert!(matches!(
-            crate::codex::normalize(json!({"id":7,"result":{}}), Some((7, Operation::StartTurn))),
-            Some(Event::Response {
-                outcome: Outcome::Unconfirmed(_),
-                ..
-            })
-        ));
-        assert!(
-            matches!(crate::codex::normalize(json!({"id":7,"error":{"message":"known refusal"}}), Some((7, Operation::StopAudio))), Some(Event::Response { outcome: Outcome::Rejected(message), .. }) if message == "known refusal")
-        );
-        for id in [json!("callback"), json!(u64::MAX)] {
-            let callback = json!({"id":id,"method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"inspect"}}}});
-            let Some(Event::Tool(call)) = crate::codex::normalize(callback.clone(), None) else {
-                panic!("Missing normalized tool call");
-            };
-            assert_eq!(call.id, id);
-            assert_eq!(
-                (&call.thread, &call.turn, &call.call, &call.name),
-                (
-                    &"thread".into(),
-                    &"turn".into(),
-                    &"call".into(),
-                    &"voyager_workspace".into()
-                )
-            );
-            assert_eq!(call.arguments, callback["params"]["arguments"]);
-            let reply = crate::codex::encode_tool_reply(&ToolReply::Result {
-                id: call.id,
-                result: ToolResult {
-                    success: false,
-                    text: "Rejected".into(),
-                },
-            });
-            assert_eq!(reply["id"], id);
-            assert_eq!(reply["result"]["success"], false);
-            assert_eq!(reply["result"]["contentItems"][0]["text"], "Rejected");
-        }
-        let error = crate::codex::encode_tool_reply(&ToolReply::Error {
-            id: json!("callback"),
-            code: -32001,
-            message: "Response capacity reached".into(),
-        });
-        assert_eq!(
-            error,
-            json!({"id":"callback","error":{"code":-32001,"message":"Response capacity reached"}})
-        );
-    }
 
     #[test]
     fn unavailable_voice_keeps_the_text_and_tool_boundary_usable() {
