@@ -129,7 +129,11 @@ process. A journey judges these values as expectations. `Native::context_click`
 aims at a control the way `click` does and presses the secondary button,
 which the X11 adapter sends as button 3. `Native::middle_click` does the same
 with the middle button, which the adapter sends as button 2. A journey names
-the intent, not the button number.
+the intent, not the button number. The display acknowledges the middle click.
+No run shows that the app received it, because the app does nothing with a
+middle click today. Two presses at one point in quick succession make a double
+or triple click. Six drags in a row that started at the same point each selected the whole
+word, and drags that started at different points did not.
 
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
@@ -948,11 +952,12 @@ removes the padding, which is 8 logical pixels times `window.scale`, from each
 edge. A cell is the inner width divided by `cols` and the inner height
 divided by `rows`, each rounded down, and the first cell starts inside the
 padding. A cell outside the grid is refused as a fixture error, never as a
-product failure. The derivation is exact when the app's cell is a whole
-number of device pixels, which holds at scale 2 with the app's font. At a
-fractional scale the width can come out short of the app's by less than one
-pixel for each column, so a cell far from the left edge is not reliable
-there. Two observations support `click_cell`, and neither goes through the
+product failure. The derivation matched the drawn text at scale 2 with the
+app's font, where a cell is 16 by 36 device pixels. The check covers cells 0,
+6 and 7 of row 0 only. At another scale the cell may not be a whole number of
+device pixels. The derived width is then short of the app's by up to one pixel
+for each column, so a cell far from the left edge may be off. No run has
+tried another scale. Two observations support `click_cell`, and neither goes through the
 app's selection. The display reports the pointer at the cell's centre, which
 `pointer-at` records. And `drag-selects-text` checks the derivation on every
 run against the text that the terminal drew. Cell 0 must start where the
