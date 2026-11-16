@@ -458,9 +458,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     cases.check(native, Case::SplitFocusRemembered, |native| {
-        select(native, &RenameTarget::Voyage { id: other.id.clone() }, |seen| {
-            seen.document.selected_voyage.as_ref() == Some(&other.id)
-        })?;
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: other.id.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&other.id),
+        )?;
         let before = at_rest(native)?.document;
         let kept = before.selected_fleet.clone();
         let (after, _, _) = split_right(native, &before, other.shell.placement())?;
@@ -473,12 +477,18 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |seen| Some(remembered(seen)),
             |seen| seen.focused.as_ref() == Some(&created.id),
         )?;
-        select(native, &RenameTarget::Voyage { id: start.voyage.clone() }, |seen| {
-            seen.document.selected_voyage.as_ref() == Some(&start.voyage)
-        })?;
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: start.voyage.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
         let returned = select(
             native,
-            &RenameTarget::Voyage { id: other.id.clone() },
+            &RenameTarget::Voyage {
+                id: other.id.clone(),
+            },
             |seen| seen.document.selected_voyage.as_ref() == Some(&other.id),
         )?;
         native.close()?;
@@ -488,9 +498,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |seen| Some(remembered(seen)),
             |seen| seen.focused.is_some(),
         )?;
-        select(native, &RenameTarget::Voyage { id: start.voyage.clone() }, |seen| {
-            seen.document.selected_voyage.as_ref() == Some(&start.voyage)
-        })?;
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: start.voyage.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
         let verdict = Verdict::new()
             .expect(
                 "the Vessel the split created is drawn as focused without a click",
