@@ -45,26 +45,50 @@ pub(super) fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> 
         let created = native.watch(|native| {
             Ok(native.document()?.and_then(|(version, layout)| {
                 fleets(&layout)
-                    .any(|fleet| !known.contains(&fleet.id))
-                    .then_some(version)
+                    .find(|fleet| !known.contains(&fleet.id))
+                    .map(|fleet| (version, fleet.id.clone()))
             }))
         })?;
+        let born = created.as_ref().map(|(_, fleet)| fleet.clone());
+        native.settle(
+            "the new Fleet selected with its terminal started and drawn",
+            |seen| {
+                let fleet = fleets(seen.document).find(|fleet| Some(&fleet.id) == born.as_ref())?;
+                let placement = fleet.placements.first()?;
+                let started = seen.document.vessels.iter().any(|vessel| {
+                    vessel.id == placement.vessel
+                        && vessel.backend.is_some()
+                        && vessel.start_pending.is_none()
+                });
+                Some(
+                    seen.document.selected_fleet.as_ref() == Some(&fleet.id)
+                        && started
+                        && seen.shows(&Target::terminal(&placement.id)),
+                )
+            },
+            |rested| *rested,
+        )?;
         native.keep_window("plan-fleet-created")?;
+        let subject = RenameTarget::Vessel {
+            id: plan.vessel.clone(),
+        };
         native.click(&Target::name(&RenameTarget::Fleet {
             id: plan.fleet.clone(),
         }))?;
-        native.settle(
-            "the planned Fleet selected again",
-            |seen| Some(seen.document.selected_fleet.as_ref() == Some(&plan.fleet)),
-            |selected| *selected,
+        let back = native.settle(
+            "the planned Fleet selected again with its Vessel drawn",
+            |seen| {
+                Some(
+                    seen.document.selected_fleet.as_ref() == Some(&plan.fleet)
+                        && seen.shows(&Target::name(&subject)),
+                )
+            },
+            |back| *back,
         )?;
         native.keep_window("plan-fleet-clicked")?;
         let played = provider.play(&turn, &rename_script(&plan, PLANNED)?)?;
         conclude(native, &provider, &turn, PLAN_ITEM)?;
         let text = played.first().and_then(|call| returned_text(&call.result));
-        let subject = RenameTarget::Vessel {
-            id: plan.vessel.clone(),
-        };
         let drawn = native.settle(
             "the planned Vessel under its new name",
             |seen| {
@@ -87,8 +111,13 @@ pub(super) fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> 
             .expect(
                 "the human's click created a Fleet after the inspect and moved the layout's version",
                 created
+                    .as_ref()
                     .zip(inspected)
-                    .is_some_and(|(created, inspected)| created > inspected),
+                    .is_some_and(|((created, _), inspected)| *created > inspected),
+            )
+            .expect(
+                "the human's click selected the planned Fleet again and the window draws its Vessel",
+                back,
             )
             .expect(
                 "the scripted rename that carried the inspected version returned Applied",
@@ -103,7 +132,7 @@ pub(super) fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> 
                         .is_some_and(|label| label.rsplit(" · ").next() == Some(PLANNED)),
             )
             .observed("inspectedVersion", &plan.version)?
-            .observed("createdAtVersion", created)?
+            .observed("created", &created)?
             .observed("played", &played)?
             .observed("drawn", &drawn)?;
         Ok((verdict, Some(plan)))
