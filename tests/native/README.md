@@ -176,6 +176,11 @@ types into the first terminal, as an agent in that Vessel would.
   with a `create-fleet` request at the saved layout version. It passes when
   the status names the first Vessel, the new Fleet is saved and drawn as a tab,
   and the command exits 0, its applied code.
+- `command-removes-placement` runs `voyager do workspace` with a
+  `remove-placement` request for the stand-in agent's placement. It passes when
+  the placement leaves the saved layout and the canvas, the command exits 0, the
+  saved Vessel stays bound to its terminal and Core still lists that terminal as
+  live.
 
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result is settled by reading Core, with nothing done twice. It

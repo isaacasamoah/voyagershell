@@ -144,6 +144,7 @@ fn offered(action: &Action) -> bool {
         | Action::MoveVoyage { .. }
         | Action::MoveFleet { .. }
         | Action::MovePlacement { .. }
+        | Action::RemovePlacement { .. }
         | Action::SelectVoyage { .. }
         | Action::SelectFleet { .. } => true,
         Action::Home
@@ -170,14 +171,13 @@ fn offered(action: &Action) -> bool {
         | Action::Dock { .. }
         | Action::SetPlacementMaximized { .. }
         | Action::SetPlacementHidden { .. }
-        | Action::RemovePlacement { .. }
         | Action::RemoveArrangement { .. }
         | Action::FocusVessel { .. }
         | Action::SetPortalPresentation { .. } => false,
     }
 }
 
-const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet, rename, move-voyage, move-fleet, move-placement, select-voyage and select-fleet; nothing was queued";
+const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet, rename, move-voyage, move-fleet, move-placement, remove-placement, select-voyage and select-fleet; nothing was queued";
 
 fn status(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId) -> SocketReply {
     let inspected = call(
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn the_command_offers_only_workspace_arrangement_and_focus() {
+    fn the_command_offers_only_workspace_arrangement_removal_and_focus() {
         let fleet = voyager_contract::FleetId("fleet-2".into());
         assert!(offered(&Action::CreateFleet {
             voyage: voyager_contract::VoyageId("voyage-1".into()),
@@ -362,8 +362,12 @@ mod tests {
         }));
         assert!(offered(&Action::SelectFleet { id: fleet.clone() }));
         assert!(!offered(&Action::CloseFleet { id: fleet }));
-        assert!(!offered(&Action::RemovePlacement {
+        assert!(offered(&Action::RemovePlacement {
             id: voyager_contract::PlacementId("placement-3".into()),
+        }));
+        assert!(!offered(&Action::SetPlacementHidden {
+            id: voyager_contract::PlacementId("placement-3".into()),
+            hidden: true,
         }));
     }
 }

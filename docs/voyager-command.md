@@ -2,7 +2,7 @@
 
 `voyager` is the agent command for VoyagerShell. Run it inside a Vessel, which
 is a terminal that VoyagerShell shows. It covers workspace actions only:
-inspect, create a Fleet, rename, move and select. Herdr Core owns programs and
+inspect, create a Fleet, rename, move, remove a placement and select. Herdr Core owns programs and
 terminals, so start, read, send to and stop programs with `hc` (`hc --skill`).
 
 A Voyage is a space. A Fleet is a tab in a Voyage. A Vessel is one piece of
@@ -53,8 +53,15 @@ voyager do workspace '{"requestId":"crew-1","expectedVersion":"<version>","actio
 ```
 
 The offered operations are `inspect`, `create-fleet`, `rename`,
-`move-voyage`, `move-fleet`, `move-placement`, `select-voyage` and
-`select-fleet`. Any other operation is refused and nothing is queued.
+`move-voyage`, `move-fleet`, `move-placement`, `remove-placement`,
+`select-voyage` and `select-fleet`. Any other operation is refused and nothing
+is queued.
+
+`remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
+takes that placement off the canvas and nothing else. The Vessel's content,
+name and data stay, and its program keeps running, so check it with `hc ls`
+and stop it with `hc`. A Vessel that removes its last placement closes its own
+socket.
 
 - Give each change a new `requestId`. Repeating the same request returns its
   first result instead of acting twice.
