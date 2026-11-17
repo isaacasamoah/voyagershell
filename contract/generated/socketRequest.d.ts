@@ -3,6 +3,9 @@ export type SocketRequest =
       command: "status";
     }
   | {
+      command: "focus";
+    }
+  | {
       command: "workspace";
       request: Request;
     };

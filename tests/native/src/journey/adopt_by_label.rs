@@ -20,7 +20,15 @@ cases! {
     CommandCreatesFleet => "command-creates-fleet",
     CommandFleetHoldsOnlyItsAgent => "command-fleet-holds-only-its-agent",
     CommandRemovesPlacement => "command-removes-placement",
+    FocusCommandPrintsDock => "focus-command-prints-dock",
+    FocusHookNamesDock => "focus-hook-names-dock",
+    FocusHookFailsQuietly => "focus-hook-fails-quietly",
+    FocusHookTime => "focus-hook-time",
 }
+
+const HOOK_SETTINGS: &str = r#"{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"/voyager/bin/voyager focus --hook claude"}]}]}}"#;
+const HOOK_RUNS: usize = 15;
+const DEADLINE_MILLIS: u64 = 200;
 
 pub const CONTROL: Case = Case::AgentInFleet;
 
@@ -445,5 +453,171 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("terminal", &terminal)?
             .observed("state", &state)
+    })?;
+
+    cases.check(native, Case::FocusCommandPrintsDock, |native| {
+        typed(&first, native, "voyager focus; echo focus-exit=$?")?;
+        let kind = first.printed(native, "\"kind\": \"focus\"")?;
+        let applied = first.printed(native, "focus-exit=0")?;
+        native.keep_window("focus-command-prints-dock")?;
+        Ok(Verdict::new()
+            .expect("voyager focus returns the generated Focus reply", kind)
+            .expect("the command exited 0, the applied code", applied))
+    })?;
+
+    cases.check(native, Case::FocusHookNamesDock, |native| {
+        typed(
+            &first,
+            native,
+            &format!(
+                "hc run --bg --name hooked --label voyager.place=fleet:{} claude --settings '{HOOK_SETTINGS}' 'Review y.rs'",
+                fleet.0
+            ),
+        )?;
+        let terminal = address(native, "hooked")?;
+        let placed = native.observe("the hooked agent drawn as a Vessel in its Fleet", |seen| {
+            adopted(seen, &terminal, |layout| {
+                fleets(layout)
+                    .filter(|item| item.id == fleet)
+                    .flat_map(|item| item.placements.clone())
+                    .collect()
+            })
+            .filter(|found| found.drawn)
+        })?;
+        let agent = Terminal::bind(native, &placed.placement)?;
+        agent.printed(native, "Stand-in claude took the task: Review y.rs")?;
+        native.drag(
+            &Target::AVATAR,
+            &Target::name(&RenameTarget::Vessel {
+                id: placed.placement.clone(),
+            }),
+        )?;
+        let docked_hooked = Context::Vessel {
+            id: placed.placement.clone(),
+        };
+        native.settle(
+            "the avatar docked on the hooked agent",
+            |seen| (seen.document.context == docked_hooked).then(|| avatar_on_dock(seen)),
+            |on| *on,
+        )?;
+        typed(&agent, native, "where am I")?;
+        let named_hooked = agent.printed(native, &format!("> {}.", placed.name))?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let shell = fleets(&layout)
+            .flat_map(|item| &item.placements)
+            .find(|placement| &placement.id == first.placement())
+            .map(|placement| placement.name.clone())
+            .context("The first Vessel has no name")?;
+        native.drag(
+            &Target::AVATAR,
+            &Target::name(&RenameTarget::Vessel {
+                id: first.placement().clone(),
+            }),
+        )?;
+        let docked_first = Context::Vessel {
+            id: first.placement().clone(),
+        };
+        native.settle(
+            "the avatar docked on the first Vessel",
+            |seen| (seen.document.context == docked_first).then(|| avatar_on_dock(seen)),
+            |on| *on,
+        )?;
+        typed(&agent, native, "and now")?;
+        let named_first = agent.printed(native, &format!("> {shell}."))?;
+        native.keep_window("focus-hook-names-dock")?;
+        Verdict::new()
+            .expect(
+                "the hook gave the agent's prompt the name of the docked Vessel",
+                named_hooked,
+            )
+            .expect(
+                "the hook gave the next prompt the Vessel the avatar was moved to",
+                named_first,
+            )
+            .observed("hooked", &placed.name)?
+            .observed("first", &shell)
+    })?;
+
+    cases.check(native, Case::FocusHookFailsQuietly, |native| {
+        typed(
+            &first,
+            native,
+            "out=$(HC_TERMINAL_ID=t0000 voyager focus --hook claude 2>&1); echo nosocket-exit=$? bytes=${#out}",
+        )?;
+        typed(
+            &first,
+            native,
+            "out=$(env -u HC_SESSION voyager focus --hook claude 2>&1); echo unset-exit=$? bytes=${#out}",
+        )?;
+        typed(
+            &first,
+            native,
+            "out=$(voyager focus --hook nobody 2>&1); echo badhook-exit=$? bytes=${#out}",
+        )?;
+        let nosocket = first.printed(native, "nosocket-exit=0 bytes=0")?;
+        let unset = first.printed(native, "unset-exit=0 bytes=0")?;
+        let refused = first.printed(native, "badhook-exit=1")?;
+        native.keep_window("focus-hook-fails-quietly")?;
+        Ok(Verdict::new()
+            .expect(
+                "the hook exits 0 and prints nothing when its Vessel has no socket",
+                nosocket,
+            )
+            .expect(
+                "the hook exits 0 and prints nothing outside a Core session",
+                unset,
+            )
+            .expect(
+                "an unknown agent name is a usage error, not a silent hook",
+                refused,
+            ))
+    })?;
+
+    cases.check(native, Case::FocusHookTime, |native| {
+        typed(
+            &first,
+            native,
+            &format!(
+                "ts=; bad=0; for i in $(seq {HOOK_RUNS}); do s=$EPOCHREALTIME; voyager focus --hook claude >/dev/null || bad=$((bad+1)); e=$EPOCHREALTIME; ts=\"$ts $(( (${{e/./}} - ${{s/./}}) / 1000 ))\"; done; echo hook-ms=$ts bad=$bad"
+            ),
+        )?;
+        first.printed(native, "hook-ms= ")?;
+        let screen = first.screen(native)?;
+        let flat = screen.replace('\n', " ");
+        let reported = flat
+            .rsplit("hook-ms= ")
+            .next()
+            .and_then(|tail| tail.split_once(" bad="))
+            .with_context(|| format!("The hook timing line is missing from the screen:\n{screen}"))?;
+        let mut millis: Vec<u64> = reported
+            .0
+            .split_whitespace()
+            .filter_map(|value| value.parse().ok())
+            .collect();
+        millis.sort_unstable();
+        let bad = reported
+            .1
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.parse::<u64>().ok());
+        let (min, median, max) = (
+            millis.first().copied(),
+            millis.get(millis.len() / 2).copied(),
+            millis.last().copied(),
+        );
+        native.keep_window("focus-hook-time")?;
+        Verdict::new()
+            .expect(
+                "every hook run exited 0",
+                millis.len() == HOOK_RUNS && bad == Some(0),
+            )
+            .expect(
+                "the slowest hook run stayed inside the 200 ms deadline",
+                max.is_some_and(|max| max < DEADLINE_MILLIS),
+            )
+            .observed("milliseconds", &millis)?
+            .observed("min", min)?
+            .observed("median", median)?
+            .observed("max", max)
     })
 }

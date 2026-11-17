@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::context::Focus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -87,20 +87,6 @@ pub struct ToolOutcome {
 pub enum CallbackId {
     String(String),
     Integer(#[schemars(regex(pattern = "^-?[0-9]+$"))] String),
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Focus {
-    pub scope: Context,
-    pub path: Vec<String>,
-    pub cwd: Option<String>,
-    #[serde(with = "crate::decimal")]
-    #[schemars(with = "String")]
-    pub revision: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(length(max = 8192))]
-    pub preview: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

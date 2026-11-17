@@ -4,6 +4,10 @@ export type SocketReply =
       status: VesselStatus;
     }
   | {
+      focus: Focus;
+      kind: "focus";
+    }
+  | {
       kind: "workspace";
       reply: Reply;
     }
@@ -19,6 +23,26 @@ export type PlacementOwner =
   | {
       kind: "portals";
       voyage: string;
+    };
+export type Context =
+  | {
+      kind: "workspace";
+    }
+  | {
+      id: string;
+      kind: "voyage";
+    }
+  | {
+      id: string;
+      kind: "fleet";
+    }
+  | {
+      id: string;
+      kind: "vessel";
+    }
+  | {
+      id: string;
+      kind: "portal";
     };
 export type Reply = Response | Unanswered;
 export type Phase = "ready" | "saving" | "incomplete" | "closed";
@@ -71,26 +95,6 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
-export type Context =
-  | {
-      kind: "workspace";
-    }
-  | {
-      id: string;
-      kind: "voyage";
-    }
-  | {
-      id: string;
-      kind: "fleet";
-    }
-  | {
-      id: string;
-      kind: "vessel";
-    }
-  | {
-      id: string;
-      kind: "portal";
-    };
 export type NameOrigin = "automatic" | "deliberate";
 export type Launch =
   | {
@@ -123,6 +127,13 @@ export interface VesselPlacement {
   owner: PlacementOwner;
   placement: string;
   voyage: string;
+}
+export interface Focus {
+  cwd?: string | null;
+  path: string[];
+  preview?: string | null;
+  revision: string;
+  scope: Context;
 }
 export interface Response {
   closePlan?: Plan | null;

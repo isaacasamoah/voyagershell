@@ -46,6 +46,33 @@ hc run --bg --name notes --label voyager.place=portal:<voyage id> bash
 - Every `hc run` rule still applies. A child ends with its parent unless you
   pass `--outlive-parent`.
 
+## Read the dock
+
+```sh
+voyager focus
+```
+
+The reply is the generated `Focus` the app holds now. It has the dock's scope, its
+path of names, its working directory and the workspace revision. It is open to
+every Vessel and changes nothing.
+
+```sh
+voyager focus --hook claude
+```
+
+This form is for Claude Code's `UserPromptSubmit` hook. It prints the focus in
+the hook output shape, so Claude sees the dock with every prompt and needs no
+tool call. It always exits 0 and prints nothing when the app is not running,
+the Vessel has no socket or the app does not answer within 200 ms, so it never
+holds or blocks a prompt. It never writes the agent's configuration. Pass it at
+launch with `--settings`, for example:
+
+```sh
+claude --settings '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"<full path>/voyager focus --hook claude"}]}]}}'
+```
+
+An app older than this request refuses it, and the hook then prints nothing.
+
 ## Change the workspace
 
 ```sh

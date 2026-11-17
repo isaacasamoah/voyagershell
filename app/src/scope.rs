@@ -336,7 +336,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            crate::conversation::focus(&model.layout, 1).unwrap().path,
+            crate::context::focus(&model.layout, 1).unwrap().path,
             ["Home", "Notes 1"]
         );
         let snapshot = Arc::new(model.layout.clone());

@@ -1,7 +1,10 @@
 use crate::voice_host::Package;
 use serde_json::Value;
 use std::path::PathBuf;
-use voyager_contract::conversation::{Focus, Phase, Role};
+use voyager_contract::{
+    context::Focus,
+    conversation::{Phase, Role},
+};
 
 pub(crate) trait Provider {
     fn request(&mut self, id: u64, command: Command) -> Result<(), String>;

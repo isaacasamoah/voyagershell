@@ -376,8 +376,8 @@ impl Client {
         &self,
         layout: &Layout,
         version: u64,
-    ) -> Result<voyager_contract::conversation::Focus, String> {
-        let mut focus = crate::conversation::focus(layout, version)?;
+    ) -> Result<voyager_contract::context::Focus, String> {
+        let mut focus = crate::context::focus(layout, version)?;
         focus.preview = self.prepared_context.lock().ok().and_then(|prepared| {
             prepared
                 .as_ref()

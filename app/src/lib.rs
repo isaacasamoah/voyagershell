@@ -10,6 +10,7 @@ mod core_endpoint;
 pub mod core_state;
 pub mod diagnostics;
 mod families;
+pub mod focus_hook;
 mod front_door;
 pub mod launch;
 mod layout_parts;

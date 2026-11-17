@@ -265,7 +265,7 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
 mod tests {
     use super::*;
     use crate::provider::ToolResult;
-    use voyager_contract::{Context, conversation::Focus};
+    use voyager_contract::{Context, context::Focus};
 
     #[test]
     fn codex_normalizes_visible_identity_and_filters_private_items() {

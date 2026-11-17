@@ -1,3 +1,4 @@
+use crate::context::Focus;
 use crate::{CoreTerminalId, PlacementId, PlacementOwner, Reply, Request, VesselId, VoyageId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "command", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum SocketRequest {
     Status,
+    Focus,
     Workspace { request: Box<Request> },
 }
 
@@ -33,6 +35,7 @@ pub struct VesselStatus {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum SocketReply {
     Status { status: VesselStatus },
+    Focus { focus: Focus },
     Workspace { reply: Reply },
     Refused { message: String },
 }
