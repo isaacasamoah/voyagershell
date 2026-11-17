@@ -85,7 +85,10 @@ Adoption adds one terminal Vessel whose backend is that terminal and places it
 at the end of the Fleet's split, or of the Voyage's Portal column, which it
 shows. The Vessel's launch is the program when the first argument names a
 known agent program from `app/src/launch.rs`, such as `claude` or `codex`, and
-a terminal otherwise. Adoption starts nothing, because the terminal is already
+a terminal otherwise. The placement takes the terminal's Core name and keeps it
+as a deliberate name, so a later folder change does not rename it. When Core
+gives no name, or another member of the group already holds it, the placement
+gets the default `Terminal N`. Adoption starts nothing, because the terminal is already
 running. When a later launch finds that the adopted terminal is gone or ended,
 `prepare_reopen` in `app/src/terminal_lifecycle.rs` clears the Vessel's backend
 and gives it a fresh shell, as for any terminal Vessel.

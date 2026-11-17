@@ -28,6 +28,7 @@ const CREW_FLEET: &str = "Crew";
 #[derive(Clone, PartialEq, Serialize)]
 struct Adopted {
     placement: PlacementId,
+    name: String,
     launch: Option<Launch>,
     drawn: bool,
 }
@@ -45,7 +46,7 @@ fn address(native: &Native, name: &str) -> Result<String> {
     })
 }
 
-fn bound_to(layout: &Layout, address: &str) -> Option<PlacementId> {
+fn bound_to(layout: &Layout, address: &str) -> Option<Placement> {
     let content = layout.vessels.iter().find(|content| {
         content
             .backend
@@ -56,7 +57,7 @@ fn bound_to(layout: &Layout, address: &str) -> Option<PlacementId> {
         .flat_map(|fleet| &fleet.placements)
         .chain(voyages(layout).flat_map(|voyage| &voyage.portals))
         .find(|placement| placement.vessel == content.id)
-        .map(|placement| placement.id.clone())
+        .cloned()
 }
 
 fn adopted(
@@ -64,7 +65,8 @@ fn adopted(
     address: &str,
     members: impl Fn(&Layout) -> Vec<Placement>,
 ) -> Option<Adopted> {
-    let placement = bound_to(seen.document, address)?;
+    let bound = bound_to(seen.document, address)?;
+    let placement = bound.id;
     let content = seen.document.vessels.iter().find(|content| {
         content
             .backend
@@ -77,6 +79,7 @@ fn adopted(
                 .iter()
                 .any(|member| member.id == placement),
         launch: content.launch.clone(),
+        name: bound.name,
         placement,
     })
 }
@@ -156,6 +159,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the adopted Vessel records the claude agent launch",
                 placed.launch == claude(),
+            )
+            .expect(
+                "the adopted Vessel is named after its Core terminal name",
+                placed.name == "crew",
             )
             .expect(
                 "the adopted Vessel shows the agent's own terminal",
