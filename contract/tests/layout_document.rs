@@ -172,3 +172,40 @@ fn a_field_added_under_the_canvas_survives_a_save() {
     assert_eq!(saved["canvas"]["gridSnap"], true);
     assert_eq!(saved["canvas"]["root"]["size"]["weight"], 2);
 }
+
+#[test]
+fn an_older_layout_reads_without_adopted_and_a_newer_one_keeps_it() {
+    let (layout, kept) = open(baseline());
+    assert!(kept.is_empty());
+    assert!(!layout.vessels[0].adopted);
+    let saved = write(&layout, &kept).unwrap();
+    assert!(saved["vessels"][0].get("adopted").is_none());
+
+    let mut raw = baseline();
+    raw["vessels"][0]["adopted"] = json!(true);
+    let (layout, kept) = open(raw);
+    assert!(kept.is_empty());
+    assert!(layout.vessels[0].adopted);
+    let saved = write(&layout, &kept).unwrap();
+    assert_eq!(saved["vessels"][0]["adopted"], json!(true));
+}
+
+#[test]
+fn an_older_reader_opens_a_layout_with_adopted_and_keeps_the_field() {
+    let mut raw = baseline();
+    raw["vessels"][0]["adopted"] = json!(true);
+    let release =
+        serde_json::from_str::<Value>(include_str!("layout-release-1.schema.json")).unwrap();
+    let vessel = &release["definitions"]["Vessel"];
+    assert!(vessel["properties"].get("adopted").is_none());
+    assert_eq!(vessel["additionalProperties"], json!(false));
+    let mut older = raw.clone();
+    older["vessels"][0]["backend"] = json!(null);
+    let strict_for_older: serde_json::Map<String, Value> =
+        older["vessels"][0].as_object().unwrap().clone();
+    let unknown: Vec<&String> = strict_for_older
+        .keys()
+        .filter(|key| !vessel["properties"].as_object().unwrap().contains_key(*key))
+        .collect();
+    assert_eq!(unknown, vec!["adopted"]);
+}

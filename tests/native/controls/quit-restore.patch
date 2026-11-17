@@ -2,7 +2,7 @@ diff --git a/app/src/families/terminal/lifecycle.rs b/app/src/families/terminal/
 index 1f35581..6fb09b4 100644
 --- a/app/src/families/terminal/lifecycle.rs
 +++ b/app/src/families/terminal/lifecycle.rs
-@@ -74,7 +74,7 @@ fn prepare_selected(
+@@ -80,7 +80,7 @@ fn prepare_selected(
          let observed = terminals
              .iter()
              .find(|terminal| terminal.address == backend.0);
@@ -10,4 +10,4 @@ index 1f35581..6fb09b4 100644
 +        if observed.is_some_and(|terminal| terminal.start_unconfirmed()) {
              continue;
          }
-         content.backend = None;
+         if content.adopted {

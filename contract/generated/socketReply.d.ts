@@ -226,6 +226,7 @@ export interface LastUsed {
   voyage: string;
 }
 export interface Vessel {
+  adopted?: boolean;
   backend?: string | null;
   configuration?: {
     [k: string]: unknown;

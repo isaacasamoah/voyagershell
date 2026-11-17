@@ -88,7 +88,9 @@ These definitions describe what each user action does.
   (`families::terminal::lifecycle::close_exited`). A program that ended while the app was
   closed, for example after a computer restart, keeps its placement, and the
   next launch opens a plain shell there (`families::terminal::lifecycle::prepare_reopen`).
-  Agents are not resumed. This is unchanged.
+  A Vessel the app adopted from a `voyager.place` label carries `adopted`; when its
+  program ended, the next launch removes its placement and starts no shell.
+  Agents are not resumed.
 - **Quitting the app.** Ctrl+Q and closing the window are quit-and-keep. The
   owner closes terminal input admission, marks reported activity unavailable,
   releases its own Core connection (the `hc connect` child) and waits up to
@@ -635,7 +637,6 @@ both Vessel and Portal after Quit/reopen still requires the maintained session
 Quit journey on the matched release. Already-attached terminal end presentation
 and its original correction history are unchanged by this cold-attachment path.
 
-
 ## Exit and reopen feedback candidate
 
 The 5 November feedback changes the earlier manual-restart presentation. Recognized agent launches run as children of an interactive Bash process. The executable and its arguments remain separate positional arguments; the command does not interpolate user text. Agent exit returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's `finished` state and `exited` reason before the application removes its placement from the panel tree. Losing a viewer or Core connection does not establish shell exit. The application owner publishes the resulting layout change.
@@ -682,13 +683,11 @@ Callers take monotonic elapsed-time brackets around a wall-clock sample and try 
 
 Internal event intervals use the common process monotonic clock. Alignment with external dispatch/capture requires recorded wall-to-monotonic brackets and checks for clock changes. Unresolved clock alignment stays unresolved. An adjacent output batch or render callback is not automatically the response to the preceding key. Validate actual glyph correlation in the isolated Codex scene before attaching those events to a key. Compare tracing off/on with the same release before using its timings to explain normal operation. The logger is experimental support and counts in authored proving inventory; it is not an accepted runtime optimization.
 
-
 ### CPU-contention transport observations
 
 The private experimental trace is compiled once in the application crate. The desktop uses its narrow record function through its own diagnostics module. Both existing writer paths record terminal-data frame write/flush start and completion or failure. The reader records a complete data frame after channel classification and before stream buffering; that point includes the membership-check lock interval. Metadata contains only channel, byte count, stage and clock brackets. Protocol replies can also use data frames, so timing does not prove a human-input or glyph association. Flush establishes pipe submission only.
 
 UI, writer and reader are concurrent producers. Attempt sequences identify records and loss; log arrival order is not monotonic event order. Analysis checks unique complete sequence sets and orders by monotonic brackets, preserving overlaps as uncertain. It adds no UI lock or transport scheduling change. The scratch guard and finite queue/event/time bounds remain. These diagnostic hooks establish neither a product latency fix nor observer equivalence.
-
 
 ### Diagnostics seam
 

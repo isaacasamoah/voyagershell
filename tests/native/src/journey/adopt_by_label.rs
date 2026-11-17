@@ -24,6 +24,8 @@ cases! {
     FocusHookNamesDock => "focus-hook-names-dock",
     FocusHookFailsQuietly => "focus-hook-fails-quietly",
     FocusHookTime => "focus-hook-time",
+    ReopenRestartsOwnTerminal => "reopen-restarts-own-terminal",
+    ReopenClosesEndedAdopted => "reopen-closes-ended-adopted",
 }
 
 const HOOK_SETTINGS: &str = r#"{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"/voyager/bin/voyager focus --hook claude"}]}]}}"#;
@@ -619,5 +621,107 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("min", min)?
             .observed("median", median)?
             .observed("max", max)
+    })?;
+
+    let reopened = cases.make(native, Case::ReopenRestartsOwnTerminal, |native| {
+        native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
+        typed(
+            &first,
+            native,
+            &format!(
+                "hc run --bg --name finisher --label voyager.place=fleet:{} claude 'Finish early'",
+                fleet.0
+            ),
+        )?;
+        let finisher = address(native, "finisher")?;
+        let placed = native.observe("the labelled agent adopted into the Fleet", |seen| {
+            bound_to(seen.document, &finisher).map(|placement| placement.id)
+        })?;
+        let own = native.observe("the Vessel Isaac opened bound to its terminal", |seen| {
+            let content = seen
+                .document
+                .vessels
+                .iter()
+                .find(|content| {
+                    fleets(seen.document)
+                        .flat_map(|item| &item.placements)
+                        .any(|member| &member.id == first.placement() && member.vessel == content.id)
+                })?;
+            content.backend.as_ref().map(|backend| backend.0.clone())
+        })?;
+        native.close()?;
+        for ended in [&finisher, &own] {
+            native
+                .system
+                .rpc("terminal.kill", json!({"terminal":ended}))?;
+        }
+        let known: Vec<String> = native
+            .system
+            .watch("terminal.list", json!({"all":true}))?["terminals"]
+            .as_array()
+            .map(|terminals| {
+                terminals
+                    .iter()
+                    .filter_map(|terminal| terminal["address"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        native.launch()?;
+        let restarted = native.observe("the Vessel Isaac opened bound to a new terminal", |seen| {
+            let content = seen.document.vessels.iter().find(|content| {
+                fleets(seen.document)
+                    .flat_map(|item| &item.placements)
+                    .any(|member| &member.id == first.placement() && member.vessel == content.id)
+            })?;
+            let backend = content.backend.as_ref()?.0.clone();
+            (backend != own && seen.shows(&Target::terminal(first.placement()))).then_some(backend)
+        })?;
+        let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+        let created: Vec<String> = listed["terminals"]
+            .as_array()
+            .map(|terminals| {
+                terminals
+                    .iter()
+                    .filter_map(|terminal| terminal["address"].as_str())
+                    .filter(|address| !known.iter().any(|old| old == address))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        native.keep_window("reopen-restarts-own-terminal")?;
+        let verdict = Verdict::new()
+            .expect(
+                "the terminal Isaac opened and then ended comes back as a fresh shell in its Vessel",
+                created.contains(&restarted),
+            )
+            .observed("ended", &own)?
+            .observed("restarted", &restarted)?;
+        Ok((verdict, Some((placed, finisher, created))))
+    })?;
+    let Some((placed, finisher, created)) = reopened else {
+        return Ok(());
+    };
+
+    cases.check(native, Case::ReopenClosesEndedAdopted, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let gone = fleets(&layout)
+            .filter(|item| item.id == fleet)
+            .all(|item| !on_canvas(item.root.as_ref(), &placed));
+        let drawn = native.observe("the Fleet drawn after the reopen", |seen| {
+            Some(seen.shows(&Target::terminal(&placed)))
+        })?;
+        native.keep_window("reopen-closes-ended-adopted")?;
+        Verdict::new()
+            .expect(
+                "the adopted agent whose program ended is gone from its Fleet after the reopen",
+                gone && !drawn,
+            )
+            .expect(
+                "the reopen started exactly one new terminal, the shell of the terminal Isaac opened",
+                created.len() == 1,
+            )
+            .observed("finisher", &finisher)?
+            .observed("placement", &placed)?
+            .observed("created", &created)
     })
 }

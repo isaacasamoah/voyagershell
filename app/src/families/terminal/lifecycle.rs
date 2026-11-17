@@ -33,7 +33,7 @@ fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, VesselId)> {
     result
 }
 
-pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> Vec<VesselId> {
+pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> (Vec<VesselId>, bool) {
     prepare_selected(layout, terminals, None)
 }
 
@@ -54,16 +54,17 @@ pub(crate) fn prepare_voyage_reopen(
         })
         .map(|panel| panel.vessel.clone())
         .collect();
-    prepare_selected(layout, terminals, Some(&ids))
+    prepare_selected(layout, terminals, Some(&ids)).0
 }
 
 fn prepare_selected(
     layout: &mut Layout,
     terminals: &[Terminal],
     ids: Option<&[VesselId]>,
-) -> Vec<VesselId> {
+) -> (Vec<VesselId>, bool) {
     let retained = retained(layout);
     let mut ready = Vec::new();
+    let mut closing = Vec::new();
     for content in &mut layout.vessels {
         if content.type_id != "terminal"
             || ids.is_some_and(|ids| !ids.contains(&content.id))
@@ -82,11 +83,31 @@ fn prepare_selected(
         if observed.is_some_and(|terminal| !terminal.has_ended()) {
             continue;
         }
+        if content.adopted {
+            closing.extend(
+                retained
+                    .iter()
+                    .filter(|(_, id)| id == &content.id)
+                    .map(|(placement, _)| placement.clone()),
+            );
+            continue;
+        }
         content.backend = None;
         content.launch = Some(Launch::Terminal);
         ready.push(content.id.clone());
     }
-    ready
+    let closed = closing
+        .into_iter()
+        .filter(|id| {
+            panels::apply(
+                layout,
+                voyager_contract::Action::RemovePlacement { id: id.clone() },
+            )
+            .is_ok()
+        })
+        .count()
+        > 0;
+    (ready, closed)
 }
 
 pub(crate) fn exited(terminals: &[Terminal]) -> Vec<CoreTerminalId> {
@@ -199,13 +220,14 @@ mod tests {
             .find(|item| item.backend == Some(CoreTerminalId("t2".into())))
             .unwrap();
         content.start_pending = Some("uncertain-start".into());
-        let ready = prepare_reopen(
+        let (ready, closed) = prepare_reopen(
             &mut model.layout,
             &[
                 terminal("t1", "live", ""),
                 terminal("t2", "finished", "exited"),
             ],
         );
+        assert!(!closed);
         assert_eq!(ready.len(), 1);
         let restarted = model
             .layout
@@ -228,6 +250,47 @@ mod tests {
                 .vessels
                 .iter()
                 .any(|item| item.start_pending.as_deref() == Some("uncertain-start"))
+        );
+    }
+
+    #[test]
+    fn reopen_closes_an_adopted_vessel_whose_program_ended_and_starts_no_shell() {
+        let mut model = workspace();
+        for content in model
+            .layout
+            .vessels
+            .iter_mut()
+            .filter(|item| item.type_id == "terminal")
+        {
+            content.adopted = content.backend == Some(CoreTerminalId("t2".into()));
+        }
+        let (ready, closed) = prepare_reopen(
+            &mut model.layout,
+            &[
+                terminal("t0", "finished", "exited"),
+                terminal("t1", "live", ""),
+                terminal("t2", "finished", "exited"),
+            ],
+        );
+        assert!(closed);
+        let by_backend = |layout: &Layout, address: &str| {
+            layout
+                .vessels
+                .iter()
+                .find(|item| item.backend == Some(CoreTerminalId(address.into())))
+                .map(|item| item.id.clone())
+        };
+        assert_eq!(ready.len(), 1);
+        assert!(model.layout.voyages[2].fleets[0].root.is_none());
+        assert!(by_backend(&model.layout, "t2").is_some());
+        assert!(model.layout.voyages[0].fleets[0].root.is_some());
+        assert!(model.layout.voyages[1].fleets[0].root.is_some());
+        assert!(
+            model
+                .layout
+                .vessels
+                .iter()
+                .any(|item| item.backend.is_none() && item.launch == Some(Launch::Terminal))
         );
     }
 
@@ -265,6 +328,7 @@ mod tests {
         assert!(!close_exited(&mut model, &exited(&terminals), &[]).unwrap());
         assert!(
             prepare_reopen(&mut model.layout, &terminals)
+                .0
                 .iter()
                 .all(|id| {
                     model.layout.voyages[0].fleets[0]
