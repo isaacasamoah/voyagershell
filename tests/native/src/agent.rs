@@ -30,7 +30,11 @@ fn context_of(command: &str, prompt: &str) -> Option<String> {
         .spawn()
         .ok()?;
     let input = serde_json::json!({"hook_event_name":"UserPromptSubmit","prompt":prompt});
-    child.stdin.take()?.write_all(input.to_string().as_bytes()).ok()?;
+    child
+        .stdin
+        .take()?
+        .write_all(input.to_string().as_bytes())
+        .ok()?;
     let output = child.wait_with_output().ok()?;
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     parsed["hookSpecificOutput"]["additionalContext"]
