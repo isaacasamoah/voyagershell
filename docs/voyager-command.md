@@ -63,6 +63,10 @@ name and data stay, and its program keeps running, so check it with `hc ls`
 and stop it with `hc`. A Vessel that removes its last placement closes its own
 socket.
 
+- `create-fleet` makes an empty Fleet and opens it. Start your program there
+  with `--label voyager.place=fleet:<new fleet id>`, and it becomes the
+  Fleet's first Vessel. Take the id from the layout in the reply. The Fleet
+  shows "Choose content" until a labelled program arrives.
 - Give each change a new `requestId`. Repeating the same request returns its
   first result instead of acting twice.
 - The exit code is 0 when the change applied, 1 when it was refused and 2 when

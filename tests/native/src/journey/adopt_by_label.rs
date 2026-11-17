@@ -18,12 +18,33 @@ cases! {
     AgentInPortal => "agent-in-portal",
     UnplacedStayHidden => "unplaced-stay-hidden",
     CommandCreatesFleet => "command-creates-fleet",
+    CommandFleetHoldsOnlyItsAgent => "command-fleet-holds-only-its-agent",
     CommandRemovesPlacement => "command-removes-placement",
 }
 
 pub const CONTROL: Case = Case::AgentInFleet;
 
 const CREW_FLEET: &str = "Crew";
+
+#[derive(Clone, PartialEq, Serialize)]
+struct Made {
+    placements: Vec<PlacementId>,
+    selected: bool,
+    drawn: bool,
+}
+
+fn made_fleet(seen: &Seen, id: &FleetId, agent: Option<&PlacementId>) -> Option<Made> {
+    let fleet = fleets(seen.document).find(|item| &item.id == id)?;
+    Some(Made {
+        placements: fleet
+            .placements
+            .iter()
+            .map(|item| item.id.clone())
+            .collect(),
+        selected: seen.document.selected_fleet.as_ref() == Some(id),
+        drawn: agent.is_some_and(|agent| seen.shows(&Target::terminal(agent))),
+    })
+}
 
 #[derive(Clone, PartialEq, Serialize)]
 struct Adopted {
@@ -292,6 +313,66 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect("the command exited 0, the applied code", applied)
             .observed("vessel", &vessel)?
             .observed("expectedVersion", version)
+    })?;
+
+    cases.check(native, Case::CommandFleetHoldsOnlyItsAgent, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let made = voyages(&layout)
+            .filter(|item| item.id == voyage)
+            .flat_map(|item| &item.fleets)
+            .find(|item| item.name == CREW_FLEET)
+            .map(|item| item.id.clone())
+            .context("The Fleet the command created is not in the saved layout")?;
+        let waiting = native
+            .observe("the command's Fleet open before its agent starts", |seen| {
+                made_fleet(seen, &made, None).filter(|found| found.selected)
+            })?;
+        native.keep_window("command-fleet-before-agent")?;
+        native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
+        native.observe("the calling Vessel's Fleet selected again", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(&fleet)
+                && seen.shows(&Target::terminal(first.placement())))
+            .then_some(())
+        })?;
+        typed(
+            &first,
+            native,
+            &format!(
+                "hc run --bg --name lead --label voyager.place=fleet:{} claude 'Lead the crew'",
+                made.0
+            ),
+        )?;
+        let terminal = address(native, "lead")?;
+        let placement = native.observe(
+            "the labelled agent adopted into the command's Fleet",
+            |seen| {
+                bound_to(seen.document, &terminal)
+                    .map(|placement| placement.id)
+                    .filter(|placement| fleet_of(seen.document, placement).as_ref() == Some(&made))
+            },
+        )?;
+        native.click(&Target::name(&RenameTarget::Fleet { id: made.clone() }))?;
+        let shown = native.observe(
+            "the command's Fleet selected and drawn with its agent",
+            |seen| {
+                made_fleet(seen, &made, Some(&placement))
+                    .filter(|found| found.selected && found.drawn)
+            },
+        )?;
+        native.keep_window("command-fleet-holds-only-its-agent")?;
+        Verdict::new()
+            .expect(
+                "before its agent starts, the Fleet the command created holds no Vessel",
+                waiting.placements.is_empty(),
+            )
+            .expect(
+                "the agent's labelled terminal is the only Vessel in the Fleet the command created",
+                shown.placements == [placement],
+            )
+            .observed("fleet", &made)?
+            .observed("terminal", &terminal)?
+            .observed("before", &waiting)?
+            .observed("after", &shown)
     })?;
 
     cases.check(native, Case::CommandRemovesPlacement, |native| {

@@ -2099,7 +2099,7 @@ impl Client {
                                     Action::StartNewShell { vessel_id, expected_backend } => {
                                         candidate.start_new_shell(vessel_id, expected_backend, &request.request_id)
                                     }
-                                    _ => candidate.apply(request.action.clone()),
+                                    _ => candidate.apply_from(program.as_ref(), request.action.clone()),
                                 }
                                     .map_err(rejected)
                                     .and_then(|()| {
