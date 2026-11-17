@@ -1,10 +1,8 @@
 # Native verification environment
 
 This is the Rust slice of the maintained native fixture. It runs the journeys in
-its journey registry on an owned Linux X11 display. The journeys are
-`terminal-scrolling`, `workspace`, which covers Voyages, Fleets and Vessels,
-`quit-restore` and `terminal-input`, which covers typing, keys, output,
-selection, copy and paste and clicks in a terminal.
+its journey registry on an owned Linux X11 display. `voyager-verification journeys` prints its journeys, with their cases and negative
+controls. See Journeys below.
 The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
@@ -808,6 +806,30 @@ list replies`, because the Vessel closes only when a held list lands.
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
 after a journey launches the candidate again.
+
+### Frame probe
+
+`run --probe frame` records the time of every frame that the candidate draws. It
+sets `VOYAGER_FRAME_PROFILE=1` and a stop file in the evidence folder, and it names
+the Core session `voyager-typing-verify-...`, because the app's frame profile starts
+only in a `voyager-typing-` session. At the end of the journey the verifier creates
+the stop file, waits up to 2 s for the profiler's end record, and keeps `frames.jsonl` in the
+evidence folder. `checks.json` gets a `frames` entry with `frames`, `medianMs`,
+`p95Ms` and `maxMs`, the draw time of each frame in the GPUI foreground journal.
+`ended` is false and `lost`, `capped` and `expired` are null when the candidate ended
+before it wrote its end record, as `terminal-scrolling` does when it closes the app.
+
+- The candidate must be built with `--features voyager-desktop/frame-profiler`.
+  Without it the run is `inconclusive` and `firstFailingCheck.check` is
+  `frame-probe`.
+- A run without `--probe` sets no frame variable and writes no `frames` entry.
+- The profiler creates its file once per process. A journey that starts the app a
+  second time, such as `quit-restore`, records the first launch only.
+- The record is the observed prefix up to the stop, not the process lifetime.
+
+`tests/native/controls/frame-stall.patch` plants a 50 ms sleep in the terminal
+snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's
+`maxMs` and `p95Ms` then exceed 50 ms, and a build without the patch does not.
 
 ### Build and inspect
 

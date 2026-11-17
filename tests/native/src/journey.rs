@@ -441,10 +441,13 @@ mod tests {
     }
 
     #[test]
-    fn every_journey_has_a_control_patch_that_still_applies() {
+    fn every_control_patch_still_applies() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for journey in Journey::ALL {
-            let patch = journey.control_patch();
+        let patches = Journey::ALL
+            .iter()
+            .map(|journey| journey.control_patch())
+            .chain(["tests/native/controls/frame-stall.patch".to_owned()]);
+        for patch in patches {
             let check = Command::new("git")
                 .arg("-C")
                 .arg(&root)
