@@ -1251,6 +1251,10 @@ and optional `gates` (`{"name","result","log"}`), `mutants` (`{"name","run"?,"lo
   leaves the verdict folder.
 - a mutant that cites a run whose role is not `mutant`, and a perf pair whose runs are
   not `trunk` and `head`.
+- a mutant whose `caught` disagrees with its run: `caught` must be true exactly when the
+  run's `runtimeResult` is `failed`, and an `inconclusive` run is neither.
+- the same run folder listed twice, however its path is spelled.
+- a `checks.json` anywhere in the verdict folder whose run the input does not list.
 
 The manifest lists, per run, its path, role, journey, `runtimeResult`, build `sha256` and
 the `checks.json` it read. It does not read case results, timings or screenshots: a

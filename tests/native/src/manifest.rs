@@ -126,6 +126,28 @@ fn cite(folder: &Path, cited: &str) -> Result<()> {
     Ok(())
 }
 
+fn normal(cited: &str) -> Result<String> {
+    inside(Path::new(""), cited).map(|path| {
+        path.components()
+            .map(|part| part.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    })
+}
+
+fn listed_checks(folder: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(folder)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            listed_checks(&entry.path(), found)?;
+        } else if kind.is_file() && entry.file_name() == "checks.json" {
+            found.push(folder.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
 fn field(checks: &Value, name: &str, at: &str) -> Result<String> {
     checks
         .get(name)
@@ -162,7 +184,7 @@ fn run(folder: &Path, input: &RunInput) -> Result<Run> {
         journey: field(&checks, "journey", &input.path)?,
         runtime_result: field(&checks, "runtimeResult", &input.path)?,
         sha256: field(&checks, "sha256", &input.path)?,
-        path: input.path.clone(),
+        path: normal(&input.path)?,
         role,
         role_from,
         checks: checks_path,
@@ -183,19 +205,33 @@ fn role_of<'a>(runs: &'a [Run], path: &str, wanted: Role, by: &str) -> Result<&'
 }
 
 pub fn build(folder: &Path, input: Input) -> Result<Value> {
-    let mut seen = BTreeMap::new();
-    for item in &input.runs {
-        ensure!(
-            seen.insert(item.path.as_str(), ()).is_none(),
-            "Run {} is listed twice",
-            item.path
-        );
-    }
     let runs = input
         .runs
         .iter()
         .map(|item| run(folder, item))
         .collect::<Result<Vec<_>>>()?;
+    let mut seen = BTreeMap::new();
+    for item in &runs {
+        let resolved = fs::canonicalize(folder.join(&item.path))?;
+        ensure!(
+            seen.insert(resolved, ()).is_none(),
+            "Run {} is listed twice",
+            item.path
+        );
+    }
+    let mut found = Vec::new();
+    listed_checks(folder, &mut found)?;
+    for run_folder in found {
+        let resolved = fs::canonicalize(&run_folder)?;
+        ensure!(
+            seen.contains_key(&resolved),
+            "{} holds a checks.json that the input does not list",
+            run_folder
+                .strip_prefix(folder)
+                .unwrap_or(&run_folder)
+                .display()
+        );
+    }
     for gate in &input.gates {
         cite(folder, &gate.log)?;
     }
@@ -206,12 +242,24 @@ pub fn build(folder: &Path, input: Input) -> Result<Value> {
             mutant.name
         );
         if let Some(path) = &mutant.run {
-            role_of(
+            let cited = role_of(
                 &runs,
-                path,
+                &normal(path)?,
                 Role::Mutant,
                 &format!("Mutant {}", mutant.name),
             )?;
+            let result = cited.runtime_result.as_str();
+            ensure!(
+                result == "passed" || result == "failed",
+                "Mutant {} cites run {path}, which ended {result}, so it is neither caught nor missed",
+                mutant.name
+            );
+            ensure!(
+                mutant.caught == (result == "failed"),
+                "Mutant {} says caught {}, but its run {path} ended {result}",
+                mutant.name,
+                mutant.caught
+            );
         }
         if let Some(log) = &mutant.log {
             cite(folder, log)?;
@@ -220,13 +268,13 @@ pub fn build(folder: &Path, input: Input) -> Result<Value> {
     for pair in &input.perf {
         role_of(
             &runs,
-            &pair.trunk,
+            &normal(&pair.trunk)?,
             Role::Trunk,
             &format!("Perf {}", pair.metric),
         )?;
         role_of(
             &runs,
-            &pair.head,
+            &normal(&pair.head)?,
             Role::Head,
             &format!("Perf {}", pair.metric),
         )?;
@@ -377,7 +425,7 @@ mod tests {
         let scratch = Scratch::new("manifest").unwrap();
         checks(scratch.path(), "head-1", Some("head"));
         checks(scratch.path(), "trunk-1", Some("trunk"));
-        checks(scratch.path(), "mut-1", Some("mutant"));
+        result(scratch.path(), "mut-1", "mutant", "failed");
         let runs = json!([{"path":"head-1"},{"path":"trunk-1"},{"path":"mut-1"}]);
         let good = build(
             scratch.path(),
@@ -415,6 +463,68 @@ mod tests {
         let saved: Value = serde_json::from_slice(&fs::read(written).unwrap()).unwrap();
         assert_eq!(saved["schema"], 1);
         assert_eq!(saved["runs"][0]["role"], "head");
+    }
+
+    fn result(folder: &Path, path: &str, role: &str, result: &str) {
+        checks(folder, path, Some(role));
+        let file = folder.join(path).join("checks.json");
+        let mut value: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        value["runtimeResult"] = json!(result);
+        fs::write(file, value.to_string()).unwrap();
+    }
+
+    #[test]
+    fn a_mutant_is_caught_only_when_its_run_failed() {
+        let scratch = Scratch::new("manifest").unwrap();
+        result(scratch.path(), "mut-pass", "mutant", "passed");
+        result(scratch.path(), "mut-fail", "mutant", "failed");
+        result(scratch.path(), "mut-open", "mutant", "inconclusive");
+        let with = |run: &str, caught: bool| {
+            build(
+                scratch.path(),
+                input(json!({"pr":1,"head":"h",
+                    "runs":[{"path":"mut-pass"},{"path":"mut-fail"},{"path":"mut-open"}],
+                    "mutants":[{"name":"m","run":run,"caught":caught}]})),
+            )
+        };
+        assert!(with("mut-fail", true).is_ok());
+        assert!(with("mut-pass", false).is_ok());
+        assert!(with("mut-pass", true).is_err());
+        assert!(with("mut-fail", false).is_err());
+        assert!(with("mut-open", true).is_err());
+        assert!(with("mut-open", false).is_err());
+    }
+
+    #[test]
+    fn one_folder_listed_two_ways_is_one_run() {
+        let scratch = Scratch::new("manifest").unwrap();
+        result(scratch.path(), "head-pass", "head", "passed");
+        let error = build(
+            scratch.path(),
+            input(json!({"pr":1,"head":"h","runs":[{"path":"head-pass"},{"path":"head-pass/"}]})),
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("twice"), "{error:#}");
+    }
+
+    #[test]
+    fn a_run_in_the_folder_that_the_input_omits_is_refused() {
+        let scratch = Scratch::new("manifest").unwrap();
+        result(scratch.path(), "head-pass", "head", "passed");
+        result(scratch.path(), "deep/head-fail", "head", "failed");
+        let error = build(
+            scratch.path(),
+            input(json!({"pr":1,"head":"h","runs":[{"path":"head-pass"}]})),
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("deep/head-fail"), "{error:#}");
+        assert!(
+            build(
+                scratch.path(),
+                input(json!({"pr":1,"head":"h","runs":[{"path":"head-pass"},{"path":"deep/head-fail"}]})),
+            )
+            .is_ok()
+        );
     }
 
     #[test]
