@@ -1231,6 +1231,35 @@ The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
 inconclusive or unavailable.
 
+## Run roles and the verdict manifest
+
+`run --role head|trunk|control|mutant` writes `"role"` into `checks.json`. It says
+what the run stands for in a verdict: the PR head, the trunk it is compared with, the
+journey's own negative control, or a mutant of the head. Without `--role` the field is
+`null`; the run itself is unchanged.
+
+`manifest --folder VERDICT_FOLDER --input INPUT_JSON` writes `VERDICT_FOLDER/verdict.json`,
+the one file that a proof page or a policy reads. The input is JSON with `pr`, `head`,
+`runs` (each `{"path","role"?}`, the path being a run folder inside the verdict folder),
+and optional `gates` (`{"name","result","log"}`), `mutants` (`{"name","run"?,"log"?,"caught"}`),
+`perf` (`{"metric","trunk","head"}` run paths) and `media` (file paths). The writer refuses:
+
+- a run with no role. The role comes from that run's `checks.json`. Only a run recorded
+  before `--role` existed may declare its role in the input, and the manifest says so
+  with `"roleFrom":"declared"`. A declared role that contradicts `checks.json` is refused.
+- any cited file or run folder that does not exist, and any path that is absolute or
+  leaves the verdict folder.
+- a mutant that cites a run whose role is not `mutant`, and a perf pair whose runs are
+  not `trunk` and `head`.
+- a mutant whose `caught` disagrees with its run: `caught` must be true exactly when the
+  run's `runtimeResult` is `failed`, and an `inconclusive` run is neither.
+- the same run folder listed twice, however its path is spelled.
+- a `checks.json` anywhere in the verdict folder whose run the input does not list.
+
+The manifest lists, per run, its path, role, journey, `runtimeResult`, build `sha256` and
+the `checks.json` it read. It does not read case results, timings or screenshots: a
+reader opens the cited files for those. `verdict.json` is part of the evidence list.
+
 An error inside the journey is blamed after the fact (`diagnose` in `src/native.rs`):
 
 | Observation when the journey stopped | Verdict |

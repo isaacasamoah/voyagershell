@@ -95,6 +95,14 @@ source, prove the repair with an independent negative control, then rerun the
 affected app behavior. Record a bounded unresolved result and next action if the
 repair cannot be completed; do not silently substitute a custom rig. Never weaken an assertion, and never retry an uncertain effect that a read has not proved did not happen.
 
+## Verdict manifest
+
+Run each verdict run with `--role head|trunk|control|mutant`. When the lanes are
+done, write `verdict.json` once with `voyager-verification manifest --folder
+VERDICT_FOLDER --input INPUT_JSON` and read the README section "Run roles and the
+verdict manifest" for the input. The writer refuses a run without a role and any
+cited file that does not exist; fix the input, never the check.
+
 ## Negative control
 
 Each journey has a control patch in tests/native/controls/. A candidate built
