@@ -232,6 +232,25 @@ mod tests {
     }
 
     #[test]
+    fn automatic_cleanup_never_removes_a_placement_whose_program_is_live() {
+        let mut model = workspace();
+        let live = [
+            CoreTerminalId("t0".into()),
+            CoreTerminalId("t1".into()),
+            CoreTerminalId("t2".into()),
+        ];
+        let terminals = [
+            terminal("t0", "live", ""),
+            terminal("t1", "live", ""),
+            terminal("t2", "finished", "exited"),
+        ];
+        assert!(close_exited(&mut model, &exited(&terminals), &live).unwrap());
+        assert!(model.layout.voyages[0].fleets[0].root.is_some());
+        assert!(model.layout.voyages[1].fleets[0].root.is_some());
+        assert!(model.layout.voyages[2].fleets[0].root.is_none());
+    }
+
+    #[test]
     fn normal_exit_closes_only_a_previously_live_placement() {
         let mut model = workspace();
         let live = [CoreTerminalId("t0".into()), CoreTerminalId("t1".into())];

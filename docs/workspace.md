@@ -133,9 +133,10 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   calling Vessel, its terminal, the layout version and each of its placements.
 - `workspace` carries a workspace `Request`. The socket offers `inspect`,
   `create-fleet`, `rename`, `move-voyage`, `move-fleet`, `move-placement`,
-  `select-voyage` and `select-fleet`, and refuses any other operation before
-  queueing it. An offered request passes the front door like the canvas's,
-  with no scope, so the program acts with the person's authority.
+  `remove-placement`, `select-voyage` and `select-fleet`, and refuses any
+  other operation before queueing it. An offered request passes the front
+  door like the canvas's, with no scope, so the program acts with the
+  person's authority.
 
 The socket binds the caller outside the payload: the envelope's caller is
 `Program { vessel }`, taken from the socket that accepted the connection. That

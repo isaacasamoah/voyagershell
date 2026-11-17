@@ -6,6 +6,7 @@ pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
+use crate::frames;
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::profile;
 use crate::provider::Script;
@@ -208,6 +209,7 @@ pub struct Native {
     seeded_at: Option<u128>,
     pub hc: Pinned,
     pub script: Option<Script>,
+    pub probe_frames: bool,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -260,6 +262,7 @@ impl Native {
             seeded_at: None,
             hc,
             script: None,
+            probe_frames: false,
             surface,
             display: None,
             x11: None,
@@ -590,6 +593,16 @@ impl Native {
         }
         fs::create_dir_all(&profile)?;
         let inspection = self.inspection();
+        let stop = self.system.evidence.join(frames::STOP);
+        let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
+        if self.probe_frames {
+            extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
+            extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));
+            extra_env.push((
+                "VOYAGER_FRAME_PROFILE_STOP",
+                stop.to_str().context("Invalid frame stop path")?,
+            ));
+        }
         let viewer = self.system.spawn(
             &self.candidate.path,
             &[
@@ -600,7 +613,7 @@ impl Native {
                 "--inspect",
                 inspection.to_str().context("Invalid inspection path")?,
             ],
-            &[("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")],
+            &extra_env,
             "native.log",
         )?;
         self.attach(viewer);
@@ -1141,6 +1154,21 @@ impl Native {
             aim.injection = Injection::Withdrawn;
         }
         aim.injection == Injection::Fired
+    }
+
+    pub fn frame_summary(&self) -> Result<Value> {
+        let evidence = &self.system.evidence;
+        fs::write(evidence.join(frames::STOP), b"")?;
+        let record = evidence.join(frames::RECORD);
+        let mut text = String::new();
+        for _ in 0..25 {
+            text = fs::read_to_string(&record).unwrap_or_default();
+            if frames::ended(&text) {
+                break;
+            }
+            sleep(Duration::from_millis(80));
+        }
+        frames::summarize(&text)
     }
 
     pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {

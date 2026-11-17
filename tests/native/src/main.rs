@@ -3,6 +3,7 @@ mod battery;
 mod core_relay;
 mod diagnosis;
 mod features;
+mod frames;
 mod inspection;
 mod journey;
 mod lifecycle;
@@ -127,6 +128,7 @@ fn entry() -> Result<i32> {
         "--second-assets",
         "--core-document",
         "--role",
+        "--probe",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -266,12 +268,22 @@ fn entry() -> Result<i32> {
         system::save(evidence.join(profile::MANIFEST), &seeded)?;
     }
     system::save(evidence.join("doctor.json"), &readiness)?;
+    let probe_frames = match get("--probe").ok().as_deref() {
+        None => false,
+        Some("frame") => true,
+        Some(other) => bail!("Unknown probe {other}; the only probe is frame"),
+    };
     let session = format!(
-        "voyager-verify-{}-{:08x}",
+        "{}-{}-{:08x}",
+        if probe_frames {
+            "voyager-typing-verify"
+        } else {
+            "voyager-verify"
+        },
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -322,6 +334,8 @@ struct Plan {
     provider_script: Option<provider::Script>,
     surface: Surface,
     role: Option<manifest::Role>,
+    #[serde(rename = "probeFrames")]
+    probe_frames: bool,
 }
 
 fn journey(
@@ -384,6 +398,7 @@ fn drive(plan: Plan) -> Result<i32> {
     let second = plan.second.clone();
     let mut native = Native::new(system, plan.candidate, plan.second, plan.hc, plan.surface);
     native.script = plan.provider_script;
+    native.probe_frames = plan.probe_frames;
     native.seed_documents(plan.documents);
     let mut gate = Run::default();
     let result = journey(
@@ -394,6 +409,7 @@ fn drive(plan: Plan) -> Result<i32> {
         plan.host,
         plan.fault.as_ref(),
     );
+    let frames = (plan.probe_frames && result.is_ok()).then(|| native.frame_summary());
     let ledgers = [
         plan.core_delay.as_ref().map(|delay| {
             (
@@ -412,7 +428,11 @@ fn drive(plan: Plan) -> Result<i32> {
     let ledger_fault = ledgers
         .into_iter()
         .flatten()
-        .find_map(|(check, audit)| audit.err().map(|error| (check, format!("{error:#}"))));
+        .find_map(|(check, audit)| audit.err().map(|error| (check, format!("{error:#}"))))
+        .or_else(|| {
+            let error = frames.as_ref()?.as_ref().err()?;
+            Some(("frame-probe", format!("{error:#}")))
+        });
     let cause = match (result, &ledger_fault) {
         (_, Some((_, detail))) => Some(Cause::Fixture(detail.clone())),
         (Err(error), _) => Some(native.diagnose(&error)),
@@ -480,7 +500,10 @@ fn drive(plan: Plan) -> Result<i32> {
             &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let report = json!({"schema":3,"journey":plan.journey,"role":plan.role,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":tested.path,"sha256":tested.sha256,"second":second,"builds":native.builds(),"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let mut report = json!({"schema":3,"journey":plan.journey,"role":plan.role,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":tested.path,"sha256":tested.sha256,"second":second,"builds":native.builds(),"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    if let Some(Ok(summary)) = frames {
+        report["frames"] = summary;
+    }
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     match verdict {
@@ -498,6 +521,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/features.rs", include_bytes!("features.rs")),
+    ("src/frames.rs", include_bytes!("frames.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
     ("src/journey.rs", include_bytes!("journey.rs")),
     (
