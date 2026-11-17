@@ -138,15 +138,18 @@ function violations(rule, facts) {
       }));
   }
   if (rule.check === "forbid_cross") {
+    const root = rule.group.replace(/::$/, "");
     const family = (id) =>
-      id.startsWith(rule.group)
-        ? id.slice(rule.group.length).split("::")[0]
-        : "";
+      id === root
+        ? ""
+        : id.startsWith(rule.group)
+          ? id.slice(rule.group.length).split("::")[0]
+          : null;
     return facts.edges
       .filter(
         (edge) =>
-          family(edge.from) &&
-          family(edge.to) &&
+          family(edge.from) !== null &&
+          family(edge.to) !== null &&
           family(edge.from) !== family(edge.to) &&
           (!rule.kinds?.length || rule.kinds.includes(edge.kind)),
       )
