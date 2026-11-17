@@ -1035,6 +1035,9 @@
     "Vessel": {
       "additionalProperties": false,
       "properties": {
+        "adopted": {
+          "type": "boolean"
+        },
         "backend": {
           "type": [
             "string",

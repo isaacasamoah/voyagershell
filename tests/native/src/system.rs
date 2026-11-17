@@ -530,6 +530,7 @@ impl System {
                     | "terminal.get"
                     | "terminal.list"
                     | "terminal.read"
+                    | "terminal.kill"
                     | "server.stop"
             ),
             "Unsupported verification Core operation"

@@ -37007,7 +37007,7 @@ return errors === 0;
 }
 
 export const response = validate104;
-const schema163 = {"$schema":"http://json-schema.org/draft-07/schema#","anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}],"definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"title":"Reply"};
+const schema163 = {"$schema":"http://json-schema.org/draft-07/schema#","anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}],"definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"title":"Reply"};
 const schema164 = {"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"};
 const schema196 = {"enum":["applied","refused","uncertain"],"type":"string"};
 const schema165 = {"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"};
@@ -40517,7 +40517,7 @@ validate117.errors = vErrors;
 return errors === 0;
 }
 
-const schema191 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
+const schema191 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
 const schema192 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
 const schema193 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
 const schema194 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
@@ -40929,18 +40929,17 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!((((((((key0 === "backend") || (key0 === "configuration")) || (key0 === "cwd")) || (key0 === "id")) || (key0 === "launch")) || (key0 === "shellIntent")) || (key0 === "startPending")) || (key0 === "typeId"))){
+if(!(func2.call(schema191.properties, key0))){
 validate128.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
 if(_errs1 === errors){
-if(data.backend !== undefined){
-let data0 = data.backend;
+if(data.adopted !== undefined){
 const _errs2 = errors;
-if((typeof data0 !== "string") && (data0 !== null)){
-validate128.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema191.properties.backend.type},message:"must be string,null"}];
+if(typeof data.adopted !== "boolean"){
+validate128.errors = [{instancePath:instancePath+"/adopted",schemaPath:"#/properties/adopted/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -40949,11 +40948,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.configuration !== undefined){
-let data1 = data.configuration;
+if(data.backend !== undefined){
+let data1 = data.backend;
 const _errs4 = errors;
-if((!(data1 && typeof data1 == "object" && !Array.isArray(data1))) && (data1 !== null)){
-validate128.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema191.properties.configuration.type},message:"must be object,null"}];
+if((typeof data1 !== "string") && (data1 !== null)){
+validate128.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema191.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -40962,22 +40961,23 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.cwd !== undefined){
-const _errs7 = errors;
-if(typeof data.cwd !== "string"){
-validate128.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(data.configuration !== undefined){
+let data2 = data.configuration;
+const _errs6 = errors;
+if((!(data2 && typeof data2 == "object" && !Array.isArray(data2))) && (data2 !== null)){
+validate128.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema191.properties.configuration.type},message:"must be object,null"}];
 return false;
 }
-var valid0 = _errs7 === errors;
+var valid0 = _errs6 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
-if(data.id !== undefined){
+if(data.cwd !== undefined){
 const _errs9 = errors;
-if(typeof data.id !== "string"){
-validate128.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.cwd !== "string"){
+validate128.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs9 === errors;
@@ -40986,21 +40986,33 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.launch !== undefined){
-let data4 = data.launch;
+if(data.id !== undefined){
 const _errs11 = errors;
-const _errs12 = errors;
-let valid1 = false;
+if(typeof data.id !== "string"){
+validate128.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs11 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.launch !== undefined){
+let data5 = data.launch;
 const _errs13 = errors;
-if(!(validate129(data4, {instancePath:instancePath+"/launch",parentData:data,parentDataProperty:"launch",rootData}))){
+const _errs14 = errors;
+let valid1 = false;
+const _errs15 = errors;
+if(!(validate129(data5, {instancePath:instancePath+"/launch",parentData:data,parentDataProperty:"launch",rootData}))){
 vErrors = vErrors === null ? validate129.errors : vErrors.concat(validate129.errors);
 errors = vErrors.length;
 }
-var _valid0 = _errs13 === errors;
+var _valid0 = _errs15 === errors;
 valid1 = valid1 || _valid0;
 if(!valid1){
-const _errs14 = errors;
-if(data4 !== null){
+const _errs16 = errors;
+if(data5 !== null){
 const err0 = {instancePath:instancePath+"/launch",schemaPath:"#/properties/launch/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err0];
@@ -41010,7 +41022,7 @@ vErrors.push(err0);
 }
 errors++;
 }
-var _valid0 = _errs14 === errors;
+var _valid0 = _errs16 === errors;
 valid1 = valid1 || _valid0;
 }
 if(!valid1){
@@ -41026,40 +41038,27 @@ validate128.errors = vErrors;
 return false;
 }
 else {
-errors = _errs12;
+errors = _errs14;
 if(vErrors !== null){
-if(_errs12){
-vErrors.length = _errs12;
+if(_errs14){
+vErrors.length = _errs14;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid0 = _errs11 === errors;
+var valid0 = _errs13 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.shellIntent !== undefined){
-let data5 = data.shellIntent;
-const _errs16 = errors;
-if((typeof data5 !== "string") && (data5 !== null)){
-validate128.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema191.properties.shellIntent.type},message:"must be string,null"}];
-return false;
-}
-var valid0 = _errs16 === errors;
-}
-else {
-var valid0 = true;
-}
-if(valid0){
-if(data.startPending !== undefined){
-let data6 = data.startPending;
+let data6 = data.shellIntent;
 const _errs18 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate128.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema191.properties.startPending.type},message:"must be string,null"}];
+validate128.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema191.properties.shellIntent.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -41068,16 +41067,30 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.typeId !== undefined){
+if(data.startPending !== undefined){
+let data7 = data.startPending;
 const _errs20 = errors;
-if(typeof data.typeId !== "string"){
-validate128.errors = [{instancePath:instancePath+"/typeId",schemaPath:"#/properties/typeId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if((typeof data7 !== "string") && (data7 !== null)){
+validate128.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema191.properties.startPending.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.typeId !== undefined){
+const _errs22 = errors;
+if(typeof data.typeId !== "string"){
+validate128.errors = [{instancePath:instancePath+"/typeId",schemaPath:"#/properties/typeId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs22 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -42302,7 +42315,7 @@ return errors === 0;
 }
 
 export const socketReply = validate137;
-const schema199 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Reply":{"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"VesselPlacement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"},"VesselStatus":{"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"status","type":"string"},"status":{"$ref":"#/definitions/VesselStatus"}},"required":["kind","status"],"type":"object"},{"additionalProperties":false,"properties":{"focus":{"$ref":"#/definitions/Focus"},"kind":{"const":"focus","type":"string"}},"required":["kind","focus"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"},"reply":{"$ref":"#/definitions/Reply"}},"required":["kind","reply"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"refused","type":"string"},"message":{"type":"string"}},"required":["kind","message"],"type":"object"}],"title":"SocketReply"};
+const schema199 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Reply":{"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"VesselPlacement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"},"VesselStatus":{"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"status","type":"string"},"status":{"$ref":"#/definitions/VesselStatus"}},"required":["kind","status"],"type":"object"},{"additionalProperties":false,"properties":{"focus":{"$ref":"#/definitions/Focus"},"kind":{"const":"focus","type":"string"}},"required":["kind","focus"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"},"reply":{"$ref":"#/definitions/Reply"}},"required":["kind","reply"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"refused","type":"string"},"message":{"type":"string"}},"required":["kind","message"],"type":"object"}],"title":"SocketReply"};
 const schema200 = {"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"};
 const schema201 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"};
 const schema202 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
@@ -46848,7 +46861,7 @@ validate157.errors = vErrors;
 return errors === 0;
 }
 
-const schema233 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
+const schema233 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
 const schema234 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
 const schema235 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
 const schema236 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
@@ -47260,18 +47273,17 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!((((((((key0 === "backend") || (key0 === "configuration")) || (key0 === "cwd")) || (key0 === "id")) || (key0 === "launch")) || (key0 === "shellIntent")) || (key0 === "startPending")) || (key0 === "typeId"))){
+if(!(func2.call(schema233.properties, key0))){
 validate168.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
 if(_errs1 === errors){
-if(data.backend !== undefined){
-let data0 = data.backend;
+if(data.adopted !== undefined){
 const _errs2 = errors;
-if((typeof data0 !== "string") && (data0 !== null)){
-validate168.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema233.properties.backend.type},message:"must be string,null"}];
+if(typeof data.adopted !== "boolean"){
+validate168.errors = [{instancePath:instancePath+"/adopted",schemaPath:"#/properties/adopted/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -47280,11 +47292,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.configuration !== undefined){
-let data1 = data.configuration;
+if(data.backend !== undefined){
+let data1 = data.backend;
 const _errs4 = errors;
-if((!(data1 && typeof data1 == "object" && !Array.isArray(data1))) && (data1 !== null)){
-validate168.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema233.properties.configuration.type},message:"must be object,null"}];
+if((typeof data1 !== "string") && (data1 !== null)){
+validate168.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema233.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -47293,22 +47305,23 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.cwd !== undefined){
-const _errs7 = errors;
-if(typeof data.cwd !== "string"){
-validate168.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(data.configuration !== undefined){
+let data2 = data.configuration;
+const _errs6 = errors;
+if((!(data2 && typeof data2 == "object" && !Array.isArray(data2))) && (data2 !== null)){
+validate168.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema233.properties.configuration.type},message:"must be object,null"}];
 return false;
 }
-var valid0 = _errs7 === errors;
+var valid0 = _errs6 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
-if(data.id !== undefined){
+if(data.cwd !== undefined){
 const _errs9 = errors;
-if(typeof data.id !== "string"){
-validate168.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.cwd !== "string"){
+validate168.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs9 === errors;
@@ -47317,21 +47330,33 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.launch !== undefined){
-let data4 = data.launch;
+if(data.id !== undefined){
 const _errs11 = errors;
-const _errs12 = errors;
-let valid1 = false;
+if(typeof data.id !== "string"){
+validate168.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs11 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.launch !== undefined){
+let data5 = data.launch;
 const _errs13 = errors;
-if(!(validate169(data4, {instancePath:instancePath+"/launch",parentData:data,parentDataProperty:"launch",rootData}))){
+const _errs14 = errors;
+let valid1 = false;
+const _errs15 = errors;
+if(!(validate169(data5, {instancePath:instancePath+"/launch",parentData:data,parentDataProperty:"launch",rootData}))){
 vErrors = vErrors === null ? validate169.errors : vErrors.concat(validate169.errors);
 errors = vErrors.length;
 }
-var _valid0 = _errs13 === errors;
+var _valid0 = _errs15 === errors;
 valid1 = valid1 || _valid0;
 if(!valid1){
-const _errs14 = errors;
-if(data4 !== null){
+const _errs16 = errors;
+if(data5 !== null){
 const err0 = {instancePath:instancePath+"/launch",schemaPath:"#/properties/launch/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err0];
@@ -47341,7 +47366,7 @@ vErrors.push(err0);
 }
 errors++;
 }
-var _valid0 = _errs14 === errors;
+var _valid0 = _errs16 === errors;
 valid1 = valid1 || _valid0;
 }
 if(!valid1){
@@ -47357,40 +47382,27 @@ validate168.errors = vErrors;
 return false;
 }
 else {
-errors = _errs12;
+errors = _errs14;
 if(vErrors !== null){
-if(_errs12){
-vErrors.length = _errs12;
+if(_errs14){
+vErrors.length = _errs14;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid0 = _errs11 === errors;
+var valid0 = _errs13 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.shellIntent !== undefined){
-let data5 = data.shellIntent;
-const _errs16 = errors;
-if((typeof data5 !== "string") && (data5 !== null)){
-validate168.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema233.properties.shellIntent.type},message:"must be string,null"}];
-return false;
-}
-var valid0 = _errs16 === errors;
-}
-else {
-var valid0 = true;
-}
-if(valid0){
-if(data.startPending !== undefined){
-let data6 = data.startPending;
+let data6 = data.shellIntent;
 const _errs18 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate168.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema233.properties.startPending.type},message:"must be string,null"}];
+validate168.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema233.properties.shellIntent.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -47399,16 +47411,30 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.typeId !== undefined){
+if(data.startPending !== undefined){
+let data7 = data.startPending;
 const _errs20 = errors;
-if(typeof data.typeId !== "string"){
-validate168.errors = [{instancePath:instancePath+"/typeId",schemaPath:"#/properties/typeId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if((typeof data7 !== "string") && (data7 !== null)){
+validate168.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema233.properties.startPending.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.typeId !== undefined){
+const _errs22 = errors;
+if(typeof data.typeId !== "string"){
+validate168.errors = [{instancePath:instancePath+"/typeId",schemaPath:"#/properties/typeId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs22 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }

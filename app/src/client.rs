@@ -1778,8 +1778,8 @@ impl Client {
                                     }
                                     if !reopened {
                                         let terminals = core.terminal_list()?;
-                                        let ready = crate::families::terminal::lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
-                                        if !ready.is_empty() {
+                                        let (ready, closed) = crate::families::terminal::lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
+                                        if closed || !ready.is_empty() {
                                             revision = save(core, &candidate.layout, revision)?;
                                             created_vessels.extend(ready.into_iter().map(|id| CreatedTerminal {
                                                 id, launch: voyager_contract::launch::Launch::Terminal,

@@ -89,6 +89,7 @@ impl Model {
             start_pending: None,
             launch,
             shell_intent: None,
+            adopted: false,
         });
         Ok(Placement {
             id: placement,
@@ -218,6 +219,7 @@ impl Model {
         }
         if let Some(content) = self.layout.vessels.last_mut() {
             content.backend = Some(terminal.clone());
+            content.adopted = true;
         }
         self.insert(owner, PlacementInsertion::Empty, panel)?;
         Ok(true)

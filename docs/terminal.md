@@ -88,7 +88,9 @@ These definitions describe what each user action does.
   (`families::terminal::lifecycle::close_exited`). A program that ended while the app was
   closed, for example after a computer restart, keeps its placement, and the
   next launch opens a plain shell there (`families::terminal::lifecycle::prepare_reopen`).
-  Agents are not resumed. This is unchanged.
+  A Vessel the app adopted from a `voyager.place` label carries `adopted`; when its
+  program ended, the next launch removes its placement and starts no shell.
+  Agents are not resumed.
 - **Quitting the app.** Ctrl+Q and closing the window are quit-and-keep. The
   owner closes terminal input admission, marks reported activity unavailable,
   releases its own Core connection (the `hc connect` child) and waits up to

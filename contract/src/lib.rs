@@ -145,6 +145,8 @@ pub struct Vessel {
     pub launch: Option<launch::Launch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell_intent: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub adopted: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
