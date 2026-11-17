@@ -5,6 +5,12 @@ use voyager_contract::{
     Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FirstVessel {
+    DefaultTerminal,
+    Labelled,
+}
+
 #[derive(Default)]
 pub struct Model {
     pub layout: Layout,
@@ -93,16 +99,18 @@ impl Model {
         })
     }
 
-    fn fleet(&mut self, name: String, cwd: String) -> Result<Fleet, String> {
-        let placement = self.placement(cwd, "terminal".into(), "Terminal 1".into(), None)?;
+    fn fleet(&mut self, name: String, cwd: Option<String>) -> Result<Fleet, String> {
+        let placement = cwd
+            .map(|cwd| self.placement(cwd, "terminal".into(), "Terminal 1".into(), None))
+            .transpose()?;
         Ok(Fleet {
             id: FleetId(self.id("fleet")?),
             name,
             closed: false,
-            root: Some(Split::Leaf {
+            root: placement.as_ref().map(|placement| Split::Leaf {
                 placement: placement.id.clone(),
             }),
-            placements: vec![placement],
+            placements: placement.into_iter().collect(),
             maximized_placement: None,
         })
     }
@@ -215,6 +223,56 @@ impl Model {
         Ok(true)
     }
 
+    pub(crate) fn apply_from(
+        &mut self,
+        program: Option<&VesselId>,
+        action: Action,
+    ) -> Result<(), String> {
+        match action {
+            Action::CreateFleet { voyage, name } if program.is_some() => {
+                self.add_fleet(voyage, name, FirstVessel::Labelled)?;
+                self.remember_fleet();
+                Ok(())
+            }
+            action => self.apply(action),
+        }
+    }
+
+    fn add_fleet(
+        &mut self,
+        voyage: VoyageId,
+        name: String,
+        first: FirstVessel,
+    ) -> Result<(), String> {
+        let index = self
+            .layout
+            .voyages
+            .iter()
+            .position(|v| v.id == voyage)
+            .ok_or("Voyage not found")?;
+        if name.trim().is_empty() {
+            return Err("A Fleet needs a name".into());
+        }
+        let cwd = match first {
+            FirstVessel::Labelled => None,
+            FirstVessel::DefaultTerminal => Some(
+                self.layout.voyages[index]
+                    .fleets
+                    .first()
+                    .and_then(|f| f.placements.first())
+                    .and_then(|v| self.layout.vessels.iter().find(|c| c.id == v.vessel))
+                    .map(|c| c.cwd.clone())
+                    .ok_or("Voyage has no working directory")?,
+            ),
+        };
+        let fleet = self.fleet(name, cwd)?;
+        self.layout.selected_voyage = Some(voyage);
+        self.layout.selected_fleet = Some(fleet.id.clone());
+        self.layout.view = WorkspaceView::Fleet;
+        self.layout.voyages[index].fleets.push(fleet);
+        Ok(())
+    }
+
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
         self.change(action)?;
         self.remember_fleet();
@@ -299,7 +357,7 @@ impl Model {
                     return Err("A Voyage needs a name and absolute working directory".into());
                 }
                 let id = VoyageId(self.id("voyage")?);
-                let fleet = self.fleet("Fleet 1".into(), cwd.clone())?;
+                let fleet = self.fleet("Fleet 1".into(), Some(cwd.clone()))?;
                 self.layout.selected_voyage = Some(id.clone());
                 self.layout.selected_fleet = Some(fleet.id.clone());
                 self.layout.view = WorkspaceView::Fleet;
@@ -334,27 +392,7 @@ impl Model {
                 }
             }
             Action::CreateFleet { voyage, name } => {
-                let index = self
-                    .layout
-                    .voyages
-                    .iter()
-                    .position(|v| v.id == voyage)
-                    .ok_or("Voyage not found")?;
-                if name.trim().is_empty() {
-                    return Err("A Fleet needs a name".into());
-                }
-                let cwd = self.layout.voyages[index]
-                    .fleets
-                    .first()
-                    .and_then(|f| f.placements.first())
-                    .and_then(|v| self.layout.vessels.iter().find(|c| c.id == v.vessel))
-                    .map(|c| c.cwd.clone())
-                    .ok_or("Voyage has no working directory")?;
-                let fleet = self.fleet(name, cwd)?;
-                self.layout.selected_voyage = Some(voyage);
-                self.layout.selected_fleet = Some(fleet.id.clone());
-                self.layout.view = WorkspaceView::Fleet;
-                self.layout.voyages[index].fleets.push(fleet);
+                self.add_fleet(voyage, name, FirstVessel::DefaultTerminal)?;
             }
             Action::CreateFleetWithVessel {
                 voyage,
@@ -729,235 +767,4 @@ fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: boo
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn two_voyages() -> (Model, VoyageId, FleetId, FleetId, VoyageId) {
-        let mut model = Model {
-            layout: Model::prepare(Layout::default(), "/tmp").unwrap(),
-        };
-        model
-            .apply(Action::CreateVoyage {
-                name: "A".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let a = model.layout.voyages[0].id.clone();
-        let first = model.layout.voyages[0].fleets[0].id.clone();
-        model
-            .apply(Action::CreateFleet {
-                voyage: a.clone(),
-                name: "Second".into(),
-            })
-            .unwrap();
-        let second = model.layout.voyages[0].fleets[1].id.clone();
-        model
-            .apply(Action::CreateVoyage {
-                name: "B".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let b = model.layout.voyages[1].id.clone();
-        (model, a, first, second, b)
-    }
-
-    #[test]
-    fn navigation_changes_only_the_navigation_record() {
-        let (mut model, a, _, second, b) = two_voyages();
-        let vessel = model.layout.voyages[0].fleets[1].placements[0].id.clone();
-        let before = model.layout.clone();
-        for action in [
-            Action::SelectVoyage { id: a.clone() },
-            Action::SelectFleet { id: second },
-            Action::FocusVessel { id: vessel },
-            Action::Dock {
-                context: Context::Voyage { id: a },
-            },
-            Action::Home,
-            Action::SelectVoyage { id: b },
-        ] {
-            assert!(action.is_navigation());
-            model.apply(action).unwrap();
-            assert!(before.same_structure(&model.layout));
-        }
-        assert_ne!(before, model.layout);
-    }
-
-    #[test]
-    fn a_voyage_reopens_on_its_last_used_fleet_and_vessel() {
-        let (mut model, a, _, second, b) = two_voyages();
-        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
-        assert_eq!(model.layout.selected_fleet.as_ref(), Some(&second));
-        let vessel = model.layout.voyages[0].fleets[1].placements[0].id.clone();
-        model
-            .apply(Action::FocusVessel { id: vessel.clone() })
-            .unwrap();
-        model.apply(Action::SelectVoyage { id: b }).unwrap();
-        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
-        assert_eq!(model.layout.selected_fleet.as_ref(), Some(&second));
-        let entry = model
-            .layout
-            .navigation
-            .iter()
-            .find(|entry| entry.voyage == a)
-            .unwrap();
-        assert_eq!(entry.fleet, second);
-        assert_eq!(entry.vessel.as_ref(), Some(&vessel));
-    }
-
-    #[test]
-    fn a_closed_last_used_fleet_falls_back_to_the_first_open_fleet() {
-        let (mut model, a, first, second, b) = two_voyages();
-        model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
-        model.apply(Action::CloseFleet { id: second }).unwrap();
-        model.apply(Action::SelectVoyage { id: b }).unwrap();
-        model.apply(Action::SelectVoyage { id: a }).unwrap();
-        assert_eq!(model.layout.selected_fleet, Some(first));
-    }
-
-    #[test]
-    fn a_vessel_outside_the_open_fleet_is_not_remembered() {
-        let (mut model, a, first, _, _) = two_voyages();
-        let elsewhere = model.layout.voyages[0].fleets[0].placements[0].id.clone();
-        model.apply(Action::SelectVoyage { id: a }).unwrap();
-        assert_ne!(model.layout.selected_fleet, Some(first));
-        let before = model.layout.clone();
-        assert!(model.apply(Action::FocusVessel { id: elsewhere }).is_err());
-        assert_eq!(before, model.layout);
-    }
-
-    #[test]
-    fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
-        let mut model = Model::default();
-        model
-            .apply(Action::CreateVoyage {
-                name: "Crew".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let voyage = model.layout.voyages[0].id.clone();
-        let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let agent = Launch::Program {
-            argv: vec!["claude".into()],
-        };
-        let into_fleet = PlacementOwner::Fleet { id: fleet.clone() };
-        let t5 = CoreTerminalId("t5".into());
-        assert_eq!(
-            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
-            Ok(true)
-        );
-        assert_eq!(
-            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
-            Ok(false)
-        );
-        let adopted = model.layout.vessels.last().unwrap().clone();
-        assert_eq!(adopted.backend, Some(t5));
-        assert_eq!(adopted.launch, Some(agent));
-        assert_eq!(adopted.cwd, "/work");
-        let placements = &model.layout.voyages[0].fleets[0];
-        assert_eq!(placements.placements.len(), 2);
-        assert!(panels::contains(
-            &placements.root,
-            &placements.placements[1].id
-        ));
-        let t6 = CoreTerminalId("t6".into());
-        let portal = PlacementOwner::Portals {
-            voyage: voyage.clone(),
-        };
-        assert_eq!(
-            model.adopt(&portal, &t6, "/work".into(), Launch::Terminal, None),
-            Ok(true)
-        );
-        let column = model.layout.voyages[0].portal_layout.as_ref().unwrap();
-        assert!(column.visible);
-        assert_eq!(model.layout.voyages[0].portals.len(), 1);
-        let unknown = PlacementOwner::Fleet {
-            id: FleetId("fleet-404".into()),
-        };
-        let t7 = CoreTerminalId("t7".into());
-        assert!(
-            model
-                .adopt(&unknown, &t7, "/".into(), Launch::Terminal, None)
-                .is_err()
-        );
-        model.layout.voyages[0].fleets[0].closed = true;
-        assert!(
-            model
-                .adopt(&into_fleet, &t7, "/".into(), Launch::Terminal, None)
-                .is_err()
-        );
-        assert!(
-            !model
-                .layout
-                .vessels
-                .iter()
-                .any(|content| content.backend.as_ref() == Some(&t7))
-        );
-    }
-
-    #[test]
-    fn an_adopted_terminal_takes_its_core_name_unless_a_neighbour_holds_it() {
-        let mut model = Model::default();
-        model
-            .apply(Action::CreateVoyage {
-                name: "Crew".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let owner = PlacementOwner::Fleet { id: fleet };
-        let adopt = |model: &mut Model, address: &str, name: Option<&str>| {
-            model
-                .adopt(
-                    &owner,
-                    &CoreTerminalId(address.into()),
-                    "/work".into(),
-                    Launch::Terminal,
-                    name.map(str::to_owned),
-                )
-                .unwrap();
-            model.layout.voyages[0].fleets[0]
-                .placements
-                .last()
-                .unwrap()
-                .clone()
-        };
-        let arch = adopt(&mut model, "t5", Some("arch"));
-        assert_eq!(arch.name, "arch");
-        assert_eq!(arch.name_origin, voyager_contract::NameOrigin::Deliberate);
-        let twin = adopt(&mut model, "t6", Some("arch"));
-        assert_eq!(twin.name, "Terminal 2");
-        assert_eq!(twin.name_origin, voyager_contract::NameOrigin::Automatic);
-        assert_eq!(adopt(&mut model, "t7", None).name, "Terminal 3");
-        assert_eq!(adopt(&mut model, "t8", Some("")).name, "Terminal 4");
-    }
-
-    #[test]
-    fn default_agents_seed_only_a_previously_absent_home() {
-        let initial = Model::prepare(Layout::default(), "/tmp").unwrap();
-        let home = initial.home.as_ref().unwrap();
-        let panel = &home.fleets[0].placements[0];
-        let content = initial
-            .vessels
-            .iter()
-            .find(|item| item.id == panel.vessel)
-            .unwrap();
-        assert_eq!(content.type_id, "agents");
-        assert_eq!(panel.name, "Agents 1");
-        assert!(content.backend.is_none());
-        assert!(content.launch.is_none());
-        let mut model = Model { layout: initial };
-        let id = model.layout.home.as_ref().unwrap().fleets[0].placements[0]
-            .id
-            .clone();
-        model.apply(Action::RemovePlacement { id }).unwrap();
-        let empty = model.layout.clone();
-        assert_eq!(Model::prepare(empty.clone(), "/elsewhere").unwrap(), empty);
-        model.layout.home.as_mut().unwrap().fleets[0].name = "My landing".into();
-        let customized = model.layout;
-        assert_eq!(
-            Model::prepare(customized.clone(), "/elsewhere").unwrap(),
-            customized
-        );
-    }
-}
+mod tests;

@@ -140,6 +140,17 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   other operation before queueing it. An offered request passes the front
   door like the canvas's, with no scope, so the program acts with the
   person's authority.
+- A `create-fleet` from the socket makes a Fleet with no Vessel. The canvas
+  and the avatar still get a Fleet that opens on a new "Terminal 1". An agent
+  that makes a Fleet does so to start its own program there with a
+  `voyager.place` label, and an extra idle terminal beside that program is
+  clutter. The first labelled terminal is adopted into the empty split, so it
+  takes the Fleet's first slot. The application queue in `app/src/client.rs`
+  passes the calling program to `Model::apply_from` in `app/src/workspace.rs`,
+  which picks the Fleet's `FirstVessel` from it. The wire `Action` is the same
+  for every caller. Until a labelled terminal arrives, the Fleet looks like
+  one whose last Vessel was closed: an empty canvas that offers "Choose
+  content".
 
 The socket binds the caller outside the payload: the envelope's caller is
 `Program { vessel }`, taken from the socket that accepted the connection. That
