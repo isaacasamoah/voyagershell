@@ -43,6 +43,9 @@ app/src/families/terminal/lifecycle.rs.
   must still hold `QUIT-42`. The app adopts that terminal in the same instant
   the canvas opens its first terminal, which is the startup race behind a
   refused open ("Layout changed; inspect before opening a terminal").
+  The adopted Vessel is also the one the app closes after a cold restart, so
+  `cold-restart-restores` expects the saved document without the adopted
+  Vessel's place in the split, and draws and checks only the other Vessels.
 - `quit-busy-keeps-output` starts a loop that prints `BUSY-1` to `BUSY-100`
   over ten seconds and then `BUSY-DONE-42`, and quits after `BUSY-3`. While the
   app is closed, the shell must be the same live program, and one read of Core's

@@ -14,6 +14,15 @@ export async function openOrRetry(open, refresh, before) {
     shownPanels(layout).some((panel) => panel.vessel === before.id);
   return unchanged ? open() : opened;
 }
+export function reopens(content, opening) {
+  return Boolean(
+    (content.shellIntent && opening?.intent !== content.shellIntent) ||
+    (!content.backend &&
+      !content.startPending &&
+      opening &&
+      ["applied", "unbound", "rejected"].includes(opening.status)),
+  );
+}
 export function terminalStatus(content, outcome) {
   if (content.startPending)
     return "Terminal start is unconfirmed. Inspect before trying again.";

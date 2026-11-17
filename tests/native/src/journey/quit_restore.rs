@@ -1,5 +1,5 @@
 use super::adopt_by_label::{address, bound_to};
-use super::layout::{avatar_on_dock, without_runtime};
+use super::layout::{avatar_on_dock, without_adopted_leaves, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Decorations, Native, Seen, Terminal, voyages};
@@ -445,16 +445,17 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let saved = at_rest(native)?;
         native.close()?;
         let old_core = native.stop_core()?;
-        let old = backends(&saved.document);
+        let old = backends(&without_adopted(&saved.document));
         native.launch()?;
         let new_core = native.core()?.clone();
         let (layout, picture) = native.settle(
             "each Vessel of the selected Fleet bound to a new terminal and drawn",
-            |seen| Some((seen.document.clone(), drawn(seen))),
+            |seen| Some((seen.document.clone(), drawn_of(seen, false))),
             |(_, picture)| picture.whole() && picture.fresh(&old),
         )?;
         let shells = selected(&layout)
             .iter()
+            .filter(|vessel| !is_adopted(&layout, vessel))
             .map(|vessel| shell_of(native, &layout, vessel))
             .collect::<Result<Vec<_>>>()?;
         let plain = !shells.is_empty()
@@ -462,7 +463,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             && shells
                 .iter()
                 .all(|shell| shell["state"] == "live" && shell["argv"] == before.argv);
-        let first = selected(&layout).first().map(|vessel| vessel.id.clone());
+        let first = selected(&layout)
+            .into_iter()
+            .find(|vessel| !is_adopted(&layout, vessel))
+            .map(|vessel| vessel.id.clone());
         let typed = match &first {
             Some(placement) if plain => {
                 let restored = Terminal::bind(native, placement)?;
@@ -475,7 +479,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect("a new Core answers after the restart", new_core != old_core)
             .expect(
                 "the Voyages, Fleets, Vessels, names and selection are the same after the restart",
-                without_runtime(&layout) == without_runtime(&saved.document),
+                without_runtime(&layout)
+                    == without_runtime(&without_adopted_leaves(&saved.document)),
             )
             .expect(
                 "each Vessel of the selected Fleet runs a new plain shell",
@@ -581,6 +586,19 @@ fn selected(layout: &Layout) -> Vec<&Placement> {
         .collect()
 }
 
+fn is_adopted(layout: &Layout, vessel: &Placement) -> bool {
+    layout
+        .vessels
+        .iter()
+        .any(|content| content.id == vessel.vessel && content.adopted)
+}
+
+fn without_adopted(layout: &Layout) -> Layout {
+    let mut layout = layout.clone();
+    layout.vessels.retain(|content| !content.adopted);
+    layout
+}
+
 fn backend_of(layout: &Layout, vessel: &Placement) -> Option<String> {
     layout
         .vessels
@@ -609,12 +627,19 @@ fn shell_of(native: &Native, layout: &Layout, vessel: &Placement) -> Result<Valu
 }
 
 fn drawn(seen: &Seen) -> Drawn {
+    drawn_of(seen, true)
+}
+
+fn drawn_of(seen: &Seen, adopted: bool) -> Drawn {
     let layout = seen.document;
     let tabs = voyages(layout)
         .filter(|voyage| layout.selected_voyage.as_ref() == Some(&voyage.id))
         .flat_map(|voyage| &voyage.fleets)
         .map(|fleet| fleet.id.0.clone());
-    let shown = selected(layout);
+    let shown: Vec<_> = selected(layout)
+        .into_iter()
+        .filter(|vessel| adopted || !is_adopted(layout, vessel))
+        .collect();
     let starting = shown.iter().any(|vessel| {
         layout
             .vessels

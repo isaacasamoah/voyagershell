@@ -2,7 +2,7 @@ use crate::inspection::Target;
 use crate::native::{Native, Seen, vessels};
 use anyhow::Result;
 use voyager_contract::inspection::{Rect, Role};
-use voyager_contract::{Context, Layout, PlacementId, RenameTarget};
+use voyager_contract::{Context, Layout, PlacementId, RenameTarget, Split};
 
 pub fn split_right(
     native: &Native,
@@ -107,6 +107,49 @@ pub fn without_runtime(layout: &Layout) -> Layout {
         content.launch = None;
         content.start_pending = None;
         content.shell_intent = None;
+    }
+    layout
+}
+
+pub fn without_adopted_leaves(layout: &Layout) -> Layout {
+    fn prune(split: Split, drop: &[PlacementId]) -> Option<Split> {
+        match split {
+            Split::Leaf { placement } => {
+                (!drop.contains(&placement)).then_some(Split::Leaf { placement })
+            }
+            Split::Branch {
+                axis,
+                share,
+                first,
+                second,
+            } => match (prune(*first, drop), prune(*second, drop)) {
+                (Some(first), Some(second)) => Some(Split::Branch {
+                    axis,
+                    share,
+                    first: Box::new(first),
+                    second: Box::new(second),
+                }),
+                (only, None) | (None, only) => only,
+            },
+        }
+    }
+    let adopted: Vec<_> = layout
+        .vessels
+        .iter()
+        .filter(|vessel| vessel.adopted)
+        .map(|vessel| vessel.id.clone())
+        .collect();
+    let mut layout = layout.clone();
+    for voyage in &mut layout.voyages {
+        for fleet in &mut voyage.fleets {
+            let drop: Vec<_> = fleet
+                .placements
+                .iter()
+                .filter(|placement| adopted.contains(&placement.vessel))
+                .map(|placement| placement.id.clone())
+                .collect();
+            fleet.root = fleet.root.take().and_then(|root| prune(root, &drop));
+        }
     }
     layout
 }

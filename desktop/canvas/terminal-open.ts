@@ -29,6 +29,19 @@ export async function openOrRetry(
   return unchanged ? open() : opened;
 }
 
+export function reopens(
+  content: Vessel,
+  opening: Opening | undefined,
+): boolean {
+  return Boolean(
+    (content.shellIntent && opening?.intent !== content.shellIntent) ||
+    (!content.backend &&
+      !content.startPending &&
+      opening &&
+      ["applied", "unbound", "rejected"].includes(opening.status)),
+  );
+}
+
 export function terminalStatus(
   content: Vessel,
   outcome: Opening | undefined,

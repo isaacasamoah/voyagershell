@@ -35,7 +35,7 @@ import {
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
-import { openOrRetry, terminalStatus } from "./terminal-open.js";
+import { openOrRetry, reopens, terminalStatus } from "./terminal-open.js";
 import { CreationPicker } from "./creation.js";
 import { focusedPlacement, moveFocus, renderPanel } from "./panel-view.js";
 import {
@@ -791,18 +791,13 @@ export default class Canvas extends View {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
     const errors = [];
+    const visited = new Set();
     for (const vessel of shownPanels(layout)) {
+      visited.add(vessel.vessel);
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (content?.typeId !== "terminal") continue;
       const opening = this.openings.get(vessel.vessel);
-      if (
-        allowed.has(vessel.vessel) &&
-        ((content.shellIntent && opening?.intent !== content.shellIntent) ||
-          (!content.backend &&
-            !content.startPending &&
-            opening &&
-            ["applied", "unbound", "rejected"].includes(opening.status)))
-      ) {
+      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
         this.openings.delete(vessel.vessel);
         this.terminals.delete(vessel.vessel);
       }
@@ -871,6 +866,11 @@ export default class Canvas extends View {
         errors.push(opened.message || opened.status);
       task.notify();
     }
+    if (
+      this.layout &&
+      shownPanels(this.layout).some((panel) => !visited.has(panel.vessel))
+    )
+      await this.prepare(task, existingOnly, retry, allowed);
     if (errors.length) throw Error(errors[0]);
   }
   terminalStatus(content) {

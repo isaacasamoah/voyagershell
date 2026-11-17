@@ -624,6 +624,8 @@ intent. Attaching to a live terminal changes nothing that a retry could double.
 Otherwise the Vessel shows the refusal. A Vessel with no bound terminal is never
 retried, because its open can start a program.
 
+The canvas opens a terminal for every shown Vessel that has none, and repeats the pass when a refresh during it showed a Vessel the pass had not visited, such as one the app adopted after the canvas's first inspect. A Vessel that appeared that way otherwise stayed on "Connecting terminal" with no open sent.
+
 The updated canvas treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
 Vessel ID, name, tree and avatar context stay unchanged. The new program always
