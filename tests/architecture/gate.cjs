@@ -139,7 +139,9 @@ function violations(rule, facts) {
   }
   if (rule.check === "forbid_cross") {
     const family = (id) =>
-      id.startsWith(rule.group) ? id.slice(rule.group.length).split("::")[0] : "";
+      id.startsWith(rule.group)
+        ? id.slice(rule.group.length).split("::")[0]
+        : "";
     return facts.edges
       .filter(
         (edge) =>
