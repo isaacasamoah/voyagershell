@@ -694,7 +694,7 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
         Some(ProcessOutput::Interrupt { outcome, .. }) => {
             format!("Interrupt submitted; Core reports {outcome}")
         }
-        Some(ProcessOutput::Stop { observed, .. }) => if crate::process::ended(&observed.state) {
+        Some(ProcessOutput::Stop { observed, .. }) => if crate::families::ended(&observed.state) {
             "Program ended"
         } else {
             "Stop requested; Core still reports running"

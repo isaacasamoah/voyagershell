@@ -243,6 +243,25 @@ test("voyage_close using client fails when it is not a known violation", () => {
   );
 });
 
+test("the terminal family using another family fails", () => {
+  const directory = scratch();
+  fs.writeFileSync(path.join(directory, "app/src/families/worktree.rs"), "");
+  edit(
+    directory,
+    "app/src/families.rs",
+    (text) => `${text}\npub(crate) mod worktree;\n`,
+  );
+  edit(
+    directory,
+    "app/src/families/terminal.rs",
+    (text) => `use crate::families::worktree as _planted;\n${text}`,
+  );
+  expectFailure(
+    run(directory),
+    "NEW families-stay-apart: uses(rs:voyager_app::families::terminal,rs:voyager_app::families::worktree)",
+  );
+});
+
 test("a new module cycle fails", () => {
   const directory = scratch();
   edit(

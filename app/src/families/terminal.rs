@@ -7,9 +7,11 @@ use crate::{
 };
 use std::sync::Arc;
 use voyager_contract::{
-    Context, CoreTerminalId, Layout, VesselId,
-    administrator::{ProcessAction, ProcessInfo, ProcessOutput},
+    Context, CoreTerminalId, Layout, Status, VesselId,
+    administrator::{ProcessAction, ProcessInfo, ProcessOutput, ProcessResponse},
 };
+
+pub(crate) mod lifecycle;
 
 fn refused(message: &str) -> Error {
     Error::Rejected {
@@ -289,6 +291,57 @@ impl Effect {
             }
         }
     }
+}
+
+pub(crate) fn decide(
+    crowded: bool,
+    fresh: bool,
+    current: impl FnOnce() -> bool,
+) -> Option<&'static str> {
+    if crowded {
+        Some("Process request limit reached; no effect was queued")
+    } else if !fresh || !current() {
+        Some("Inspect the current workspace revision before using processes")
+    } else {
+        None
+    }
+}
+
+pub(crate) fn response(
+    request_id: String,
+    version: u64,
+    fresh: &mut bool,
+    outcome: Result<ProcessOutput, Error>,
+) -> Arc<ProcessResponse> {
+    let mut response = ProcessResponse {
+        request_id,
+        status: Status::Rejected,
+        version,
+        fresh: *fresh,
+        output: None,
+        message: None,
+    };
+    match outcome {
+        Ok(output) => match serde_json::to_vec(&output) {
+            Ok(bytes) if bytes.len() <= 24 * 1024 => {
+                response.status = Status::Applied;
+                response.output = Some(output);
+            }
+            _ if matches!(output, ProcessOutput::Send { .. } | ProcessOutput::Interrupt { .. } | ProcessOutput::Stop { .. }) => {
+                response.status = Status::Applied;
+                response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+            }
+            _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
+        },
+        Err(Error::Rejected { message, .. }) => response.message = Some(message),
+        Err(Error::Uncertain(message)) => {
+            *fresh = false;
+            response.status = Status::Uncertain;
+            response.message = Some(message);
+        }
+    }
+    response.fresh = *fresh;
+    Arc::new(response)
 }
 
 pub(crate) fn parts(action: &ProcessAction) -> Vec<Part> {

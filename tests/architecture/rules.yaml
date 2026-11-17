@@ -15,6 +15,15 @@ rules:
     from: ['rs:voyager_app::voyage_close*']
     to: ['rs:voyager_app::client*']
     kinds: [uses]
+  - id: families-stay-apart
+    check: forbid_code
+    from: ['rs:voyager_app::families::terminal*']
+    to:
+      - 'rs:voyager_app::families::worktree*'
+      - 'rs:voyager_app::families::voyage_close*'
+      - 'rs:voyager_app::families::content*'
+      - 'rs:voyager_app::families::structure*'
+    kinds: [uses]
   - id: no-module-cycles
     check: acyclic
     kind: uses
