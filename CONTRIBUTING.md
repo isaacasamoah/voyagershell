@@ -32,6 +32,8 @@ npm run format:check
 npm test
 npm run contract:check
 npm run vocabulary:check
+npm run comments:check
+npm run prose:check
 cargo fmt --all --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -45,6 +47,16 @@ It also fails on a use or import between modules of different contexts that
 `tests/architecture/intended.yaml` does not list, and on a listed edge that is
 gone. A PR that adds an edge runs `npm run architecture:intended` and commits the
 change, so reviewers see the new dependency.
+
+`npm run comments:check` and `npm run prose:check` read the diff from the merge
+base of `origin/main` to `HEAD`, so commit first. Pass `--base <rev>` to compare
+against another revision. The comment check fails on a comment in an added line
+of Rust or TypeScript under `app/`, `desktop/src/`, `contract/src/`,
+`desktop/canvas/` and `tests/native/src/`. `desktop/patches/` is exempt. The
+prose check fails on a long dash, a curly quote or a mid-sentence colon in an
+added line of `docs/*.md`, `README.md` or `AGENTS.md`, outside code spans and
+fenced code. Each finding names the file, the line and the fix. CI compares the
+pull request's merge commit with its first parent.
 
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
 cache, applies the reviewed native-overlay, engine-limits and window-drag patches in `desktop/patches/`
