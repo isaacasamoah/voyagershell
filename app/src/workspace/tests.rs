@@ -274,3 +274,36 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
         .find(|item| item.id == only.vessel);
     assert_eq!(content.and_then(|item| item.backend.as_ref()), Some(&agent));
 }
+
+#[test]
+fn a_dock_moves_the_canvas_to_its_target() {
+    let (mut model, a, first, second, b) = two_voyages();
+    assert_eq!(model.layout.selected_voyage, Some(b.clone()));
+    model
+        .apply(Action::Dock {
+            context: Context::Fleet { id: first.clone() },
+        })
+        .unwrap();
+    assert_eq!(model.layout.selected_voyage, Some(a.clone()));
+    assert_eq!(model.layout.selected_fleet, Some(first));
+    model
+        .apply(Action::Dock {
+            context: Context::Voyage { id: b.clone() },
+        })
+        .unwrap();
+    assert_eq!(model.layout.selected_voyage, Some(b));
+    let vessel = model.layout.voyages[0].fleets[1].placements[0].id.clone();
+    model
+        .apply(Action::Dock {
+            context: Context::Vessel { id: vessel },
+        })
+        .unwrap();
+    assert_eq!(model.layout.selected_voyage, Some(a));
+    assert_eq!(model.layout.selected_fleet, Some(second));
+    model
+        .apply(Action::Dock {
+            context: Context::Workspace,
+        })
+        .unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Home);
+}

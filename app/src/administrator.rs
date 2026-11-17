@@ -351,6 +351,15 @@ impl Tools {
             }
             Err(error) => return self.reject(tool, id, call, Some(arguments), &error.to_string()),
         };
+        if matches!(action, Dispatch::Workspace(Action::FocusVessel { .. })) {
+            return self.reject(
+                tool,
+                id,
+                call,
+                Some(arguments),
+                "focus-vessel is not an agent operation; dock moves and focuses",
+            );
+        }
         let context = context.cloned()?;
         let request_id = workspace.request_id();
         let client = workspace.clone();

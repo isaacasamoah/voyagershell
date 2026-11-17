@@ -9,6 +9,20 @@ fn schema<T: JsonSchema>() -> Schema {
         .into_root_schema_for::<T>()
 }
 
+fn agent_workspace_tool() -> serde_json::Value {
+    let mut value = serde_json::to_value(schema::<voyager_contract::administrator::WorkspaceInput>())
+        .unwrap_or_default();
+    if let Some(branches) = value
+        .pointer_mut("/definitions/Action/oneOf")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        branches.retain(|branch| {
+            branch.pointer("/properties/operation/const") != Some(&json!("focus-vessel"))
+        });
+    }
+    value
+}
+
 fn main() {
     if std::env::args().nth(1).as_deref() == Some("--avatar") {
         let schemas = json!({
@@ -29,7 +43,7 @@ fn main() {
             "conversationRequest":schema::<conversation::Request>(),
             "conversationReply":schema::<conversation::Reply>(),
             "conversationSnapshot":schema::<conversation::Snapshot>(),
-            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>(),
+            "workspaceTool":agent_workspace_tool(),
             "processTool":schema::<voyager_contract::administrator::ProcessInput>(),
             "processResponse":schema::<voyager_contract::administrator::ProcessResponse>(),
             "contentTool":schema::<voyager_contract::content::Input>(),

@@ -306,6 +306,71 @@ impl Model {
         }
     }
 
+    fn go_to(&mut self, context: &Context) -> Result<(), String> {
+        let (voyage, fleet) = match context {
+            Context::Workspace => {
+                self.layout.view = WorkspaceView::Home;
+                return Ok(());
+            }
+            Context::Voyage { id } => (id.clone(), None),
+            Context::Fleet { id } => {
+                let (v, _) = self.fleet_index(id).ok_or("Dock target not found")?;
+                (self.layout.voyages[v].id.clone(), Some(id.clone()))
+            }
+            Context::Vessel { id } => {
+                let found = self.layout.voyages.iter().find_map(|voyage| {
+                    voyage
+                        .fleets
+                        .iter()
+                        .find(|fleet| fleet.placements.iter().any(|p| &p.id == id))
+                        .map(|fleet| (voyage.id.clone(), fleet.id.clone()))
+                });
+                match found {
+                    Some((voyage, fleet)) => (voyage, Some(fleet)),
+                    None => {
+                        self.layout.view = WorkspaceView::Home;
+                        return Ok(());
+                    }
+                }
+            }
+            Context::Portal { id } => {
+                let found = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .find(|voyage| voyage.portals.iter().any(|p| &p.id == id))
+                    .map(|voyage| voyage.id.clone());
+                match found {
+                    Some(voyage) => (voyage, None),
+                    None => {
+                        self.layout.view = WorkspaceView::Home;
+                        return Ok(());
+                    }
+                }
+            }
+        };
+        let target = self
+            .layout
+            .voyages
+            .iter()
+            .find(|candidate| candidate.id == voyage)
+            .ok_or("Dock target not found")?;
+        if target.closed {
+            return Err("Dock target is in a closed Voyage".into());
+        }
+        let fleet = match fleet {
+            Some(id) if target.fleets.iter().any(|f| f.id == id && f.closed) => {
+                return Err("Dock target is in a closed Fleet".into());
+            }
+            Some(id) => Some(id),
+            None => opening_fleet(&self.layout.navigation, target),
+        };
+        self.layout.selected_voyage = Some(voyage);
+        self.layout.selected_fleet = fleet;
+        self.layout.view = WorkspaceView::Fleet;
+        Ok(())
+    }
+
     fn focus_vessel(&mut self, id: PlacementId) -> Result<(), String> {
         let voyage = self
             .layout
@@ -647,6 +712,7 @@ impl Model {
                 if !exists {
                     return Err("Dock target not found".into());
                 }
+                self.go_to(&context)?;
                 self.layout.context = context;
             }
             action @ (Action::ResizePlacementSplit { .. }
