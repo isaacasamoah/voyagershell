@@ -1,7 +1,8 @@
 const { analyse } = require("./rust.cjs");
 const { glob } = require("./snapshot.cjs");
 
-const TEST_FILE = /(^|\/)tests\/|(^|\/)tests\.rs$|_tests?\.rs$/;
+const TEST_FILE =
+  /(^|\/)tests\/|(^|\/)tests\.rs$|_tests?\.rs$|-tests?\.[cm]?[jt]s$|\.test\.[jt]s$/;
 const TEST_SCOPES = new Set(["skip", "scan"]);
 
 function any(patterns) {
@@ -13,7 +14,8 @@ function load(rule) {
   const problem = (message) => {
     throw new Error(`Rule ${rule.id}: ${message}`);
   };
-  if (!rule.literals?.length) problem("forbid_literal needs literals");
+  if (!rule.literals?.length && !rule.terms?.length)
+    problem("forbid_literal needs literals or terms");
   const owners = [rule.owner, ...(rule.owners ?? [])].filter(Boolean);
   if (!owners.length) problem("forbid_literal needs an owner file");
   if (!rule.roots?.length) problem("forbid_literal needs roots");
@@ -23,7 +25,9 @@ function load(rule) {
     );
   return {
     id: rule.id,
-    literals: rule.literals.map(String),
+    literals: (rule.literals ?? []).map(String),
+    terms: (rule.terms ?? []).map((term) => String(term).toLowerCase()),
+    extensions: rule.extensions ?? [".rs"],
     owners: new Set(owners),
     skipTests: rule.tests === "skip",
     inside: any(rule.roots),
@@ -48,7 +52,29 @@ function stringContents(analysis) {
   return found;
 }
 
+function scanTerms(table, file, text) {
+  const lower = text.toLowerCase();
+  const analysis = file.endsWith(".rs") ? analyse(text) : null;
+  const hits = [];
+  for (const term of table.terms) {
+    for (
+      let at = lower.indexOf(term);
+      at >= 0;
+      at = lower.indexOf(term, at + 1)
+    ) {
+      if (table.skipTests && analysis?.inTest(at)) continue;
+      hits.push({
+        key: `${term} in ${file}`,
+        file,
+        line: text.slice(0, at).split("\n").length,
+      });
+    }
+  }
+  return hits;
+}
+
 function scanFile(table, file, text) {
+  if (table.terms.length) return scanTerms(table, file, text);
   const wanted = table.literals.filter((value) => text.includes(`"${value}"`));
   if (!wanted.length) return [];
   const analysis = analyse(text);
@@ -69,7 +95,7 @@ function scanSnapshot(table, snapshot) {
   const found = new Map();
   for (const file of snapshot.blobs.keys()) {
     if (
-      !file.endsWith(".rs") ||
+      !table.extensions.some((extension) => file.endsWith(extension)) ||
       table.owners.has(file) ||
       !table.inside(file) ||
       table.outside(file) ||

@@ -45,14 +45,14 @@ rules:
     tests: skip
   - id: agent-names-stay-in-adapters
     check: forbid_literal
-    literals: [codex, claude, claude-code]
+    terms: [claude, codex]
+    extensions: ['.rs', '.ts']
     owners:
       - app/src/codex.rs
       - app/src/codex_protocol.rs
       - app/src/focus_hook.rs
-      - app/src/launch.rs
-      - contract/src/launch.rs
-    roots: ['app/src/**', 'contract/src/**', 'desktop/src/**']
+    roots: ['app/src/**', 'contract/src/**', 'desktop/src/**', 'desktop/canvas/**', 'content/**']
+    exclude: ['contract/generated/*']
     tests: skip
   - id: one-owner-per-module
     check: one_owner

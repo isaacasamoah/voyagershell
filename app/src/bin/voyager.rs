@@ -7,7 +7,7 @@ use voyager_contract::{
 const GUIDE: &str = include_str!("../../../docs/voyager-command.md");
 
 const USAGE: &str = "Usage: voyager status
-       voyager focus [--hook claude]
+       voyager focus [--hook <agent>]
        voyager do workspace '<request json>'
        voyager --skill
 Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
@@ -112,12 +112,8 @@ fn main() -> ExitCode {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
     }
-    if matches!(arguments.as_slice(), [command, flag, agent] if command == "focus" && flag == "--hook" && agent == "claude")
-    {
-        print!(
-            "{}",
-            voyager_app::focus_hook::claude_hook(|request| send(&request).ok())
-        );
+    if let Some(output) = voyager_app::focus_hook::hook(&arguments, |request| send(&request).ok()) {
+        print!("{output}");
         return ExitCode::SUCCESS;
     }
     let request = match parse(&arguments) {
