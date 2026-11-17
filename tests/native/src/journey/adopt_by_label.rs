@@ -8,7 +8,9 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::json;
 use voyager_contract::launch::Launch;
-use voyager_contract::{Context, FleetId, Layout, Placement, PlacementId, RenameTarget, VoyageId};
+use voyager_contract::{
+    Context, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, VoyageId,
+};
 
 cases! {
     AgentInFleet => "agent-in-fleet",
@@ -16,6 +18,7 @@ cases! {
     AgentInPortal => "agent-in-portal",
     UnplacedStayHidden => "unplaced-stay-hidden",
     CommandCreatesFleet => "command-creates-fleet",
+    CommandRemovesPlacement => "command-removes-placement",
 }
 
 pub const CONTROL: Case = Case::AgentInFleet;
@@ -99,6 +102,16 @@ fn voyage_of(layout: &Layout, fleet: &FleetId) -> Option<VoyageId> {
     voyages(layout)
         .find(|voyage| voyage.fleets.iter().any(|item| &item.id == fleet))
         .map(|voyage| voyage.id.clone())
+}
+
+fn on_canvas(root: Option<&Split>, placement: &PlacementId) -> bool {
+    match root {
+        None => false,
+        Some(Split::Leaf { placement: leaf }) => leaf == placement,
+        Some(Split::Branch { first, second, .. }) => {
+            on_canvas(Some(first), placement) || on_canvas(Some(second), placement)
+        }
+    }
 }
 
 fn typed(terminal: &Terminal, native: &Native, text: &str) -> Result<()> {
@@ -272,5 +285,77 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect("the command exited 0, the applied code", applied)
             .observed("vessel", &vessel)?
             .observed("expectedVersion", version)
+    })?;
+
+    cases.check(native, Case::CommandRemovesPlacement, |native| {
+        native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
+        native.observe("the agent drawn before the command", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(&fleet)
+                && seen.shows(&Target::terminal(&crew)))
+            .then_some(true)
+        })?;
+        let terminal = address(native, "crew")?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let content = layout
+            .vessels
+            .iter()
+            .find(|content| {
+                content
+                    .backend
+                    .as_ref()
+                    .is_some_and(|backend| backend.0 == terminal)
+            })
+            .map(|content| content.id.clone())
+            .context("The agent has no Vessel before the command")?;
+        typed(
+            &first,
+            native,
+            &format!(
+                "v=$(voyager status | sed -n 's/.*\"version\": \"\\([0-9]*\\)\".*/\\1/p'); voyager do workspace '{{\"requestId\":\"crew-remove\",\"expectedVersion\":\"'$v'\",\"action\":{{\"operation\":\"remove-placement\",\"id\":\"{}\"}}}}' >/dev/null; echo remove-exit=$?",
+                crew.0
+            ),
+        )?;
+        let applied = first.printed(native, "remove-exit=0")?;
+        native.keep_window("command-removes-placement")?;
+        let removed = native.observe("the removed placement gone from the canvas", |seen| {
+            let placed = fleets(seen.document)
+                .filter(|item| item.id == fleet)
+                .any(|item| on_canvas(item.root.as_ref(), &crew));
+            (!placed && !seen.shows(&Target::terminal(&crew))).then_some(true)
+        })?;
+        let (_, after) = native.document()?.context("Missing saved layout")?;
+        let kept = after.vessels.iter().any(|vessel| {
+            vessel.id == content
+                && vessel
+                    .backend
+                    .as_ref()
+                    .is_some_and(|backend| backend.0 == terminal)
+        });
+        let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+        let state = listed["terminals"]
+            .as_array()
+            .and_then(|terminals| {
+                terminals
+                    .iter()
+                    .find(|item| item["address"].as_str() == Some(terminal.as_str()))
+            })
+            .and_then(|item| item["state"].as_str())
+            .map(str::to_owned);
+        Verdict::new()
+            .expect(
+                "voyager do workspace removed the placement from the canvas",
+                removed,
+            )
+            .expect("the command exited 0, the applied code", applied)
+            .expect(
+                "the Vessel's content stays bound to its terminal",
+                kept,
+            )
+            .expect(
+                "Core still lists the agent's terminal as live",
+                state.as_deref() == Some("live"),
+            )
+            .observed("terminal", &terminal)?
+            .observed("state", &state)
     })
 }
