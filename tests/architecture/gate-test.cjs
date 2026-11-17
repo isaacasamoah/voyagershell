@@ -811,6 +811,28 @@ test("a missing rules file names the file and exits without a stack trace", () =
   assert.doesNotMatch(result.err, /\n\s+at /);
 });
 
+test("an agent name outside its adapter fails and inside it passes", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/process.rs",
+    (text) =>
+      `${text}\nfn planted_agent(name: &str) -> bool {\n    name == "claude"\n}\n`,
+  );
+  expectFailure(
+    run(directory),
+    'agent-names-stay-in-adapters: "claude" in app/src/process.rs has 1 literals, over the limit of 0',
+  );
+  const adapter = scratch();
+  edit(
+    adapter,
+    "app/src/codex.rs",
+    (text) =>
+      `${text}\nfn planted_agent(name: &str) -> bool {\n    name == "claude"\n}\n`,
+  );
+  assert.strictEqual(run(adapter).status, 0);
+});
+
 test("the Notes literal in a nested module of a root fails", () => {
   const directory = scratch();
   edit(

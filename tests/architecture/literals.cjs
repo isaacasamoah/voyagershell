@@ -14,7 +14,8 @@ function load(rule) {
     throw new Error(`Rule ${rule.id}: ${message}`);
   };
   if (!rule.literals?.length) problem("forbid_literal needs literals");
-  if (!rule.owner) problem("forbid_literal needs an owner file");
+  const owners = [rule.owner, ...(rule.owners ?? [])].filter(Boolean);
+  if (!owners.length) problem("forbid_literal needs an owner file");
   if (!rule.roots?.length) problem("forbid_literal needs roots");
   if (!TEST_SCOPES.has(rule.tests))
     problem(
@@ -23,7 +24,7 @@ function load(rule) {
   return {
     id: rule.id,
     literals: rule.literals.map(String),
-    owner: rule.owner,
+    owners: new Set(owners),
     skipTests: rule.tests === "skip",
     inside: any(rule.roots),
     outside: any(rule.exclude),
@@ -69,7 +70,7 @@ function scanSnapshot(table, snapshot) {
   for (const file of snapshot.blobs.keys()) {
     if (
       !file.endsWith(".rs") ||
-      file === table.owner ||
+      table.owners.has(file) ||
       !table.inside(file) ||
       table.outside(file) ||
       (table.skipTests && TEST_FILE.test(file))

@@ -124,6 +124,16 @@ features = ["avatar"]
 checked_by = []
 confidence = "stated"
 
+[[invariant]]
+id = "any-agent-works"
+says = "The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer's agent setup. Agent-specific code lives only in that agent's adapter."
+hurts = "developer"
+source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
+features = ["agent-vessels", "avatar"]
+checked_by = []
+verified_by = "architecture gate rule agent-names-stay-in-adapters (npm run architecture:check): exact string literals codex, claude and claude-code may appear only in the adapter and launch-catalog files the rule lists; identifiers and non-adapter wording are not covered"
+confidence = "stated"
+
 # Terminals
 
 [[invariant]]
