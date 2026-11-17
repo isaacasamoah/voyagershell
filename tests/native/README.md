@@ -164,7 +164,8 @@ types into the first terminal, as an agent in that Vessel would.
 - `agent-in-fleet` starts the stand-in `claude` with `--label
   voyager.place=fleet:<id>` for the first terminal's Fleet. It passes when the
   terminal is drawn as a Vessel in that Fleet, the saved Vessel records the
-  `claude` launch and the Vessel shows the stand-in's own output.
+  `claude` launch, the placement is named `crew` after the Core terminal name
+  and the Vessel shows the stand-in's own output.
 - `dock-agent` drags the avatar onto that Vessel's name. It passes when the
   saved context is that Vessel and the avatar is drawn on it.
 - `agent-in-portal` starts the stand-in with `voyager.place=portal:<Voyage

@@ -18,6 +18,8 @@ pub(crate) struct Origin {
     argv: Vec<String>,
     #[serde(default)]
     cwd: String,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,6 +28,7 @@ pub(crate) struct Labelled {
     pub(crate) place: Result<Place, String>,
     pub(crate) cwd: String,
     pub(crate) launch: Launch,
+    pub(crate) name: Option<String>,
 }
 
 impl Labelled {
@@ -43,6 +46,7 @@ impl Labelled {
                 .parse()
                 .map_err(|error| format!("Terminal {address} was not placed: {error}")),
             cwd: origin.cwd,
+            name: origin.name,
             launch: match program {
                 Some(program) if crate::launch::is_agent_program(&program) => Launch::Program {
                     argv: vec![program],
@@ -102,6 +106,7 @@ impl Adoptions {
                         &labelled.terminal,
                         labelled.cwd.clone(),
                         labelled.launch.clone(),
+                        labelled.name.clone(),
                     )
                     .map_err(|error| {
                         format!("Terminal {} was not placed: {error}", labelled.terminal.0)
@@ -185,6 +190,7 @@ mod tests {
             place: Ok(Place(voyager_contract::PlacementOwner::Fleet { id: fleet })),
             cwd: "/work".into(),
             launch: Launch::Terminal,
+            name: None,
         };
         let notice = Arc::new(Mutex::new(None));
         let mut adoptions = Adoptions::new(notice.clone());
@@ -234,7 +240,7 @@ mod tests {
             .notification(event(
                 2,
                 "t3",
-                json!({"argv":task,"cwd":"/work","labels":{"voyager.place":"fleet:fleet-2"}}),
+                json!({"argv":task,"cwd":"/work","name":"arch","labels":{"voyager.place":"fleet:fleet-2"}}),
             ))
             .unwrap();
         facts
@@ -248,6 +254,8 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].terminal, CoreTerminalId("t3".into()));
         assert_eq!(found[0].cwd, "/work");
+        assert_eq!(found[0].name.as_deref(), Some("arch"));
+        assert_eq!(found[1].name, None);
         assert_eq!(
             found[0].launch,
             Launch::Program {
