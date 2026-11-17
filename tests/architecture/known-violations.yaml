@@ -115,11 +115,11 @@ known:
   - id: 'agent-names-stay-in-adapters: claude in desktop/canvas/process-icons.ts'
     limit: 3
     owner: isaac
-    reason: 'No migration unit yet. Icons are picked by agent name and shipped as files, and no planned unit is known to move them. build raises a unit or a card.'
+    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
   - id: 'agent-names-stay-in-adapters: claude in desktop/src/shipped.rs'
     limit: 2
     owner: isaac
-    reason: 'No migration unit yet. Icons are picked by agent name and shipped as files, and no planned unit is known to move them. build raises a unit or a card.'
+    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
   - id: 'agent-names-stay-in-adapters: codex in app/src/conversation_audio.rs'
     limit: 1
     owner: isaac
@@ -147,8 +147,8 @@ known:
   - id: 'agent-names-stay-in-adapters: codex in desktop/canvas/process-icons.ts'
     limit: 3
     owner: isaac
-    reason: 'No migration unit yet. Icons are picked by agent name and shipped as files, and no planned unit is known to move them. build raises a unit or a card.'
+    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
   - id: 'agent-names-stay-in-adapters: codex in desktop/src/shipped.rs'
     limit: 2
     owner: isaac
-    reason: 'No migration unit yet. Icons are picked by agent name and shipped as files, and no planned unit is known to move them. build raises a unit or a card.'
+    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
