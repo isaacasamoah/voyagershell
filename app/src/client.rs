@@ -1,4 +1,4 @@
-pub use crate::terminal_lifecycle::Lifecycle;
+pub use crate::families::terminal::lifecycle::Lifecycle;
 use crate::{
     activity::Activity,
     core::{Error, Viewer, WeakViewer},
@@ -141,7 +141,7 @@ enum Message {
     },
     ProcessDone {
         request_id: String,
-        completed: crate::process::Completed,
+        completed: crate::families::terminal::Completed,
         reply: SyncSender<Arc<ProcessResponse>>,
     },
     Workspace {
@@ -1400,31 +1400,30 @@ impl Client {
                                 continue;
                             }
                         };
-                        let result = if door.crowded(&Envelope::process(&scope, &request)) {
-                            Err(rejected(
-                                "Process request limit reached; no effect was queued".into(),
-                            ))
-                        } else if !fresh
-                            || !seen.current(
-                                request.input.expected_version,
-                                version,
-                                &layout,
-                                || Some(crate::process::parts(&request.input.action)),
-                            )
-                        {
-                            Err(rejected(
-                                "Inspect the current workspace revision before using processes"
-                                    .into(),
-                            ))
+                        let crowded = door.crowded(&Envelope::process(&scope, &request));
+                        let result = if let Some(refusal) =
+                            crate::families::terminal::decide(crowded, fresh, || {
+                                seen.current(
+                                    request.input.expected_version,
+                                    version,
+                                    &layout,
+                                    || {
+                                        Some(crate::families::terminal::parts(
+                                            &request.input.action,
+                                        ))
+                                    },
+                                )
+                            }) {
+                            Err(rejected(refusal.into()))
                         } else {
                             match core.as_mut() {
                                 Ok(core) => load(core, &cwd, &layout, version).and_then(|(current, revision, _)| {
                                     layout = Arc::new(current);
                                     version = revision;
-                                    if !seen.current(request.input.expected_version, version, &layout, || Some(crate::process::parts(&request.input.action))) {
+                                    if !seen.current(request.input.expected_version, version, &layout, || Some(crate::families::terminal::parts(&request.input.action))) {
                                         return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
                                     }
-                                    crate::process::start(core, &layout, &scope, &request.input.action)
+                                    crate::families::terminal::start(core, &layout, &scope, &request.input.action)
                                 }),
                                 Err(error) => Err(error.clone()),
                             }
@@ -1445,11 +1444,11 @@ impl Client {
                             }
                             Err(error) => error,
                         };
-                        let answer = process_response(
+                        let answer = crate::families::terminal::response(
                             request.request_id.clone(),
                             version.structure,
                             &mut fresh,
-                            Err(error).into(),
+                            Err(error),
                         );
                         door.record(ticket, Receipt::Process(Arc::clone(&answer)));
                         let _ = reply.send(answer);
@@ -1461,11 +1460,11 @@ impl Client {
                         reply,
                     } => {
                         let completed = completed.settle(core.as_mut().ok());
-                        let outcome = process_response(
+                        let outcome = crate::families::terminal::response(
                             request_id.clone(),
                             completed.read_at.unwrap_or(version.structure),
                             &mut fresh,
-                            completed.result.into(),
+                            completed.result,
                         );
                         door.settle(&request_id, Receipt::Process(Arc::clone(&outcome)));
                         let _ = reply.send(outcome);
@@ -1779,7 +1778,7 @@ impl Client {
                                     }
                                     if !reopened {
                                         let terminals = core.terminal_list()?;
-                                        let ready = crate::terminal_lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
+                                        let ready = crate::families::terminal::lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
                                         if !ready.is_empty() {
                                             revision = save(core, &candidate.layout, revision)?;
                                             created_vessels.extend(ready.into_iter().map(|id| CreatedTerminal {
@@ -2105,7 +2104,7 @@ impl Client {
                                     .and_then(|()| {
                                         closing.check_layout(&candidate.layout)?;
                                         let reopening = if let Action::ReopenVoyage { id } = &request.action {
-                                            crate::terminal_lifecycle::prepare_voyage_reopen(&mut candidate.layout, &core.terminal_list()?, id)
+                                            crate::families::terminal::lifecycle::prepare_voyage_reopen(&mut candidate.layout, &core.terminal_list()?, id)
                                         } else { Vec::new() };
                                         if let Action::StartNewShell { expected_backend, .. } = &request.action {
                                             let observed = core.terminal_get(&expected_backend.0)?;
@@ -3708,44 +3707,6 @@ mod terminal_outcome_tests {
             Error::Uncertain(_)
         ));
     }
-}
-
-fn process_response(
-    request_id: String,
-    version: u64,
-    fresh: &mut bool,
-    outcome: Outcome<voyager_contract::administrator::ProcessOutput>,
-) -> Arc<ProcessResponse> {
-    use voyager_contract::administrator::ProcessOutput;
-    let mut response = ProcessResponse {
-        request_id,
-        status: Status::Rejected,
-        version,
-        fresh: *fresh,
-        output: None,
-        message: None,
-    };
-    match outcome {
-        Outcome::Applied(output) => match serde_json::to_vec(&output) {
-            Ok(bytes) if bytes.len() <= 24 * 1024 => {
-                response.status = Status::Applied;
-                response.output = Some(output);
-            }
-            _ if matches!(output, ProcessOutput::Send { .. } | ProcessOutput::Interrupt { .. } | ProcessOutput::Stop { .. }) => {
-                response.status = Status::Applied;
-                response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
-            }
-            _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
-        },
-        Outcome::Refused { message, .. } => response.message = Some(message),
-        Outcome::Uncertain(message) => {
-            *fresh = false;
-            response.status = Status::Uncertain;
-            response.message = Some(message);
-        }
-    }
-    response.fresh = *fresh;
-    Arc::new(response)
 }
 
 #[cfg(test)]

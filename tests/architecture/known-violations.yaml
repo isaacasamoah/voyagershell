@@ -70,11 +70,11 @@ known:
     owner: isaac
     reason: 'voyage_close uses client while client uses voyage_close. Removing the use clears it.'
   - id: 'file-size: app/src/administrator.rs'
-    limit: 1475
+    limit: 1472
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
-    limit: 3753
+    limit: 3714
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/content.rs'

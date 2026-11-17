@@ -52,13 +52,14 @@ Owns files:
 - `contract/src/socket.rs`
 - `app/src/front_door.rs`
 - `app/src/layout_store.rs`
-- `app/src/process.rs`
+- `app/src/families.rs`
+- `app/src/families/terminal.rs`
 - `app/src/launch.rs`
 - `app/src/activity.rs`
 - `app/src/diagnostics.rs`
 - `app/src/observation.rs`
 - `app/src/lib.rs`
-- `app/src/terminal_lifecycle.rs`
+- `app/src/families/terminal/lifecycle.rs`
 - `app/src/tests.rs`
 - `app/tests/exit_events.rs`
 - `app/tests/front_door.rs`

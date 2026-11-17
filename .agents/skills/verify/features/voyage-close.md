@@ -25,7 +25,7 @@ tests/native/src/journey/voyage_close.rs owns the recipe. The close plan and
 its stops belong to app/src/voyage_close.rs, the dialog to
 desktop/canvas/voyage-close.ts, the Voyage row menu and Recent voyages to
 desktop/canvas/navigation-view.ts, and reopening to
-app/src/terminal_lifecycle.rs.
+app/src/families/terminal/lifecycle.rs.
 
 Voyage A is the first Voyage with the first shell. Voyage B is made by the
 journey.

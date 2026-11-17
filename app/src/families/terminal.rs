@@ -7,9 +7,11 @@ use crate::{
 };
 use std::sync::Arc;
 use voyager_contract::{
-    Context, CoreTerminalId, Layout, VesselId,
-    administrator::{ProcessAction, ProcessInfo, ProcessOutput},
+    Context, CoreTerminalId, Layout, Status, VesselId,
+    administrator::{ProcessAction, ProcessInfo, ProcessOutput, ProcessResponse},
 };
+
+pub(crate) mod lifecycle;
 
 fn refused(message: &str) -> Error {
     Error::Rejected {
@@ -79,7 +81,15 @@ fn is_live(state: &str) -> bool {
     TerminalState::parse(state) == TerminalState::Live
 }
 
-pub(crate) fn ended(state: &str) -> bool {
+pub(crate) fn stop_summary(state: &str) -> &'static str {
+    if ended(state) {
+        "Program ended"
+    } else {
+        "Stop requested; Core still reports running"
+    }
+}
+
+fn ended(state: &str) -> bool {
     TerminalState::parse(state) == TerminalState::Finished
 }
 
@@ -291,6 +301,57 @@ impl Effect {
     }
 }
 
+pub(crate) fn decide(
+    crowded: bool,
+    fresh: bool,
+    current: impl FnOnce() -> bool,
+) -> Option<&'static str> {
+    if crowded {
+        Some("Process request limit reached; no effect was queued")
+    } else if !fresh || !current() {
+        Some("Inspect the current workspace revision before using processes")
+    } else {
+        None
+    }
+}
+
+pub(crate) fn response(
+    request_id: String,
+    version: u64,
+    fresh: &mut bool,
+    outcome: Result<ProcessOutput, Error>,
+) -> Arc<ProcessResponse> {
+    let mut response = ProcessResponse {
+        request_id,
+        status: Status::Rejected,
+        version,
+        fresh: *fresh,
+        output: None,
+        message: None,
+    };
+    match outcome {
+        Ok(output) => match serde_json::to_vec(&output) {
+            Ok(bytes) if bytes.len() <= 24 * 1024 => {
+                response.status = Status::Applied;
+                response.output = Some(output);
+            }
+            _ if matches!(output, ProcessOutput::Send { .. } | ProcessOutput::Interrupt { .. } | ProcessOutput::Stop { .. }) => {
+                response.status = Status::Applied;
+                response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+            }
+            _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
+        },
+        Err(Error::Rejected { message, .. }) => response.message = Some(message),
+        Err(Error::Uncertain(message)) => {
+            *fresh = false;
+            response.status = Status::Uncertain;
+            response.message = Some(message);
+        }
+    }
+    response.fresh = *fresh;
+    Arc::new(response)
+}
+
 pub(crate) fn parts(action: &ProcessAction) -> Vec<Part> {
     match action {
         ProcessAction::List => vec![Part::Vessels],
@@ -462,6 +523,39 @@ mod tests {
         assert_eq!(
             info(content, second, &model.layout).agent_name.as_deref(),
             Some("project")
+        );
+    }
+
+    #[test]
+    fn decide_refuses_crowded_and_stale_requests_before_asking_for_the_revision() {
+        assert!(decide(true, true, || panic!("not asked")).is_some());
+        assert!(decide(false, false, || panic!("not asked")).is_some());
+        assert!(decide(false, true, || false).is_some());
+        assert!(decide(false, true, || true).is_none());
+    }
+
+    #[test]
+    fn response_marks_a_refusal_rejected_and_an_uncertain_result_stale() {
+        let mut fresh = true;
+        let refused = response("r1".into(), 3, &mut fresh, Err(refused("no such terminal")));
+        assert_eq!(refused.status, Status::Rejected);
+        assert!(fresh && refused.fresh);
+        let uncertain = response(
+            "r2".into(),
+            3,
+            &mut fresh,
+            Err(Error::Uncertain("lost".into())),
+        );
+        assert_eq!(uncertain.status, Status::Uncertain);
+        assert!(!fresh && !uncertain.fresh);
+    }
+
+    #[test]
+    fn stop_summary_names_whether_the_program_ended() {
+        assert_eq!(stop_summary("finished"), "Program ended");
+        assert_eq!(
+            stop_summary("live"),
+            "Stop requested; Core still reports running"
         );
     }
 

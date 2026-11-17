@@ -90,7 +90,7 @@ as a deliberate name, so a later folder change does not rename it. When Core
 gives no name, or another member of the group already holds it, the placement
 gets the default `Terminal N`. Adoption starts nothing, because the terminal is already
 running. When a later launch finds that the adopted terminal is gone or ended,
-`prepare_reopen` in `app/src/terminal_lifecycle.rs` clears the Vessel's backend
+`prepare_reopen` in `app/src/families/terminal/lifecycle.rs` clears the Vessel's backend
 and gives it a fresh shell, as for any terminal Vessel.
 A terminal that any Vessel already names is skipped, so a repeat report or a
 second snapshot adds nothing. The adopted terminal joins the live bindings, so
@@ -228,7 +228,7 @@ The owner settles in the effect owner, after Core's 20-second deadline gives
 it an uncertain result, so a request that was not uncertain makes no extra
 call. `settle_save` in `app/src/layout_store.rs` settles every layout save,
 including the save in flight below. `settle_run` in `app/src/client_terminal.rs`
-settles a program start, and `Completed::settle` in `app/src/process.rs`
+settles a program start, and `Completed::settle` in `app/src/families/terminal.rs`
 settles a stop. Each read waits at most Core's deadline. While it waits, the
 owner's queue waits too, because the owner reads on its own thread.
 
