@@ -815,13 +815,13 @@ test("an agent name outside its adapter fails and inside it passes", () => {
   const directory = scratch();
   edit(
     directory,
-    "app/src/process.rs",
+    "app/src/lib.rs",
     (text) =>
       `${text}\nfn planted_agent(name: &str) -> bool {\n    name == "claude"\n}\n`,
   );
   expectFailure(
     run(directory),
-    'agent-names-stay-in-adapters: "claude" in app/src/process.rs has 1 literals, over the limit of 0',
+    'agent-names-stay-in-adapters: "claude" in app/src/lib.rs has 1 literals, over the limit of 0',
   );
   const adapter = scratch();
   edit(
