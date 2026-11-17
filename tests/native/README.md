@@ -182,6 +182,20 @@ types into the first terminal, as an agent in that Vessel would.
   the placement leaves the saved layout and the canvas, the command exits 0, the
   saved Vessel stays bound to its terminal and Core still lists that terminal as
   live.
+- `focus-command-prints-dock` runs `voyager focus`. It passes when the reply is
+  the `focus` kind and the command exits 0.
+- `focus-hook-names-dock` starts the stand-in `claude` with a `UserPromptSubmit`
+  hook that runs `voyager focus --hook claude`. The stand-in has no tools and
+  runs the hook as Claude does, with the prompt as JSON on stdin. It passes when
+  a prompt after docking the avatar on that Vessel is given its name, and a
+  later prompt after docking on the first Vessel is given that name.
+- `focus-hook-fails-quietly` runs the hook with an unknown terminal and with no
+  Core session. It passes when each exits 0 and prints no bytes, and an unknown
+  agent name exits 1.
+- `focus-hook-time` runs the hook 15 times in the first terminal. It passes when
+  every run exits 0 and the slowest takes under 200 ms. It records each run in
+  milliseconds, including the shell's fork and exec. The numbers are a
+  measurement of one machine, not a bar.
 
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result is settled by reading Core, with nothing done twice. It

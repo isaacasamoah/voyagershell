@@ -1456,6 +1456,19 @@
       "additionalProperties": false,
       "properties": {
         "command": {
+          "const": "focus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
           "const": "workspace",
           "type": "string"
         },

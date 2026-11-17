@@ -7,6 +7,7 @@ use voyager_contract::{
 const GUIDE: &str = include_str!("../../../docs/voyager-command.md");
 
 const USAGE: &str = "Usage: voyager status
+       voyager focus [--hook claude]
        voyager do workspace '<request json>'
        voyager --skill
 Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
@@ -14,6 +15,7 @@ Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
 fn parse(arguments: &[String]) -> Result<SocketRequest, String> {
     match arguments {
         [command] if command == "status" => Ok(SocketRequest::Status),
+        [command] if command == "focus" => Ok(SocketRequest::Focus),
         [verb, family, request] if verb == "do" && family == "workspace" => {
             serde_json::from_str::<Request>(request)
                 .map(|request| SocketRequest::Workspace {
@@ -74,7 +76,7 @@ fn send(_: &SocketRequest) -> Result<SocketReply, (ExitCode, String)> {
 
 fn code(reply: &SocketReply) -> ExitCode {
     let outcome = match reply {
-        SocketReply::Status { .. } => Outcome::Applied,
+        SocketReply::Status { .. } | SocketReply::Focus { .. } => Outcome::Applied,
         SocketReply::Refused { .. } => Outcome::Refused,
         SocketReply::Workspace {
             reply: Reply::Answered(response),
@@ -108,6 +110,14 @@ fn main() -> ExitCode {
     }
     if matches!(arguments.as_slice(), [flag] if flag == "--help" || flag == "-h") {
         println!("{USAGE}");
+        return ExitCode::SUCCESS;
+    }
+    if matches!(arguments.as_slice(), [command, flag, agent] if command == "focus" && flag == "--hook" && agent == "claude")
+    {
+        print!(
+            "{}",
+            voyager_app::focus_hook::claude_hook(|request| send(&request).ok())
+        );
         return ExitCode::SUCCESS;
     }
     let request = match parse(&arguments) {

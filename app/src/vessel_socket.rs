@@ -220,12 +220,37 @@ fn status(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId) -> SocketRe
     }
 }
 
+fn focus(call: &Call, vessel: &VesselId) -> SocketReply {
+    let inspected = call(
+        vessel.clone(),
+        Request {
+            request_id: format!(
+                "voyager-focus-{}-{}",
+                std::process::id(),
+                STATUS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ),
+            expected_version: 0,
+            action: Action::Inspect,
+        },
+    );
+    match inspected {
+        Err(unanswered) => SocketReply::Workspace {
+            reply: Reply::Unanswered(unanswered),
+        },
+        Ok(response) => match crate::conversation::focus(&response.layout, response.version) {
+            Ok(focus) => SocketReply::Focus { focus },
+            Err(message) => SocketReply::Refused { message },
+        },
+    }
+}
+
 fn answer(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId, line: &str) -> SocketReply {
     match serde_json::from_str::<SocketRequest>(line) {
         Err(error) => SocketReply::Refused {
             message: format!("Invalid voyager request: {error}; nothing was queued"),
         },
         Ok(SocketRequest::Status) => status(call, vessel, terminal),
+        Ok(SocketRequest::Focus) => focus(call, vessel),
         Ok(SocketRequest::Workspace { request }) if !offered(&request.action) => {
             SocketReply::Refused {
                 message: NOT_OFFERED.into(),

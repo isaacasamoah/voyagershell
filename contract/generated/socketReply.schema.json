@@ -230,6 +230,42 @@
       ],
       "type": "object"
     },
+    "Focus": {
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preview": {
+          "maxLength": 8192,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/Context"
+        }
+      },
+      "required": [
+        "scope",
+        "path",
+        "revision"
+      ],
+      "type": "object"
+    },
     "LastUsed": {
       "additionalProperties": false,
       "properties": {
@@ -1192,6 +1228,23 @@
       "required": [
         "kind",
         "status"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "focus": {
+          "$ref": "#/definitions/Focus"
+        },
+        "kind": {
+          "const": "focus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "focus"
       ],
       "type": "object"
     },

@@ -339,8 +339,8 @@ debug = "covered"
 [[feature]]
 id = "adopted-vessels"
 name = "Labelled programs as Vessels"
-path = "From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command and remove a placement with it."
-sources = ["contract/src/place.rs", "contract/src/socket.rs", "app/src/activity.rs", "app/src/client_core.rs", "app/src/adoption.rs", "app/src/vessel_socket.rs", "app/src/bin/voyager.rs", "app/src/workspace.rs", "docs/voyager-command.md"]
+path = "From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook."
+sources = ["contract/src/place.rs", "contract/src/socket.rs", "app/src/activity.rs", "app/src/client_core.rs", "app/src/adoption.rs", "app/src/vessel_socket.rs", "app/src/focus_hook.rs", "app/src/bin/voyager.rs", "app/src/workspace.rs", "docs/voyager-command.md"]
 journeys = ["adopt-by-label"]
 platforms = ["linux"]
 python = []
