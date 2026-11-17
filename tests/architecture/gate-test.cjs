@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /30 violations, 30 known\n.*PASS\n$/s);
+  assert.match(result.out, /43 violations, 43 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -809,6 +809,59 @@ test("a missing rules file names the file and exits without a stack trace", () =
   assert.strictEqual(result.status, 2);
   assert.match(result.err, /^architecture gate: .*\/nonexistent\/rules\.yaml/);
   assert.doesNotMatch(result.err, /\n\s+at /);
+});
+
+const LEAK = "agent-names-stay-in-adapters";
+const PLANTS = [
+  [
+    "a quoted name",
+    "app/src/lib.rs",
+    '\nfn planted(name: &str) -> bool {\n    name == "claude"\n}\n',
+    `${LEAK}: claude in app/src/lib.rs has 1 literals, over the limit of 0`,
+  ],
+  [
+    "an enum variant",
+    "app/src/lib.rs",
+    "\nenum PlantedKind {\n    Claude,\n}\n",
+    `${LEAK}: claude in app/src/lib.rs has 1 literals, over the limit of 0`,
+  ],
+  [
+    "an identifier",
+    "app/src/lib.rs",
+    "\nfn codex_output() {}\n",
+    `${LEAK}: codex in app/src/lib.rs has 1 literals, over the limit of 0`,
+  ],
+  [
+    "a branch in the launch catalog",
+    "app/src/launch.rs",
+    '\nfn planted(name: &str) -> bool {\n    name == "claude"\n}\n',
+    `${LEAK}: claude in app/src/launch.rs has 3 literals, over its recorded limit of 2`,
+  ],
+  [
+    "a name in the canvas",
+    "desktop/canvas/regions.ts",
+    '\nexport const planted = (name: string) => name === "claude";\n',
+    `${LEAK}: claude in desktop/canvas/regions.ts has 1 literals, over the limit of 0`,
+  ],
+];
+
+for (const [form, file, text, message] of PLANTS) {
+  test(`${form} outside an adapter fails the agent-name rule`, () => {
+    const directory = scratch();
+    edit(directory, file, (current) => `${current}${text}`);
+    expectFailure(run(directory), message);
+  });
+}
+
+test("an agent name inside its adapter passes", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/codex.rs",
+    (text) =>
+      `${text}\nfn planted(name: &str) -> bool {\n    name == "claude"\n}\n`,
+  );
+  assert.strictEqual(run(directory).status, 0);
 });
 
 test("the Notes literal in a nested module of a root fails", () => {

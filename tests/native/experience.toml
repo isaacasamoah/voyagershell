@@ -124,6 +124,16 @@ features = ["avatar"]
 checked_by = []
 confidence = "stated"
 
+[[invariant]]
+id = "any-agent-works"
+says = "The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer's agent setup. Agent-specific code lives only in that agent's adapter."
+hurts = "developer"
+source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
+features = ["agent-vessels", "avatar"]
+checked_by = []
+verified_by = "architecture gate rule agent-names-stay-in-adapters (npm run architecture:check): the terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit"
+confidence = "stated"
+
 # Terminals
 
 [[invariant]]

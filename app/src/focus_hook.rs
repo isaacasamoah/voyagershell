@@ -30,6 +30,18 @@ pub fn claude_hook(
     }
 }
 
+pub fn hook(
+    arguments: &[String],
+    ask: impl FnOnce(SocketRequest) -> Option<SocketReply> + Send + 'static,
+) -> Option<String> {
+    match arguments {
+        [command, flag, agent] if command == "focus" && flag == "--hook" && agent == "claude" => {
+            Some(claude_hook(ask))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,5 +95,16 @@ mod tests {
             Some(reply)
         });
         assert!(output.contains("UserPromptSubmit"));
+    }
+
+    #[test]
+    fn only_the_claude_hook_flag_is_taken() {
+        let words = |list: &[&str]| list.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            hook(&words(&["focus", "--hook", "claude"]), |_| None),
+            Some(String::new())
+        );
+        assert_eq!(hook(&words(&["focus", "--hook", "other"]), |_| None), None);
+        assert_eq!(hook(&words(&["focus"]), |_| None), None);
     }
 }
