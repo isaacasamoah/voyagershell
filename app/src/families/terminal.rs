@@ -81,7 +81,15 @@ fn is_live(state: &str) -> bool {
     TerminalState::parse(state) == TerminalState::Live
 }
 
-pub(crate) fn ended(state: &str) -> bool {
+pub(crate) fn stop_summary(state: &str) -> &'static str {
+    if ended(state) {
+        "Program ended"
+    } else {
+        "Stop requested; Core still reports running"
+    }
+}
+
+fn ended(state: &str) -> bool {
     TerminalState::parse(state) == TerminalState::Finished
 }
 
@@ -515,6 +523,39 @@ mod tests {
         assert_eq!(
             info(content, second, &model.layout).agent_name.as_deref(),
             Some("project")
+        );
+    }
+
+    #[test]
+    fn decide_refuses_crowded_and_stale_requests_before_asking_for_the_revision() {
+        assert!(decide(true, true, || panic!("not asked")).is_some());
+        assert!(decide(false, false, || panic!("not asked")).is_some());
+        assert!(decide(false, true, || false).is_some());
+        assert!(decide(false, true, || true).is_none());
+    }
+
+    #[test]
+    fn response_marks_a_refusal_rejected_and_an_uncertain_result_stale() {
+        let mut fresh = true;
+        let refused = response("r1".into(), 3, &mut fresh, Err(refused("no such terminal")));
+        assert_eq!(refused.status, Status::Rejected);
+        assert!(fresh && refused.fresh);
+        let uncertain = response(
+            "r2".into(),
+            3,
+            &mut fresh,
+            Err(Error::Uncertain("lost".into())),
+        );
+        assert_eq!(uncertain.status, Status::Uncertain);
+        assert!(!fresh && !uncertain.fresh);
+    }
+
+    #[test]
+    fn stop_summary_names_whether_the_program_ended() {
+        assert_eq!(stop_summary("finished"), "Program ended");
+        assert_eq!(
+            stop_summary("live"),
+            "Stop requested; Core still reports running"
         );
     }
 

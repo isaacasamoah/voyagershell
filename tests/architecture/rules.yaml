@@ -16,13 +16,8 @@ rules:
     to: ['rs:voyager_app::client*']
     kinds: [uses]
   - id: families-stay-apart
-    check: forbid_code
-    from: ['rs:voyager_app::families::terminal*']
-    to:
-      - 'rs:voyager_app::families::worktree*'
-      - 'rs:voyager_app::families::voyage_close*'
-      - 'rs:voyager_app::families::content*'
-      - 'rs:voyager_app::families::structure*'
+    check: forbid_cross
+    group: 'rs:voyager_app::families::'
     kinds: [uses]
   - id: no-module-cycles
     check: acyclic

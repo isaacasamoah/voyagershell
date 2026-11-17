@@ -25,7 +25,7 @@ Follow the exact doctor and run commands in ../SKILL.md with
 tests/native/src/journey/quit_restore.rs owns the recipe. The app quits in
 desktop/src/quit.rs through the owner's `Lifecycle` in app/src/client.rs and
 decides which terminals to keep or start again in
-app/src/terminal_lifecycle.rs.
+app/src/families/terminal/lifecycle.rs.
 
 - `quit-and-keep` prints `QUIT-42`, presses Ctrl+Q, and reads Core with no app
   running. Core, the shell, Core's live terminals and the layout document with

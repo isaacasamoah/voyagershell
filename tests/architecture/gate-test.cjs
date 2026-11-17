@@ -262,6 +262,23 @@ test("the terminal family using another family fails", () => {
   );
 });
 
+test("a non-terminal family using the terminal family fails", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "app/src/families/worktree.rs"),
+    "use crate::families::terminal::ended as _planted;\n",
+  );
+  edit(
+    directory,
+    "app/src/families.rs",
+    (text) => `${text}\npub(crate) mod worktree;\n`,
+  );
+  expectFailure(
+    run(directory),
+    "NEW families-stay-apart: uses(rs:voyager_app::families::worktree,rs:voyager_app::families::terminal)",
+  );
+});
+
 test("a new module cycle fails", () => {
   const directory = scratch();
   edit(

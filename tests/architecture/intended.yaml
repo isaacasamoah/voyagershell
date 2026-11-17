@@ -12,7 +12,7 @@ edges:
   - {from: 'rs:voyager_app::activity', to: 'rs:voyager_app::core_state', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_app::content', from_owner: conversation-provider, to_owner: content}
-  - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_app::families', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_app::families::terminal', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::content', from_owner: conversation-provider, to_owner: content}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::worktree', from_owner: conversation-provider, to_owner: placement}

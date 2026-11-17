@@ -137,6 +137,22 @@ function violations(rule, facts) {
         at: `${edge.evidence[0].path}:${edge.evidence[0].line}`,
       }));
   }
+  if (rule.check === "forbid_cross") {
+    const family = (id) =>
+      id.startsWith(rule.group) ? id.slice(rule.group.length).split("::")[0] : "";
+    return facts.edges
+      .filter(
+        (edge) =>
+          family(edge.from) &&
+          family(edge.to) &&
+          family(edge.from) !== family(edge.to) &&
+          (!rule.kinds?.length || rule.kinds.includes(edge.kind)),
+      )
+      .map((edge) => ({
+        id: `${rule.id}: ${edge.kind}(${edge.from},${edge.to})`,
+        at: `${edge.evidence[0].path}:${edge.evidence[0].line}`,
+      }));
+  }
   if (rule.check === "forbid_unresolved") {
     return facts.unresolved
       .filter((item) => rule.kinds.includes(item.kind))
