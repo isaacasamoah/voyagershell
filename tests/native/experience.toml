@@ -9,7 +9,7 @@ says = "Ctrl+Q, the window's close button and a window-manager close all quit an
 hurts = "user"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
-checked_by = ["quit-restore:quit-and-keep", "quit-restore:relaunch-reattaches", "quit-restore:quit-busy-keeps-output", "quit-restore:close-window-keeps", "quit-restore:close-button-keeps"]
+checked_by = ["quit-restore:quit-and-keep", "quit-restore:relaunch-reattaches", "quit-restore:relaunch-adopts-and-attaches", "quit-restore:quit-busy-keeps-output", "quit-restore:close-window-keeps", "quit-restore:close-button-keeps"]
 confidence = "stated"
 
 [[invariant]]

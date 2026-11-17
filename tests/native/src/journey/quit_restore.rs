@@ -1,10 +1,11 @@
+use super::adopt_by_label::{address, bound_to};
 use super::layout::{avatar_on_dock, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Decorations, Native, Seen, Terminal, voyages};
 use crate::system::{Identity, until};
 use crate::x11::{Observed, Request};
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::time::Instant;
@@ -14,6 +15,7 @@ use voyager_contract::{Context, Layout, Placement};
 cases! {
     QuitAndKeep => "quit-and-keep",
     RelaunchReattaches => "relaunch-reattaches",
+    RelaunchAdoptsAndAttaches => "relaunch-adopts-and-attaches",
     QuitBusy => "quit-busy-keeps-output",
     CloseWindow => "close-window-keeps",
     WindowButtons => "window-buttons-send-minimise-and-maximise-requests",
@@ -170,6 +172,52 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )?
             .observed("drawn", &picture)?
             .observed("shell", &shell)
+    })?;
+    cases.check(native, Case::RelaunchAdoptsAndAttaches, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let fleet = layout
+            .selected_fleet
+            .clone()
+            .context("No Fleet is selected before Quit")?;
+        native.close()?;
+        let label = format!("voyager.place=fleet:{}", fleet.0);
+        native.system.execute(
+            "hc",
+            &["run", "--bg", "--name", "late", "--label", &label, "bash"],
+            None,
+        )?;
+        let late = address(native, "late")?;
+        native.launch()?;
+        let picture = native
+            .settle(
+                "every Vessel of the selected Fleet drawn with its terminal, including the one labelled while the app was closed",
+                |seen| {
+                    let adopted = bound_to(seen.document, &late)
+                        .is_some_and(|placement| seen.shows(&Target::terminal(&placement.id)));
+                    Some((drawn(seen), adopted))
+                },
+                |(picture, adopted)| *adopted && picture.whole() && picture.bound(),
+            )
+            .ok();
+        native.keep_window("relaunch-adopts-and-attaches")?;
+        let first = terminal.printed(native, "QUIT-42")?;
+        Verdict::new()
+            .expect(
+                "the terminal labelled while the app was closed is drawn as a Vessel of its Fleet after the relaunch",
+                picture.as_ref().is_some_and(|(_, adopted)| *adopted),
+            )
+            .expect(
+                "every restored Vessel of the selected Fleet draws its terminal after the relaunch",
+                picture
+                    .as_ref()
+                    .is_some_and(|(picture, _)| picture.whole() && picture.bound()),
+            )
+            .expect(
+                "the first Vessel still shows the output printed before Quit",
+                first,
+            )
+            .observed("late", &late)?
+            .observed("drawn", picture.as_ref().map(|(picture, _)| picture))
     })?;
     cases.check(native, Case::QuitBusy, |native| {
         terminal.line(

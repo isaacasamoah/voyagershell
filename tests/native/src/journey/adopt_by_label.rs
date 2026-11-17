@@ -64,7 +64,7 @@ struct Adopted {
     drawn: bool,
 }
 
-fn address(native: &Native, name: &str) -> Result<String> {
+pub(super) fn address(native: &Native, name: &str) -> Result<String> {
     until(&format!("Core naming the terminal {name}"), || {
         let listed = native.system.watch("terminal.list", json!({"all":true}))?;
         Ok(listed["terminals"].as_array().and_then(|terminals| {
@@ -77,7 +77,7 @@ fn address(native: &Native, name: &str) -> Result<String> {
     })
 }
 
-fn bound_to(layout: &Layout, address: &str) -> Option<Placement> {
+pub(super) fn bound_to(layout: &Layout, address: &str) -> Option<Placement> {
     let content = layout.vessels.iter().find(|content| {
         content
             .backend

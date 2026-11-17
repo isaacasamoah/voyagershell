@@ -36,6 +36,13 @@ app/src/families/terminal/lifecycle.rs.
   for that terminal, read through `terminal.read`. The Fleet tabs, Vessels and terminals must be drawn with
   the avatar docked where the document says, and `AFTER-42` must reach the same
   shell.
+- `relaunch-adopts-and-attaches` quits, starts a Core terminal labelled
+  `voyager.place=fleet:<selected Fleet>` while the app is closed, and launches
+  again. The labelled terminal must be drawn as a Vessel of that Fleet, every
+  Vessel of the selected Fleet must draw its terminal, and the first terminal
+  must still hold `QUIT-42`. The app adopts that terminal in the same instant
+  the canvas opens its first terminal, which is the startup race behind a
+  refused open ("Layout changed; inspect before opening a terminal").
 - `quit-busy-keeps-output` starts a loop that prints `BUSY-1` to `BUSY-100`
   over ten seconds and then `BUSY-DONE-42`, and quits after `BUSY-3`. While the
   app is closed, the shell must be the same live program, and one read of Core's
