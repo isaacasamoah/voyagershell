@@ -150,15 +150,19 @@ function contextMap(table) {
       "",
       context.summary,
       "",
-      `Guide: [${context.guide}](${path.posix.relative("docs", context.guide)}).`,
+      `Its guide is [${context.guide}](${path.posix.relative("docs", context.guide)}).`,
       "",
       "Owns files:",
       "",
       ...context.owns.map((entry) => `- \`${entry}\``),
       "",
-      `Owns words: ${own.map((term) => term.term).join(", ") || "none"}.`,
+      own.length
+        ? `It owns the words ${own.map((term) => term.term).join(", ")}.`
+        : "It owns no words.",
       "",
-      `Uses words: ${(context.uses ?? []).join(", ") || "none"}.`,
+      context.uses?.length
+        ? `It uses the words ${context.uses.join(", ")}.`
+        : "It uses no words.",
     );
   }
   return `${lines.join("\n")}\n`;

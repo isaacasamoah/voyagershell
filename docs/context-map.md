@@ -10,7 +10,7 @@ The [glossary](glossary.md) defines every word.
 
 Connects the application to Herdr Core. Core owns terminals, screens and processes.
 
-Guide: [docs/terminal.md](terminal.md).
+Its guide is [docs/terminal.md](terminal.md).
 
 Owns files:
 
@@ -29,15 +29,15 @@ Owns files:
 - `app/tests/viewer_streams.rs`
 - `app/tests/wire.rs`
 
-Owns words: Core, Core session, Core terminal, Program.
+It owns the words Core, Core session, Core terminal, Program.
 
-Uses words: none.
+It uses no words.
 
 ## Application queue and front door
 
 Takes every request from a view, a Vessel or an agent, orders the effects and reports each outcome.
 
-Guide: [docs/workspace.md](workspace.md).
+Its guide is [docs/workspace.md](workspace.md).
 
 Owns files:
 
@@ -70,15 +70,15 @@ Owns files:
 - `contract/src/launch.rs`
 - `contract/src/observation.rs`
 
-Owns words: Queue, Operation, Refusal, Uncertain effect.
+It owns the words Queue, Operation, Refusal, Uncertain effect.
 
-Uses words: Placement, Vessel, Context, Core terminal, Program.
+It uses the words Placement, Vessel, Context, Core terminal, Program.
 
 ## Placement
 
 Decides where each Vessel sits and which Context a request carries.
 
-Guide: [docs/workspace.md](workspace.md).
+Its guide is [docs/workspace.md](workspace.md).
 
 Owns files:
 
@@ -112,15 +112,15 @@ Owns files:
 - `contract/tests/panels.rs`
 - `contract/generated/workspace.ts`
 
-Owns words: Voyage, Fleet, Placement, Portal, Arrangement, Layout, Context, Overwatch, Region.
+It owns the words Voyage, Fleet, Placement, Portal, Arrangement, Layout, Context, Overwatch, Region.
 
-Uses words: Vessel.
+It uses the words Vessel.
 
 ## Content
 
 Owns Vessel types, Vessel packages, Vessel data and the link from a Vessel to its backend.
 
-Guide: [docs/content.md](content.md).
+Its guide is [docs/content.md](content.md).
 
 Owns files:
 
@@ -131,15 +131,15 @@ Owns files:
 - `content/`
 - `app/tests/content.rs`
 
-Owns words: Vessel, Vessel type, Vessel package, Backend, Description.
+It owns the words Vessel, Vessel type, Vessel package, Backend, Description.
 
-Uses words: Placement, Core terminal.
+It uses the words Placement, Core terminal.
 
 ## Conversation and provider
 
 Runs the private Conversation with the Administrator through a Provider. The application keeps scope, tools and policy.
 
-Guide: [docs/conversation.md](conversation.md).
+Its guide is [docs/conversation.md](conversation.md).
 
 Owns files:
 
@@ -162,15 +162,15 @@ Owns files:
 - `contract/src/voice.rs`
 - `contract/generated/conversation.ts`
 
-Owns words: Administrator, Conversation, Provider.
+It owns the words Administrator, Conversation, Provider.
 
-Uses words: Context, Operation, Vessel, Placement.
+It uses the words Context, Operation, Vessel, Placement.
 
 ## Desktop presentation
 
 Draws the Canvas and the Avatar and binds the native window to the application owners.
 
-Guide: [docs/terminal.md](terminal.md).
+Its guide is [docs/terminal.md](terminal.md).
 
 Owns files:
 
@@ -180,21 +180,21 @@ Owns files:
 - `contract/src/avatar_animation.rs`
 - `contract/src/inspection.rs`
 
-Owns words: Canvas, Panel, Avatar, Dock, Profile.
+It owns the words Canvas, Panel, Avatar, Dock, Profile.
 
-Uses words: Placement, Portal, Vessel, Context, Operation, Core terminal, Region.
+It uses the words Placement, Portal, Vessel, Context, Operation, Core terminal, Region.
 
 ## Verification
 
 Drives the real app on an owned display and keeps the architecture checks.
 
-Guide: [tests/native/README.md](../tests/native/README.md).
+Its guide is [tests/native/README.md](../tests/native/README.md).
 
 Owns files:
 
 - `tests/native/`
 - `tests/architecture/`
 
-Owns words: Journey, Fixture, Control, Evidence.
+It owns the words Journey, Fixture, Control, Evidence.
 
-Uses words: Voyage, Fleet, Vessel, Placement, Portal, Canvas.
+It uses the words Voyage, Fleet, Vessel, Placement, Portal, Canvas.
