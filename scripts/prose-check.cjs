@@ -1,5 +1,11 @@
 const { runCli } = require("./changed.cjs");
 
+const RULES = [
+  [/[\u2013\u2014]/, "long dash"],
+  [/[\u2018\u2019\u201c\u201d]/, "curly quote"],
+  [/: \S/, "mid-sentence colon"],
+];
+
 const FIXES = {
   "long dash": "use a comma, a period or parentheses",
   "curly quote": "use a straight quote",
@@ -21,7 +27,7 @@ function closingFence(text, opening) {
 }
 
 function proseFindings(text) {
-  const raw = text.replace(/^﻿/, "").split(/\r?\n/);
+  const raw = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   const findings = [];
   let start = 0;
   if (raw[0] === "---") {
@@ -44,12 +50,9 @@ function proseFindings(text) {
       .replace(/(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)/g, "`")
       .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
       .replace(/\]\([^)]*\)/g, "]");
-    if (/[–—]/.test(prose)) findings.push({ line: n, rule: "long dash" });
-    if (/[‘’“”]/.test(prose)) {
-      findings.push({ line: n, rule: "curly quote" });
+    for (const [pattern, rule] of RULES) {
+      if (pattern.test(prose)) findings.push({ line: n, rule });
     }
-    if (/: \S/.test(prose))
-      findings.push({ line: n, rule: "mid-sentence colon" });
   }
   return findings;
 }
