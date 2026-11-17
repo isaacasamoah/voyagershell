@@ -173,6 +173,7 @@ impl Model {
         terminal: &CoreTerminalId,
         cwd: String,
         launch: Launch,
+        core_name: Option<String>,
     ) -> Result<bool, String> {
         if self
             .layout
@@ -198,8 +199,15 @@ impl Model {
                 PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
             });
         }
-        let name = panels::default_name(panels::group(&self.layout, owner)?.members, "terminal");
-        let panel = self.placement(cwd, "terminal".into(), name, Some(launch))?;
+        let members = panels::group(&self.layout, owner)?.members;
+        let core_name = core_name
+            .filter(|name| !name.is_empty() && members.iter().all(|panel| &panel.name != name));
+        let named = core_name.is_some();
+        let name = core_name.unwrap_or_else(|| panels::default_name(members, "terminal"));
+        let mut panel = self.placement(cwd, "terminal".into(), name, Some(launch))?;
+        if named {
+            panel.name_origin = voyager_contract::NameOrigin::Deliberate;
+        }
         if let Some(content) = self.layout.vessels.last_mut() {
             content.backend = Some(terminal.clone());
         }
@@ -835,11 +843,11 @@ mod tests {
         let into_fleet = PlacementOwner::Fleet { id: fleet.clone() };
         let t5 = CoreTerminalId("t5".into());
         assert_eq!(
-            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone()),
+            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
             Ok(true)
         );
         assert_eq!(
-            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone()),
+            model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
             Ok(false)
         );
         let adopted = model.layout.vessels.last().unwrap().clone();
@@ -857,7 +865,7 @@ mod tests {
             voyage: voyage.clone(),
         };
         assert_eq!(
-            model.adopt(&portal, &t6, "/work".into(), Launch::Terminal),
+            model.adopt(&portal, &t6, "/work".into(), Launch::Terminal, None),
             Ok(true)
         );
         let column = model.layout.voyages[0].portal_layout.as_ref().unwrap();
@@ -869,13 +877,13 @@ mod tests {
         let t7 = CoreTerminalId("t7".into());
         assert!(
             model
-                .adopt(&unknown, &t7, "/".into(), Launch::Terminal)
+                .adopt(&unknown, &t7, "/".into(), Launch::Terminal, None)
                 .is_err()
         );
         model.layout.voyages[0].fleets[0].closed = true;
         assert!(
             model
-                .adopt(&into_fleet, &t7, "/".into(), Launch::Terminal)
+                .adopt(&into_fleet, &t7, "/".into(), Launch::Terminal, None)
                 .is_err()
         );
         assert!(
@@ -885,6 +893,43 @@ mod tests {
                 .iter()
                 .any(|content| content.backend.as_ref() == Some(&t7))
         );
+    }
+
+    #[test]
+    fn an_adopted_terminal_takes_its_core_name_unless_a_neighbour_holds_it() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let owner = PlacementOwner::Fleet { id: fleet };
+        let adopt = |model: &mut Model, address: &str, name: Option<&str>| {
+            model
+                .adopt(
+                    &owner,
+                    &CoreTerminalId(address.into()),
+                    "/work".into(),
+                    Launch::Terminal,
+                    name.map(str::to_owned),
+                )
+                .unwrap();
+            model.layout.voyages[0].fleets[0]
+                .placements
+                .last()
+                .unwrap()
+                .clone()
+        };
+        let arch = adopt(&mut model, "t5", Some("arch"));
+        assert_eq!(arch.name, "arch");
+        assert_eq!(arch.name_origin, voyager_contract::NameOrigin::Deliberate);
+        let twin = adopt(&mut model, "t6", Some("arch"));
+        assert_eq!(twin.name, "Terminal 2");
+        assert_eq!(twin.name_origin, voyager_contract::NameOrigin::Automatic);
+        assert_eq!(adopt(&mut model, "t7", None).name, "Terminal 3");
+        assert_eq!(adopt(&mut model, "t8", Some("")).name, "Terminal 4");
     }
 
     #[test]

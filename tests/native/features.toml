@@ -348,3 +348,16 @@ behavior = "covered"
 performance = "none"
 visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "verification-environment"
+name = "Verification environment"
+path = "Run the verifier's own unit tests and the journey battery and get a verdict that leaves nothing behind."
+sources = ["tests/native/src/**"]
+journeys = []
+platforms = ["linux"]
+python = []
+behavior = "none"
+performance = "none"
+visual = "none"
+debug = "none"
