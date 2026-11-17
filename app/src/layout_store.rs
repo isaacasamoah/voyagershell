@@ -8,7 +8,7 @@ use std::sync::Arc;
 use voyager_contract::layout_document::{
     BACKUP, DOCUMENT, Kept, LEGACY_DOCUMENT, READER_LEVEL, Reading, import_legacy, read, write,
 };
-use voyager_contract::{Action, Layout, Outcome, Response};
+use voyager_contract::{Action, Layout, Outcome, Response, VesselId};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct LayoutRevision {
@@ -35,6 +35,8 @@ impl LayoutRevision {
         }
     }
 }
+
+pub const CHANGED: &str = "layout_changed";
 
 const SEEN: usize = 32;
 
@@ -77,6 +79,45 @@ impl Seen {
             return false;
         };
         parts().is_some_and(|parts| parts.iter().all(|part| part.same(seen, layout)))
+    }
+
+    pub(crate) fn stale_terminal(
+        &self,
+        expected: u64,
+        revision: LayoutRevision,
+        layout: &Layout,
+        vessel: &VesselId,
+    ) -> Error {
+        let record = |layout: &Layout| {
+            serde_json::to_string(&layout.vessels.iter().find(|item| &item.id == vessel))
+                .unwrap_or_default()
+        };
+        let noted: Vec<u64> = self
+            .layouts
+            .iter()
+            .map(|(structure, _)| *structure)
+            .collect();
+        match self
+            .layouts
+            .iter()
+            .find(|(structure, _)| *structure == expected)
+        {
+            None => eprintln!(
+                "Terminal open refused for {}: structure {expected} is not among those noted {noted:?}; current structure {}",
+                vessel.0, revision.structure
+            ),
+            Some((_, seen)) => eprintln!(
+                "Terminal open refused for {}: Vessel record at structure {expected}: {}; at current structure {}: {}",
+                vessel.0,
+                record(seen),
+                revision.structure,
+                record(layout)
+            ),
+        }
+        Error::Rejected {
+            kind: CHANGED.into(),
+            message: "Layout changed; inspect before opening a terminal".into(),
+        }
     }
 }
 

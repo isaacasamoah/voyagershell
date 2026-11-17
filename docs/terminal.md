@@ -617,6 +617,13 @@ makes its launch or intent ineligible. The opening owner needs that record to
 reject a changed launch instead of treating it as an ordinary unbound shell.
 Advertising eligibility still requires the exact current tuple to match.
 
+A terminal open refused because the layout changed carries the typed reason
+`changed`. The canvas then inspects once and retries the open once, only when
+the Vessel is still shown with the same bound terminal and no start or new-shell
+intent. Attaching to a live terminal changes nothing that a retry could double.
+Otherwise the Vessel shows the refusal. A Vessel with no bound terminal is never
+retried, because its open can start a program.
+
 The updated canvas treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
 Vessel ID, name, tree and avatar context stay unchanged. The new program always

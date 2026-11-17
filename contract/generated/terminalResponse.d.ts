@@ -1,4 +1,4 @@
-export type TerminalReason = "ended";
+export type TerminalReason = "ended" | "changed";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface TerminalResponse {

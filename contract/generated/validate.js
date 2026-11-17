@@ -59428,8 +59428,8 @@ return errors === 0;
 }
 
 export const terminalResponse = validate196;
-const schema272 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"TerminalReason":{"enum":["ended"],"type":"string"}},"properties":{"message":{"type":["string","null"]},"reason":{"anyOf":[{"$ref":"#/definitions/TerminalReason"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","status"],"title":"TerminalResponse","type":"object"};
-const schema273 = {"enum":["ended"],"type":"string"};
+const schema272 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"TerminalReason":{"enum":["ended","changed"],"type":"string"}},"properties":{"message":{"type":["string","null"]},"reason":{"anyOf":[{"$ref":"#/definitions/TerminalReason"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","status"],"title":"TerminalResponse","type":"object"};
+const schema273 = {"enum":["ended","changed"],"type":"string"};
 const schema274 = {"enum":["applied","rejected","uncertain"],"type":"string"};
 
 function validate196(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -59481,7 +59481,7 @@ vErrors.push(err0);
 }
 errors++;
 }
-if(!(data1 === "ended")){
+if(!((data1 === "ended") || (data1 === "changed"))){
 const err1 = {instancePath:instancePath+"/reason",schemaPath:"#/definitions/TerminalReason/enum",keyword:"enum",params:{allowedValues: schema273.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err1];

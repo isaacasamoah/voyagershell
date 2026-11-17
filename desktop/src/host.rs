@@ -387,6 +387,11 @@ fn load(
                     Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "finished" => {
                         Some(voyager_contract::TerminalReason::Ended)
                     }
+                    Err(voyager_app::core::Error::Rejected { kind, .. })
+                        if kind == voyager_app::client::CHANGED =>
+                    {
+                        Some(voyager_contract::TerminalReason::Changed)
+                    }
                     _ => None,
                 };
                 let (status, message) = match result {

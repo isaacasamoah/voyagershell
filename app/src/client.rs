@@ -42,6 +42,7 @@ use core_calls::{
 };
 use terminal_start::{CreatedTerminal, require_finished};
 
+pub use crate::layout_store::CHANGED;
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
 
@@ -497,6 +498,7 @@ impl Client {
                 crate::voyage_close::RenameRelease,
             )> = None;
             loop {
+                seen.note(version, &layout);
                 let gate = |event: &_| door.gate(&Envelope::report(event)).is_ok();
                 let reported = reports(
                     &observed_activity,
@@ -1634,9 +1636,7 @@ impl Client {
                         } else if !seen.current(expected_version, version, &layout, || {
                             Some(vec![Part::Vessel(content.clone())])
                         }) {
-                            Err(rejected(
-                                "Layout changed; inspect before opening a terminal".into(),
-                            ))
+                            Err(seen.stale_terminal(expected_version, version, &layout, &content))
                         } else if closing.blocks_terminal(&content) {
                             Err(rejected(
                                 "This Voyage is closing; no terminal was opened".into(),
