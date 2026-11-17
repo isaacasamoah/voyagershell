@@ -138,6 +138,10 @@ function changedFiles({
     .map((path) => ({ path, added: added.get(path), text: texts.get(path) }));
 }
 
+function count(n, noun) {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 function parseArgs(name, argv) {
   const options = { base: "origin/main", head: "HEAD", help: false };
   for (let i = 0; i < argv.length; i += 1) {
@@ -190,12 +194,12 @@ function runCli(name, argv, check) {
     for (const finding of findings) console.log(finding);
     if (findings.length === 0) {
       console.log(
-        `${name}: no findings in ${files.length} changed files against ${options.base}`,
+        `${name}: no findings in ${count(files.length, "changed file")} against ${options.base}`,
       );
       return 0;
     }
     console.log(
-      `${name}: ${findings.length} findings in ${touched.size} files against ${options.base}`,
+      `${name}: ${count(findings.length, "finding")} in ${count(touched.size, "file")} against ${options.base}`,
     );
     return 1;
   } catch (error) {

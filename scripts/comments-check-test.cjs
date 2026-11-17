@@ -165,7 +165,7 @@ test("a planted comment names its path and line and fails", () => {
   );
   assert.match(
     result.stdout,
-    /comments-check: 1 findings in 1 files against base/,
+    /comments-check: 1 finding in 1 file against base/,
   );
 });
 
@@ -186,7 +186,7 @@ test("a comment already in the file but not added passes", () => {
   );
   const result = run(cwd);
   assert.strictEqual(result.status, 0);
-  assert.match(result.stdout, /no findings in 1 changed files against base/);
+  assert.match(result.stdout, /no findings in 1 changed file against base/);
 });
 
 test("a typescript comment in an added line fails and a new file counts", () => {

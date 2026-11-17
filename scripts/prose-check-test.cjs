@@ -122,10 +122,7 @@ test("a planted long dash names its path and line and fails", () => {
   const result = run(cwd);
   assert.strictEqual(result.status, 1);
   assert.match(result.stdout, /^docs\/x\.md:2: long dash\. Fix: use a comma/m);
-  assert.match(
-    result.stdout,
-    /prose-check: 1 findings in 1 files against base/,
-  );
+  assert.match(result.stdout, /prose-check: 1 finding in 1 file against base/);
 });
 
 test("a tell already in the file but not added passes", () => {
@@ -135,7 +132,7 @@ test("a tell already in the file but not added passes", () => {
   );
   const result = run(cwd);
   assert.strictEqual(result.status, 0);
-  assert.match(result.stdout, /no findings in 1 changed files against base/);
+  assert.match(result.stdout, /no findings in 1 changed file against base/);
 });
 
 test("root README and AGENTS are in scope", () => {
