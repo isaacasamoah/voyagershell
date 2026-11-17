@@ -1,0 +1,12 @@
+diff --git a/desktop/src/terminal_view.rs b/desktop/src/terminal_view.rs
+index 4eadc03..0d775bb 100644
+--- a/desktop/src/terminal_view.rs
++++ b/desktop/src/terminal_view.rs
+@@ -43,6 +43,7 @@ impl Render for Pane {
+         crate::diagnostics::trace("render_start", usize::from(self.dirty));
+         crate::diagnostics::redraw::record("terminal_renders", 1);
+         if self.dirty {
++            std::thread::sleep(std::time::Duration::from_millis(50));
+             match self.screen.snapshot() {
+                 Ok(grid) => {
+                     self.grid = Some(grid);
