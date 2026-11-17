@@ -52,7 +52,7 @@ hc run --bg --name notes --label voyager.place=portal:<voyage id> bash
 voyager focus
 ```
 
-The reply is the generated `Focus` the app holds now: the dock's scope, its
+The reply is the generated `Focus` the app holds now. It has the dock's scope, its
 path of names, its working directory and the workspace revision. It is open to
 every Vessel and changes nothing.
 
