@@ -17,7 +17,7 @@ This is an application for extensible content, not only a terminal manager. A te
 - Work in small, complete, user-visible increments. Verify the intended interaction and one relevant failure.
 - Keep authority, avatar focus, placement, content state, process identity and derived knowledge distinct.
 - A received request is not a completed effect. Settle an uncertain operation by asking the provider of that hop: Core for the app, the app for the canvas and the avatar. Retry only when the read proves the effect did not happen and the retry cannot double it, and report what a read cannot settle. Never restore an uncertain process.
-- `tests/native/experience.toml` holds the invariants, the usage envelope and the out-of-scope states. A plan item or review finding names the entry it serves or breaks, and one that names none is a note. Style preferences belong in a separate design reference, not in this file.
+- `tests/native/experience.toml` holds the invariants, the usage envelope and the out-of-scope states. A plan item or review finding names the entry it serves or breaks, and one that names none is a note. Style preferences belong in a separate design reference, not in experience.toml.
 - Keep changed source comment-free. Put mechanisms and invariants in the owning technical document.
 - Prefer explicit types and a small number of modules. Add a dependency only for a primitive required now.
 - Keep runtime profiles, transcripts, credentials, private task documents and evidence out of Git.
