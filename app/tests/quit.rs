@@ -61,7 +61,15 @@ mod linux {
         absent(items)
     }
 
-    fn connectors() -> Vec<u32> {
+    fn serves(pid: u32, session: &str) -> bool {
+        std::fs::read(format!("/proc/{pid}/cmdline")).is_ok_and(|bytes| {
+            bytes
+                .split(|byte| *byte == 0)
+                .any(|argument| argument == session.as_bytes())
+        })
+    }
+
+    fn connectors(session: &str) -> Vec<u32> {
         let mut children = Vec::new();
         for task in std::fs::read_dir("/proc/self/task").unwrap() {
             let listed =
@@ -69,7 +77,8 @@ mod linux {
             children.extend(
                 listed
                     .split_whitespace()
-                    .map(|pid| pid.parse::<u32>().unwrap()),
+                    .map(|pid| pid.parse::<u32>().unwrap())
+                    .filter(|pid| serves(*pid, session)),
             );
         }
         children.sort();
@@ -420,7 +429,7 @@ mod linux {
                 .clone();
             let program = identity(core.terminal_get(&address).unwrap().pid.unwrap());
             let before = core.server_status().unwrap();
-            let connected = connectors();
+            let connected = connectors(&session);
             let server = identity(before.pid);
             let first = wait(client.end(Lifecycle::QuitAndKeep));
             let repeated = wait(client.end(Lifecycle::QuitAndKeep));
@@ -430,7 +439,7 @@ mod linux {
                 matches!(&stop, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "quitting"),
                 "{stop:?}"
             );
-            let released = connectors();
+            let released = connectors(&session);
             let status = core.server_status().unwrap();
             assert_eq!(status.core.id, before.core.id);
             assert_eq!(identity(status.pid), server);
