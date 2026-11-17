@@ -1,4 +1,4 @@
-use crate::conversation::Focus;
+use crate::context::Focus;
 use crate::{CoreTerminalId, PlacementId, PlacementOwner, Reply, Request, VesselId, VoyageId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

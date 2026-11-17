@@ -29,3 +29,17 @@ pub struct Facts {
     pub directory: Directory,
     pub branch: Branch,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Focus {
+    pub scope: Context,
+    pub path: Vec<String>,
+    pub cwd: Option<String>,
+    #[serde(with = "crate::decimal")]
+    #[schemars(with = "String")]
+    pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(max = 8192))]
+    pub preview: Option<String>,
+}

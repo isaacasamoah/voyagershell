@@ -15,6 +15,7 @@ edges:
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_app::families::terminal', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::content', from_owner: conversation-provider, to_owner: content}
+  - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::worktree', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::adoption', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::adoption', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
@@ -23,7 +24,6 @@ edges:
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::content', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::content::rename', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::context', from_owner: application-queue, to_owner: placement}
-  - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::conversation', from_owner: application-queue, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::layout_parts', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::panels', from_owner: application-queue, to_owner: placement}
@@ -36,7 +36,6 @@ edges:
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::administrator', from_owner: application-queue, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::content', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
-  - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::conversation', from_owner: application-queue, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::voyage_close', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::worktree', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::content', from_owner: application-queue, to_owner: content}
@@ -63,15 +62,13 @@ edges:
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content::rename', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::content', from_owner: placement, to_owner: content}
-  - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::conversation', from_owner: placement, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::core', from_owner: placement, to_owner: core-adapter}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::vessel_type', from_owner: placement, to_owner: content}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_contract::content', from_owner: placement, to_owner: content}
-  - {from: 'rs:voyager_app::context', to: 'rs:voyager_contract::conversation', from_owner: placement, to_owner: conversation-provider}
-  - {from: 'rs:voyager_app::conversation', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
+  - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::conversation_client::audio', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::core', to: 'rs:voyager_app', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::core', to: 'rs:voyager_app::activity', from_owner: core-adapter, to_owner: application-queue}
@@ -91,6 +88,8 @@ edges:
   - {from: 'rs:voyager_app::families::terminal::lifecycle', to: 'rs:voyager_app::panels', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::families::terminal::lifecycle', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::families::terminal::lifecycle', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::focus_hook', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::focus_hook', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::front_door', to: 'rs:voyager_app::content', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::front_door', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::front_door', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
@@ -110,7 +109,10 @@ edges:
   - {from: 'rs:voyager_app::observation', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::observation', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::panels', to: 'rs:voyager_app::vessel_type', from_owner: placement, to_owner: content}
+  - {from: 'rs:voyager_app::provider', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
+  - {from: 'rs:voyager_app::provider', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::provider_settings::codex', to: 'rs:voyager_app::content', from_owner: conversation-provider, to_owner: content}
+  - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::core_endpoint', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::panels', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
@@ -133,11 +135,12 @@ edges:
   - {from: 'rs:voyager_contract::administrator', to: 'rs:voyager_contract::worktree', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_contract::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_contract::conversation', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
+  - {from: 'rs:voyager_contract::conversation', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_contract::inspection', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_contract::observation', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_contract::observation', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_contract::socket', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
-  - {from: 'rs:voyager_contract::socket', to: 'rs:voyager_contract::conversation', from_owner: application-queue, to_owner: conversation-provider}
+  - {from: 'rs:voyager_contract::socket', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_contract::voyage_close', to: 'rs:voyager_contract::administrator', from_owner: placement, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::content', from_owner: desktop-presentation, to_owner: content}

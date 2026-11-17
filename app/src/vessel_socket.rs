@@ -237,7 +237,7 @@ fn focus(call: &Call, vessel: &VesselId) -> SocketReply {
         Err(unanswered) => SocketReply::Workspace {
             reply: Reply::Unanswered(unanswered),
         },
-        Ok(response) => match crate::conversation::focus(&response.layout, response.version) {
+        Ok(response) => match crate::context::focus(&response.layout, response.version) {
             Ok(focus) => SocketReply::Focus { focus },
             Err(message) => SocketReply::Refused { message },
         },

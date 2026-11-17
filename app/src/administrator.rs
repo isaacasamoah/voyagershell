@@ -7,7 +7,7 @@ use voyager_contract::{
     administrator::{
         ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction, WorkspaceInput,
     },
-    conversation::{CallbackId, Focus, ToolOutcome},
+    conversation::{CallbackId, ToolOutcome},
 };
 
 #[derive(Clone)]
@@ -77,7 +77,7 @@ struct Receipt {
 
 pub(crate) struct Work {
     call: String,
-    context: Focus,
+    context: voyager_contract::context::Focus,
     request_id: String,
     action: ToolAction,
     receive: mpsc::Receiver<EffectResult>,
@@ -102,7 +102,7 @@ pub(crate) struct Completed {
     pub replies: Vec<ToolReply>,
     pub outcome: ToolOutcome,
     pub text: String,
-    pub context: Focus,
+    pub context: voyager_contract::context::Focus,
 }
 
 pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
@@ -172,7 +172,7 @@ impl Tools {
         thread: Option<&str>,
         turn: Option<&str>,
         active: bool,
-        context: Option<&Focus>,
+        context: Option<&voyager_contract::context::Focus>,
         workspace: &Client,
     ) -> Option<Value> {
         match crate::provider_settings::codex_event(value.clone(), None)? {
@@ -220,7 +220,7 @@ impl Tools {
         thread: Option<&str>,
         turn: Option<&str>,
         active: bool,
-        context: Option<&Focus>,
+        context: Option<&voyager_contract::context::Focus>,
         workspace: &Client,
     ) -> Option<ToolReply> {
         let id = value.id.clone();
@@ -934,7 +934,7 @@ mod tests {
                 ContentResponse::Snapshot { snapshot, .. } => snapshot.revision.clone(),
                 other => panic!("{other:?}"),
             };
-            let focus = Focus {
+            let focus = voyager_contract::context::Focus {
                 scope: Context::Vessel { id: placement },
                 path: vec!["Notes A".into()],
                 cwd: None,
@@ -1126,7 +1126,7 @@ mod tests {
                 action: Action::Inspect,
             })
             .unwrap();
-        let focus = Focus {
+        let focus = voyager_contract::context::Focus {
             scope: Context::Workspace,
             path: vec!["Workspace".into()],
             cwd: None,
@@ -1400,7 +1400,7 @@ mod tests {
     fn a_refused_correlated_call_cannot_be_replaced_with_valid_arguments() {
         let session = format!("voyager-c2-refusal-test-{}", std::process::id());
         let workspace = Client::open(session.clone(), "/tmp".into());
-        let context = Focus {
+        let context = voyager_contract::context::Focus {
             scope: Context::Workspace,
             path: vec!["Workspace".into()],
             cwd: None,

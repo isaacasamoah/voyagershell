@@ -28,11 +28,11 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use voyager_contract::Outcome as WorkspaceOutcome;
 use voyager_contract::conversation::{
-    Action, Delivery, Focus, Message, Phase, Reply, Request, Role, Snapshot,
+    Action, Delivery, Message, Phase, Reply, Request, Role, Snapshot,
 };
 use voyager_contract::voice::{Capability, State as VoiceState};
+use voyager_contract::{Outcome as WorkspaceOutcome, context::Focus};
 
 const REPLY_WAIT: Duration = Duration::from_secs(25);
 const _: () = assert!(crate::client::WORKSPACE_WAIT.as_secs() < REPLY_WAIT.as_secs());

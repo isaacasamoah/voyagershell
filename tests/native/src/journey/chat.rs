@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::fs;
 use std::time::Instant;
-use voyager_contract::conversation::Focus;
+use voyager_contract::context::Focus;
 use voyager_contract::inspection::Role;
 use voyager_contract::{FleetId, RenameTarget};
 

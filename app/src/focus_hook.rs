@@ -1,7 +1,7 @@
 use serde_json::json;
 use std::time::Duration;
 use voyager_contract::{
-    conversation::Focus,
+    context::Focus,
     socket::{SocketReply, SocketRequest},
 };
 
@@ -10,7 +10,7 @@ pub const DEADLINE: Duration = Duration::from_millis(200);
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();
     let text = format!(
-        "VoyagerShell focus at this prompt: Isaac is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}",
+        "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}",
         focus.path.join(" > ")
     );
     json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
