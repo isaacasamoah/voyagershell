@@ -1,7 +1,7 @@
-diff --git a/app/src/terminal_lifecycle.rs b/app/src/terminal_lifecycle.rs
+diff --git a/app/src/families/terminal/lifecycle.rs b/app/src/families/terminal/lifecycle.rs
 index 1f35581..6fb09b4 100644
---- a/app/src/terminal_lifecycle.rs
-+++ b/app/src/terminal_lifecycle.rs
+--- a/app/src/families/terminal/lifecycle.rs
++++ b/app/src/families/terminal/lifecycle.rs
 @@ -74,7 +74,7 @@ fn prepare_selected(
          let observed = terminals
              .iter()

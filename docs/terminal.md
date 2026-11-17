@@ -85,9 +85,9 @@ These definitions describe what each user action does.
   This is unchanged.
 - **A Vessel's or Portal's program exiting.** When a terminal program that this
   owner saw live finishes with reason `exited`, the owner removes its placement
-  (`terminal_lifecycle::close_exited`). A program that ended while the app was
+  (`families::terminal::lifecycle::close_exited`). A program that ended while the app was
   closed, for example after a computer restart, keeps its placement, and the
-  next launch opens a plain shell there (`terminal_lifecycle::prepare_reopen`).
+  next launch opens a plain shell there (`families::terminal::lifecycle::prepare_reopen`).
   Agents are not resumed. This is unchanged.
 - **Quitting the app.** Ctrl+Q and closing the window are quit-and-keep. The
   owner closes terminal input admission, marks reported activity unavailable,
@@ -462,7 +462,7 @@ read work this way.
   when the list began at the current version. A Vessel whose program the list
   shows exited closes either way, because an exit is final.
 - **Process List and Read**, from the administrator, the Agents list and the
-  content chooser (`app/src/process.rs`). List begins `terminal.list`. Read
+  content chooser (`app/src/families/terminal.rs`). List begins `terminal.list`. Read
   begins `terminal.get` and `terminal.read` together. The request stays
   pending in the front door's ledger, and the answer is recorded when the
   reply arrives. The answer names the workspace version it was dispatched at,
@@ -642,7 +642,7 @@ The 5 November feedback changes the earlier manual-restart presentation. Recogni
 
 At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
 
-`app/src/terminal_lifecycle.rs` holds these small layout decisions. `app/src/client.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
+`app/src/families/terminal/lifecycle.rs` holds these small layout decisions. `app/src/client.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
 
 ## Terminal state words
 
