@@ -53,10 +53,16 @@ base of `origin/main` to `HEAD`, so commit first. Pass `--base <rev>` to compare
 against another revision. The comment check fails on a comment in an added line
 of Rust or TypeScript under `app/`, `desktop/src/`, `contract/src/`,
 `desktop/canvas/` and `tests/native/src/`. `desktop/patches/` is exempt. The
-prose check fails on a long dash, a curly quote or a mid-sentence colon in an
-added line of `docs/*.md`, `README.md` or `AGENTS.md`, outside code spans and
-fenced code. Each finding names the file, the line and the fix. CI compares the
-pull request's merge commit with its first parent.
+prose check fails on a long dash, a curly quote or a mid-sentence colon, outside
+code spans and fenced code. It reads every line of each rule file, whether or not
+the change touched it. The rule files are every `AGENTS.md` outside
+`experiments/` and `tests/native/fixtures/`, `CONSTRAINTS.md`,
+`CONTRIBUTING.md`, `docs/*.md`, `tests/native/README.md`, the project skills
+under `.agents/skills/` and the `says` statements of
+`tests/native/declared-invariants.toml`. `ruleFile` in `scripts/prose-check.cjs`
+is the only list, and its test plants a tell in each tracked rule file. For
+`README.md` it reads added lines only. Each finding names the file, the line and
+the fix. CI compares the pull request's merge commit with its first parent.
 
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
 cache, applies the reviewed native-overlay, engine-limits and window-drag patches in `desktop/patches/`

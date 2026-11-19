@@ -51,7 +51,7 @@ success rule and evidence schema; generate derived views where practical.
 
 ### Feature registry
 
-`tests/native/features.toml` is the one record per user feature: source globs, native
+`tests/native/features.toml` is the one record per user feature. It holds source globs, native
 journeys, tier status and the retained Python journeys. `voyager-verification features`
 validates it and prints the coverage table. `features --write` regenerates the table in
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
@@ -503,7 +503,7 @@ closes, only when the socket closes or the app stops it.
 answers `initialize`, `thread/start` and `turn/start` at once, in the Codex
 app-server shapes the app decodes, and hands each turn to the journey. The
 journey then scripts the turn with `started`, `item_started`, `delta`,
-`finish`, `complete` and `fail`. No timer drives the stand-in: each frame
+`finish`, `complete` and `fail`. No timer drives the stand-in. Each frame
 answers an app frame, or follows a state the journey has just observed. Every
 frame in both directions is recorded in `provider.jsonl` in the evidence folder,
 with its connection number. The frames are written by hand, so they are only as
@@ -765,7 +765,7 @@ no longer applies to the current tree. The verifier never applies a patch.
 
 To run a control, use a checkout that you can discard:
 
-1. Apply the patch: `git apply tests/native/controls/terminal-scrolling.patch`.
+1. Apply the patch with `git apply tests/native/controls/terminal-scrolling.patch`.
    A patch that changes a canvas script changes its compiled `.js` file too,
    so no generation step is needed.
 2. Build the candidate with the release command in Build and inspect below.
@@ -814,7 +814,7 @@ The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.
 
-The `adopt-by-label` patch restores the old drop rule: a `created` report for a
+The `adopt-by-label` patch restores the old drop rule. A `created` report for a
 terminal that no Vessel names is dropped even when it carries the label.
 `agent-in-fleet` then fails, because no Vessel appears for the labelled agent.
 
@@ -914,7 +914,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
 | `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. |
-| `/voyager/bin/claude` | The verifier binary itself, read-only. Under that name it runs as a stand-in agent: it prints the task it was given and echoes each line it reads, so a journey can start a known agent program with no model. |
+| `/voyager/bin/claude` | The verifier binary itself, read-only. Under that name it runs as a stand-in agent. It prints the task it was given and echoes each line it reads, so a journey can start a known agent program with no model. |
 | `/voyager/bin/voyager` | The candidate's sibling `voyager` command, read-only, when the candidate's folder holds one. Its hash is not pinned. |
 | `/voyager/bin/hc-delay` | The verifier binary itself, read-only. Under that name it runs as the Core reply relay. It does nothing unless `--core-delay` names it as the app's Core bridge. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
@@ -1173,7 +1173,7 @@ returns the capture that has not changed for 150 ms, and the case decides pass
 or fail. A terminal that never holds still for 150 ms ends the journey
 `failed`, blamed on the product. No
 step waits a fixed time for the app. Key events are 1 ms apart, as with the
-earlier `xdotool --delay 1`: typed back to back, 2 of 10 runs lost characters.
+earlier `xdotool --delay 1`. Typed back to back, 2 of 10 runs lost characters.
 
 Xvfb runs with `-noreset`. By default it resets when its last client
 disconnects. While the driver ran one process per action, that reset discarded
@@ -1276,7 +1276,7 @@ inconclusive or unavailable.
 ## Run roles and the verdict manifest
 
 `run --role head|trunk|control|mutant` writes `"role"` into `checks.json`. It says
-what the run stands for in a verdict: the PR head, the trunk it is compared with, the
+what the run stands for in a verdict, which is the PR head, the trunk it is compared with, the
 journey's own negative control, or a mutant of the head. Without `--role` the field is
 `null`; the run itself is unchanged.
 
@@ -1293,13 +1293,13 @@ and optional `gates` (`{"name","result","log"}`), `mutants` (`{"name","run"?,"lo
   leaves the verdict folder.
 - a mutant that cites a run whose role is not `mutant`, and a perf pair whose runs are
   not `trunk` and `head`.
-- a mutant whose `caught` disagrees with its run: `caught` must be true exactly when the
+- a mutant whose `caught` disagrees with its run. `caught` must be true exactly when the
   run's `runtimeResult` is `failed`, and an `inconclusive` run is neither.
 - the same run folder listed twice, however its path is spelled.
 - a `checks.json` anywhere in the verdict folder whose run the input does not list.
 
 The manifest lists, per run, its path, role, journey, `runtimeResult`, build `sha256` and
-the `checks.json` it read. It does not read case results, timings or screenshots: a
+the `checks.json` it read. It does not read case results, timings or screenshots. A
 reader opens the cited files for those. `verdict.json` is part of the evidence list.
 
 An error inside the journey is blamed after the fact (`diagnose` in `src/native.rs`):
@@ -1397,7 +1397,7 @@ both the enum and its exhaustive list. The finite state includes phase and eight
 Boolean facts, so there are at most 1280 representable states; 212 are reachable.
 All eleven events are considered from every reachable state, including cycles.
 
-The independent properties are: a pass requires Finished, an actual observation,
+The independent properties are that a pass requires Finished, an actual observation,
 dispatch, an acknowledged command, evidence and successful cleanup, with neither unavailable nor failure;
 dispatch cannot occur twice; Finished accepts no further events; rejected events
 leave state unchanged; acknowledgement cannot create observation; a crash or mismatch always records failure; recorded
@@ -1436,7 +1436,7 @@ real-surface proof, negative control, maintenance and evidence requirements.
 No global plugin hook or workflow policy was activated.
 
 Herdr Core was inspected at its 0.1.19 source revision
-`06793ede1bedb1fed8d22d3cae476d3eb239edf0`: AGENTS.md, README.md,
+`06793ede1bedb1fed8d22d3cae476d3eb239edf0`. The files read were AGENTS.md, README.md,
 `crates/herdr-core/src/client.rs`, `cli.rs` and `server.rs`. In particular,
 `hc connect` can autostart; the adapter instead uses the published plain JSON-RPC
 socket protocol with no start behavior. Herdr App guidance was inspected at
@@ -1488,7 +1488,7 @@ observation listed Core's terminals after the time in `at-N`. The canvas's next
 observation cannot start until 3 s after that. The case then creates
 `exit-ticks/stop`; the loop ends and the shell exits. A newer layout must be saved
 before the time in `at-N` plus 3 s, and the Vessel must then leave the drawn
-frame. The deadline does not depend on machine speed: a build that waits for the
+frame. The deadline does not depend on machine speed. A build that waits for the
 observation misses it under any load, and load only takes margin from a build
 that closes on the event. The case records `observed tick`, `refresh margin ms`,
 `exit to saved ms` (from `stop` to the newer saved layout, at the fixture's 80 ms
@@ -1562,7 +1562,7 @@ python -m unittest discover -s tests/native -p test_routes.py
 ```
 
 The route/path checks do not launch an app, model, Core or desktop-input session.
-Compile or inspect input scripts without importing them: the native input script
+Compile or inspect input scripts without importing them. The native input script
 opens a desktop session when executed. Native journeys still require the actual
 candidate binary, a unique session/profile/evidence path and serialized input.
 

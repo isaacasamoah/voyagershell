@@ -5,11 +5,11 @@ description: Model-check VoyagerShell's Core terminal viewer slots and output bu
 
 # Core viewer slots
 
-The promise: while Herdr Core keeps its protocol, nothing Voyager or the person
-does with terminal viewers disconnects the Core bridge, and every occupied viewer
-slot belongs to a viewer someone holds. The harm: a disconnected bridge stops
-input, focus and resize for every terminal in the session, and leaked slots
-eventually refuse every new terminal with `viewer_limit`.
+While Herdr Core keeps its protocol, nothing Voyager or the person does with
+terminal viewers disconnects the Core bridge, and every occupied viewer slot
+belongs to a viewer someone holds. A disconnected bridge stops input, focus and
+resize for every terminal in the session, and leaked slots eventually refuse
+every new terminal with `viewer_limit`.
 
 The check is a TLA+ model, `tests/formal/core-viewers/CoreViewers.tla`, run by
 TLC over every order of attaches, attach timeouts, output, credit, terminal
@@ -32,7 +32,7 @@ model failed to run. Exit 2 means the covered code changed and needs review firs
 
 | Configuration | Expected | What it checks |
 |---|---|---|
-| CoreViewers | holds | With attach timeouts: the bridge stays up, buffered bytes equal the stored streams, occupied slots stay within the limit, and every occupied slot belongs to a held or attaching viewer |
+| CoreViewers | holds | With attach timeouts, the bridge stays up, buffered bytes equal the stored streams, occupied slots stay within the limit, and every occupied slot belongs to a held or attaching viewer |
 
 Read every violation with `/statechart`, which tells the counterexample as the
 shortest path of steps. Translate each step through the coverage table below into
@@ -74,7 +74,7 @@ path back fails the check.
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
-Sync commit: `749314a2a81b2b74dfc33b59519c4b2dfe180fdf`
+Sync commit is `749314a2a81b2b74dfc33b59519c4b2dfe180fdf`.
 
 `check.sh` reads the file column and the sync commit from this file. Move the sync
 commit forward only after you have read every diff in those files since the
@@ -85,7 +85,7 @@ does what the code does at the new commit.
 
 Three channels, two viewer slots, two units of credit per channel, a per-viewer
 limit of eight units, a control queue of two frames and three attach requests.
-The ratios match the code: 16 MiB is 64 slots of Core's 256 KiB credit, and 1 MiB
+The ratios match the code. 16 MiB is 64 slots of Core's 256 KiB credit, and 1 MiB
 is four credits. A pass covers these bounds, not every size.
 
 The model assumes, without checking, that Herdr Core:
@@ -109,8 +109,8 @@ already handed over.
 
 For each step of a counterexample, open the code in the coverage table and check
 that the code allows that step in that state. If it does, the path is a product
-bug: report it with the path in the code's words, and do not change product code
-unless asked. If some step cannot happen in the code, the model is wrong: fix the
+bug. Report it with the path in the code's words, and do not change product code
+unless asked. If some step cannot happen in the code, the model is wrong. Fix the
 model to match the code and say what you changed. Never weaken an invariant, cut
 an action or shrink a bound to make a check pass.
 

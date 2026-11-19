@@ -62,6 +62,6 @@ expectation `the Portal column stays shown on every Fleet`.
 Aims dodge the Portal column, because it overlays the right of the Fleet. The
 make-room presentation, splits inside the column and Portal maximize are not
 driven. No case compares pixels. The Python `portal-terminal` journey keeps
-its checks that are not about Portals: a Fleet created in a missing folder, a
+its checks that are not about Portals. They are a Fleet created in a missing folder, a
 shell's exit code, and a live edit of the canvas script. Linux evidence does
 not establish another platform.

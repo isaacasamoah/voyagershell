@@ -111,7 +111,7 @@ voice remains a separate integration requirement.
 The native account trial also observed the installed Codex stop hook continuing
 the same turn. Its additional visible message reached chat through the native
 stream; Voyager did not submit another request. The installed stop hook checks
-for the owner's required oru: response prefix. C1's private instructions omitted
+for the owner's required `oru:` response prefix. C1's private instructions omitted
 that convention. C2 added it to the private administrator instructions, leaving
 the global hooks and configuration unchanged. S18a moved it out of the built-in
 policy and into the owner's configured prompt, because it is one person's
@@ -176,7 +176,7 @@ program's stop key without escalation. The request carries the inspected content
 terminal and PID, while the result retains both the inspected target and Core's
 observed record. Only a finished record is described as "Program ended". A live
 record with the same PID is reported as still running. A lost confirmation is
-settled by reading the terminal: no longer live is applied, the same program
+settled by reading the terminal. A program no longer live is applied, the same program
 still live gets one more stop, and a different program is refused with nothing
 sent. A malformed response, an unexpected terminal, PID or state, or a read
 that fails stays unconfirmed and is never automatically repeated. The placement, backend address and final screen remain.

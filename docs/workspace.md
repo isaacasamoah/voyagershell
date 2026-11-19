@@ -40,7 +40,7 @@ they do not pass it.
    changed request under a known id is refused. An id that another kind holds
    is refused. A request that is still in flight answers that it is pending.
 3. **Gates.** An effect is refused while Voyager quits. A request with no effect
-   passes: a workspace inspect, a Vessel inspect, describe or list, and a
+   passes. These are a workspace inspect, a Vessel inspect, describe or list, and a
    process list or read. A workspace inspect while quitting answers from the
    owner's last layout and marks it not fresh.
 4. **Decide** and 5. **Effect.** Each kind supplies these. The kinds are
@@ -70,7 +70,7 @@ next. [The Core adapter](terminal.md#core-adapter) describes the whole path.
 
 Core owns terminals, so an agent starts a program with `hc run` and labels it
 `voyager.place=<value>`. The value is the `Place` contract type in
-`contract/src/place.rs`: `fleet:<Fleet id>` or `portal:<Voyage id>`. Its
+`contract/src/place.rs`. It is `fleet:<Fleet id>` or `portal:<Voyage id>`. Its
 generated schema is `contract/generated/place.schema.json`. The owner parses
 the label where Core's report enters, in `app/src/activity.rs`.
 
@@ -149,10 +149,10 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   passes the calling program to `Model::apply_from` in `app/src/workspace.rs`,
   which picks the Fleet's `FirstVessel` from it. The wire `Action` is the same
   for every caller. Until a labelled terminal arrives, the Fleet looks like
-  one whose last Vessel was closed: an empty canvas that offers "Choose
+  one whose last Vessel was closed. It shows an empty canvas that offers "Choose
   content".
 
-The socket binds the caller outside the payload: the envelope's caller is
+The socket binds the caller outside the payload. The envelope's caller is
 `Program { vessel }`, taken from the socket that accepted the connection. That
 identity is advisory, and nothing is enforced. Any process of the same user can
 connect to any Vessel's socket, and the directory's 0700 mode only keeps other
@@ -218,9 +218,9 @@ the effect, or a provider that does not answer, leaves the result uncertain.
 
 | Effect | Read | Landed | Did not land | Otherwise |
 | --- | --- | --- | --- | --- |
-| Workspace save, `doc.set` with a version | `doc.get` of the layout document | The version moved and the value is the one written: applied | The version is unchanged: one retry with the same expected version, and a second read if that retry conflicts | Uncertain |
-| Program start, `terminal.run` labelled `voyager-operation` | `terminal.list` for that label | One terminal: applied, and the start adopts it | Not provable, so no retry | Uncertain, and the marker stays |
-| Program stop by verified identity | `terminal.get` of the terminal | It is no longer live: applied | The same program is still live: one more stop | A different program: refused, nothing sent |
+| Workspace save, `doc.set` with a version | `doc.get` of the layout document | Applied when the version moved and the value is the one written | One retry with the same expected version when the version is unchanged, and a second read if that retry conflicts | Uncertain |
+| Program start, `terminal.run` labelled `voyager-operation` | `terminal.list` for that label | Applied, and the start adopts it, when one terminal carries the label | Not provable, so no retry | Uncertain, and the marker stays |
+| Program stop by verified identity | `terminal.get` of the terminal | Applied when it is no longer live | One more stop when the same program is still live | Refused, with nothing sent, when it is a different program |
 | Terminal input | None | | | Uncertain, and the message says to read the terminal |
 | A canvas or avatar request | The same request, sent again with its id | The ledger's recorded answer | | The ledger answers that the request is pending |
 
@@ -271,12 +271,12 @@ When the reply lands, the owner installs the saved layout only if its revision
 is newer than the layout it holds. An inspect during the flight may already
 have loaded it.
 
-A `terminal.list` that an effect needs first departs the same way: the check
+A `terminal.list` that an effect needs first departs the same way. These are the check
 before a worktree removal, the plan of a Voyage close, and a Voyage or Fleet
 created from a live directory. When the list lands, the request is decided
 again from the start with the list in hand.
 
-The other saves still block the owner: opening a terminal, selecting or
+The other saves still block the owner. They are opening a terminal, selecting or
 configuring a Note, the last step of a Voyage close or a worktree change, the
 closure of an ended Vessel, and the repairs an inspect makes. A slow Core delays
 every request behind those.
@@ -286,7 +286,7 @@ caller names its machine. Only the local machine exists today.
 
 ## Shared panel arrangements
 
-The current owner contract uses `PlacementOwner`: a Fleet ID or a Voyage's Portal
+The current owner contract uses `PlacementOwner`, which is a Fleet ID or a Voyage's Portal
 column. Home is one retained internal Voyage/Fleet with its own Portal column,
 kept outside the ordinary Voyage list. Entering Home preserves the selected
 ordinary Voyage/Fleet and explicit dock context. A previously absent Home starts
@@ -655,7 +655,7 @@ Closing the window quits and keeps the Core server and its programs. The
 [lifecycle](terminal.md#lifecycle) defines closing the window, quitting and
 stopping the session.
 
-Source basis: Core 0.1.16 at
+The source basis is Core 0.1.16 at
 [`e07c2a1`](https://github.com/herdrdev/herdr-core/tree/e07c2a1bedd62cf4787ee026ee23ee79c7d95491),
 including its document schema and plain/framed protocol; GPUI Shell at
 [`9448039`](https://github.com/longbridge/gpui-kit/tree/944803984cf0ba3111861d6e1aa9d6265c109ff9),
@@ -759,7 +759,7 @@ New worktrees use the main checkout's `.worktrees/` folder, with a local Git exc
 
 The layout and Git operation owners remain distinct. The script cannot grant deletion or launch authority. Dialog observations keep their captured request identity/version. Async list and text changes explicitly refresh the separate native dialog. The dialog handles Escape and Cancel itself, and waits for a dispatched operation before dismissal.
 
-Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates canvas, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task: closing a dialog cancels that view's continuations and can strand the workspace busy flag.
+Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates canvas, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task. Closing a dialog cancels that view's continuations and can strand the workspace busy flag.
 
 Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Notes and other content without processes remain present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
 
@@ -852,7 +852,7 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most eighteen pending RPCs: at most eight admitted process effects, at most
+most eighteen pending RPCs, which are at most eight admitted process effects, at most
 three process reads at two calls each, the one shared terminal list that observations
 wait on, the one workspace save or list in flight, the activity subscription
 and one ordinary owner call. Process admissions remain counted
@@ -938,12 +938,12 @@ Its real native restore/reattach and Notes/Voyage-shutdown journeys ran against
 Core 0.1.18. The owner handoff also retained an existing 0.1.18 Core. This
 establishes that these consumed operations work across that additive upgrade.
 It does not establish a general compatibility matrix. Generation, capability
-and minimum-release checks are the admission rule: a newer release is accepted,
+and minimum-release checks are the admission rule. A newer release is accepted,
 and one older than 0.1.18 is refused.
 
 ## Navigation and the structure revision
 
-Navigation is where the user is: the selected Voyage and Fleet, the Home or
+Navigation is where the user is. It holds the selected Voyage and Fleet, the Home or
 Fleet view, the dock context and the `navigation` record. Everything else in
 `Layout` is structure. `Layout::same_structure` in `contract/src/lib.rs` names
 both sets, and it destructures every field, so a new field does not build until
@@ -974,7 +974,7 @@ it holds. Its own navigation, including `focus-vessel`, and the native avatar's
 dock reach it through their replies, so they send it no notice and cost it no
 second inspect.
 
-**The navigation record.** `navigation` holds one entry per Voyage: its
+**The navigation record.** `navigation` holds one entry per Voyage, with its
 last-used Fleet and, optionally, its last-used Vessel placement. Any change that
 leaves the workspace on a Voyage and Fleet updates that Voyage's entry, and a
 new Fleet clears the remembered Vessel. The owner records a placement only when
@@ -989,15 +989,15 @@ opens the first open Fleet. Home keeps no entry.
 store private to that module, and `Canvas.focused` only reads it, so an
 assignment anywhere else does not compile. A move has one of two targets:
 
-- A placement the user chose: a click on a pane, the Maximize or Restore
+- A placement the user chose. It comes from a click on a pane, the Maximize or Restore
   button or menu item, or the Vessel a split or create focuses. When this
   changes focus in an ordinary Voyage, the canvas sends `focus-vessel`. It sends
   it outside the action queue, does not wait for it and ignores its reply.
-- The opening placement: the remembered placement when it is shown, and the
+- The opening placement. It is the remembered placement when it is shown, and the
   first shown placement otherwise. The canvas moves here after a selection
   change, when nothing is focused in an ordinary Voyage, as on the first layout
   after launch, and when the focused placement is no longer shown. It sends
-  nothing, because the record already names this placement: a Fleet change
+  nothing, because the record already names this placement. A Fleet change
   clears the remembered Vessel, and a Fleet with no remembered Vessel opens on
   its first shown placement. A tab click therefore costs one save, the
   selection itself.
@@ -1049,7 +1049,7 @@ older build still refuses any stale structure revision.
 
 The whole `Layout` lives in the Core document `voyager-layout-v2`. A build
 reads it through `voyager_contract::layout_document` and saves it through
-`app/src/layout_store.rs`. The wire stays closed: no response schema carries a
+`app/src/layout_store.rs`. The wire stays closed. No response schema carries a
 field a newer build added.
 
 **Reading.** The reader parses strictly first. A document that fails to parse is
@@ -1065,7 +1065,7 @@ replaces a field the build itself wrote.
 
 **The stamp.** A `minReader` number at the top of the document names the lowest
 reader level that may open it. This build reads level 1. A document stamped above
-the build's level is refused: the build copies the raw document to
+the build's level is refused. The build copies the raw document to
 `voyager-layout-backup`, writes nothing else and reports the level it needs. A
 stamp above 1 on a document the build can read is kept and written back. A
 `minReader` that is not a whole number (`2.0`, `"2"`, `-1`, `null`) is a

@@ -828,7 +828,7 @@ terms:
     code: [Layout]
   - term: Context
     context: placement
-    meaning: 'What the avatar acts on: the workspace, a Voyage, a Fleet, a Vessel or a Portal. Docking sets it. It stays separate from keyboard focus, visual selection and delegated assignment.'
+    meaning: 'What the avatar acts on, which is the workspace, a Voyage, a Fleet, a Vessel or a Portal. Docking sets it. It stays separate from keyboard focus, visual selection and delegated assignment.'
     code: [Context]
   - term: Overwatch
     context: placement

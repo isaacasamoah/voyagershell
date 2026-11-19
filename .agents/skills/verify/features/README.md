@@ -38,13 +38,13 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Verification environment | none | none | none | none | - | - | linux |
 <!-- features:end -->
 
-Recipes: [terminal-scrolling.md](terminal-scrolling.md),
+The recipes are [terminal-scrolling.md](terminal-scrolling.md),
 [workspace.md](workspace.md), [quit-restore.md](quit-restore.md) and
 [terminal-input.md](terminal-input.md).
 
 The table claims native coverage for six features. `terminal-scrolling`
 proves Terminal scroll. `workspace` proves Voyages, Fleets and Vessels, and
-only the actions that its recipe lists: create, switch and rename a Voyage or
+only the actions that its recipe lists. Those are create, switch and rename a Voyage or
 a Fleet, and split and rename a terminal Vessel. `terminal-input` proves
 Terminal I/O and Selection, and only the checks that its recipe lists. It
 also drives copy and paste in a terminal, but the Clipboard feature stays
