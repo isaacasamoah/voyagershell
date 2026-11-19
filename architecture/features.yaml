@@ -297,8 +297,8 @@ features:
     name: Worktrees
     summary: 'Create and switch git worktrees from a Vessel.'
     group: worktrees-voyage-close
-    owner: desktop-presentation
-    shared_with: [placement]
+    owner: application-queue
+    shared_with: [desktop-presentation, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -306,8 +306,8 @@ features:
     native_journeys: [worktrees]
     python_journeys: []
     docs: ['.agents/skills/verify/features/worktrees.md', docs/terminal.md, docs/workspace.md]
-    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
-    code: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
+    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts, app/src/families/worktree.rs, app/src/families/worktree/git.rs]
+    code: [app/src/families/worktree.rs, app/src/families/worktree/git.rs, contract/src/worktree.rs, desktop/canvas/worktrees.ts]
   - id: close-quit-restore
     name: 'Close Voyage / quit / restore'
     summary: 'Close a Voyage, quit the app and find the session restored on the next launch.'

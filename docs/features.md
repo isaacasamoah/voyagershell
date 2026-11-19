@@ -26,7 +26,7 @@ On a pull request, `npm run features:check -- --base <base>` fails when a change
 | Chat / conversation | Private assistant | conversation-provider | native | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | [.agents/skills/verify/features/chat.md](../.agents/skills/verify/features/chat.md), [docs/conversation.md](conversation.md), [docs/terminal.md](terminal.md) |
 | Voice | Voice | conversation-provider | python-only | - | conversation-voice | [docs/conversation.md](conversation.md), [docs/terminal.md](terminal.md) |
 | Layouts / Home | Workspace layout | desktop-presentation | python-only | - | layouts, workspace-ux | [docs/layouts.md](layouts.md), [docs/terminal.md](terminal.md) |
-| Worktrees | Worktrees | desktop-presentation | native | worktrees | - | [.agents/skills/verify/features/worktrees.md](../.agents/skills/verify/features/worktrees.md), [docs/terminal.md](terminal.md), [docs/workspace.md](workspace.md) |
+| Worktrees | Worktrees | application-queue | native | worktrees | - | [.agents/skills/verify/features/worktrees.md](../.agents/skills/verify/features/worktrees.md), [docs/terminal.md](terminal.md), [docs/workspace.md](workspace.md) |
 | Close Voyage / quit / restore | Start-up and quit | desktop-presentation | native | quit-restore, voyage-close | - | [docs/terminal.md](terminal.md), [docs/workspace.md](workspace.md) |
 | Window drag bar | Workspace layout | desktop-presentation | native | workspace | - | [docs/terminal.md](terminal.md) |
 | Profile theme | Script host | desktop-presentation | native | profile | - | [docs/terminal.md](terminal.md) |
