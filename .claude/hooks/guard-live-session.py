@@ -6,7 +6,7 @@ import sys
 LIVE = ("HC_SESSION", "HC_SOCKET", "HC_TERMINAL_ID")
 BODY_FILE = (
     " If this is only text for a gh or git command, such as a comment body that mentions the command, "
-    "put the text in a file and pass --body-file."
+    "put the text in a file: gh takes --body-file, git commit takes -F."
 )
 PREFIX ="env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
 LEAD = r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
@@ -81,6 +81,12 @@ def segments(command):
     index = 0
     while index < len(command):
         char = command[index]
+        if char == "#" and not quote and (index == 0 or command[index - 1] in " \t;&|("):
+            end = command.find("\n", index)
+            end = len(command) if end < 0 else end
+            current.append(command[index:end])
+            index = end
+            continue
         if char == "\\" and quote != "'" and index + 1 < len(command):
             current.append(" " if command[index + 1] == "\n" else command[index : index + 2])
             index += 2

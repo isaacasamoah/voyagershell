@@ -105,6 +105,13 @@ class Refused(unittest.TestCase):
         self.refused(f"{CLEAN} gh pr comment 1 --body $$'a\\' ; hc ls", {})
         self.refused(f"{CLEAN} gh pr comment 1 --body \\$'a\\'\nhc ls", {})
 
+    def test_comment_ending_in_backslash_does_not_join_the_next_line(self):
+        inner = "env -u HC_SESSION -u HC_SOCKET hc ls"
+        for lead in (f"{CLEAN} git status", "cargo build", "echo hi"):
+            self.refused(f"{lead} # x\\\n{inner}", TRIAL)
+            self.refused(f"{lead} # x\\\n{inner}", {})
+        self.refused(f"{CLEAN} git status # x\\\nhc ls", {})
+
     def test_prefixed_gh_git_text_is_refused_and_the_message_names_body_file(self):
         for command in (
             f"{CLEAN} gh pr comment 1 --body 'run `hc ls` first'",
@@ -113,6 +120,7 @@ class Refused(unittest.TestCase):
             reason = guard.check(command, TRIAL)
             self.assertIsNotNone(reason, command)
             self.assertIn("--body-file", reason)
+            self.assertIn("-F", reason)
         self.assertIn("--body-file", guard.check("hc ls", DEFAULT))
 
     def test_server_stop_without_own_session(self):
