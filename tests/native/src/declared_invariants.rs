@@ -308,7 +308,7 @@ fn definitions<'a>(text: &'a str, keywords: &[&str]) -> BTreeSet<&'a str> {
         .collect()
 }
 
-const TYPE_KEYWORDS: [&str; 11] = [
+const TYPE_KEYWORDS: [&str; 10] = [
     "struct",
     "enum",
     "trait",
@@ -317,7 +317,6 @@ const TYPE_KEYWORDS: [&str; 11] = [
     "fn",
     "const",
     "static",
-    "mod",
     "class",
     "interface",
 ];
