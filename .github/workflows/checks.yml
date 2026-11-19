@@ -99,6 +99,10 @@ jobs:
       - run: npm run contract:check
       - run: npm run architecture:check
       - run: npm run vocabulary:check
+      - run: npm run features:check
+      - name: Feature map change gate
+        if: github.event_name == 'pull_request'
+        run: npm run features:check -- --base HEAD^1
       - run: npm run comments:check -- --base HEAD^1
       - run: npm run prose:check -- --base HEAD^1
       - run: cargo fmt --all --check
