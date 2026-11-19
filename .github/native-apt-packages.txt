@@ -1,0 +1,6 @@
+pkg-config clang libclang-dev
+libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libx11-dev
+libx11-xcb-dev libwayland-dev libegl1-mesa-dev libgles2-mesa-dev
+libasound2-dev libvulkan-dev mesa-vulkan-drivers
+libfontconfig-dev libfreetype-dev
+bubblewrap

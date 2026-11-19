@@ -43,16 +43,30 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: ${{ env.ZIG_VERSION }}
+      - name: Record runner image version
+        run: echo "RUNNER_IMAGE_VERSION=$ImageVersion" >> "$GITHUB_ENV"
+      - name: Restore native library packages
+        id: apt-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ env.RUNNER_IMAGE_VERSION }}-${{ hashFiles('.github/native-apt-packages.txt') }}
       - name: Native build libraries
         timeout-minutes: 10
+        env:
+          APT_CACHE_HIT: ${{ steps.apt-cache.outputs.cache-hit }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pkg-config clang libclang-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libx11-dev \
-            libx11-xcb-dev libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libasound2-dev libvulkan-dev mesa-vulkan-drivers \
-            libfontconfig-dev libfreetype-dev
+          set -euo pipefail
+          archives="$HOME/apt-archives"
+          if [ "$APT_CACHE_HIT" = "true" ] && sudo dpkg -i "$archives"/*.deb; then
+            exit 0
+          fi
+          mkdir -p "$archives/partial"
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
+          xargs -a .github/native-apt-packages.txt sudo apt-get install -y --no-install-recommends \
+            -o Acquire::Retries=5 -o Acquire::http::Timeout=30 \
+            -o Dir::Cache::archives="$archives"
+          sudo chown -R "$USER" "$archives"
       - name: Install Herdr Core ${{ env.HC_VERSION }}
         run: |
           set -euo pipefail
@@ -91,6 +105,5 @@ jobs:
       - run: cargo clippy --all-targets --locked --manifest-path tests/native/Cargo.toml -- -D warnings
       - name: Sandbox tools for the native crate tests
         run: |
-          sudo apt-get install -y --no-install-recommends bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo test --locked --manifest-path tests/native/Cargo.toml
