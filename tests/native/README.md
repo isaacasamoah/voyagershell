@@ -83,6 +83,21 @@ It is guarded and checked, checked only, guarded only or a gap, and the `feature
 summary prints the counts. The `policy:` ids mirror the rules `bin/review-policy` in the
 Workshop reports, so a renamed rule there needs the same rename in `Policy`.
 
+Two counts may only fall. An unguarded invariant has an empty `guard`. An orphan is a
+guard or check that serves no invariant. Every rule in `tests/architecture/rules.yaml`,
+every lint, every formal property and every journey case must be named by some entry's
+`guard`, `formal` or `check`. The prose lint is exempt as a style rule, and `TypeOK` is
+exempt as a model's type sanity property. A case that only prepares a later case is
+declared setup in its `cases!` list, as in `CreateFleet => "create-fleet" setup`, and is
+not counted. Type, hook, policy, test, perf and manual links are not counted, because
+their targets have no closed list here or are owned by the Workshop.
+
+`tests/native/declared-invariants-ratchets.toml` records both lists, `unguarded` by
+invariant id and `orphans` by link. A new entry in either fails and names the fix. An
+entry that has left either list also fails until it is removed from the record in the
+same change, so a count that fell cannot rise again unnoticed. The ratchets are compared
+once every link resolves, and the summary prints both counts.
+
 ### Journeys
 
 `journeys!` in `src/journey.rs` is the one list of native journeys. Each row

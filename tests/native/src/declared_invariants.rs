@@ -6,9 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 pub const MODEL: &str = "tests/native/declared-invariants.toml";
+pub const RATCHETS: &str = "tests/native/declared-invariants-ratchets.toml";
 const GATES: &str = "tests/architecture/rules.yaml";
 const VOCABULARY: &str = "tests/architecture/vocabulary.yaml";
 const FORMAL: &str = "tests/formal";
+const STYLE_LINT: Lint = Lint::Prose;
+const SANITY_PROPERTY: &str = "TypeOK";
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -32,6 +35,19 @@ pub enum Lint {
     Prose,
     Clippy,
     Fmt,
+}
+
+impl Lint {
+    const ALL: [Lint; 4] = [Lint::Comments, Lint::Prose, Lint::Clippy, Lint::Fmt];
+
+    fn name(self) -> &'static str {
+        match self {
+            Lint::Comments => "comments",
+            Lint::Prose => "prose",
+            Lint::Clippy => "clippy",
+            Lint::Fmt => "fmt",
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -141,6 +157,13 @@ pub struct OutOfScope {
     pub confidence: Confidence,
 }
 
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Ratchets {
+    pub unguarded: BTreeSet<String>,
+    pub orphans: BTreeSet<String>,
+}
+
 #[derive(Debug)]
 pub struct Model {
     pub invariant: Vec<Invariant>,
@@ -155,6 +178,7 @@ pub struct Targets {
     pub contexts: BTreeSet<String>,
     pub formal: BTreeMap<String, BTreeSet<String>>,
     pub files: BTreeMap<String, String>,
+    pub cases: Vec<Check>,
 }
 
 fn nearest<'a>(word: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
@@ -281,6 +305,31 @@ impl TryFrom<String> for Check {
     }
 }
 
+impl Guard {
+    fn counted_link(&self) -> Option<String> {
+        match self {
+            Guard::Gate(id) => Some(format!("gate:{id}")),
+            Guard::Lint(lint) => Some(format!("lint:{}", lint.name())),
+            Guard::Type(_) | Guard::Hook(_) | Guard::Policy(_) => None,
+        }
+    }
+}
+
+impl Check {
+    fn counted_link(&self) -> Option<String> {
+        match self {
+            Check::Journey { journey, case } => Some(format!("journey:{}/{case}", journey.name())),
+            Check::Test(_) | Check::Perf(_) | Check::Manual(_) => None,
+        }
+    }
+}
+
+impl Formal {
+    fn link(&self) -> String {
+        format!("{}:{}", self.model, self.property)
+    }
+}
+
 impl TryFrom<String> for Formal {
     type Error = String;
 
@@ -349,6 +398,40 @@ impl Targets {
             Check::Manual(how) => how.trim().is_empty().then(|| "manual: names nobody".into()),
             Check::Journey { .. } => None,
         }
+    }
+
+    fn counted(&self) -> BTreeMap<String, &'static str> {
+        const GUARD: &str = "add it to an invariant's guard";
+        const FORMAL_FIX: &str = "add it to an invariant's formal";
+        const CHECK: &str =
+            "add it to an invariant's check, or mark the case setup in its cases! list";
+        let lints = Lint::ALL.into_iter().filter(|lint| *lint != STYLE_LINT);
+        let guards = self
+            .gates
+            .iter()
+            .cloned()
+            .map(Guard::Gate)
+            .chain(lints.map(Guard::Lint))
+            .filter_map(|guard| guard.counted_link())
+            .map(|link| (link, GUARD));
+        let formal = self.formal.iter().flat_map(|(model, properties)| {
+            properties
+                .iter()
+                .filter(|property| property.as_str() != SANITY_PROPERTY)
+                .map(|property| {
+                    let formal = Formal {
+                        model: model.clone(),
+                        property: property.clone(),
+                    };
+                    (formal.link(), FORMAL_FIX)
+                })
+        });
+        let cases = self
+            .cases
+            .iter()
+            .filter_map(Check::counted_link)
+            .map(|link| (link, CHECK));
+        guards.chain(formal).chain(cases).collect()
     }
 
     fn formal(&self, formal: &Formal) -> Option<String> {
@@ -441,7 +524,61 @@ impl Model {
             .collect()
     }
 
-    pub fn validate(&self, targets: &Targets) -> Result<()> {
+    pub fn ratchets(&self, targets: &Targets) -> Ratchets {
+        let named: BTreeSet<String> = self
+            .invariant
+            .iter()
+            .flat_map(|entry| {
+                let guards = entry.guard.iter().filter_map(Guard::counted_link);
+                let checks = entry.check.iter().filter_map(Check::counted_link);
+                guards
+                    .chain(checks)
+                    .chain(entry.formal.iter().map(Formal::link))
+            })
+            .collect();
+        Ratchets {
+            unguarded: self
+                .invariant
+                .iter()
+                .filter(|entry| entry.guard.is_empty())
+                .map(|entry| entry.id.clone())
+                .collect(),
+            orphans: targets
+                .counted()
+                .into_keys()
+                .filter(|link| !named.contains(link))
+                .collect(),
+        }
+    }
+
+    fn ratchet_problems(&self, targets: &Targets, recorded: &Ratchets) -> Vec<String> {
+        let actual = self.ratchets(targets);
+        let counted = targets.counted();
+        let risen_unguarded = actual.unguarded.difference(&recorded.unguarded).map(|id| {
+            format!("invariant {id}: guard is empty and unguarded invariants may only fall; add a guard link")
+        });
+        let fallen_unguarded = recorded.unguarded.difference(&actual.unguarded).map(|id| {
+            format!(
+                "{id} is no longer an unguarded invariant; remove it from unguarded in {RATCHETS}"
+            )
+        });
+        let risen_orphans = actual.orphans.difference(&recorded.orphans).map(|link| {
+            format!(
+                "{link} serves no invariant and orphans may only fall; {}",
+                counted[link]
+            )
+        });
+        let fallen_orphans = recorded.orphans.difference(&actual.orphans).map(|link| {
+            format!("{link} is no longer an orphan; remove it from orphans in {RATCHETS}")
+        });
+        risen_unguarded
+            .chain(fallen_unguarded)
+            .chain(risen_orphans)
+            .chain(fallen_orphans)
+            .collect()
+    }
+
+    pub fn validate(&self, targets: &Targets, recorded: &Ratchets) -> Result<()> {
         let mut problems = Vec::new();
         let mut seen = BTreeSet::new();
         let ids = self
@@ -484,6 +621,9 @@ impl Model {
                     ("revisit_when", &entry.revisit_when),
                 ],
             );
+        }
+        if problems.is_empty() {
+            problems = self.ratchet_problems(targets, recorded);
         }
         ensure!(problems.is_empty(), "{}", problems.join("\n"));
         Ok(())
@@ -575,7 +715,7 @@ impl Model {
         }
     }
 
-    pub fn counts(&self) -> String {
+    pub fn counts(&self, ratchets: &Ratchets) -> String {
         let unmeasured: Vec<&str> = self
             .envelope
             .iter()
@@ -600,7 +740,8 @@ impl Model {
         format!(
             "{} invariants ({} user, {} developer, {} structure), {} envelope entries, {} out of scope, {stated} stated\n\
              status: {} guarded and checked, {} checked only, {} guarded only, {} gap; {ownerless} with no owner\n\
-             envelope entries with no measurement ({}): {}",
+             envelope entries with no measurement ({}): {}\n\
+             ratchets, which may only fall: {} unguarded invariants, {} orphan guards and checks",
             self.invariant.len(),
             kind(Kind::User),
             kind(Kind::Developer),
@@ -612,7 +753,9 @@ impl Model {
             status(Status::GuardedOnly),
             status(Status::Gap),
             unmeasured.len(),
-            unmeasured.join(", ")
+            unmeasured.join(", "),
+            ratchets.unguarded.len(),
+            ratchets.orphans.len()
         )
     }
 }
@@ -662,7 +805,23 @@ fn formal_models(root: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
     Ok(models)
 }
 
-pub fn load(root: &Path, features: &BTreeSet<&str>) -> Result<Model> {
+fn non_setup_cases() -> Vec<Check> {
+    Journey::ALL
+        .iter()
+        .flat_map(|journey| {
+            journey
+                .cases()
+                .iter()
+                .filter(|case| !journey.setup().contains(case))
+                .map(|case| Check::Journey {
+                    journey: *journey,
+                    case: (*case).into(),
+                })
+        })
+        .collect()
+}
+
+pub fn load(root: &Path, features: &BTreeSet<&str>) -> Result<(Model, Ratchets)> {
     let model = Model::parse(&std::fs::read_to_string(root.join(MODEL))?)?;
     let files = model
         .linked_files()
@@ -678,9 +837,13 @@ pub fn load(root: &Path, features: &BTreeSet<&str>) -> Result<Model> {
         contexts: listed_ids(&std::fs::read_to_string(root.join(VOCABULARY))?, "contexts"),
         formal: formal_models(root)?,
         files,
+        cases: non_setup_cases(),
     };
-    model.validate(&targets)?;
-    Ok(model)
+    let recorded: Ratchets = toml::from_str(&std::fs::read_to_string(root.join(RATCHETS))?)
+        .map_err(|error| anyhow::anyhow!("{RATCHETS}: {error}"))?;
+    model.validate(&targets, &recorded)?;
+    let ratchets = model.ratchets(&targets);
+    Ok((model, ratchets))
 }
 
 #[cfg(test)]
@@ -749,15 +912,37 @@ confidence = "stated"
             ]
             .map(|(path, text)| (path.to_string(), text.to_string()))
             .into(),
+            cases: ["rename-fleet-enter", "create-fleet"]
+                .map(|case| Check::Journey {
+                    journey: Journey::Workspace,
+                    case: case.into(),
+                })
+                .into(),
         }
     }
 
+    fn recorded() -> Ratchets {
+        let set = |items: &[&str]| items.iter().map(|item| item.to_string()).collect();
+        Ratchets {
+            unguarded: set(&["tidy"]),
+            orphans: set(&[
+                "gate:agent-names-stay-in-adapters",
+                "lint:comments",
+                "lint:fmt",
+                "journey:workspace/create-fleet",
+            ]),
+        }
+    }
+
+    fn verdict(text: &str, targets: &Targets, recorded: &Ratchets) -> Result<(), String> {
+        let model = Model::parse(text).map_err(|error| format!("{error:#}"))?;
+        model
+            .validate(targets, recorded)
+            .map_err(|error| format!("{error:#}"))
+    }
+
     fn failure(text: &str) -> String {
-        let model = match Model::parse(text) {
-            Ok(model) => model,
-            Err(error) => return format!("{error:#}"),
-        };
-        format!("{:#}", model.validate(&targets()).unwrap_err())
+        verdict(text, &targets(), &recorded()).unwrap_err()
     }
 
     fn broken(from: &str, to: &str) -> String {
@@ -772,8 +957,10 @@ confidence = "stated"
     #[test]
     fn seed_model_is_valid() {
         let model = Model::parse(SEED).unwrap();
-        model.validate(&targets()).unwrap();
-        let counts = model.counts();
+        model.validate(&targets(), &recorded()).unwrap();
+        let ratchets = model.ratchets(&targets());
+        assert_eq!(ratchets, recorded());
+        let counts = model.counts(&ratchets);
         assert!(
             counts.contains("1 user, 1 developer, 0 structure"),
             "{counts}"
@@ -788,6 +975,108 @@ confidence = "stated"
             counts.contains("envelope entries with no measurement (1): latency"),
             "{counts}"
         );
+        assert!(
+            counts.contains(
+                "ratchets, which may only fall: 1 unguarded invariants, 4 orphan guards and checks"
+            ),
+            "{counts}"
+        );
+    }
+
+    const FRESH: &str = r#"
+[[invariant]]
+id = "fresh"
+says = "A new promise."
+kind = "user"
+owner = "core-adapter"
+source = "a design"
+features = []
+guard = []
+check = ["manual:Isaac by eye"]
+type_gap = "Not state-shaped: a seed."
+confidence = "stated"
+"#;
+
+    #[test]
+    fn a_new_unguarded_invariant_fails_naming_it_and_the_fix() {
+        assert_eq!(
+            failure(&format!("{SEED}{FRESH}")),
+            "invariant fresh: guard is empty and unguarded invariants may only fall; add a guard link"
+        );
+    }
+
+    #[test]
+    fn a_new_orphan_fails_naming_it_and_the_fix() {
+        let mut gate = targets();
+        gate.gates.insert("no-new-cycles".into());
+        assert_eq!(
+            verdict(SEED, &gate, &recorded()).unwrap_err(),
+            "gate:no-new-cycles serves no invariant and orphans may only fall; add it to an invariant's guard"
+        );
+        let mut case = targets();
+        case.cases.push(Check::Journey {
+            journey: Journey::Workspace,
+            case: "switch-fleet".into(),
+        });
+        assert_eq!(
+            verdict(SEED, &case, &recorded()).unwrap_err(),
+            "journey:workspace/switch-fleet serves no invariant and orphans may only fall; add it to an invariant's check, or mark the case setup in its cases! list"
+        );
+        let mut property = targets();
+        property
+            .formal
+            .get_mut("core-viewers")
+            .unwrap()
+            .insert("NoLostOutput".into());
+        assert_eq!(
+            verdict(SEED, &property, &recorded()).unwrap_err(),
+            "core-viewers:NoLostOutput serves no invariant and orphans may only fall; add it to an invariant's formal"
+        );
+    }
+
+    #[test]
+    fn style_lint_and_type_sanity_are_not_orphans() {
+        let model = Model::parse(SEED).unwrap();
+        let orphans = model.ratchets(&targets()).orphans;
+        assert!(!orphans.contains("lint:prose"), "{orphans:?}");
+        assert!(!orphans.contains("core-viewers:TypeOK"), "{orphans:?}");
+    }
+
+    #[test]
+    fn a_lower_unguarded_count_passes_once_its_record_is_lowered() {
+        let guarded = SEED.replacen("guard = []", "guard = [\"hook:.claude/hooks/guard.py\"]", 1);
+        assert_eq!(
+            verdict(&guarded, &targets(), &recorded()).unwrap_err(),
+            format!(
+                "tidy is no longer an unguarded invariant; remove it from unguarded in {RATCHETS}"
+            )
+        );
+        let mut lowered = recorded();
+        lowered.unguarded.remove("tidy");
+        assert_eq!(verdict(&guarded, &targets(), &lowered), Ok(()));
+    }
+
+    #[test]
+    fn a_lower_orphan_count_passes_once_its_record_is_lowered() {
+        let linked = SEED.replacen(
+            "\"journey:workspace/rename-fleet-enter\"",
+            "\"journey:workspace/rename-fleet-enter\", \"journey:workspace/create-fleet\"",
+            1,
+        );
+        assert_eq!(
+            verdict(&linked, &targets(), &recorded()).unwrap_err(),
+            format!(
+                "journey:workspace/create-fleet is no longer an orphan; remove it from orphans in {RATCHETS}"
+            )
+        );
+        let mut lowered = recorded();
+        lowered.orphans.remove("journey:workspace/create-fleet");
+        assert_eq!(verdict(&linked, &targets(), &lowered), Ok(()));
+        let mut setup = targets();
+        setup.cases.retain(|case| {
+            case.counted_link().as_deref() != Some("journey:workspace/create-fleet")
+        });
+        assert_eq!(verdict(SEED, &setup, &lowered), Ok(()));
     }
 
     #[test]

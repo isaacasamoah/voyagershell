@@ -245,13 +245,13 @@ pub fn run(args: &[String]) -> Result<i32> {
         .collect();
     registry.validate(&files, &Journey::names(), &python_journeys(root)?)?;
     let ids = registry.feature.iter().map(|f| f.id.as_str()).collect();
-    let model = declared_invariants::load(root, &ids)?;
+    let (model, ratchets) = declared_invariants::load(root, &ids)?;
     let readme_path = root.join(TABLE_FILE);
     match args {
         [] => {
             print!("{}", registry.table());
             eprintln!("{}", registry.counts());
-            eprintln!("{}", model.counts());
+            eprintln!("{}", model.counts(&ratchets));
         }
         [flag] if flag == "--check" => {
             let readme = std::fs::read_to_string(&readme_path)?;
