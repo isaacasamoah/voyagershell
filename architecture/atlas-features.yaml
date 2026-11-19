@@ -1,0 +1,61 @@
+groups:
+  - id: startup-quit
+    name: Start-up and quit
+    plain: 'Closing a Voyage, quitting so that views detach while programs keep running, and restoring the saved workspace.'
+    features: [close-quit-restore]
+  - id: workspace-layout
+    name: Workspace layout
+    plain: 'Voyages, Fleets, Vessels and Portals: splitting, moving, resizing, renaming and maximizing, and the saved layout document.'
+    features: [voyages, fleets, fleet-arrangement, vessels, portals, split-resize-maximize, layouts-home, window-drag-bar, layout-compat]
+  - id: terminals
+    name: Terminals
+    plain: 'Terminal Vessels: drawing the screen, keyboard and mouse input, selection and scrolling.'
+    features: [terminal-io, terminal-scrolling, selection]
+  - id: notes
+    name: Notes
+    plain: 'Notes Vessels: editing, drafts and saving.'
+    features: [notes]
+  - id: content-model
+    name: Content model
+    plain: 'What content is in general: Vessel types, packages, adoption of existing Core programs and seeding the profile.'
+    features: [profile-updates, adopted-vessels]
+  - id: assistant
+    name: Private assistant
+    plain: 'The avatar conversation, the Voyager tools it may call and the conversation client.'
+    features: [chat]
+  - id: voice
+    name: Voice
+    plain: 'Speech input and output for the assistant.'
+    features: [voice]
+  - id: avatar
+    name: Avatar
+    plain: 'The avatar docking, dragging, look, animation packs and motion.'
+    features: [avatar]
+  - id: agents
+    name: Terminal agents
+    plain: 'Launching agents such as Codex or Claude Code in a Vessel and seeing their processes.'
+    features: [agent-vessels]
+  - id: worktrees-voyage-close
+    name: Worktrees
+    plain: 'Git worktrees for agent work.'
+    features: [worktrees]
+  - id: script-host
+    name: Script host
+    plain: 'Running TypeScript in the desktop: the profile theme and live edits of installed scripts.'
+    features: [profile-theme, scripts-live-edit]
+  - id: core-adapter
+    name: Core adapter
+    plain: 'Talking to Herdr Core: matching replies and reporting what Core says.'
+    features: [core-reports]
+  - id: shared-contract
+    name: Shared contract
+    plain: 'Requests and results shared by views, Vessels and agents, and how the front door reports each outcome.'
+    features: [front-door, outcomes]
+  - id: platform
+    name: Platform
+    plain: 'Operating-system pieces such as the clipboard.'
+    features: [clipboard]
+  - id: diagnostics
+    name: Diagnostics
+    plain: 'The verification environment that runs journeys and reports a verdict.'
+    features: [verification-environment]

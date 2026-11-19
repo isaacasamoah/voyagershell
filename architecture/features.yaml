@@ -1,0 +1,530 @@
+features:
+  - id: voyages
+    name: Voyages
+    summary: 'Create a Voyage from the canvas, switch between Voyages and rename one.'
+    group: workspace-layout
+    owner: desktop-presentation
+    shared_with: [placement, content]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [workspace]
+    python_journeys: [demo-feedback]
+    docs: [docs/content.md, docs/terminal.md, docs/workspace.md]
+    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', desktop/canvas/voyage-colours.ts, app/src/workspace.rs, app/src/content/rename.rs, app/src/scope.rs]
+    code:
+      - app/src/content/rename.rs
+      - app/src/scope.rs
+      - app/src/workspace.rs
+      - desktop/canvas/main.js
+      - desktop/canvas/main.ts
+      - desktop/canvas/navigation-view.js
+      - desktop/canvas/navigation-view.ts
+      - desktop/canvas/voyage-colours.ts
+  - id: fleets
+    name: Fleets
+    summary: 'Create a Fleet from the Fleet strip, switch between Fleets and rename one.'
+    group: workspace-layout
+    owner: desktop-presentation
+    shared_with: [placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [workspace]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs]
+    code: [app/src/workspace.rs, desktop/canvas/creation.js, desktop/canvas/creation.ts, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/navigation-view.js, desktop/canvas/navigation-view.ts]
+  - id: fleet-arrangement
+    name: 'Fleet arrangement'
+    summary: 'Drag the Vessels of a Fleet into a new arrangement and keep it.'
+    group: workspace-layout
+    owner: desktop-presentation
+    shared_with: [placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: python-only, debug: covered}
+    platforms: [linux]
+    native_journeys: [arrangement]
+    python_journeys: [layouts, arrangement]
+    docs: [docs/arrangement.md, docs/terminal.md, docs/workspace.md]
+    sources: [app/src/panels.rs, desktop/src/arrangement.rs, docs/arrangement.md, 'desktop/canvas/panel-view.*']
+    code: [app/src/panels.rs, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/arrangement.rs, docs/arrangement.md]
+  - id: vessels
+    name: Vessels
+    summary: 'Split a terminal Vessel beside another through the chooser, see its shell run and rename it.'
+    group: workspace-layout
+    owner: desktop-presentation
+    shared_with: [application-queue, placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [workspace]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: ['desktop/canvas/main.*', 'desktop/canvas/panel-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs, app/src/launch.rs, app/src/families/terminal/lifecycle.rs]
+    code:
+      - app/src/families/terminal/lifecycle.rs
+      - app/src/launch.rs
+      - app/src/workspace.rs
+      - desktop/canvas/creation.js
+      - desktop/canvas/creation.ts
+      - desktop/canvas/main.js
+      - desktop/canvas/main.ts
+      - desktop/canvas/panel-view.js
+      - desktop/canvas/panel-view.ts
+  - id: agent-vessels
+    name: 'Agent Vessels'
+    summary: 'Launch an agent Vessel and see it and its processes in the arrangement.'
+    group: agents
+    owner: desktop-presentation
+    shared_with: [application-queue]
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [arrangement, terminal-agent]
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [app/src/launch.rs, desktop/canvas/agents.ts, desktop/canvas/processes.ts]
+    code: [app/src/launch.rs, desktop/canvas/agents.ts, desktop/canvas/processes.ts]
+  - id: portals
+    name: Portals
+    summary: 'Open a content Portal beside a Vessel, use it and close it.'
+    group: workspace-layout
+    owner: content
+    shared_with: [desktop-presentation, placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: python-only, debug: covered}
+    platforms: [linux]
+    native_journeys: [portals]
+    python_journeys: [portal-terminal]
+    docs: ['.agents/skills/verify/features/portals.md', docs/content.md, docs/terminal.md, docs/workspace.md]
+    sources: [app/src/content.rs, 'app/src/content/*.rs', app/src/workspace.rs, app/src/panels.rs, desktop/canvas/panels.ts, desktop/canvas/panel-view.ts]
+    code:
+      - app/src/content.rs
+      - app/src/content/description.rs
+      - app/src/content/install.rs
+      - app/src/content/install/diff.rs
+      - app/src/content/install/tests.rs
+      - app/src/content/markdown.rs
+      - app/src/content/package.rs
+      - app/src/content/rename.rs
+      - app/src/content/view.rs
+      - app/src/panels.rs
+      - app/src/workspace.rs
+      - desktop/canvas/panel-view.ts
+      - desktop/canvas/panels.ts
+  - id: split-resize-maximize
+    name: 'Split / resize / maximize'
+    summary: 'Split a pane, drag the divider to resize it and maximize one pane.'
+    group: workspace-layout
+    owner: desktop-presentation
+    shared_with: [placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [arrangement]
+    python_journeys: [workspace-ux]
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [desktop/src/split.rs, 'desktop/canvas/panel-view.*', 'desktop/canvas/main.*', app/src/panels.rs]
+    code: [app/src/panels.rs, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/split.rs]
+  - id: terminal-io
+    name: 'Terminal I/O'
+    summary: 'Type into the terminal, run commands and read their output.'
+    group: terminals
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: covered, performance: none, visual: covered, debug: covered}
+    platforms: [linux]
+    native_journeys: [terminal-input]
+    python_journeys: [terminal-grid, portal-terminal]
+    docs: [docs/terminal.md]
+    sources:
+      - desktop/src/terminal.rs
+      - desktop/src/terminal_input.rs
+      - desktop/src/terminal_screen.rs
+      - desktop/src/terminal_view.rs
+      - desktop/src/terminal_rows.rs
+      - desktop/src/terminal_font.rs
+      - desktop/src/terminal_background.rs
+    code:
+      - desktop/src/terminal.rs
+      - desktop/src/terminal_background.rs
+      - desktop/src/terminal_font.rs
+      - desktop/src/terminal_input.rs
+      - desktop/src/terminal_rows.rs
+      - desktop/src/terminal_screen.rs
+      - desktop/src/terminal_view.rs
+  - id: terminal-scrolling
+    name: 'Terminal scroll'
+    summary: 'Wheel through shell history and full-screen programs, then reattach the viewer.'
+    group: terminals
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: covered, performance: none, visual: covered, debug: covered}
+    platforms: [linux]
+    native_journeys: [terminal-scrolling]
+    python_journeys: [terminal-scrolling]
+    docs: ['.agents/skills/verify/features/terminal-scrolling.md', docs/terminal.md]
+    sources: [desktop/src/terminal_scroll.rs, desktop/src/terminal.rs, desktop/src/terminal_screen.rs, desktop/src/terminal_view.rs]
+    code: [desktop/src/terminal.rs, desktop/src/terminal_screen.rs, desktop/src/terminal_scroll.rs, desktop/src/terminal_view.rs]
+  - id: selection
+    name: Selection
+    summary: 'Select terminal text with the pointer.'
+    group: terminals
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: covered, performance: none, visual: covered, debug: covered}
+    platforms: [linux]
+    native_journeys: [terminal-input]
+    python_journeys: []
+    docs: [docs/terminal.md]
+    sources: [desktop/src/terminal_screen.rs, desktop/src/terminal_input.rs]
+    code: [desktop/src/terminal_input.rs, desktop/src/terminal_screen.rs]
+  - id: clipboard
+    name: Clipboard
+    summary: 'Copy text out of and paste text into a terminal, canvas or note.'
+    group: platform
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: python-only, performance: none, visual: none, debug: python-only}
+    platforms: [linux]
+    native_journeys: [terminal-input]
+    python_journeys: [notes-lifetime]
+    docs: [docs/terminal.md]
+    sources: [desktop/src/text.rs, desktop/src/terminal_input.rs]
+    code: [desktop/src/terminal_input.rs, desktop/src/text.rs]
+  - id: notes
+    name: Notes
+    summary: 'Open a note, type into it and find it again after a restart.'
+    group: notes
+    owner: desktop-presentation
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [notes, notes-lifetime]
+    docs: [docs/terminal.md]
+    sources: [desktop/src/notes.rs, 'desktop/src/notes_*.rs']
+    code: [desktop/src/notes.rs, desktop/src/notes_draft.rs, desktop/src/notes_input.rs, desktop/src/notes_scope.rs, desktop/src/notes_session.rs]
+  - id: avatar
+    name: 'Avatar docking / drag'
+    summary: 'Drag the avatar around the window and dock it to a Vessel.'
+    group: avatar
+    owner: desktop-presentation
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [avatar, portal-avatar]
+    docs: [docs/terminal.md]
+    sources: [desktop/src/avatar.rs, 'desktop/src/avatar/*.rs', desktop/src/avatar_motion.rs, desktop/src/avatar_pack.rs, 'desktop/src/avatar_pack/*.rs', contract/src/avatar_animation.rs]
+    code:
+      - contract/src/avatar_animation.rs
+      - desktop/src/avatar.rs
+      - desktop/src/avatar/paint.rs
+      - desktop/src/avatar/view.rs
+      - desktop/src/avatar_motion.rs
+      - desktop/src/avatar_pack.rs
+      - desktop/src/avatar_pack/defaults.rs
+  - id: chat
+    name: 'Chat / conversation'
+    summary: 'Talk to the assistant in the conversation panel and read, scroll and stop its replies.'
+    group: assistant
+    owner: conversation-provider
+    shared_with: [desktop-presentation]
+    proof: native
+    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: [chat]
+    python_journeys: [conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content]
+    docs: ['.agents/skills/verify/features/chat.md', docs/conversation.md, docs/terminal.md]
+    sources: [desktop/src/conversation.rs, app/src/conversation.rs, 'app/src/conversation_*.rs', 'app/src/codex*.rs', 'app/src/provider*.rs', desktop/canvas/chat.ts]
+    code:
+      - app/src/codex.rs
+      - app/src/codex_protocol.rs
+      - app/src/conversation.rs
+      - app/src/conversation_audio.rs
+      - app/src/conversation_client.rs
+      - app/src/conversation_provider_tests.rs
+      - app/src/provider.rs
+      - app/src/provider_settings.rs
+      - desktop/canvas/chat.ts
+      - desktop/src/conversation.rs
+  - id: voice
+    name: Voice
+    summary: 'Speak to the assistant and hear it answer.'
+    group: voice
+    owner: conversation-provider
+    shared_with: [desktop-presentation]
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: none, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [conversation-voice]
+    docs: [docs/conversation.md, docs/terminal.md]
+    sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs']
+    code: [app/src/voice.rs, app/src/voice_host.rs, app/src/voice_session.rs, app/src/voice_transcript.rs, app/src/voice_wire.rs, desktop/src/speech.rs]
+  - id: layouts-home
+    name: 'Layouts / Home'
+    summary: 'Pick a layout and return to the Home view.'
+    group: workspace-layout
+    owner: desktop-presentation
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [layouts, workspace-ux]
+    docs: [docs/layouts.md, docs/terminal.md]
+    sources: [desktop/canvas/navigation-view.ts, desktop/canvas/menu.ts, docs/layouts.md]
+    code: [desktop/canvas/menu.ts, desktop/canvas/navigation-view.ts, docs/layouts.md]
+  - id: worktrees
+    name: Worktrees
+    summary: 'Create and switch git worktrees from a Vessel.'
+    group: worktrees-voyage-close
+    owner: desktop-presentation
+    shared_with: [placement]
+    proof: python-only
+    state: {behavior: python-only, performance: none, visual: none, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [demo-feedback]
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
+    code: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
+  - id: close-quit-restore
+    name: 'Close Voyage / quit / restore'
+    summary: 'Close a Voyage, quit the app and find the session restored on the next launch.'
+    group: startup-quit
+    owner: desktop-presentation
+    shared_with: [application-queue, placement, core-adapter]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [quit-restore, voyage-close]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources:
+      - desktop/src/quit.rs
+      - app/src/families/terminal/lifecycle.rs
+      - app/src/voyage_close.rs
+      - contract/src/voyage_close.rs
+      - desktop/canvas/voyage-close.ts
+      - desktop/canvas/stop-session.ts
+      - app/src/client.rs
+      - app/src/core.rs
+      - desktop/src/lib.rs
+    code:
+      - app/src/client.rs
+      - app/src/core.rs
+      - app/src/families/terminal/lifecycle.rs
+      - app/src/voyage_close.rs
+      - contract/src/voyage_close.rs
+      - desktop/canvas/stop-session.ts
+      - desktop/canvas/voyage-close.ts
+      - desktop/src/lib.rs
+      - desktop/src/quit.rs
+  - id: window-drag-bar
+    name: 'Window drag bar'
+    summary: 'Drag the empty top bar or the sidebar''s top row to move the window, double-click the bar to maximise it, and drag a Fleet tab to reorder it without moving the window.'
+    group: workspace-layout
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [workspace]
+    python_journeys: []
+    docs: [docs/terminal.md]
+    sources: ['desktop/canvas/navigation-view.*', desktop/src/window_frame.rs, desktop/patches/gpui-shell-window-drag.patch]
+    code: [desktop/canvas/navigation-view.js, desktop/canvas/navigation-view.ts, desktop/patches/gpui-shell-window-drag.patch, desktop/src/window_frame.rs]
+  - id: profile-theme
+    name: 'Profile theme'
+    summary: 'Edit the theme file in the profile and see the window''s colours change without a relaunch.'
+    group: script-host
+    owner: desktop-presentation
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [profile]
+    python_journeys: []
+    docs: [docs/terminal.md]
+    sources: [desktop/themes/voyager.json, desktop/src/lib.rs, desktop/src/host.rs]
+    code: [desktop/src/host.rs, desktop/src/lib.rs, desktop/themes/voyager.json]
+  - id: profile-updates
+    name: 'Profile updates'
+    summary: 'Start a new build on an old profile and see untouched first-party files update, edited ones stay and an update notice with a diff.'
+    group: content-model
+    owner: content
+    shared_with: [desktop-presentation]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [profile-updates]
+    python_journeys: []
+    docs: [docs/content.md, docs/terminal.md]
+    sources: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/shipped.rs, desktop/src/lib.rs, desktop/src/host.rs]
+    code: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/host.rs, desktop/src/lib.rs, desktop/src/shipped.rs]
+  - id: scripts-live-edit
+    name: 'Scripts live edit'
+    summary: 'Edit a canvas script and see the change appear live.'
+    group: script-host
+    owner: desktop-presentation
+    proof: python-only
+    state: {behavior: python-only, performance: python-only, visual: python-only, debug: python-only}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: [canvas-stack]
+    docs: [docs/terminal.md]
+    sources: [desktop/canvas/main.ts, desktop/src/script_types.rs, desktop/script-types.json]
+    code: [desktop/canvas/main.ts, desktop/script-types.json, desktop/src/script_types.rs]
+  - id: layout-compat
+    name: 'Stored layout across builds'
+    summary: 'Open a layout a newer build wrote and keep what this build does not know, refuse a layout that needs a newer build without changing it, and back up an unreadable layout before starting fresh.'
+    group: workspace-layout
+    owner: application-queue
+    shared_with: [placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [layout-compat, layout-refused, layout-corrupt]
+    python_journeys: []
+    docs: [docs/workspace.md]
+    sources: [contract/src/layout_document.rs, app/src/layout_store.rs]
+    code: [app/src/layout_store.rs, contract/src/layout_document.rs]
+  - id: front-door
+    name: 'Front door'
+    summary: 'Ask for something while Core is slow to confirm a save, and get a read answered at once while every change keeps its turn.'
+    group: shared-contract
+    owner: application-queue
+    shared_with: [core-adapter]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [slow-save]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [app/src/front_door.rs, app/src/client.rs, app/src/client_core.rs]
+    code: [app/src/client.rs, app/src/client_core.rs, app/src/front_door.rs]
+  - id: outcomes
+    name: 'Refused and uncertain results'
+    summary: 'Ask for something the app declines and read why, or ask while Core gives no answer and see that the result is uncertain and is not sent again.'
+    group: shared-contract
+    owner: desktop-presentation
+    shared_with: [application-queue]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [outcomes]
+    python_journeys: []
+    docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
+    sources: [app/src/client_reply.rs, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts, contract/generated/workspace.ts]
+    code: [app/src/client_reply.rs, contract/generated/workspace.ts, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts]
+  - id: core-reports
+    name: 'Core reports and slow reads'
+    summary: 'Start a program in a terminal and see the Agents list name it at once, let a shell exit and see its Vessel close while Core is slow to list terminals, and get a read answered while the Agents list waits for Core.'
+    group: core-adapter
+    owner: application-queue
+    shared_with: [core-adapter, desktop-presentation]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [core-events, slow-list]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, 'desktop/canvas/agents.*']
+    code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
+  - id: adopted-vessels
+    name: 'Labelled programs as Vessels'
+    summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook.'
+    group: content-model
+    owner: application-queue
+    shared_with: [placement, core-adapter]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    native_journeys: [adopt-by-label]
+    python_journeys: []
+    docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
+    sources:
+      - contract/src/place.rs
+      - contract/src/socket.rs
+      - app/src/activity.rs
+      - app/src/client_core.rs
+      - app/src/adoption.rs
+      - app/src/vessel_socket.rs
+      - app/src/focus_hook.rs
+      - app/src/bin/voyager.rs
+      - app/src/workspace.rs
+      - docs/voyager-command.md
+    code:
+      - app/src/activity.rs
+      - app/src/adoption.rs
+      - app/src/bin/voyager.rs
+      - app/src/client_core.rs
+      - app/src/focus_hook.rs
+      - app/src/vessel_socket.rs
+      - app/src/workspace.rs
+      - contract/src/place.rs
+      - contract/src/socket.rs
+      - docs/voyager-command.md
+  - id: verification-environment
+    name: 'Verification environment'
+    summary: 'Run the verifier''s own unit tests and the journey battery and get a verdict that leaves nothing behind.'
+    group: diagnostics
+    owner: verification
+    proof: unproved
+    state: {behavior: none, performance: none, visual: none, debug: none}
+    platforms: [linux]
+    native_journeys: []
+    python_journeys: []
+    docs: [tests/native/README.md]
+    sources: ['tests/native/src/**']
+    code:
+      - tests/native/src/agent.rs
+      - tests/native/src/battery.rs
+      - tests/native/src/core_relay.rs
+      - tests/native/src/diagnosis.rs
+      - tests/native/src/experience.rs
+      - tests/native/src/features.rs
+      - tests/native/src/frames.rs
+      - tests/native/src/inspection.rs
+      - tests/native/src/journey.rs
+      - tests/native/src/journey/adopt_by_label.rs
+      - tests/native/src/journey/arrangement.rs
+      - tests/native/src/journey/chat.rs
+      - tests/native/src/journey/core_events.rs
+      - tests/native/src/journey/input.rs
+      - tests/native/src/journey/layout.rs
+      - tests/native/src/journey/layout_compat.rs
+      - tests/native/src/journey/layout_corrupt.rs
+      - tests/native/src/journey/layout_refused.rs
+      - tests/native/src/journey/outcomes.rs
+      - tests/native/src/journey/portals.rs
+      - tests/native/src/journey/profile.rs
+      - tests/native/src/journey/profile_updates.rs
+      - tests/native/src/journey/quit_restore.rs
+      - tests/native/src/journey/scrolling.rs
+      - tests/native/src/journey/slow_list.rs
+      - tests/native/src/journey/slow_save.rs
+      - tests/native/src/journey/voyage_close.rs
+      - tests/native/src/journey/workspace.rs
+      - tests/native/src/journey/workspace/avatar.rs
+      - tests/native/src/journey/workspace/model.rs
+      - tests/native/src/journey/workspace/plan.rs
+      - tests/native/src/lifecycle.rs
+      - tests/native/src/main.rs
+      - tests/native/src/manifest.rs
+      - tests/native/src/native.rs
+      - tests/native/src/native/avatar.rs
+      - tests/native/src/native/input.rs
+      - tests/native/src/native/terminal.rs
+      - tests/native/src/probe.rs
+      - tests/native/src/profile.rs
+      - tests/native/src/proof.rs
+      - tests/native/src/provider.rs
+      - tests/native/src/sandbox.rs
+      - tests/native/src/scratch.rs
+      - tests/native/src/system.rs
+      - tests/native/src/x11.rs
+      - tests/native/src/x11/clipboard.rs
+      - tests/native/src/x11/compositor.rs
+      - tests/native/src/x11/requests.rs
