@@ -65,7 +65,7 @@ check in `cargo test`. Each `[[invariant]]` has these fields.
 
 | Field | Takes |
 | --- | --- |
-| `kind` | `user`, `developer`, `structure` or `process` |
+| `kind` | `user`, `developer` or `structure` |
 | `owner` | A context id from `tests/architecture/vocabulary.yaml` |
 | `guard` | `type:<path>#<item>`, `gate:<rules.yaml id>`, `lint:<comments, prose, clippy or fmt>`, `hook:<path>` or `policy:<review-policy rule>` |
 | `check` | `journey:<journey>/<case>`, `test:<path>#<fn>`, `perf:<envelope id>` or `manual:<who and how>` |
