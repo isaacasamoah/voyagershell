@@ -61,6 +61,7 @@ Owns files:
 - `app/src/observation.rs`
 - `app/src/lib.rs`
 - `app/src/families/terminal/lifecycle.rs`
+- `app/src/families/voyage_close.rs`
 - `app/src/families/worktree.rs`
 - `app/src/families/worktree/git.rs`
 - `app/src/tests.rs`
@@ -92,7 +93,6 @@ Owns files:
 - `app/src/context.rs`
 - `app/src/panels.rs`
 - `app/src/canvas.rs`
-- `app/src/voyage_close.rs`
 - `contract/src/lib.rs`
 - `contract/src/place.rs`
 - `contract/src/layout_document.rs`

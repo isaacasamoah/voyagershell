@@ -1,5 +1,8 @@
 use super::{CallError, Client};
-use voyager_contract::{Action, Request, Response, Unanswered, VesselId};
+use crate::families::voyage_close::Calls;
+use std::sync::Arc;
+use voyager_contract::administrator::{ProcessInput, ProcessRequest, ProcessResponse};
+use voyager_contract::{Action, Context, Request, Response, Unanswered, VesselId};
 
 impl Client {
     pub fn inspect(&self) -> Result<Response, Unanswered> {
@@ -39,12 +42,32 @@ impl Client {
     }
 }
 
+impl Calls for Client {
+    fn inspected(&self) -> Result<Response, Unanswered> {
+        self.inspect()
+    }
+
+    fn stopped(
+        &self,
+        scope: Context,
+        input: ProcessInput,
+    ) -> Result<Arc<ProcessResponse>, CallError> {
+        self.process(
+            scope,
+            ProcessRequest {
+                request_id: self.request_id(),
+                input,
+            },
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Message, PendingCall};
     use super::*;
     use crate::core::Error;
-    use crate::voyage_close::{Confirmed, execute};
+    use crate::families::voyage_close::{Confirmed, execute};
     use serde_json::json;
     use std::sync::{Arc, atomic::AtomicU64};
     use std::thread;

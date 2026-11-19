@@ -50,6 +50,12 @@ const VIEWER_LIMIT: usize = 64;
 pub const MAX_INPUT_BYTES: usize = 65536;
 
 #[derive(Clone, Debug)]
+pub enum CallError {
+    Rejected(String),
+    Unconfirmed(String),
+}
+
+#[derive(Clone, Debug)]
 pub enum Error {
     Rejected { kind: String, message: String },
     Uncertain(String),

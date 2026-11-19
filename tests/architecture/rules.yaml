@@ -12,7 +12,7 @@ rules:
     to: ['gpui*', voyager-app, voyager-desktop]
   - id: voyage-close-not-on-client
     check: forbid_code
-    from: ['rs:voyager_app::voyage_close*']
+    from: ['rs:voyager_app::families::voyage_close*']
     to: ['rs:voyager_app::client*']
     kinds: [uses]
   - id: families-stay-apart

@@ -83,10 +83,10 @@ impl Host {
             let Ok(requests) = requests else { return; };
             while let Ok(request) = requests.recv().await {
                 match request {
-                    request @ (voyager_app::voyage_close::SaveRequest::Prepare { .. } | voyager_app::voyage_close::SaveRequest::PrepareRename { .. }) => {
+                    request @ (voyager_app::client::SaveRequest::Prepare { .. } | voyager_app::client::SaveRequest::PrepareRename { .. }) => {
                         let (ticket, vessels, reply, rename_reply, files) = match request {
-                            voyager_app::voyage_close::SaveRequest::Prepare { ticket, vessels, reply } => (ticket, vessels, Some(reply), None, Vec::new()),
-                            voyager_app::voyage_close::SaveRequest::PrepareRename { ticket, vessels, files, reply } => (ticket, vessels, None, Some(reply), files),
+                            voyager_app::client::SaveRequest::Prepare { ticket, vessels, reply } => (ticket, vessels, Some(reply), None, Vec::new()),
+                            voyager_app::client::SaveRequest::PrepareRename { ticket, vessels, files, reply } => (ticket, vessels, None, Some(reply), files),
                             _ => unreachable!(),
                         };
                         let pending = handle.update(cx, |_, _, cx| {
@@ -132,7 +132,7 @@ impl Host {
                         if let Some(reply) = reply { let _ = reply.send(result.map(|_| ())).await; }
                         else if let Some(reply) = rename_reply { let _ = reply.send(result).await; }
                     }
-                    voyager_app::voyage_close::SaveRequest::Release { ticket, vessels } => {
+                    voyager_app::client::SaveRequest::Release { ticket, vessels } => {
                         let _ = handle.update(cx, |_, _, cx| {
                             for id in &vessels {
                                 let view = host.views.borrow().get(&id.0).cloned();
@@ -143,7 +143,7 @@ impl Host {
                             }
                         });
                     }
-                    voyager_app::voyage_close::SaveRequest::ReleaseRename { ticket, vessels, rebind } => {
+                    voyager_app::client::SaveRequest::ReleaseRename { ticket, vessels, rebind } => {
                         let _ = handle.update(cx, |_, window, cx| {
                             for id in &vessels {
                                 let view = host.views.borrow().get(&id.0).cloned();

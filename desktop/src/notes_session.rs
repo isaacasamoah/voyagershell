@@ -12,11 +12,11 @@ use crate::notes_draft::{Draft, Field};
 pub enum Intent {
     Native,
     Script(ViewBinding),
-    Close(voyager_app::voyage_close::SaveTicket),
+    Close(voyager_app::client::SaveTicket),
 }
 
 struct CloseLease {
-    ticket: Option<voyager_app::voyage_close::SaveTicket>,
+    ticket: Option<voyager_app::client::SaveTicket>,
     readonly: [bool; 2],
     waiters: Vec<async_channel::Sender<Result<(), voyager_app::client::CallError>>>,
 }
@@ -256,7 +256,7 @@ impl Session {
 
     pub fn rebind_file(
         &mut self,
-        ticket: &voyager_app::voyage_close::SaveTicket,
+        ticket: &voyager_app::client::SaveTicket,
         file: &voyager_contract::content::NotesFile,
         version: u64,
         snapshot: &voyager_contract::content::Snapshot,
@@ -485,7 +485,7 @@ impl Session {
 
     pub fn flush_for_close(
         &mut self,
-        ticket: voyager_app::voyage_close::SaveTicket,
+        ticket: voyager_app::client::SaveTicket,
         cx: &mut Context<Self>,
     ) -> async_channel::Receiver<Result<(), voyager_app::client::CallError>> {
         self.flush(Some(ticket), cx)
@@ -493,7 +493,7 @@ impl Session {
 
     fn flush(
         &mut self,
-        ticket: Option<voyager_app::voyage_close::SaveTicket>,
+        ticket: Option<voyager_app::client::SaveTicket>,
         cx: &mut Context<Self>,
     ) -> async_channel::Receiver<Result<(), voyager_app::client::CallError>> {
         use voyager_app::client::CallError;
@@ -558,7 +558,7 @@ impl Session {
 
     pub fn release_close(
         &mut self,
-        ticket: &voyager_app::voyage_close::SaveTicket,
+        ticket: &voyager_app::client::SaveTicket,
         cx: &mut Context<Self>,
     ) {
         self.release_flush(Some(ticket), cx);
@@ -566,7 +566,7 @@ impl Session {
 
     fn release_flush(
         &mut self,
-        ticket: Option<&voyager_app::voyage_close::SaveTicket>,
+        ticket: Option<&voyager_app::client::SaveTicket>,
         cx: &mut Context<Self>,
     ) {
         if self

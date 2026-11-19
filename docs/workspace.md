@@ -798,6 +798,8 @@ later refusal ends the close as uncertain and says how many programs had
 stopped, because a refusal means that nothing changed. The application saves closed state only after successful acknowledgements.
 Uncertain storage marks the projection non-fresh until inspection.
 
+The Voyage close family in `app/src/families/voyage_close.rs` holds the close plan, its identity check and the stop sequence. It reaches the workspace only through the `Calls` trait that `app/src/client_reply.rs` implements for the client, takes the Notes type id and the worktree change count from the client as arguments, and owns the Notes save messages that `client` re-exports to the desktop. It never names `client`. `app/src/client.rs` keeps the queue, the close plan's projection and the final save of the closed Voyage.
+
 A private snapshot checks the target Voyage and its content identities. Target
 mutations and terminal opening are refused during shutdown. Unrelated Voyages
 and navigation remain available. Membership comes from the selected Voyage's

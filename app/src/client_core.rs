@@ -401,7 +401,7 @@ pub(super) fn commit(
 
 pub(super) fn live(
     bindings: &[CoreTerminalId],
-    closing: &crate::voyage_close::Closing,
+    closing: &crate::families::voyage_close::Closing,
 ) -> Vec<CoreTerminalId> {
     bindings
         .iter()
@@ -540,4 +540,20 @@ mod activity_notice_tests {
         listing.answer(Some(2), Ok(Some(&[])), &layout, version, true);
         assert!(answered.try_recv().is_ok());
     }
+}
+
+pub(super) fn worktree_changes(directory: &std::path::Path) -> Result<Option<u32>, String> {
+    use crate::families::worktree::{list, uncommitted_changes};
+    let Ok(checkouts) = list(directory) else {
+        return Ok(None);
+    };
+    if !checkouts
+        .iter()
+        .any(|checkout| !checkout.main && directory.starts_with(&checkout.path))
+    {
+        return Ok(None);
+    }
+    uncommitted_changes(directory)
+        .map(Some)
+        .map_err(|error| format!("{error:?}"))
 }

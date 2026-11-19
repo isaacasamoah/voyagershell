@@ -1,17 +1,28 @@
 use crate::{
-    client::{CallError, Client},
-    core::Error,
+    core::{CallError, Error},
     core_shapes::Terminal,
     core_state::TerminalState,
     panels,
 };
 use async_channel::{Receiver, Sender};
-use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest};
+use std::{path::Path, sync::Arc};
+use voyager_contract::administrator::{
+    ProcessAction, ProcessInput, ProcessOutput, ProcessResponse,
+};
 use voyager_contract::voyage_close::{Entry, Phase, Plan};
 use voyager_contract::{
-    Action, Context, CoreTerminalId, Layout, Outcome, Status, Unanswered, Unapplied, VesselId,
-    VoyageId,
+    Action, Context, CoreTerminalId, Layout, Outcome, Response, Status, Unanswered, Unapplied,
+    VesselId, VoyageId,
 };
+
+pub(crate) trait Calls {
+    fn inspected(&self) -> Result<Response, Unanswered>;
+    fn stopped(
+        &self,
+        scope: Context,
+        input: ProcessInput,
+    ) -> Result<Arc<ProcessResponse>, CallError>;
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SaveTicket(String);
@@ -127,11 +138,7 @@ pub(crate) struct Closing {
 }
 
 impl Closing {
-    pub fn projected(
-        &self,
-        layout: &std::sync::Arc<Layout>,
-        scope: Option<&Context>,
-    ) -> Option<Plan> {
+    pub fn projected(&self, layout: &Arc<Layout>, scope: Option<&Context>) -> Option<Plan> {
         self.plan
             .as_ref()
             .filter(|plan| {
@@ -154,6 +161,8 @@ impl Closing {
         id: &VoyageId,
         request: &str,
         terminals: &[Terminal],
+        notes_type: &str,
+        changes: impl FnOnce(&Path) -> Result<Option<u32>, String>,
     ) -> Result<(), Error> {
         if self
             .plan
@@ -175,19 +184,10 @@ impl Closing {
         let uncommitted_changes = voyage
             .cwd
             .as_ref()
-            .and_then(|cwd| {
-                let directory = std::path::Path::new(cwd);
-                crate::families::worktree::list(directory)
-                    .ok()
-                    .filter(|checkouts| {
-                        checkouts
-                            .iter()
-                            .any(|checkout| !checkout.main && directory.starts_with(&checkout.path))
-                    })
-                    .map(|_| crate::families::worktree::uncommitted_changes(directory))
-            })
+            .map(|cwd| changes(Path::new(cwd)))
             .transpose()
-            .map_err(|error| refused(&format!("Could not inspect worktree changes: {error:?}")))?;
+            .map_err(|error| refused(&format!("Could not inspect worktree changes: {error}")))?
+            .flatten();
         let placements: Vec<_> = voyage
             .fleets
             .iter()
@@ -212,7 +212,7 @@ impl Closing {
                     .find(|terminal| terminal.address == address.0)
             });
             let live = terminal.filter(|terminal| terminal.is_live());
-            let note = content.type_id == crate::vessel_type::NOTES_TYPE;
+            let note = content.type_id == notes_type;
             if note {
                 self.notes.push(content.id.clone());
             }
@@ -413,7 +413,7 @@ impl Closing {
     }
 }
 
-pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error> {
+pub(crate) fn execute(calls: &impl Calls, confirmed: Confirmed) -> Result<(), Error> {
     let Confirmed {
         plan,
         target,
@@ -433,7 +433,7 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
         let (Some(address), Some(pid)) = (&entry.terminal, entry.pid) else {
             continue;
         };
-        stop(client, &plan, &target, entry, address, pid)
+        stop(calls, &plan, &target, entry, address, pid)
             .map_err(|error| once_stopped(stopped, error))?;
         stopped += 1;
     }
@@ -441,32 +441,29 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
 }
 
 fn stop(
-    client: &Client,
+    calls: &impl Calls,
     plan: &Plan,
     target: &Target,
     entry: &Entry,
     address: &CoreTerminalId,
     pid: u32,
 ) -> Result<(), Error> {
-    let current = client.inspect().map_err(uninspected)?;
+    let current = calls.inspected().map_err(uninspected)?;
     if current.status != Outcome::Applied || !current.fresh {
         return Err(refused("Workspace could not be inspected before shutdown"));
     }
     target.check(&current.layout)?;
-    let result = client
-        .process(
+    let result = calls
+        .stopped(
             Context::Voyage {
                 id: plan.voyage.clone(),
             },
-            ProcessRequest {
-                request_id: client.request_id(),
-                input: ProcessInput {
-                    expected_version: current.version,
-                    action: ProcessAction::Stop {
-                        terminal_id: address.clone(),
-                        vessel_id: entry.vessel.clone(),
-                        pid,
-                    },
+            ProcessInput {
+                expected_version: current.version,
+                action: ProcessAction::Stop {
+                    terminal_id: address.clone(),
+                    vessel_id: entry.vessel.clone(),
+                    pid,
                 },
             },
         )
