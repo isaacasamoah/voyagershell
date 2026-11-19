@@ -144,8 +144,9 @@ only the reply. The closure gets the driver without the right to change it.
 It must read only the drawn frame, with `Native::drawn_label` or
 `Native::screen_status`, because a driver request to a paused Core fails after
 five seconds. `Native::drawn_label` waits for a control to draw a label that
-the journey accepts. Its `after` argument is added to the usual deadline, for a
-label that the app draws only once a deadline of its own has passed.
+the journey accepts. `Native::drawn_label_past` adds an owed wait to the usual
+patience, for a label that the app draws only once a deadline of its own has
+passed.
 
 The `core-events` journey proves that Core's reports reach the app. It shows
 an Agents Vessel beside the first terminal. `foreground-reaches-agents-list`
@@ -1033,6 +1034,40 @@ held still. The `workspace` journey uses `Native::settle` for the draft of
 the rename editor, for the text of a name after a rename, for the editor that
 F2 opens, for what a split or a creation draws and for the controls that a
 relaunch draws.
+
+A journey file holds no deadline of its own. `src/native/settle.rs` is the one
+file that builds a `Duration` or reads the clock for a journey. A journey waits
+for an outcome with `observe`, `Native::settle`, `until` or `Native::watch`.
+Each ends as soon as the app has drawn or saved the outcome and fails only when
+the shared patience passes, so a slow machine makes it wait longer and never
+makes it fail a bound. `Stopwatch` times an interval for the evidence. Its
+`Elapsed` has no number to compare. It offers `Elapsed::within` against a named
+`Owed` and `Elapsed::under_share_of` a hold that the run set.
+
+An `Owed` is a wait that the product or a run option owes the case. Each is
+declared once, with its source, and the pull request that adds one names it.
+
+| Owed | Wait | What it stands for |
+| --- | --- | --- |
+| `CORE_DEADLINE` | 20 s | The canvas's wait for a Core reply, the `DEADLINE` in `app/src/core_pending.rs`. |
+| `PAST_CORE_DEADLINE` | 24 s | A Core pause longer than that wait. |
+| `CORE_SILENT` | 60 s | Core silent past the owner's read. |
+| `CANVAS_REFRESH` | 3 s | The canvas's observation loop in `docs/terminal.md`. `foreign-exit` holds for it so that the loop has run, and `exit-shown-after-core-pause` stops Core for it. |
+| `AGENTS_ROW` | 1 s | The `core-events` journey's stated bound for the Agents row to name a program that Core reported. |
+| `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |
+| `FLOAT_SPACING` | 90 ms | The pace between two looks at the floating avatar. |
+
+`voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
+constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an
+`Instant::now`, a `SystemTime::now` or an `.elapsed()` in `src/journey.rs` or
+under `src/journey/`. It skips comments, strings and characters, and it names the
+line and the fix. The clock readings are in the rule because the 1 s bound that
+`exit-closes` had before the tick loop was `delay < 1000`, with no `Duration`
+literal. Only the reading that started that clock shows in the source. The lint
+test replays it. `lint --root DIR` checks another tree. CI runs the lint before
+the crate tests. A deadline that stays must become an `Owed` in the settle file.
+Moving a bound to a new constant elsewhere does not pass, and widening an
+`Owed` to pass a run is a loosened check.
 
 A glance pairs the layout document with the latest frame, and nothing says
 which document a frame drew. The app saves a change before it draws it. Until

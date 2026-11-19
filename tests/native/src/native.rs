@@ -1,9 +1,15 @@
 mod avatar;
 mod input;
+mod settle;
 mod terminal;
 
 pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
+pub use settle::{
+    AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, Elapsed, FLOAT_SPACING, Owed,
+    PAST_CORE_DEADLINE, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold,
+    now_millis,
+};
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 use crate::frames;
@@ -799,17 +805,36 @@ impl Native {
     }
 
     pub fn screen_status(&self, expected: &str, wanted: impl Fn(&str) -> bool) -> Result<String> {
-        self.drawn_label(&Target::STATUS, Duration::ZERO, expected, wanted)
+        self.drawn_label(&Target::STATUS, expected, wanted)
     }
 
     pub fn drawn_label(
         &self,
         target: &Target,
-        after: Duration,
         expected: &str,
         wanted: impl Fn(&str) -> bool,
     ) -> Result<String> {
-        self.wait_for(expected, after + PATIENCE, |frame| {
+        self.drawn_label_within(target, PATIENCE, expected, wanted)
+    }
+
+    pub fn drawn_label_past(
+        &self,
+        target: &Target,
+        owed: Owed,
+        expected: &str,
+        wanted: impl Fn(&str) -> bool,
+    ) -> Result<String> {
+        self.drawn_label_within(target, owed.within() + PATIENCE, expected, wanted)
+    }
+
+    fn drawn_label_within(
+        &self,
+        target: &Target,
+        within: Duration,
+        expected: &str,
+        wanted: impl Fn(&str) -> bool,
+    ) -> Result<String> {
+        self.wait_for(expected, within, |frame| {
             target
                 .find(frame)
                 .and_then(|element| element.label.as_deref())
@@ -818,11 +843,11 @@ impl Native {
         })
     }
 
-    pub fn drawn_labels(&self, target: &Target, during: Duration) -> Result<Vec<String>> {
+    pub fn drawn_labels(&self, target: &Target, during: Owed) -> Result<Vec<String>> {
         let x11 = self.x11()?;
         let path = self.inspection();
         let mut seen: Vec<String> = Vec::new();
-        poll(during, Duration::from_millis(10), true, || {
+        poll(during.within(), Duration::from_millis(10), true, || {
             let window = x11.geometry(self.window)?;
             if let Some(label) = inspection::read(&path)?
                 .filter(|frame| drawn_for(frame, window))

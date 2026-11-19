@@ -1,12 +1,11 @@
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Program, Terminal, fleets};
-use crate::system::{PATIENCE, poll};
+use crate::system::until;
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::time::Duration;
 use voyager_contract::inspection::{Frame, Rect, Role};
 use voyager_contract::{Axis, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split};
 
@@ -764,11 +763,10 @@ fn unchanged(native: &Native, version: u64, before: &Layout) -> Result<bool> {
 fn grid(native: &Native, shell: &Terminal, marker: &str) -> Result<Grid> {
     shell.line(native, &format!("echo {marker}=$(stty size | tr ' ' x)"))?;
     let tag = format!("{marker}=");
-    poll(PATIENCE, Duration::from_millis(80), true, || {
+    until(&format!("{marker} printed"), || {
         let screen = shell.screen(native)?;
         Ok(screen.lines().rev().find_map(|line| parse_grid(line, &tag)))
-    })?
-    .with_context(|| format!("{marker} was not printed"))
+    })
 }
 
 fn parse_grid(line: &str, tag: &str) -> Option<Grid> {

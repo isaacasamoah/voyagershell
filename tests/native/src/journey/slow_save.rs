@@ -1,12 +1,11 @@
 use super::chat::{ask, conclude, inspect_script, returned_text, saved_name};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, fleets};
+use crate::native::{Native, fleets, now_millis};
 use crate::provider::{Provider, Script};
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 use voyager_contract::FleetId;
 
 cases! {
@@ -55,9 +54,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let turn = ask(native, &provider, INSPECT)?;
         let before = fleet_count(native)?;
         let born = create_fleet(native)?;
-        let asked = now();
+        let asked = now_millis();
         let played = provider.play(&turn, &inspect_script())?;
-        let answered = now();
+        let answered = now_millis();
         conclude(native, &provider, &turn, INSPECT_ITEM)?;
         rest(native, &born)?;
         let held = held_save(native, asked)?;
@@ -106,9 +105,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let named = saved_name(native, &fleet)?;
         let before = fleet_count(native)?;
         let born = create_fleet(native)?;
-        let asked = now();
+        let asked = now_millis();
         let played = provider.play(&turn, &rename_script(&seen["version"], &fleet)?)?;
-        let answered = now();
+        let answered = now_millis();
         conclude(native, &provider, &turn, EFFECT_ITEM)?;
         rest(native, &born)?;
         let held = held_save(native, asked)?;
@@ -133,13 +132,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("askedAtMs", asked)?
             .observed("answeredAtMs", answered)
     })
-}
-
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 fn fleet_count(native: &Native) -> Result<usize> {

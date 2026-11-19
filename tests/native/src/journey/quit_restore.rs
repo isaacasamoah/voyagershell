@@ -2,13 +2,12 @@ use super::adopt_by_label::{address, bound_to};
 use super::layout::{avatar_on_dock, without_adopted_leaves, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Decorations, Native, Seen, Terminal, voyages};
+use crate::native::{Decorations, Native, Seen, Stopwatch, Terminal, voyages};
 use crate::system::{Identity, until};
 use crate::x11::{Observed, Request};
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::time::Instant;
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Placement};
 
@@ -85,9 +84,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let roster = native.live_terminals()?;
         let core = native.core()?.clone();
         let shell = terminal.program(native)?;
-        let pressed = Instant::now();
+        let pressed = Stopwatch::start();
         native.close()?;
-        let quit_millis = pressed.elapsed().as_millis();
+        let quit_millis = pressed.lap();
         let core_after = answering_core(native).ok().flatten();
         let shell_after = terminal.program(native).ok();
         let roster_after = native.live_terminals().ok();
@@ -365,10 +364,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             seen.shows(&Target::WINDOW_CLOSE).then_some(())
         })?;
         native.keep_window("close-button-before")?;
-        let pressed = Instant::now();
+        let pressed = Stopwatch::start();
         native.click(&Target::WINDOW_CLOSE)?;
         native.await_exit()?;
-        let close_millis = pressed.elapsed().as_millis();
+        let close_millis = pressed.lap();
         let core_after = answering_core(native)?;
         let closed = terminal.program(native)?;
         let roster_closed = native.live_terminals()?;

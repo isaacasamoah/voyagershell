@@ -1,18 +1,15 @@
 use super::super::layout::avatar_bounds;
 use crate::inspection::region;
-use crate::native::{Native, Reference, Sharpness};
+use crate::native::{FLOAT_SPACING, Native, Reference, Sharpness, hold};
 use crate::x11::{Geometry, Pixels};
 use anyhow::Result;
 use image::RgbaImage;
 use serde::Serialize;
-use std::thread::sleep;
-use std::time::Duration;
 
 const MARGIN: i32 = 32;
 const REACH: i32 = 6;
 const RISE: i32 = 36;
 const FRAMES: usize = 5;
-const SPACING: Duration = Duration::from_millis(90);
 
 #[derive(PartialEq, Serialize)]
 pub struct Place {
@@ -96,7 +93,7 @@ impl Avatar {
             let look = native.look_at(self.place.capture)?;
             let sharpness = self.judge(&reference, &look.image()?, RISE)?;
             frames.push((sharpness, look));
-            sleep(SPACING);
+            hold(FLOAT_SPACING)?;
         }
         Ok(frames)
     }

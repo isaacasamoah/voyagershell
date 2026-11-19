@@ -1,16 +1,16 @@
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state, vessels};
+use crate::native::{
+    CANVAS_REFRESH, Lines, Native, Stopwatch, Terminal, Wheel, after_entry, clock, epoch_millis,
+    hold, pid, quote, state, vessels,
+};
 use crate::probe::SCROLL_LINES;
 use crate::system::{Identity, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::fs;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use voyager_contract::RenameTarget;
-
-const CANVAS_REFRESH: Duration = Duration::from_secs(3);
 
 cases! {
     NormalHistory => "normal-history",
@@ -181,7 +181,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     .and_then(|item| item["address"].as_str().map(str::to_owned))
             }))
         })?;
-        std::thread::sleep(Duration::from_millis(500));
+        hold(CANVAS_REFRESH)?;
         let (after, layout) = native.document()?.context("Missing saved layout")?;
         let shown = native.observe("the placed terminal after a foreign exit", |seen| {
             Some(seen.shows(&terminal.target()))
@@ -218,25 +218,25 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             seen.label(&name).and_then(tick_of)
         })?;
         fs::write(ticks.join("stop"), "")?;
-        let stopped = Instant::now();
+        let stopped = Stopwatch::start();
         let saved = until("a newer saved layout after the exit", || {
             Ok(native
                 .document()?
                 .is_some_and(|(version, _)| version > before)
-                .then(SystemTime::now))
+                .then(clock))
         })?;
-        let saved_after = stopped.elapsed().as_millis();
+        let saved_after = stopped.lap();
         native.observe("the exited shell's Vessel closed", |seen| {
             (!seen.shows(&terminal.target()) && seen.version > before).then_some(())
         })?;
-        let delay = stopped.elapsed().as_millis();
+        let delay = stopped.lap();
         native.keep_window("exit-closes")?;
         let entered: u64 = fs::read_to_string(ticks.join(format!("at-{tick}")))?
             .trim()
             .parse()
             .context("The ticking shell's entry time")?;
-        let next_refresh = UNIX_EPOCH + Duration::from_nanos(entered) + CANVAS_REFRESH;
-        let margin = millis(next_refresh)? - millis(saved)?;
+        let next_refresh = after_entry(entered, CANVAS_REFRESH);
+        let margin = i128::from(epoch_millis(next_refresh)?) - i128::from(epoch_millis(saved)?);
         Verdict::new()
             .expect(
                 "the exited shell's Vessel is saved closed before the canvas's next 3 s observation could start",
@@ -253,10 +253,6 @@ fn tick_of(label: &str) -> Option<u64> {
     label
         .split(" · ")
         .find_map(|part| part.strip_prefix("tick-")?.parse().ok())
-}
-
-fn millis(time: SystemTime) -> Result<i128> {
-    Ok(time.duration_since(UNIX_EPOCH)?.as_millis().try_into()?)
 }
 
 fn moved(from: &Lines, to: &Lines, before: &Value, after: &Value) -> bool {

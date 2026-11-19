@@ -2,13 +2,12 @@ use super::chat::{ask, conclude, returned_text};
 use super::layout::agents_beside;
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Terminal};
+use crate::native::{Native, Stopwatch, Terminal, now_millis};
 use crate::provider::{Played, Provider, Script};
 use crate::system::until;
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 use std::fs;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 cases! {
     InspectDuringList => "inspect-answered-during-held-list",
@@ -26,13 +25,6 @@ const INSPECTS: u64 = 16;
 const SPACING_MS: u64 = 500;
 const QUESTION: &str = "Inspect during slow lists";
 const ITEM: &str = "stand-in-slow-list";
-
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
 
 fn inspects() -> Result<Script> {
     let calls: Vec<Value> = (0..INSPECTS)
@@ -94,7 +86,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::InspectDuringList, |native| {
         agents_beside(native, terminal.placement())?;
         let turn = ask(native, &provider, QUESTION)?;
-        let began = now();
+        let began = now_millis();
         let played = provider.play(&turn, &inspects()?)?;
         conclude(native, &provider, &turn, ITEM)?;
         native.keep_window("list-off-owner")?;
@@ -132,23 +124,23 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::ExitClosesDuringList, |native| {
         let (before, _) = native.document()?.context("Missing saved layout")?;
         terminal.line(native, "exit")?;
-        let exited = Instant::now();
+        let exited = Stopwatch::start();
         until("a newer saved layout after the exit", || {
             Ok(native
                 .document()?
                 .is_some_and(|(version, _)| version > before)
                 .then_some(()))
         })?;
-        let saved = exited.elapsed().as_millis() as u64;
+        let saved = exited.lap();
         native.observe("the exited shell's Vessel closed", |seen| {
             (!seen.shows(&terminal.target()) && seen.version > before).then_some(())
         })?;
-        let closed = exited.elapsed().as_millis() as u64;
+        let closed = exited.lap();
         native.keep_window("exit-event")?;
         Verdict::new()
             .expect(
                 "the exited shell's Vessel was saved closed in under half of the hold on Core's terminal list replies",
-                saved * 2 < hold,
+                saved.under_share_of(hold, 2),
             )
             .observed("exit to saved ms", saved)?
             .observed("exit to closed ms", closed)
