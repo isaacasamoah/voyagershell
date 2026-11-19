@@ -510,8 +510,8 @@ features:
       - tests/native/src/agent.rs
       - tests/native/src/battery.rs
       - tests/native/src/core_relay.rs
+      - tests/native/src/declared_invariants.rs
       - tests/native/src/diagnosis.rs
-      - tests/native/src/experience.rs
       - tests/native/src/features.rs
       - tests/native/src/frames.rs
       - tests/native/src/inspection.rs
