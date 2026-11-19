@@ -60,8 +60,6 @@ jobs:
             exit 0
           fi
           mkdir -p "$archives/partial"
-          { echo "http://azure.archive.ubuntu.com/ubuntu/"; cat /etc/apt/apt-mirrors.txt; } | sudo tee /etc/apt/apt-mirrors.txt.new >/dev/null
-          sudo mv /etc/apt/apt-mirrors.txt.new /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
           xargs -a .github/native-apt-packages.txt sudo apt-get install -y --no-install-recommends \
             -o Acquire::Retries=5 -o Acquire::http::Timeout=30 \
