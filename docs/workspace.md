@@ -1027,9 +1027,15 @@ whole set of Vessels, because its answer depends on every Vessel. A terminal, No
 request names its Vessel. A worktree request names its source Voyage.
 
 `Seen` in `app/src/layout_store.rs` keeps the layout at each of the last 32
-structure revisions. The workspace queue records the current revision before it
-takes each message, so every revision that a caller can hold is recorded before
-the caller can send it back. `Seen::current` accepts the current revision. It
+structure revisions. The workspace queue records the current revision first
+in each turn, before it applies Core's reports, adopts labelled terminals or
+closes exited placements, and again before it takes the next message. Every
+revision that a caller can hold is therefore recorded before the caller can send
+it back, even when an adoption saves in the same turn. Without the first record,
+a relaunch that adopts a terminal refused the canvas's first terminal open.
+A refused terminal open logs one standard-error line naming the Vessel, the
+revision it was given, the recorded revisions, and both Vessel records when the
+revision was recorded. `Seen::current` accepts the current revision. It
 accepts an older recorded revision when every part of the request is the same
 in that layout and the current one. It refuses an unrecorded or future revision.
 A content request from an agent that passes this check runs at the current

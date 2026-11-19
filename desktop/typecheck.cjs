@@ -23,6 +23,7 @@ const entries = [
   "desktop/canvas/processes.ts",
   "desktop/canvas/menu.ts",
   "desktop/canvas/panels.ts",
+  "desktop/canvas/terminal-open.ts",
   "desktop/canvas/panel-view.ts",
   "desktop/canvas/navigation-view.ts",
   "contract/generated/workspace.ts",

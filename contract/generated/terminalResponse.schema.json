@@ -12,7 +12,8 @@
     },
     "TerminalReason": {
       "enum": [
-        "ended"
+        "ended",
+        "changed"
       ],
       "type": "string"
     }

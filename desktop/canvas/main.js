@@ -35,6 +35,7 @@ import {
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
+import { openOrRetry, reopens, terminalStatus } from "./terminal-open.js";
 import { CreationPicker } from "./creation.js";
 import { focusedPlacement, moveFocus, renderPanel } from "./panel-view.js";
 import {
@@ -790,18 +791,13 @@ export default class Canvas extends View {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
     const errors = [];
+    const visited = new Set();
     for (const vessel of shownPanels(layout)) {
+      visited.add(vessel.vessel);
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (content?.typeId !== "terminal") continue;
       const opening = this.openings.get(vessel.vessel);
-      if (
-        allowed.has(vessel.vessel) &&
-        ((content.shellIntent && opening?.intent !== content.shellIntent) ||
-          (!content.backend &&
-            !content.startPending &&
-            opening &&
-            ["applied", "unbound", "rejected"].includes(opening.status)))
-      ) {
+      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
         this.openings.delete(vessel.vessel);
         this.terminals.delete(vessel.vessel);
       }
@@ -828,7 +824,19 @@ export default class Canvas extends View {
       });
       let opened;
       try {
-        opened = await openTerminal(vessel.vessel, this.version);
+        opened = await openOrRetry(
+          () => openTerminal(vessel.vessel, this.version),
+          async () => {
+            const current = await invoke(
+              { operation: "inspect" },
+              this.version,
+            );
+            this.acceptSnapshot(current, task);
+            const usable = current.status === "applied" && current.fresh;
+            return usable ? this.layout : null;
+          },
+          content,
+        );
       } catch (error) {
         this.openings.set(vessel.vessel, {
           status: "uncertain",
@@ -858,23 +866,15 @@ export default class Canvas extends View {
         errors.push(opened.message || opened.status);
       task.notify();
     }
+    if (
+      this.layout &&
+      shownPanels(this.layout).some((panel) => !visited.has(panel.vessel))
+    )
+      await this.prepare(task, existingOnly, retry, allowed);
     if (errors.length) throw Error(errors[0]);
   }
   terminalStatus(content) {
-    if (content.startPending)
-      return "Terminal start is unconfirmed. Inspect before trying again.";
-    const outcome = this.openings.get(content.id);
-    if (outcome?.status === "rejected" && outcome.reason === "ended")
-      return "This program has ended.";
-    if (outcome?.status === "rejected")
-      return `Terminal unavailable: ${outcome.message || "Request refused"}`;
-    if (outcome?.status === "uncertain")
-      return `Terminal connection is unconfirmed: ${outcome.message || "No confirmation received"}`;
-    if (outcome?.status === "applied")
-      return "Terminal attached. View unavailable.";
-    if (outcome?.status === "unbound") return "No terminal is bound.";
-    if (!content.backend && !outcome) return "No terminal is bound.";
-    return "Connecting terminal";
+    return terminalStatus(content, this.openings.get(content.id));
   }
   closeName(editing, cx) {
     if (this.editing !== editing) return;

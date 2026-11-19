@@ -28,6 +28,7 @@ module.exports = function workspaceSource(
           "voyage-colours.js",
           "process-icons.js",
           "panels.js",
+          "terminal-open.js",
           "agents.js",
           "panel-view.js",
           "navigation-view.js",

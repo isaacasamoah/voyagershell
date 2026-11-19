@@ -34,6 +34,10 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../canvas/panels.js").as_slice(),
     ),
     (
+        "canvas/terminal-open.js",
+        include_bytes!("../canvas/terminal-open.js").as_slice(),
+    ),
+    (
         "canvas/menu.js",
         include_bytes!("../canvas/menu.js").as_slice(),
     ),

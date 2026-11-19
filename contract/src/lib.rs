@@ -573,6 +573,7 @@ pub struct TerminalResponse {
 #[serde(rename_all = "kebab-case")]
 pub enum TerminalReason {
     Ended,
+    Changed,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
