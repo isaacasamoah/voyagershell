@@ -596,7 +596,7 @@ fn parse(args: &[String]) -> Result<Options> {
             .collect::<Result<Vec<_>>>()?,
     };
     ensure!(!journeys.is_empty(), "--journeys named no journey");
-    let hc_path = system::installed("hc")?;
+    let hc_path = system::core_binary()?;
     let hc = Pinned::check(&hc_path, &system::digest(&hc_path)?).context("Core")?;
     let head_assets = need("--head-assets")?;
     let fixtures = match given.get("--fixtures") {

@@ -153,7 +153,7 @@ fn entry() -> Result<i32> {
     let verifier = std::env::current_exe()?;
     let candidate =
         Pinned::check(Path::new(&get("--binary")?), &get("--sha256")?).context("Candidate")?;
-    let hc = Pinned::check(&system::installed("hc")?, &get("--hc-sha256")?).context("Core")?;
+    let hc = Pinned::check(&system::core_binary()?, &get("--hc-sha256")?).context("Core")?;
     let second = match (get("--second-binary").ok(), get("--second-sha256").ok()) {
         (Some(path), Some(hash)) => {
             Some(Pinned::check(Path::new(&path), &hash).context("Second candidate")?)
