@@ -83,7 +83,7 @@ def segments(command):
             index += 2
             continue
         if quote:
-            if char == quote:
+            if char == quote[-1]:
                 quote = ""
         elif char == "#" and (index == 0 or command[index - 1] in " \t;&|("):
             end = command.find("\n", index)
@@ -92,7 +92,7 @@ def segments(command):
             index = end
             continue
         elif char in "'\"":
-            quote = char
+            quote = "$'" if char == "'" and command[index - 1 : index] == "$" else char
         elif char in ";|\n" or (
             char == "&"
             and (command[index - 1 : index] not in (">", "<"))
@@ -117,14 +117,14 @@ def substitutes(segment):
         if char == "\\" and quote != "'":
             index += 2
             continue
-        if quote == "'":
+        if quote in ("'", "$'"):
             quote = "" if char == "'" else quote
         elif char == "`" or pair == "$(" or (not quote and pair in ("<(", ">(")):
             return True
         elif quote:
             quote = "" if char == quote else quote
         elif char in "'\"":
-            quote = char
+            quote = "$'" if char == "'" and segment[index - 1 : index] == "$" else char
         index += 1
     return False
 

@@ -96,6 +96,12 @@ class Refused(unittest.TestCase):
         self.refused(f"{CLEAN} git status # it's\nenv -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
         self.refused(f"{CLEAN} gh pr view 1 # don't\nhc ls", {})
 
+    def test_ansi_c_quote_with_escaped_quote_does_not_hide_next_call(self):
+        body = "gh pr comment 1 --body $'it\\'s'"
+        self.refused(f"{CLEAN} {body}; hc ls", {})
+        self.refused(f"{CLEAN} {body}\nhc ls", {})
+        self.refused(f"{CLEAN} {body} $(hc ls)", TRIAL)
+
     def test_server_stop_without_own_session(self):
         self.refused("hc server stop")
         self.refused("HC_SESSION=voyager-demo hc server stop")
@@ -147,6 +153,11 @@ class Allowed(unittest.TestCase):
             f"{CLEAN} gh pr view 1 # don't\nenv -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls",
             TRIAL,
         )
+
+    def test_ansi_c_quote_text_alone_passes(self):
+        body = "gh pr comment 1 --body $'it\\'s; hc ls $(hc ls)'"
+        self.allowed(f"{CLEAN} {body}", TRIAL)
+        self.allowed(f"{CLEAN} {body}\ngit status", TRIAL)
 
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")
