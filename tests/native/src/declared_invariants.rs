@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-pub const MODEL: &str = "tests/native/experience.toml";
+pub const MODEL: &str = "tests/native/declared-invariants.toml";
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -100,8 +100,8 @@ fn filled(problems: &mut Vec<String>, kind: &str, id: &str, fields: &[(&str, &st
 
 impl Model {
     pub fn parse(text: &str) -> Result<Self> {
-        let table: toml::Table =
-            toml::from_str(text).map_err(|error| anyhow::anyhow!("Experience model: {error}"))?;
+        let table: toml::Table = toml::from_str(text)
+            .map_err(|error| anyhow::anyhow!("Declared invariants: {error}"))?;
         let mut problems = Vec::new();
         for key in table.keys().filter(|key| !KINDS.contains(&key.as_str())) {
             problems.push(format!("Unknown section {key}"));
@@ -113,7 +113,7 @@ impl Model {
         };
         ensure!(
             problems.is_empty(),
-            "Experience model:\n{}",
+            "Declared invariants:\n{}",
             problems.join("\n")
         );
         Ok(model)
