@@ -297,17 +297,17 @@ features:
     name: Worktrees
     summary: 'Create and switch git worktrees from a Vessel.'
     group: worktrees-voyage-close
-    owner: desktop-presentation
-    shared_with: [placement]
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: none, debug: python-only}
+    owner: application-queue
+    shared_with: [desktop-presentation, placement]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: []
-    python_journeys: [demo-feedback]
-    docs: [docs/terminal.md, docs/workspace.md]
-    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
-    code: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
+    native_journeys: [worktrees]
+    python_journeys: []
+    docs: ['.agents/skills/verify/features/worktrees.md', docs/terminal.md, docs/workspace.md]
+    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts, app/src/families/worktree.rs, app/src/families/worktree/git.rs]
+    code: [app/src/families/worktree.rs, app/src/families/worktree/git.rs, contract/src/worktree.rs, desktop/canvas/worktrees.ts]
   - id: close-quit-restore
     name: 'Close Voyage / quit / restore'
     summary: 'Close a Voyage, quit the app and find the session restored on the next launch.'
@@ -538,6 +538,7 @@ features:
       - tests/native/src/journey/workspace/avatar.rs
       - tests/native/src/journey/workspace/model.rs
       - tests/native/src/journey/workspace/plan.rs
+      - tests/native/src/journey/worktrees.rs
       - tests/native/src/lifecycle.rs
       - tests/native/src/lint.rs
       - tests/native/src/main.rs

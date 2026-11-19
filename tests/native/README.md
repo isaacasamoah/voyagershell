@@ -198,6 +198,28 @@ types into the first terminal, as an agent in that Vessel would.
   milliseconds, including the shell's fork and exec. The numbers are a
   measurement of one machine, not a bar.
 
+The `worktrees` journey proves that a Voyage on a git repository makes,
+guards and removes a linked worktree from its row's context menu. Before the
+first case it makes the fixture's second project folder a git repository with
+one empty commit and creates that folder's Voyage. The verify skill's
+`features/worktrees.md` lists what each case observes.
+
+- `new-worktree-escape-cancels` opens New worktree and presses Escape. It
+  passes when the dialog closes and no Voyage, checkout folder or branch was
+  made.
+- `new-worktree-creates-checkout-and-voyage` types `demo/proof` and presses
+  Enter. It passes when `.worktrees/demo-proof` is checked out on that branch
+  and one new Voyage in that folder is selected with one running terminal
+  Vessel there.
+- `remove-refused-while-shell-runs` confirms Remove worktree while the
+  worktree's shell runs. It passes when the dialog stays open and names a live
+  process in the checkout, the shell is the same running program, the folder,
+  the branch and the Voyage stay, and Cancel closes the dialog.
+- `remove-after-shell-exit-keeps-branch` exits the shell, then confirms Remove
+  worktree. It passes when the exit closed the Vessel, the removal closed the
+  dialog and the worktree's Voyage, the folder is gone, the branch stays and
+  the repository's Voyage stays open.
+
 The `outcomes` journey proves that a refusal shows its reason and that an
 uncertain result is settled by reading Core, with nothing done twice. It
 declares the Core delay `arm`, so the relay is in the path and each case arms
@@ -801,6 +823,11 @@ the text, so only a read taken while the reply streams catches it. The `terminal
 nothing. `copy-puts-the-selection-on-the-clipboard` then fails on the
 expectation `another X client reads exactly COPYβ界 from the clipboard`, and
 the observed text is the verifier's own `VERIFIER-SENTINEL`.
+
+The `worktrees` patch makes the canvas drop the reason from a refused
+worktree action. `remove-refused-while-shell-runs` then fails on the
+expectation `the dialog stays open and says a live process uses the
+checkout`, and the observed reason is `The worktree action was refused.`.
 
 The `outcomes` patch makes the canvas drop the reason from a refusal.
 `refused-shows-reason` then fails on the expectation `the status line says

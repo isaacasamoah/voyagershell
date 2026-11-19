@@ -612,6 +612,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         "src/journey/workspace/plan.rs",
         include_bytes!("journey/workspace/plan.rs"),
     ),
+    (
+        "src/journey/worktrees.rs",
+        include_bytes!("journey/worktrees.rs"),
+    ),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/lint.rs", include_bytes!("lint.rs")),
     ("src/manifest.rs", include_bytes!("manifest.rs")),

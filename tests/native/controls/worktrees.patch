@@ -1,0 +1,24 @@
+diff --git a/desktop/canvas/worktrees.js b/desktop/canvas/worktrees.js
+--- a/desktop/canvas/worktrees.js
++++ b/desktop/canvas/worktrees.js
+@@ -276,7 +276,7 @@ export class WorktreeControls {
+           this.status =
+             result.status === "uncertain"
+               ? `Worktree result unconfirmed. Inspect before trying again. ${result.message || ""}`
+-              : result.message || "The worktree action was refused.";
++              : "The worktree action was refused.";
+           if (this.current === opening) opening.message = this.status;
+         }
+       } catch (error) {
+diff --git a/desktop/canvas/worktrees.ts b/desktop/canvas/worktrees.ts
+--- a/desktop/canvas/worktrees.ts
++++ b/desktop/canvas/worktrees.ts
+@@ -329,7 +329,7 @@ export class WorktreeControls {
+           this.status =
+             result.status === "uncertain"
+               ? `Worktree result unconfirmed. Inspect before trying again. ${result.message || ""}`
+-              : result.message || "The worktree action was refused.";
++              : "The worktree action was refused.";
+           if (this.current === opening) opening.message = this.status;
+         }
+       } catch (error) {

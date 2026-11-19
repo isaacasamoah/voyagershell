@@ -170,6 +170,10 @@ union all come from that list.
 | `window-drag` | `home`, `fleets` or `sidebar` | The empty filler that moves the window when it is dragged and maximises it on a double-click. It sits after the Fleet tabs, in the Home strip, or in the sidebar's top row. Only a filler carries it, never a tab or a button | `dragFiller` in `navigation-view.ts` |
 | `fleet-drop` | Fleet id of the tab under the pointer | The insertion bar on the edge of a Fleet tab while another Fleet tab is dragged over it | `renderFleets` in `navigation-view.ts` |
 | `agents-row` | Placement id | One row of an Agents Vessel. Its `label` is the row's name, program and detail | `agentsView` in `agents.ts` |
+| `new-worktree`, `remove-worktree` | Voyage id | The New worktree and Remove worktree entries of the Voyage row's context menu. Remove worktree is listed only for a Voyage in a linked checkout | `renderSidebar` in `navigation-view.ts`, through `MenuItem.marker` |
+| `worktree-confirm` | Voyage id | The Create or Remove worktree button of the worktree dialog, drawn only while it can be pressed | `WorktreeControls.render` in `worktrees.ts` |
+| `worktree-cancel` | Voyage id | The Cancel button of the worktree dialog | `WorktreeControls.render` |
+| `worktree-status` | Voyage id | The message line of the worktree dialog, drawn only while it has text. Its `label` is the text | `WorktreeControls.render` |
 
 A name control leaves the frame while its rename editor replaces it, and
 `name-editor` with the same key takes its place. The editor takes keyboard

@@ -177,14 +177,14 @@ impl Closing {
             .as_ref()
             .and_then(|cwd| {
                 let directory = std::path::Path::new(cwd);
-                crate::worktrees::list(directory)
+                crate::families::worktree::list(directory)
                     .ok()
                     .filter(|checkouts| {
                         checkouts
                             .iter()
                             .any(|checkout| !checkout.main && directory.starts_with(&checkout.path))
                     })
-                    .map(|_| crate::worktrees::uncommitted_changes(directory))
+                    .map(|_| crate::families::worktree::uncommitted_changes(directory))
             })
             .transpose()
             .map_err(|error| refused(&format!("Could not inspect worktree changes: {error:?}")))?;

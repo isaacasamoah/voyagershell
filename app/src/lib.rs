@@ -22,7 +22,6 @@ pub mod vessel_socket;
 pub mod vessel_type;
 pub mod voyage_close;
 pub mod workspace;
-pub mod worktrees;
 
 #[cfg(test)]
 mod tests;

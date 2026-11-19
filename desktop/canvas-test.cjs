@@ -1892,6 +1892,7 @@ test("worktree controller groups identified checkouts and preserves request iden
         };
       if (name === "voyager_native")
         return {
+          Marker: MarkerStub,
           Name: { new: element },
           NameState: {
             new: () => ({ value: () => "", on() {}, focus() {}, release() {} }),
@@ -1949,7 +1950,10 @@ test("worktree controller groups identified checkouts and preserves request iden
   controls.open("main", "7", cx, "new", "/repo");
   await settle();
   controls.current.input.value = () => "new";
-  controls.render();
+  assert.deepEqual(deepMarkers(controls.render()), [
+    ["worktree-cancel", "main"],
+    ["worktree-confirm", "main"],
+  ]);
   buttons
     .get("worktree-create-submit")
     .calls.find(([name]) => name === "on_click")[1]({}, cx);

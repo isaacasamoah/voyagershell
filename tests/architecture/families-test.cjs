@@ -7,7 +7,7 @@ const { scratch, run, edit, expectFailure } = require("./fixture.cjs");
 const STUB =
   "pub(crate) mod inner { pub(crate) fn probe() {} }\npub(crate) fn probe() {}\n";
 const FAMILY_FILES = {
-  worktree: "app/src/families/worktree.rs",
+  sample: "app/src/families/sample.rs",
   content: "app/src/families/content.rs",
   structure: "app/src/families/structure.rs",
   terminal: "app/src/families/terminal.rs",
@@ -20,18 +20,18 @@ const VOCABULARY = "tests/architecture/vocabulary.yaml";
 function prepared() {
   const directory = scratch();
   const root = "app/src/families.rs";
-  for (const name of ["worktree", "content", "structure"])
+  for (const name of ["sample", "content", "structure"])
     fs.writeFileSync(path.join(directory, FAMILY_FILES[name]), STUB);
   edit(
     directory,
     root,
     (text) =>
-      `${text}pub(crate) mod worktree;\npub(crate) mod content;\npub(crate) mod structure;\n`,
+      `${text}pub(crate) mod sample;\npub(crate) mod content;\npub(crate) mod structure;\n`,
   );
   edit(directory, VOCABULARY, (text) =>
     text.replace(
       "owns: [app/src/workspace.rs,",
-      "owns: [app/src/families/worktree.rs, app/src/families/content.rs, app/src/families/structure.rs, app/src/workspace.rs,",
+      "owns: [app/src/families/sample.rs, app/src/families/content.rs, app/src/families/structure.rs, app/src/workspace.rs,",
     ),
   );
   return { directory, root };
@@ -106,7 +106,7 @@ const CROSS = [
     "use of a path in another family",
     (p) =>
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "use crate::families::terminal::stop_summary as _planted;\n",
       ),
   ],
@@ -114,7 +114,7 @@ const CROSS = [
     "grouped use naming another family",
     (p) =>
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "use crate::families::{terminal::stop_summary as _s, content as _c};\n",
       ),
   ],
@@ -122,7 +122,7 @@ const CROSS = [
     "glob use of another family",
     (p) =>
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "#[allow(unused_imports)]\nuse crate::families::terminal::*;\n",
       ),
   ],
@@ -130,7 +130,7 @@ const CROSS = [
     "use through super",
     (p) =>
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "use super::terminal::stop_summary as _planted;\n",
       ),
   ],
@@ -138,7 +138,7 @@ const CROSS = [
     "super path in an expression",
     (p) =>
       p.appendTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         PROBE('super::terminal::stop_summary("live")'),
       ),
   ],
@@ -146,7 +146,7 @@ const CROSS = [
     "crate path in an expression",
     (p) =>
       p.appendTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         PROBE('crate::families::terminal::stop_summary("live")'),
       ),
   ],
@@ -154,7 +154,7 @@ const CROSS = [
     "crate path into a submodule of another family",
     (p) =>
       p.appendTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         PROBE("crate::families::terminal::lifecycle::exited(&[])"),
       ),
   ],
@@ -162,7 +162,7 @@ const CROSS = [
     "submodule reaching another family through super::super",
     (p) =>
       p.write(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         'pub(crate) mod inner { pub(crate) fn probe() { let _ = super::super::terminal::stop_summary("live"); } }\npub(crate) fn probe() {}\n',
       ),
   ],
@@ -180,13 +180,13 @@ const CROSS = [
   ],
   [
     "terminal family using another family",
-    (p) => p.appendTo(FAMILY_FILES.terminal, PROBE("super::worktree::probe()")),
+    (p) => p.appendTo(FAMILY_FILES.terminal, PROBE("super::sample::probe()")),
   ],
   [
     "root re-export of a family item used through super",
     (p) => {
       p.appendTo(p.root, "pub(crate) use terminal::stop_summary;\n");
-      p.appendTo(FAMILY_FILES.worktree, PROBE('super::stop_summary("live")'));
+      p.appendTo(FAMILY_FILES.sample, PROBE('super::stop_summary("live")'));
     },
   ],
   [
@@ -194,7 +194,7 @@ const CROSS = [
     (p) => {
       p.appendTo(p.root, "pub(crate) use terminal::stop_summary;\n");
       p.appendTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         PROBE('crate::families::stop_summary("live")'),
       );
     },
@@ -204,7 +204,7 @@ const CROSS = [
     (p) => {
       p.appendTo(p.root, "pub(crate) use terminal::stop_summary;\n");
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "use crate::families::stop_summary as _planted;\n",
       );
     },
@@ -212,7 +212,7 @@ const CROSS = [
   [
     "root re-export of another family's item used by the terminal family",
     (p) => {
-      p.appendTo(p.root, "pub(crate) use worktree::probe;\n");
+      p.appendTo(p.root, "pub(crate) use sample::probe;\n");
       p.appendTo(FAMILY_FILES.terminal, PROBE("super::probe()"));
     },
   ],
@@ -220,14 +220,14 @@ const CROSS = [
     "root glob re-export used through super",
     (p) => {
       p.appendTo(p.root, "pub(crate) use terminal::*;\n");
-      p.appendTo(FAMILY_FILES.worktree, PROBE('super::stop_summary("live")'));
+      p.appendTo(FAMILY_FILES.sample, PROBE('super::stop_summary("live")'));
     },
   ],
   [
     "root re-export through self",
     (p) => {
       p.appendTo(p.root, "pub(crate) use self::terminal::stop_summary;\n");
-      p.appendTo(FAMILY_FILES.worktree, PROBE('super::stop_summary("live")'));
+      p.appendTo(FAMILY_FILES.sample, PROBE('super::stop_summary("live")'));
     },
   ],
   [
@@ -235,7 +235,7 @@ const CROSS = [
     (p) => {
       p.appendTo(p.root, "pub(crate) use terminal::stop_summary;\n");
       p.prependTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         "#[allow(unused_imports)]\nuse super::*;\n",
       );
     },
@@ -243,36 +243,36 @@ const CROSS = [
 ];
 
 const EDGES = {
-  "use of a path in another family": [["worktree", "terminal"]],
+  "use of a path in another family": [["sample", "terminal"]],
   "grouped use naming another family": [
-    ["worktree", "content"],
-    ["worktree", "terminal"],
+    ["sample", "content"],
+    ["sample", "terminal"],
   ],
-  "glob use of another family": [["worktree", "terminal"]],
-  "use through super": [["worktree", "terminal"]],
-  "super path in an expression": [["worktree", "terminal"]],
-  "crate path in an expression": [["worktree", "terminal"]],
+  "glob use of another family": [["sample", "terminal"]],
+  "use through super": [["sample", "terminal"]],
+  "super path in an expression": [["sample", "terminal"]],
+  "crate path in an expression": [["sample", "terminal"]],
   "crate path into a submodule of another family": [
-    ["worktree", "terminal::lifecycle"],
+    ["sample", "terminal::lifecycle"],
   ],
   "submodule reaching another family through super::super": [
-    ["worktree::inner", "terminal"],
+    ["sample::inner", "terminal"],
   ],
   "terminal family submodule using another family": [
     ["terminal::lifecycle", "content"],
   ],
   "two non-terminal families": [["content", "structure"]],
-  "terminal family using another family": [["terminal", "worktree"]],
+  "terminal family using another family": [["terminal", "sample"]],
 };
 const ROOT_EDGES = [
   ["", "terminal"],
-  ["worktree", ""],
+  ["sample", ""],
 ];
 EDGES["root re-export of a family item used through super"] = ROOT_EDGES;
 EDGES["root re-export of a family item used through crate"] = ROOT_EDGES;
 EDGES["root re-export of a family item imported with use"] = ROOT_EDGES;
 EDGES["root re-export of another family's item used by the terminal family"] = [
-  ["", "worktree"],
+  ["", "sample"],
   ["terminal", ""],
 ];
 EDGES["root glob re-export used through super"] = ROOT_EDGES;
@@ -303,7 +303,7 @@ const OWN = [
   ],
   [
     "a family using its own inner module",
-    (p) => p.appendTo(FAMILY_FILES.worktree, PROBE("inner::probe()")),
+    (p) => p.appendTo(FAMILY_FILES.sample, PROBE("inner::probe()")),
   ],
   [
     "a family using its own submodule through super",
@@ -340,7 +340,7 @@ const SHARED_ALIAS = [
       "\npub(crate) use families::terminal as process;\n",
     );
     p.appendTo(
-      FAMILY_FILES.worktree,
+      FAMILY_FILES.sample,
       PROBE('crate::process::stop_summary("live")'),
     );
   },
@@ -350,14 +350,14 @@ const ALIASES = [
   [
     "a consumer alias of a family",
     "families-reach-shared-only",
-    `NEW families-reach-shared-only: uses(${FAMILIES}::worktree,rs:voyager_app::front_door)`,
+    `NEW families-reach-shared-only: uses(${FAMILIES}::sample,rs:voyager_app::front_door)`,
     (p) => {
       p.appendTo(
         "app/src/front_door.rs",
         "\npub(crate) use crate::families::terminal as process;\n",
       );
       p.appendTo(
-        FAMILY_FILES.worktree,
+        FAMILY_FILES.sample,
         PROBE('crate::front_door::process::stop_summary("live")'),
       );
     },

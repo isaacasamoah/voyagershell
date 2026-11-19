@@ -110,6 +110,11 @@ roles! {
     WindowDrag => "window-drag",
     FleetDrop => "fleet-drop",
     AgentsRow => "agents-row",
+    NewWorktree => "new-worktree",
+    RemoveWorktree => "remove-worktree",
+    WorktreeConfirm => "worktree-confirm",
+    WorktreeCancel => "worktree-cancel",
+    WorktreeStatus => "worktree-status",
 }
 
 #[cfg(test)]
