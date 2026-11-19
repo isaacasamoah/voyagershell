@@ -6,6 +6,7 @@ const { observe, lockReach } = require("./observe.cjs");
 const { parse } = require("./yaml.cjs");
 const vocabulary = require("./vocabulary.cjs");
 const literals = require("./literals.cjs");
+const texts = require("./texts.cjs");
 const ownersOf = require("./owners.cjs");
 
 const HERE = __dirname;
@@ -125,11 +126,13 @@ function violations(rule, facts) {
   if (rule.check === "forbid_code") {
     const from = matcher(rule.from);
     const to = matcher(rule.to);
+    const except = matcher(rule.except);
     return facts.edges
       .filter(
         (edge) =>
           from(edge.from) &&
           to(edge.to) &&
+          !except(edge.to) &&
           (!rule.kinds?.length || rule.kinds.includes(edge.kind)),
       )
       .map((edge) => ({
@@ -213,7 +216,11 @@ function violations(rule, facts) {
         limit: rule.limit,
       }));
   }
-  if (rule.check === "forbid_terms" || rule.check === "forbid_literal") {
+  if (
+    rule.check === "forbid_terms" ||
+    rule.check === "forbid_literal" ||
+    rule.check === "forbid_text"
+  ) {
     return [...facts.terms.get(rule.id)].map(([id, hits]) => ({
       id: `${rule.id}: ${id}`,
       at: `${hits[0].file}:${hits[0].line}`,
@@ -256,6 +263,9 @@ function gate({
   const exact = ruleList
     .filter((rule) => rule.check === "forbid_literal")
     .map((rule) => literals.load(rule));
+  const patterns = ruleList
+    .filter((rule) => rule.check === "forbid_text")
+    .map((rule) => texts.load(rule));
   const observation = observe(
     repository,
     tree,
@@ -269,6 +279,10 @@ function gate({
         ...exact.map((table) => [
           table.id,
           literals.scanSnapshot(table, snapshot),
+        ]),
+        ...patterns.map((table) => [
+          table.id,
+          texts.scanSnapshot(table, snapshot),
         ]),
       ]),
   );

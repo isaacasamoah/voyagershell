@@ -85,9 +85,9 @@ These definitions describe what each user action does.
   This is unchanged.
 - **A Vessel's or Portal's program exiting.** When a terminal program that this
   owner saw live finishes with reason `exited`, the owner removes its placement
-  (`families::terminal::lifecycle::close_exited`). A program that ended while the app was
+  (`families::terminal::close_exited`). A program that ended while the app was
   closed, for example after a computer restart, keeps its placement, and the
-  next launch opens a plain shell there (`families::terminal::lifecycle::prepare_reopen`).
+  next launch opens a plain shell there (`families::terminal::prepare_reopen`).
   A Vessel the app adopted from a `voyager.place` label carries `adopted`; when its
   program ended, the next launch removes its placement and starts no shell.
   Agents are not resumed.

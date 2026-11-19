@@ -142,12 +142,11 @@ pub(super) fn close_exited(
     let mut candidate = Model {
         layout: (**layout).clone(),
     };
-    let closed =
-        match crate::families::terminal::lifecycle::close_exited(&mut candidate, exited, live) {
-            Ok(true) => commit(core, layout, version, fresh, candidate),
-            Ok(false) => Ok(()),
-            Err(error) => Err(error),
-        };
+    let closed = match crate::families::terminal::close_exited(&mut candidate, exited, live) {
+        Ok(true) => commit(core, layout, version, fresh, candidate),
+        Ok(false) => Ok(()),
+        Err(error) => Err(error),
+    };
     if let Err(error) = closed {
         eprintln!("{error}");
     }
@@ -375,8 +374,8 @@ pub(super) fn changed_layout(
             voyage.name = name;
         }
     }
-    let exited = crate::families::terminal::lifecycle::exited(terminals);
-    let closed = crate::families::terminal::lifecycle::close_exited(&mut candidate, &exited, live)?;
+    let exited = crate::families::terminal::exited(terminals);
+    let closed = crate::families::terminal::close_exited(&mut candidate, &exited, live)?;
     Ok((closed || renamed).then_some(candidate))
 }
 

@@ -1,4 +1,4 @@
-pub use crate::families::terminal::lifecycle::Lifecycle;
+pub use crate::families::terminal::Lifecycle;
 use crate::{
     activity::Activity,
     core::{Error, Viewer, WeakViewer},
@@ -1778,7 +1778,7 @@ impl Client {
                                     }
                                     if !reopened {
                                         let terminals = core.terminal_list()?;
-                                        let (ready, closed) = crate::families::terminal::lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
+                                        let (ready, closed) = crate::families::terminal::prepare_reopen(&mut candidate.layout, &terminals);
                                         if closed || !ready.is_empty() {
                                             revision = save(core, &candidate.layout, revision)?;
                                             created_vessels.extend(ready.into_iter().map(|id| CreatedTerminal {
@@ -2104,7 +2104,7 @@ impl Client {
                                     .and_then(|()| {
                                         closing.check_layout(&candidate.layout)?;
                                         let reopening = if let Action::ReopenVoyage { id } = &request.action {
-                                            crate::families::terminal::lifecycle::prepare_voyage_reopen(&mut candidate.layout, &core.terminal_list()?, id)
+                                            crate::families::terminal::prepare_voyage_reopen(&mut candidate.layout, &core.terminal_list()?, id)
                                         } else { Vec::new() };
                                         if let Action::StartNewShell { expected_backend, .. } = &request.action {
                                             let observed = core.terminal_get(&expected_backend.0)?;

@@ -19,6 +19,19 @@ rules:
     check: forbid_cross
     group: 'rs:voyager_app::families::'
     kinds: [uses]
+  - id: families-not-aliased
+    check: forbid_code
+    from: ['rs:voyager_app']
+    to: ['rs:voyager_app::families*']
+  - id: families-reach-shared-only
+    check: forbid_code
+    from: ['rs:voyager_app::families*']
+    to: ['rs:voyager_app::*']
+    except: ['rs:voyager_app::families*', 'rs:voyager_app::activity', 'rs:voyager_app::activity::*', 'rs:voyager_app::core', 'rs:voyager_app::core::*', 'rs:voyager_app::core_shapes', 'rs:voyager_app::core_shapes::*', 'rs:voyager_app::core_state', 'rs:voyager_app::core_state::*', 'rs:voyager_app::layout_parts', 'rs:voyager_app::layout_parts::*', 'rs:voyager_app::observation', 'rs:voyager_app::observation::*', 'rs:voyager_app::panels', 'rs:voyager_app::panels::*', 'rs:voyager_app::scope', 'rs:voyager_app::scope::*', 'rs:voyager_app::workspace', 'rs:voyager_app::workspace::*']
+  - id: families-no-widened-visibility
+    check: forbid_text
+    pattern: 'pub\s*\(\s*(super|in)\b'
+    roots: ['app/src/families/*']
   - id: no-module-cycles
     check: acyclic
     kind: uses

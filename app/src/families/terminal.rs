@@ -11,7 +11,9 @@ use voyager_contract::{
     administrator::{ProcessAction, ProcessInfo, ProcessOutput, ProcessResponse},
 };
 
-pub(crate) mod lifecycle;
+mod lifecycle;
+pub use lifecycle::Lifecycle;
+pub(crate) use lifecycle::{close_exited, exited, prepare_reopen, prepare_voyage_reopen};
 
 fn refused(message: &str) -> Error {
     Error::Rejected {
