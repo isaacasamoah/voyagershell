@@ -539,11 +539,13 @@ features:
       - tests/native/src/journey/workspace/model.rs
       - tests/native/src/journey/workspace/plan.rs
       - tests/native/src/lifecycle.rs
+      - tests/native/src/lint.rs
       - tests/native/src/main.rs
       - tests/native/src/manifest.rs
       - tests/native/src/native.rs
       - tests/native/src/native/avatar.rs
       - tests/native/src/native/input.rs
+      - tests/native/src/native/settle.rs
       - tests/native/src/native/terminal.rs
       - tests/native/src/probe.rs
       - tests/native/src/profile.rs
