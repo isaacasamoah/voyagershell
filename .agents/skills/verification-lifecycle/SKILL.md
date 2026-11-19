@@ -15,7 +15,7 @@ The implementation is Run::step and Run::verdict in tests/native/src/lifecycle.r
 The independent invariant checker is tests/native/src/proof.rs. Runtime calls are
 in tests/native/src/main.rs. The current event list and finite Rust state type
 define the entire checked domain. The checker explores all reachable states and
-all ten events, including cycles. The platform, semantic validity of observations,
+every event in `EVENTS`, including cycles. The platform, semantic validity of observations,
 OS scheduling, physical input and product-wide behavior are outside that proof.
 
 The event macro generates both the enum and exhaustive event list. A new field or

@@ -30,7 +30,7 @@ The environment is not yet accepted as a complete implementation of that design.
 | Voyages, Fleets and Vessels | Implemented by the `workspace` journey. Its recipe lists the checks that it does not drive. |
 | Seeded, live-edited and shared run profile, and a second identified build | Implemented by the `profile` journey. Checks the theme background only. See Profile fixtures below. |
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
-| Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
+| Portal, provider, content and authority journeys | The `portals` and `chat` journeys are native. Content and authority coverage stays in the retained Python drivers; Rust migration and parity incomplete. |
 | Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. `quit-restore` asserts the window buttons, the corner grip and the close button, and `workspace` asserts the drag, the double-click and the tab drag. See Client decorations and window requests below. |
 | Window-manager behavior, IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
