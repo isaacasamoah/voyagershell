@@ -50,8 +50,8 @@ folder's Voyage.
   the checkout. The shell is the same running program, the folder and the
   branch stay, and the worktree's Voyage stays open. Cancel closes the dialog.
 - `remove-after-shell-exit-keeps-branch` types `exit` in the worktree's shell.
-  The Vessel closes, so the Fleet has no split tree. Remove worktree is then
-  confirmed. The dialog closes, the worktree's Voyage is closed, the folder is
+  The Vessel closes, so the Fleet has no split tree, and its terminal is no
+  longer drawn. Only then does the journey open Remove worktree and confirm. The dialog closes, the worktree's Voyage is closed, the folder is
   gone, `refs/heads/demo/proof` still exists and the repository's Voyage stays
   open.
 
@@ -72,4 +72,8 @@ Git result and a worktree Voyage reopened from Recent voyages are not driven.
 The refused removal is driven with the worktree's own shell as the live
 program. The journey reads Git and the folder from inside the sandbox, as the
 Python `demo-feedback` journey did from outside it. No case compares pixels.
+One run under 18 busy loops showed why the journey waits for the drawn
+frame. A context click 240 ms after the exit, while the window still drew the
+closed Vessel, opened no menu. Whether the canvas drops a context click that
+arrives during that redraw is not established.
 Linux evidence does not establish another platform.

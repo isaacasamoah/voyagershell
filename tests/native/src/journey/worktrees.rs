@@ -209,8 +209,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         worktree.shell.line(native, "exit")?;
         worktree.shell.ended(native)?;
         let emptied = native.settle(
-            "the exited shell's Vessel closed",
-            |seen| Some(emptied(seen.document, &worktree.voyage)),
+            "the exited shell's Vessel closed and no longer drawn",
+            |seen| {
+                Some(
+                    emptied(seen.document, &worktree.voyage)
+                        && !seen.shows(&worktree.shell.target()),
+                )
+            },
             |emptied| *emptied,
         )?;
         open(
@@ -228,7 +233,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let program = worktree.shell.program(native)?;
         Verdict::new()
             .expect(
-                "the shell's exit closed the worktree Voyage's Vessel",
+                "the shell's exit closed the worktree Voyage's Vessel and the window stopped drawing it",
                 emptied,
             )
             .expect(
