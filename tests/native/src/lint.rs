@@ -105,10 +105,8 @@ fn blank(source: &str) -> String {
                 index += if rest[index] == b'\\' { 2 } else { 1 };
             }
             (index + 1).min(rest.len())
-        } else if let Some(length) = character(rest) {
-            length
         } else {
-            0
+            character(rest).unwrap_or_default()
         };
         if skip == 0 {
             let width = source[at..].chars().next().map_or(1, char::len_utf8);
@@ -195,7 +193,7 @@ fn tokens(clean: &str) -> Vec<(Token, usize)> {
     found
 }
 
-fn word<'a>(token: Option<&'a (Token, usize)>) -> Option<&'a str> {
+fn word(token: Option<&(Token, usize)>) -> Option<&str> {
     match token {
         Some((Token::Word(text), _)) => Some(text),
         _ => None,
