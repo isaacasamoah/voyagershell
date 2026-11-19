@@ -299,13 +299,13 @@ features:
     group: worktrees-voyage-close
     owner: desktop-presentation
     shared_with: [placement]
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: none, debug: python-only}
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: []
-    python_journeys: [demo-feedback]
-    docs: [docs/terminal.md, docs/workspace.md]
+    native_journeys: [worktrees]
+    python_journeys: []
+    docs: ['.agents/skills/verify/features/worktrees.md', docs/terminal.md, docs/workspace.md]
     sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
     code: [contract/src/worktree.rs, desktop/canvas/worktrees.ts]
   - id: close-quit-restore
@@ -538,6 +538,7 @@ features:
       - tests/native/src/journey/workspace/avatar.rs
       - tests/native/src/journey/workspace/model.rs
       - tests/native/src/journey/workspace/plan.rs
+      - tests/native/src/journey/worktrees.rs
       - tests/native/src/lifecycle.rs
       - tests/native/src/main.rs
       - tests/native/src/manifest.rs

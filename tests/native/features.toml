@@ -211,13 +211,13 @@ id = "worktrees"
 name = "Worktrees"
 path = "Create and switch git worktrees from a Vessel."
 sources = ["contract/src/worktree.rs", "desktop/canvas/worktrees.ts"]
-journeys = []
+journeys = ["worktrees"]
 platforms = ["linux"]
-python = ["demo-feedback"]
-behavior = "python-only"
+python = []
+behavior = "covered"
 performance = "none"
 visual = "none"
-debug = "python-only"
+debug = "covered"
 
 [[feature]]
 id = "close-quit-restore"
