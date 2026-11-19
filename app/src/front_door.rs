@@ -1,7 +1,7 @@
 use crate::activity::Event;
 use crate::content::Access;
 use crate::core::{Core, Error, PROCESS_EFFECTS, PROCESS_READS};
-use crate::families::terminal::lifecycle::Lifecycle;
+use crate::families::terminal::Lifecycle;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::Arc;

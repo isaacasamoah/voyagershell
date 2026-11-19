@@ -49,7 +49,7 @@ edges:
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::adoption', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::client', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::core_shapes', from_owner: core-adapter, to_owner: application-queue}
-  - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::families::terminal::lifecycle', from_owner: core-adapter, to_owner: application-queue}
+  - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::families::terminal', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::observation', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::voyage_close', from_owner: core-adapter, to_owner: placement}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::workspace', from_owner: core-adapter, to_owner: placement}
