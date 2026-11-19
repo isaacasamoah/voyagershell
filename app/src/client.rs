@@ -1005,34 +1005,17 @@ impl Client {
                             fresh = !missing;
                             if missing
                                 || !seen.current(request.expected_version, version, &layout, || {
-                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                    Some(crate::families::worktree::parts(&request))
                                 })
                             {
                                 return Err("Workspace changed; no worktree was removed".into());
                             }
-                            if !matches!(&scope, None | Some(Context::Workspace))
-                                && !matches!(&scope, Some(Context::Voyage { id }) if id == &request.voyage)
-                            {
-                                return Err(
-                                    "Captured focus no longer authorizes this Voyage".into()
-                                );
-                            }
-                            let source = layout
-                                .voyages
-                                .iter()
-                                .find(|voyage| voyage.id == request.voyage)
-                                .and_then(|voyage| voyage.cwd.as_deref())
-                                .ok_or("Source Voyage is unavailable")?;
-                            let original = std::fs::canonicalize(&source_directory)
-                                .map_err(|error| error.to_string())?;
-                            let current =
-                                std::fs::canonicalize(source).map_err(|error| error.to_string())?;
-                            if original != current {
-                                return Err(
-                                    "Source Voyage directory changed; no worktree was removed"
-                                        .into(),
-                                );
-                            }
+                            crate::families::worktree::confirm_removal(
+                                &layout,
+                                scope.as_ref(),
+                                &request,
+                                &source_directory,
+                            )?;
                             core.begin_terminal_list().map_err(unlisted)
                         })();
                         match preflight {
@@ -1058,123 +1041,66 @@ impl Client {
                         scope,
                         request,
                         source_directory,
-                        mut response,
+                        response,
                         reply,
                     } => {
-                        use voyager_contract::worktree::{
-                            Action as WorktreeAction, Status as WorktreeStatus,
-                        };
-                        if response.status == WorktreeStatus::Applied
-                            && matches!(
-                                request.action,
-                                WorktreeAction::Create { .. }
-                                    | WorktreeAction::Open { .. }
-                                    | WorktreeAction::Remove { .. }
-                            )
-                        {
-                            let completion = (|| -> Result<(), String> {
-                                door.gate(&Envelope::worktree(scope.as_ref(), &request))
-                                    .map_err(|_| "Voyager is quitting".to_owned())?;
-                                let checkout = response
-                                    .checkouts
-                                    .first()
-                                    .ok_or("Git did not return the selected checkout")?;
-                                let core = core
-                                    .as_mut()
-                                    .map_err(|error| format!("Core unavailable: {error:?}"))?;
-                                let (current, revision, missing) =
-                                    load(core, &cwd, &layout, version).map_err(|error| {
-                                        format!("Workspace unavailable: {error:?}")
-                                    })?;
-                                layout = Arc::new(current);
-                                version = revision;
-                                fresh = !missing;
-                                if missing {
-                                    return Err("Workspace is unavailable".into());
-                                }
-                                if !seen.current(request.expected_version, version, &layout, || {
-                                    Some(vec![Part::Voyage(request.voyage.clone())])
-                                }) {
-                                    return Err("Workspace changed after Git dispatch".into());
-                                }
-                                let current_source = layout
-                                    .voyages
-                                    .iter()
-                                    .find(|voyage| voyage.id == request.voyage)
-                                    .and_then(|voyage| voyage.cwd.as_deref())
-                                    .ok_or("Source Voyage is unavailable")?;
-                                let removing =
-                                    matches!(request.action, WorktreeAction::Remove { .. });
-                                if removing {
-                                    if current_source != source_directory {
-                                        return Err("Source Voyage directory changed".into());
-                                    }
-                                } else {
-                                    let original = std::fs::canonicalize(&source_directory)
-                                        .map_err(|error| {
-                                            format!("Source directory unavailable: {error}")
+                        let completion =
+                            if crate::families::worktree::moves_voyages(&request, &response) {
+                                (|| -> Result<(), String> {
+                                    door.gate(&Envelope::worktree(scope.as_ref(), &request))
+                                        .map_err(|_| "Voyager is quitting".to_owned())?;
+                                    let checkout = response
+                                        .checkouts
+                                        .first()
+                                        .ok_or("Git did not return the selected checkout")?;
+                                    let core = core
+                                        .as_mut()
+                                        .map_err(|error| format!("Core unavailable: {error:?}"))?;
+                                    let (current, revision, missing) =
+                                        load(core, &cwd, &layout, version).map_err(|error| {
+                                            format!("Workspace unavailable: {error:?}")
                                         })?;
-                                    let current =
-                                        std::fs::canonicalize(current_source).map_err(|error| {
-                                            format!("Current Voyage directory unavailable: {error}")
-                                        })?;
-                                    if original != current {
-                                        return Err("Source Voyage directory changed".into());
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    fresh = !missing;
+                                    if missing {
+                                        return Err("Workspace is unavailable".into());
                                     }
-                                }
-                                let mut candidate = Model {
-                                    layout: (*layout).clone(),
-                                };
-                                let actions =
-                                    if let WorktreeAction::Remove { path } = &request.action {
-                                        candidate
-                                            .layout
-                                            .voyages
-                                            .iter()
-                                            .filter(|voyage| {
-                                                voyage.cwd.as_ref().is_some_and(|cwd| {
-                                                    std::path::Path::new(cwd).starts_with(path)
-                                                })
-                                            })
-                                            .map(|voyage| Action::CloseVoyage {
-                                                id: voyage.id.clone(),
-                                            })
-                                            .collect::<Vec<_>>()
-                                    } else {
-                                        vec![crate::workspace::open_checkout(
-                                            &candidate.layout,
-                                            &checkout.path,
-                                        )?]
-                                    };
-                                for action in actions {
-                                    crate::scope::check(&layout, scope.as_ref(), &action)?;
-                                    candidate.apply(action)?;
-                                }
-                                let saved =
-                                    save(core, &candidate.layout, version).map_err(|error| {
-                                        format!("Workspace save not confirmed: {error:?}")
-                                    })?;
-                                record_created_terminals(
-                                    &mut created_vessels,
-                                    &layout,
-                                    &candidate.layout,
-                                );
-                                layout = Arc::new(candidate.layout);
-                                version = saved;
-                                if let Some(owner) = content.as_mut() {
-                                    owner.refresh_views();
-                                }
-                                notices.send(version, closing.revision);
+                                    if !seen.current(
+                                        request.expected_version,
+                                        version,
+                                        &layout,
+                                        || Some(crate::families::worktree::parts(&request)),
+                                    ) {
+                                        return Err("Workspace changed after Git dispatch".into());
+                                    }
+                                    let candidate = crate::families::worktree::plan(
+                                        &layout,
+                                        scope.as_ref(),
+                                        &request,
+                                        &source_directory,
+                                        checkout,
+                                    )?;
+                                    let saved = save(core, &candidate.layout, version).map_err(
+                                        |error| format!("Workspace save not confirmed: {error:?}"),
+                                    )?;
+                                    record_created_terminals(
+                                        &mut created_vessels,
+                                        &layout,
+                                        &candidate.layout,
+                                    );
+                                    layout = Arc::new(candidate.layout);
+                                    version = saved;
+                                    if let Some(owner) = content.as_mut() {
+                                        owner.refresh_views();
+                                    }
+                                    notices.send(version, closing.revision);
+                                    Ok(())
+                                })()
+                            } else {
                                 Ok(())
-                            })();
-                            if let Err(error) = completion {
-                                response.status = WorktreeStatus::Uncertain;
-                                response.message = Some(format!(
-                                    "Git completed, but updating its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
-                                ));
-                            }
-                        }
-                        let answer = Arc::new(response);
+                            };
+                        let answer = crate::families::worktree::completed(response, completion);
                         door.settle(&request.request_id, Receipt::Worktree(Arc::clone(&answer)));
                         let _ = reply.send(answer);
                         continue;
@@ -1184,18 +1110,6 @@ impl Client {
                         request,
                         reply,
                     } => {
-                        use voyager_contract::worktree::{
-                            Action as WorktreeAction, Response as WorktreeResponse,
-                            Status as WorktreeStatus,
-                        };
-                        let rejected = |message: String| {
-                            Arc::new(WorktreeResponse {
-                                request_id: request.request_id.clone(),
-                                status: WorktreeStatus::Rejected,
-                                message: Some(message),
-                                checkouts: Vec::new(),
-                            })
-                        };
                         let ticket = match door.admit(
                             &Envelope::worktree(scope.as_ref(), &request),
                             &request,
@@ -1207,40 +1121,28 @@ impl Client {
                                 continue;
                             }
                             Admission::Pending(message) => {
-                                let _ = reply.send(Arc::new(WorktreeResponse {
-                                    request_id: request.request_id.clone(),
-                                    status: WorktreeStatus::Uncertain,
-                                    message: Some(message),
-                                    checkouts: Vec::new(),
-                                }));
+                                let _ = reply
+                                    .send(crate::families::worktree::uncertain(&request, message));
                                 continue;
                             }
                             Admission::Refused(message) => {
-                                let _ = reply.send(rejected(message));
+                                let _ = reply
+                                    .send(crate::families::worktree::rejected(&request, message));
                                 continue;
                             }
                         };
                         let prepared = (|| -> Result<(String, Vec<String>), String> {
-                            if door.crowded(&Envelope::worktree(scope.as_ref(), &request)) {
-                                return Err("A worktree operation is already pending".into());
-                            }
-                            if !fresh
-                                || !seen.current(request.expected_version, version, &layout, || {
-                                    Some(vec![Part::Voyage(request.voyage.clone())])
-                                })
-                            {
-                                return Err(
-                                    "Inspect the current workspace before using worktrees".into()
-                                );
-                            }
-                            if !matches!(&scope, None | Some(Context::Workspace))
-                                && !matches!(&scope, Some(Context::Voyage { id }) if id == &request.voyage)
-                            {
-                                return Err(
-                                    "The request's captured focus does not authorize this Voyage"
-                                        .into(),
-                                );
-                            }
+                            crate::families::worktree::decide(
+                                door.crowded(&Envelope::worktree(scope.as_ref(), &request)),
+                                fresh,
+                                || {
+                                    seen.current(request.expected_version, version, &layout, || {
+                                        Some(crate::families::worktree::parts(&request))
+                                    })
+                                },
+                                scope.as_ref(),
+                                &request,
+                            )?;
                             let core = core
                                 .as_mut()
                                 .map_err(|error| format!("Core unavailable: {error:?}"))?;
@@ -1251,106 +1153,51 @@ impl Client {
                             version = revision;
                             if missing
                                 || !seen.current(request.expected_version, version, &layout, || {
-                                    Some(vec![Part::Voyage(request.voyage.clone())])
+                                    Some(crate::families::worktree::parts(&request))
                                 })
                             {
                                 return Err(
                                     "Workspace changed; inspect before using worktrees".into()
                                 );
                             }
-                            let voyage = layout
-                                .containers()
-                                .find(|voyage| voyage.id == request.voyage)
-                                .ok_or("Voyage not found")?;
-                            let directory = voyage
-                                .cwd
-                                .clone()
-                                .filter(|value| !value.is_empty())
-                                .ok_or("Voyage working directory is unavailable")?;
-                            if matches!(request.action, WorktreeAction::Create { .. }) {
-                                crate::scope::check(
-                                    &layout,
-                                    scope.as_ref(),
-                                    &Action::CreateVoyage {
-                                        name: "worktree".into(),
-                                        cwd: directory.clone(),
-                                    },
-                                )?;
-                            }
-                            Ok((directory, Vec::new()))
+                            crate::families::worktree::prepare(&layout, scope.as_ref(), &request)
                         })();
                         match prepared {
                             Err(message) => {
-                                let answer = rejected(message);
+                                let answer = crate::families::worktree::rejected(&request, message);
                                 door.record(ticket, Receipt::Worktree(Arc::clone(&answer)));
                                 let _ = reply.send(answer);
                             }
                             Ok((directory, live)) => {
                                 door.open(ticket);
-                                let task_request = request;
                                 let task_sender = worktree_sender.clone();
                                 thread::spawn(move || {
-                                    let result = if let WorktreeAction::Remove { path } =
-                                        &task_request.action
-                                    {
-                                        (|| {
-                                            let checkout = crate::families::worktree::open(
-                                                std::path::Path::new(&directory),
-                                                path,
-                                            )?;
-                                            if checkout.main {
-                                                return Err(
-                                                    crate::families::worktree::Error::Rejected(
-                                                        "Cannot remove the main checkout".into(),
-                                                    ),
-                                                );
-                                            }
+                                    let response = crate::families::worktree::run(
+                                        &request,
+                                        &directory,
+                                        &live,
+                                        || {
                                             let (approval, receive) = mpsc::sync_channel(1);
-                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), reply: approval }).map_err(|_| crate::families::worktree::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
-                                            let live = receive.recv().map_err(|_| crate::families::worktree::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::families::worktree::Error::Rejected)?;
-                                            crate::families::worktree::check_live_directories(
-                                                &checkout.path,
-                                                &live,
-                                            )
-                                            .map_err(
-                                                |error| {
-                                                    crate::families::worktree::Error::Rejected(
-                                                        format!("{error:?}"),
-                                                    )
-                                                },
-                                            )?;
-                                            crate::families::worktree::remove(
-                                                std::path::Path::new(&directory),
-                                                &checkout.path,
-                                            )
-                                        })()
-                                    } else {
-                                        crate::families::worktree::execute(
-                                            std::path::Path::new(&directory),
-                                            &task_request.action,
-                                            &live,
-                                        )
-                                    };
-                                    let (status, message, checkouts) = match result {
-                                        Ok(checkouts) => (WorktreeStatus::Applied, None, checkouts),
-                                        Err(crate::families::worktree::Error::Rejected(
-                                            message,
-                                        )) => (WorktreeStatus::Rejected, Some(message), Vec::new()),
-                                        Err(crate::families::worktree::Error::Uncertain(
-                                            message,
-                                        )) => {
-                                            (WorktreeStatus::Uncertain, Some(message), Vec::new())
-                                        }
-                                    };
-                                    let response = WorktreeResponse {
-                                        request_id: task_request.request_id.clone(),
-                                        status,
-                                        message,
-                                        checkouts,
-                                    };
+                                            task_sender
+                                                .send_blocking(Message::WorktreeRemoveReady {
+                                                    scope: scope.clone(),
+                                                    request: request.clone(),
+                                                    source_directory: directory.clone(),
+                                                    reply: approval,
+                                                })
+                                                .map_err(|_| {
+                                                    "Owner unavailable; no worktree was removed"
+                                                        .to_owned()
+                                                })?;
+                                            receive.recv().map_err(|_| {
+                                                "Owner check unavailable; no worktree was removed"
+                                                    .to_owned()
+                                            })?
+                                        },
+                                    );
                                     let _ = task_sender.send_blocking(Message::WorktreeDone {
                                         scope,
-                                        request: task_request,
+                                        request,
                                         source_directory: directory,
                                         response,
                                         reply,
