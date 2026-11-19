@@ -15,6 +15,12 @@ LIVE = {
     "HC_SOCKET": "/run/user/1000/herdr-core/voyager-live-conversation-20261108.sock",
     "HC_TERMINAL_ID": "t9",
 }
+DEFAULT = {
+    "HC_SESSION": "default",
+    "HC_SOCKET": "/run/user/1000/herdr-core/default.sock",
+    "HC_TERMINAL_ID": "t9",
+}
+CROSSED = {**LIVE, "HC_SOCKET": "/run/user/1000/herdr-core/default.sock"}
 CLEAN = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
 
 
@@ -33,8 +39,10 @@ class Refused(unittest.TestCase):
         )
 
     def test_inherited_session_reaches_core(self):
-        self.refused("hc ls")
-        self.refused("HC_SESSION=voyager-live-conversation-20261108 hc ls")
+        self.refused("hc ls", DEFAULT)
+        self.refused("hc ls", CROSSED)
+        self.refused("HC_SESSION=voyager-other hc ls")
+        self.refused("hc ls && cargo test")
         self.refused("cargo test --workspace --locked")
         self.refused("npm test")
         self.refused("ZIG=/z bash -c 'cargo test -p voyager-app'")
@@ -58,6 +66,11 @@ class Allowed(unittest.TestCase):
         )
         self.allowed(f"{CLEAN} DISPLAY=:87 /x/voyager-shell --profile /p --session voyager-x")
 
+    def test_hc_inside_own_voyager_session(self):
+        self.allowed("hc ls")
+        self.allowed("hc send t5v 'co1 code-ready workshop#27@fc0468a reports/co1.md'")
+        self.allowed("hc get --json t64", {"HC_SESSION": "voyager-trial", "HC_TERMINAL_ID": "t64"})
+
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-try hc send t1 'echo hi'")
@@ -79,8 +92,8 @@ class Allowed(unittest.TestCase):
     def test_launch_forms_still_refused(self):
         self.assertIsNotNone(guard.check('cd /p && "$VOYAGER_REPO/target/release/voyager-shell" --profile /x', LIVE))
         self.assertIsNotNone(guard.check("timeout 30 ~/.local/bin/hc server stop", {}))
-        self.assertIsNotNone(guard.check("for t in t1 t2; do hc get $t; done", LIVE))
-        self.assertIsNotNone(guard.check("x=$(hc ls)", LIVE))
+        self.assertIsNotNone(guard.check("for t in t1 t2; do hc get $t; done", DEFAULT))
+        self.assertIsNotNone(guard.check("x=$(hc ls)", DEFAULT))
         self.allowed("tests/native/target/debug/voyager-verification run --journey terminal-scrolling")
 
 

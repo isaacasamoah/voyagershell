@@ -31,6 +31,14 @@ def targets_own_session(command):
     return bool(re.search(r"\bHC_SESSION=['\"]?voyager-[a-z0-9-]+", command))
 
 
+def inside_own_session(environment):
+    session = environment.get("HC_SESSION", "")
+    socket = environment.get("HC_SOCKET", "")
+    return bool(re.fullmatch(r"voyager-[a-z0-9-]+", session)) and (
+        not socket or socket.endswith(f"/{session}.sock")
+    )
+
+
 def deny(reason):
     json.dump(
         {
@@ -60,6 +68,8 @@ def check(command, environment):
             "`env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> hc server stop`."
         )
     live = [name for name in LIVE if environment.get(name)]
+    if hc and inside_own_session(environment) and not re.search(r"\bHC_(?:SESSION|SOCKET)=", command):
+        hc = None
     runs_core = (
         hc
         or run(command, r"cargo\s+test")
