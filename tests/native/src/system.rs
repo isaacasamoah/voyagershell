@@ -616,9 +616,6 @@ fn executable(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
 }
 
-/// The Core the harness pins and binds into its sandbox: `VOYAGER_VERIFY_HC` when it is set and
-/// not empty, else the first `hc` on `PATH`. A crew's first `hc` is a stand-in that hands off to
-/// the real one on `PATH`, and the sandbox holds no other `hc`, so a crew names the real one here.
 pub fn core_binary() -> Result<PathBuf> {
     core_from(
         std::env::var_os("VOYAGER_VERIFY_HC"),
