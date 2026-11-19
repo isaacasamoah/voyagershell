@@ -1,12 +1,12 @@
 use super::layout::agents_beside;
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Terminal};
+use crate::native::{
+    AGENTS_ROW, CANVAS_REFRESH, Elapsed, Native, Stopwatch, Terminal, VESSEL_CLOSED, hold,
+};
 use crate::system::until;
 use crate::x11::Key;
 use anyhow::{Context, Result, ensure};
-use std::thread;
-use std::time::{Duration, Instant};
 use voyager_contract::RenameTarget;
 
 cases! {
@@ -17,8 +17,6 @@ cases! {
 pub const CONTROL: Case = Case::ForegroundReachesAgentsList;
 
 const ROUNDS: usize = 3;
-const SHOWN_WITHIN: Duration = Duration::from_secs(1);
-const PAUSE: Duration = Duration::from_secs(3);
 
 fn program(label: &str) -> Option<&str> {
     label.split(", ").nth(1)
@@ -30,16 +28,12 @@ fn named_after(
     row: &Target,
     reported: &str,
     drawn: &str,
-) -> Result<Duration> {
+) -> Result<Elapsed> {
     let since = terminal.runs(native, reported)?;
     native.observe(&format!("the Agents row naming {drawn}"), |seen| {
         (program(seen.label(row)?)? == drawn).then_some(())
     })?;
-    Ok(since.elapsed())
-}
-
-fn millis(delays: &[Duration]) -> Vec<u128> {
-    delays.iter().map(Duration::as_millis).collect()
+    Ok(since.lap())
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
@@ -63,14 +57,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         Verdict::new()
             .expect(
                 "the Agents row named the foreground program within 1 s of Core reporting it, three times",
-                started.iter().all(|delay| *delay <= SHOWN_WITHIN),
+                started.iter().all(|delay| delay.within(AGENTS_ROW)),
             )
             .expect(
                 "the Agents row named the shell again within 1 s of Core reporting it, three times",
-                returned.iter().all(|delay| *delay <= SHOWN_WITHIN),
+                returned.iter().all(|delay| delay.within(AGENTS_ROW)),
             )
-            .observed("program named after ms", millis(&started))?
-            .observed("shell named after ms", millis(&returned))
+            .observed("program named after ms", &started)?
+            .observed("shell named after ms", &returned)
     })?;
     cases.check(native, Case::ExitShownAfterCorePause, |native| {
         let (before, _) = native.document()?.context("Missing saved layout")?;
@@ -80,10 +74,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             id: terminal.placement().clone(),
         });
         let exited = native.with_core_paused(|native| {
-            thread::sleep(PAUSE);
+            hold(CANVAS_REFRESH)?;
             let drawn = native.drawn_label(
                 &name,
-                Duration::ZERO,
                 "the shell's Vessel still drawn while Core is stopped",
                 |_| true,
             );
@@ -93,7 +86,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             exited,
             "The shell did not exit while Core was stopped with its Vessel still drawn, so the app was not tested"
         );
-        let resumed = Instant::now();
+        let resumed = Stopwatch::start();
         let finished = terminal.ended(native)?;
         until("a newer saved layout after Core resumed", || {
             Ok(native
@@ -101,22 +94,22 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .is_some_and(|(version, _)| version > before)
                 .then_some(()))
         })?;
-        let saved = finished.elapsed();
+        let saved = finished.lap();
         native.observe("the exited shell's Vessel closed", |seen| {
             (!seen.shows(&terminal.target()) && seen.version > before).then_some(())
         })?;
-        let closed = resumed.elapsed();
+        let closed = resumed.lap();
         native.keep_window("missed-snapshot")?;
         Verdict::new()
             .expect(
                 "the Vessel of the shell that exited during the pause was saved closed within 1 s of Core reporting it finished",
-                saved <= SHOWN_WITHIN,
+                saved.within(VESSEL_CLOSED),
             )
             .observed(
                 "resume to finished ms",
-                finished.duration_since(resumed).as_millis(),
+                resumed.until(finished),
             )?
-            .observed("finished to saved ms", saved.as_millis())?
-            .observed("resume to closed ms", closed.as_millis())
+            .observed("finished to saved ms", saved)?
+            .observed("resume to closed ms", closed)
     })
 }

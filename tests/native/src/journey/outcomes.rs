@@ -2,12 +2,11 @@ use super::chat::{ask, conclude, returned_text};
 use super::{Cases, Verdict, cases};
 use crate::core_relay::{Arm, Fault};
 use crate::inspection::Target;
-use crate::native::{Native, fleets, voyages};
+use crate::native::{CORE_DEADLINE, CORE_SILENT, Native, PAST_CORE_DEADLINE, fleets, voyages};
 use crate::provider::{Provider, Script};
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde_json::{Value, json};
-use std::time::Duration;
 use voyager_contract::inspection::Role;
 use voyager_contract::{FleetId, Layout, RenameTarget, VoyageId};
 
@@ -33,10 +32,8 @@ const START: &str = "terminal.run";
 const STOP: &str = "terminal.kill";
 const LABEL: &str = "voyager-operation";
 
-const CORE_DEADLINE: Duration = Duration::from_secs(20);
 const HELD_MS: u64 = 21_000;
 const STALLED_MS: u64 = 22_000;
-const STALL: Duration = Duration::from_secs(24);
 const REFUSED: &str = "Refused.";
 const UNCERTAIN: &str = "Uncertain.";
 const REASON: &str = "A name must contain 1 to 128 bytes";
@@ -48,7 +45,6 @@ const STALLED: &str = "Held Fleet";
 const DECLINED: &str = "Name change not confirmed";
 const INSPECT: &str = "Voyage remains open. Inspect before another close";
 const STALE: &str = "Inspect the workspace before making a change";
-const SILENT: Duration = Duration::from_secs(60);
 const SILENT_NAME: &str = "Silent Fleet";
 const NOT_REPEATED: &str = "so it was not repeated";
 const DROPPED: &str = "Retried Fleet";
@@ -148,7 +144,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let labels = native.with_core_paused(|native| {
             native.press(Key::Return)?;
             native.keep_window("stalled-paused")?;
-            native.drawn_labels(&Target::STATUS, STALL)
+            native.drawn_labels(&Target::STATUS, PAST_CORE_DEADLINE)
         })?;
         let (drawn, after) = renamed(native, &fleet, STALLED)?;
         native.keep_window("stalled-applied")?;
@@ -218,12 +214,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             Ok((fleet_name(&saved(native)?, &fleet).as_deref() == Some(BEHIND)).then_some(()))
         })?;
         native.click(&Target::voyage_close_confirm(&voyage))?;
-        let status = native.drawn_label(
-            &message,
-            Duration::ZERO,
-            "a refusal in the close dialog",
-            |label| label.starts_with(REFUSED),
-        )?;
+        let status = native.drawn_label(&message, "a refusal in the close dialog", |label| {
+            label.starts_with(REFUSED)
+        })?;
         native.keep_window("close-refused")?;
         let (open, _, kept) = at_rest(native, &voyage, &message)?;
         let still_live = native.live_terminals()?;
@@ -303,9 +296,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let typed = type_name(native, &fleet, SILENT_NAME)?;
         let (status, again) = native.with_core_paused(|native| {
             native.press(Key::Return)?;
-            let status = native.drawn_label(
+            let status = native.drawn_label_past(
                 &Target::STATUS,
-                SILENT,
+                CORE_SILENT,
                 "an uncertain result in the status line while Core stays paused",
                 |label| label.starts_with(UNCERTAIN),
             )?;
@@ -356,9 +349,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let arm = native.system.arm_core(STOP, Fault::Drop)?;
         let status = native.with_core_paused(|native| {
             native.click(&Target::voyage_close_confirm(&voyage))?;
-            let status = native.drawn_label(
+            let status = native.drawn_label_past(
                 &message,
-                SILENT,
+                CORE_SILENT,
                 "a refusal in the close dialog while Core stays paused",
                 |label| label.contains(INSPECT) || label.contains(STALE),
             )?;

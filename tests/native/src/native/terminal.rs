@@ -1,4 +1,4 @@
-use super::{Defect, GLANCE, Native, Wheel, pid, placed};
+use super::{Defect, GLANCE, Native, Stopwatch, Wheel, pid, placed};
 use crate::inspection::{Target, Unseen, centre, region};
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Geometry, Key, Pixels};
@@ -8,7 +8,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use voyager_contract::inspection::Frame;
 use voyager_contract::{CoreTerminalId, Layout, PlacementId, VesselId};
 
@@ -449,7 +449,7 @@ impl Terminal {
         )
     }
 
-    pub fn runs(&self, native: &Native, program: &str) -> Result<Instant> {
+    pub fn runs(&self, native: &Native, program: &str) -> Result<Stopwatch> {
         until(
             &format!(
                 "Core naming {program} as the foreground program of {}",
@@ -459,7 +459,7 @@ impl Terminal {
                 let reported = native
                     .system
                     .watch("terminal.get", json!({"terminal":self.address}))?;
-                Ok((foreground_name(&reported).as_deref() == Some(program)).then(Instant::now))
+                Ok((foreground_name(&reported).as_deref() == Some(program)).then(Stopwatch::start))
             },
         )
     }
@@ -468,14 +468,14 @@ impl Terminal {
         self.shell.verify().is_err()
     }
 
-    pub fn ended(&self, native: &Native) -> Result<Instant> {
+    pub fn ended(&self, native: &Native) -> Result<Stopwatch> {
         until(
             &format!("Core reporting the program of {} finished", self.target()),
             || {
                 let reported = native
                     .system
                     .watch("terminal.get", json!({"terminal":self.address}))?;
-                Ok((reported["state"] == "finished").then(Instant::now))
+                Ok((reported["state"] == "finished").then(Stopwatch::start))
             },
         )
     }

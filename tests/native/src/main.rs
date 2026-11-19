@@ -8,6 +8,7 @@ mod frames;
 mod inspection;
 mod journey;
 mod lifecycle;
+mod lint;
 mod manifest;
 mod native;
 mod probe;
@@ -56,7 +57,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, probe, features, journeys, manifest\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, probe, features, lint, journeys, manifest\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nlint [--root DIR] fails with rule check-loosened on a Duration constructor, a sleep or a wall-clock reading in a journey file outside src/native/settle.rs, and names the fix.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -72,6 +73,9 @@ fn entry() -> Result<i32> {
             .context("Probe needs state path and mode")?;
         probe::run(Path::new(path), probe::Mode::parse(mode)?)?;
         return Ok(0);
+    }
+    if command == "lint" {
+        return lint::run(&args);
     }
     if command == "features" {
         return features::run(&args);
@@ -609,10 +613,12 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/workspace/plan.rs"),
     ),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
+    ("src/lint.rs", include_bytes!("lint.rs")),
     ("src/manifest.rs", include_bytes!("manifest.rs")),
     ("src/native.rs", include_bytes!("native.rs")),
     ("src/native/avatar.rs", include_bytes!("native/avatar.rs")),
     ("src/native/input.rs", include_bytes!("native/input.rs")),
+    ("src/native/settle.rs", include_bytes!("native/settle.rs")),
     (
         "src/native/terminal.rs",
         include_bytes!("native/terminal.rs"),

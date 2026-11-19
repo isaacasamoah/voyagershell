@@ -1,7 +1,7 @@
 use super::workspace::{Finish, Open, rename};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen};
+use crate::native::{Native, Seen, Stopwatch};
 use crate::provider::{Provider, Script, Turn};
 use crate::system::PATIENCE;
 use crate::x11::Key;
@@ -9,7 +9,6 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::fs;
-use std::time::Instant;
 use voyager_contract::context::Focus;
 use voyager_contract::inspection::Role;
 use voyager_contract::{FleetId, RenameTarget};
@@ -154,10 +153,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     }
     let Some(turn) = cases.make(native, Case::SendMessage, |native| {
         let draft = type_draft(native, FIRST)?;
-        let pressed = Instant::now();
+        let pressed = Stopwatch::start();
         native.press(Key::Return)?;
         let turn = provider.next_turn(PATIENCE)?;
-        let send_to_turn = pressed.elapsed().as_millis();
+        let send_to_turn = pressed.lap();
         let chat = native.settle(
             "the message drawn with the reply in progress",
             |seen| Some(Chat::of(seen)),
@@ -221,14 +220,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let replied = cases.make(native, Case::StreamedReply, |native| {
         provider.started(&turn)?;
         provider.item_started(&turn, REPLY_ITEM)?;
-        let streamed = Instant::now();
+        let streamed = Stopwatch::start();
         provider.delta(&turn, REPLY_ITEM, FIRST_DELTA)?;
         let first = native.settle(
             "the first part of the reply drawn",
             |seen| Some(Chat::of(seen)),
             |chat| chat.reply(REPLY_ITEM) == Some(FIRST_DELTA) && chat.interrupting(),
         )?;
-        let delta_to_drawn = streamed.elapsed().as_millis();
+        let delta_to_drawn = streamed.lap();
         provider.delta(&turn, REPLY_ITEM, SECOND_DELTA)?;
         let whole = format!("{FIRST_DELTA}{SECOND_DELTA}");
         let second = native.settle(
@@ -325,13 +324,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .context("The layout has no selected Fleet")?;
         let turn = ask(native, &provider, WORKING)?;
         let turns = provider.turn_starts().len();
-        let started = Instant::now();
+        let started = Stopwatch::start();
         let subject = RenameTarget::Fleet { id: fleet.clone() };
         rename(native, &subject, Open::DoubleClick, RENAMED_BY_HAND, Finish::Enter)?;
         let saved = native.watch(|native| {
             Ok(saved_name(native, &fleet)?.filter(|name| name == RENAMED_BY_HAND))
         })?;
-        let elapsed = started.elapsed().as_millis();
+        let elapsed = started.lap();
         let working = native.settle(
             "the reply still in progress after the rename",
             |seen| Some(Chat::of(seen)),
