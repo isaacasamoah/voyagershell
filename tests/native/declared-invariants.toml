@@ -22,8 +22,7 @@ owner = "placement"
 source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view must not stop its backend'; Isaac, 3 Nov 2026: 'Preserve the existing distinction between removing/hiding a view and explicitly stopping its program'; shells started at 17:55 and 20:49 on finished agents' Vessels (unit CC5); merges hide-keeps-backend and showing-starts-nothing per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["vessels", "portals", "fleets"]
 guard = ["type:contract/src/lib.rs#Placement"]
-check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal"]
-gap = "The showing half has no linked case. The case unit CC5 added and the shared_panels test are linked by the unit that links existing checks (DI5)."
+check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal", "journey:adopt-by-label/ended-away-adopted-removed-when-shown"]
 confidence = "stated"
 
 [[invariant]]
@@ -69,8 +68,7 @@ owner = "placement"
 source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'; Isaac, 14 Nov 2026 (voyage-reopens-where-left); gains the closed-Voyage clause of close-voyage-confirms and merges voyage-reopens-where-left per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
 features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-maximize"]
 guard = []
-check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart"]
-gap = "The reopen-where-left half has no linked case. Its five workspace focus cases are linked by the unit that links existing checks (DI5)."
+check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart", "journey:workspace/split-focus-remembered", "journey:workspace/reopen-voyage-restores-fleet", "journey:workspace/relaunch-restores-focus", "journey:workspace/maximize-focus-remembered", "journey:workspace/fleet-tab-focus-remembered"]
 confidence = "stated"
 
 [[invariant]]
@@ -103,8 +101,7 @@ owner = "placement"
 source = "tests/native/README.md capability rows; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["split-resize-maximize"]
 guard = ["type:contract/src/lib.rs#SplitShare"]
-check = []
-gap = "Nine arrangement cases exist and are not linked yet. The unit that links existing checks (DI5) links them."
+check = ["journey:arrangement/split-below", "journey:arrangement/split-right-shortcut", "journey:arrangement/split-below-shortcut", "journey:arrangement/resize-dividers", "journey:arrangement/maximize-button", "journey:arrangement/restore-shortcut", "journey:arrangement/maximize-shortcut-restore-button", "journey:arrangement/window-resize-fits-grid"]
 confidence = "inferred"
 
 [[invariant]]
@@ -115,8 +112,8 @@ owner = "desktop-presentation"
 source = "#189 verdict: a Fleet tab dragged 7 px past the row end onto the empty bar moved the window in 3 of 3 runs; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["fleets", "fleet-arrangement", "voyages", "selection", "window-drag-bar"]
 guard = []
-check = []
-gap = "Five workspace drag cases exist and are not linked yet (DI5). None of them releases past the row end as #189 did."
+check = ["journey:workspace/tab-drag-does-not-move-window", "journey:workspace/voyage-drag-does-not-move-window", "journey:workspace/terminal-selection-does-not-move-window", "journey:workspace/drag-bar-moves-window", "journey:workspace/sidebar-drag-moves-window"]
+gap = "None of the linked cases releases past the row end as #189 did."
 confidence = "inferred"
 
 [[invariant]]
@@ -127,8 +124,7 @@ owner = "desktop-presentation"
 source = "Client decorations under GNOME; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["window-drag-bar", "close-quit-restore"]
 guard = []
-check = []
-gap = "Three quit-restore cases and one workspace case exist and are not linked yet (DI5)."
+check = ["journey:quit-restore/window-buttons-send-minimise-and-maximise-requests", "journey:quit-restore/bottom-right-grip-sends-resize-request", "journey:quit-restore/controls-absent-under-server-decorations", "journey:workspace/double-click-bar-maximises-window"]
 confidence = "inferred"
 
 [[invariant]]
@@ -232,8 +228,8 @@ owner = "conversation-provider"
 source = "AGENTS.md, Content and provider boundaries; Isaac, 3 Nov 2026 owner UX note: wants to rename a Vessel such as Terminal T1 and then address it through the native assistant using that new name; merges renamed-vessel-is-addressable per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["chat", "vessels"]
 guard = []
-check = []
-gap = "The six chat cases exist and are not linked yet (DI5). The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name."
+check = ["journey:chat/streamed-reply", "journey:chat/provider-error", "journey:chat/tool-call-inspect", "journey:chat/tool-call-effect"]
+gap = "The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name."
 confidence = "stated"
 
 [[invariant]]
@@ -244,8 +240,8 @@ owner = "application-queue"
 source = "#243 and #251; finished-work-leaves-the-screen (#236, #251 and Isaac's tidy-up requests); merged per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["adopted-vessels", "agent-vessels"]
 guard = []
-check = []
-gap = "The adopt-by-label cases exist and are not linked yet (DI5)."
+check = ["journey:adopt-by-label/agent-in-fleet", "journey:adopt-by-label/agent-in-portal", "journey:adopt-by-label/command-fleet-holds-only-its-agent", "journey:adopt-by-label/dock-agent", "journey:adopt-by-label/reopen-closes-ended-adopted", "journey:adopt-by-label/ended-away-adopted-removed-when-shown"]
+gap = "No case proves that closing the agent removes its Vessel."
 confidence = "stated"
 
 [[invariant]]
@@ -315,8 +311,8 @@ owner = "desktop-presentation"
 source = "#142 and its issue #141, which Isaac hit in daily use: Tab moved focus out of the terminal; docs/terminal.md; merges keys-reach-the-program and selection-and-clipboard per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["terminal-io", "selection", "clipboard"]
 guard = []
-check = ["journey:terminal-input/keys-reach-the-program"]
-gap = "The other 15 terminal-input cases exist and are not linked yet (DI5)."
+check = ["journey:terminal-input/keys-reach-the-program", "journey:terminal-input/typed-command-runs", "journey:terminal-input/keys-follow-program-modes", "journey:terminal-input/paste-sends-another-clients-text", "journey:terminal-input/input-reaches-one-terminal-while-another-floods", "journey:terminal-input/a-click-sends-no-bytes-and-a-middle-click-pastes-primary", "journey:terminal-input/a-click-in-the-shell-input-line-moves-the-cursor-there", "journey:terminal-input/a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column", "journey:terminal-input/a-click-across-a-wide-character-sends-one-arrow-per-character"]
+gap = "No case reads the Program's bytes during a drag selection or a copy."
 confidence = "inferred"
 
 [[invariant]]
@@ -327,8 +323,7 @@ owner = "desktop-presentation"
 source = "Isaac's agent-scrolling report and his acceptance of the fix, 10 Nov 2026; the reattach clause from the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["terminal-scrolling", "agent-vessels"]
 guard = []
-check = ["journey:terminal-scrolling/mouse", "journey:terminal-scrolling/normal-history"]
-gap = "The arrows and reattached-history cases exist and are not linked yet (DI5)."
+check = ["journey:terminal-scrolling/mouse", "journey:terminal-scrolling/normal-history", "journey:terminal-scrolling/arrows", "journey:terminal-scrolling/reattached-history"]
 confidence = "stated"
 
 [[invariant]]
@@ -339,10 +334,9 @@ owner = "core-adapter"
 source = "#105: after about 64 terminals were opened and ended, every pane stopped taking input until restart"
 features = ["terminal-io", "vessels"]
 guard = ["type:app/src/core_viewer.rs#Lease"]
-check = []
+check = ["test:app/tests/viewer_streams.rs#ended_terminals_do_not_exhaust_viewers"]
 formal = ["core-viewers:BridgeStaysUp", "core-viewers:SlotsWithinLimit", "core-viewers:EveryOccupiedSlotHasAViewer", "core-viewers:BufferAccounting"]
 formal_why = "Two real slot-leak and disconnect bugs that depended on attach timeouts and exit order. Tests missed them and the model found them, as the core-viewers skill records."
-gap = "The viewer_streams test exists and is not linked yet (DI5)."
 confidence = "inferred"
 
 # Results of an action
@@ -377,8 +371,8 @@ owner = "core-adapter"
 source = "Isaac, 3 Nov 2026 owner UX note: 'Unknown/unavailable facts must not be invented'; hc wait woke coordinators on 'done' while work was still running (turn-ended-is-not-finished); widens unknown-is-not-invented and merges turn-ended-is-not-finished per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
 features = ["agent-vessels", "layouts-home", "core-reports"]
 guard = []
-check = []
-gap = "The core-events cases exist and are not linked yet (DI5). The unknown half has no case, and the turn-ended half waits for the Status v1 unit."
+check = ["test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal", "test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts", "test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report"]
+gap = "The linked tests pin the activity record, not what is drawn. The turn-ended half waits for the Status v1 unit."
 confidence = "stated"
 
 [[invariant]]
@@ -389,8 +383,8 @@ owner = "application-queue"
 source = "AGENTS.md: 'Do not block application actions on provider work'; widens assistant-never-blocks-app per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["chat", "front-door", "core-reports"]
 guard = []
-check = []
-gap = "The chat, slow-save and slow-list cases and a selected_stop test exist and are not linked yet (DI5)."
+check = ["journey:chat/rename-while-provider-works", "journey:slow-save/inspect-answered-during-held-save", "journey:slow-list/inspect-answered-during-held-list", "test:app/tests/selected_stop.rs#delayed_process_send_does_not_hold_workspace_inspection"]
+gap = "No case runs a user action in the workspace while a Core reply is held."
 confidence = "stated"
 
 # Stored layout and profile across builds
@@ -557,8 +551,8 @@ owner = "verification"
 source = "CONSTRAINTS.md, Effective tests; tests/native/README.md, Negative controls; reworded per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["verification-environment"]
 guard = ["type:tests/native/src/journey.rs#control"]
-check = []
-gap = "The controls run by hand. The unit test that each patch still applies exists and is not linked yet (DI5)."
+check = ["test:tests/native/src/journey.rs#every_control_patch_still_applies"]
+gap = "The controls run by hand. The linked test proves each patch still applies, and nothing proves each one fails its journey."
 confidence = "stated"
 
 [[invariant]]
