@@ -24,6 +24,11 @@ pub(crate) trait Calls {
     ) -> Result<Arc<ProcessResponse>, CallError>;
 }
 
+pub(crate) struct Observed<'a> {
+    pub terminals: &'a [Terminal],
+    pub notes_type: &'a str,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SaveTicket(String);
 
@@ -160,10 +165,13 @@ impl Closing {
         version: u64,
         id: &VoyageId,
         request: &str,
-        terminals: &[Terminal],
-        notes_type: &str,
+        observed: Observed,
         changes: impl FnOnce(&Path) -> Result<Option<u32>, String>,
     ) -> Result<(), Error> {
+        let Observed {
+            terminals,
+            notes_type,
+        } = observed;
         if self
             .plan
             .as_ref()

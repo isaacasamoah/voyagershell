@@ -1,6 +1,6 @@
 pub use crate::core::CallError;
 pub use crate::families::terminal::Lifecycle;
-use crate::families::voyage_close::{Closing, RenameRelease};
+use crate::families::voyage_close::{Closing, Observed, RenameRelease};
 pub use crate::families::voyage_close::{RenamedNotes, SaveRequest, SaveTicket};
 use crate::{
     activity::Activity,
@@ -1687,8 +1687,10 @@ impl Client {
                                                 version.structure,
                                                 id,
                                                 &request.request_id,
-                                                &terminals?,
-                                                crate::vessel_type::NOTES_TYPE,
+                                                Observed {
+                                                    terminals: &terminals?,
+                                                    notes_type: crate::vessel_type::NOTES_TYPE,
+                                                },
                                                 worktree_changes,
                                             )?;
                                             response.message = Some(

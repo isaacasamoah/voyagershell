@@ -1,6 +1,6 @@
-diff --git a/app/src/voyage_close.rs b/app/src/voyage_close.rs
---- a/app/src/voyage_close.rs
-+++ b/app/src/voyage_close.rs
+diff --git a/app/src/families/voyage_close.rs b/app/src/families/voyage_close.rs
+--- a/app/src/families/voyage_close.rs
++++ b/app/src/families/voyage_close.rs
 @@ -429,7 +429,7 @@
          }
      }
