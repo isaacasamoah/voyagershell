@@ -5,10 +5,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use voyager_app::{
-    client::{CallError, Client},
+    client::{CallError, Client, SaveRequest},
     content::Owner,
     core::Core,
-    voyage_close::SaveRequest,
 };
 use voyager_contract::{
     Action, ContentDestination, Context, Outcome, PlacementInsertion, PlacementOwner, Request,

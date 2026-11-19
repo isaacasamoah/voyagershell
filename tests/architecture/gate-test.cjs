@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /43 violations, 43 known\n.*PASS\n$/s);
+  assert.match(result.out, /41 violations, 41 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -236,10 +236,16 @@ test("the contract crate reaching the app crate fails", () => {
   );
 });
 
-test("voyage_close using client fails when it is not a known violation", () => {
+test("the Voyage close family using client fails", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/families/voyage_close.rs",
+    (text) => `use crate::client as _planted;\n${text}`,
+  );
   expectFailure(
-    run(scratch(), ["--known", without(/voyage-close-not-on-client/)]),
-    "NEW voyage-close-not-on-client: uses(rs:voyager_app::voyage_close,rs:voyager_app::client)",
+    run(directory),
+    "NEW voyage-close-not-on-client: uses(rs:voyager_app::families::voyage_close,rs:voyager_app::client)",
   );
 });
 

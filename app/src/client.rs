@@ -1,4 +1,7 @@
+pub use crate::core::CallError;
 pub use crate::families::terminal::Lifecycle;
+use crate::families::voyage_close::{Closing, Observed, RenameRelease, RenamedNotes};
+pub use crate::families::voyage_close::{SaveRequest, SaveTicket};
 use crate::{
     activity::Activity,
     core::{Error, Viewer, WeakViewer},
@@ -38,7 +41,7 @@ use content_calls::{configure, select_note};
 pub use core_calls::WorkspaceNotice;
 use core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
-    live_directories, post, relist, reports, unlisted,
+    live_directories, post, relist, reports, unlisted, worktree_changes,
 };
 use terminal_start::{CreatedTerminal, require_finished};
 
@@ -52,7 +55,7 @@ enum Message {
         version: u64,
     },
     CloseSaves {
-        sender: async_channel::Sender<crate::voyage_close::SaveRequest>,
+        sender: async_channel::Sender<SaveRequest>,
     },
     CloseDone {
         request: Request,
@@ -108,7 +111,7 @@ enum Message {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
         reply: ContentReply,
-        close_ticket: Option<crate::voyage_close::SaveTicket>,
+        close_ticket: Option<SaveTicket>,
         native_save: bool,
     },
     Worktree {
@@ -329,12 +332,6 @@ impl Message {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum CallError {
-    Rejected(String),
-    Unconfirmed(String),
-}
-
 pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration, Claim);
 
 impl PendingCall {
@@ -491,12 +488,9 @@ impl Client {
             let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut listing = Listing::default();
             let mut notices = Notices::new(observed_activity.clone(), published_packages);
-            let mut closing = crate::voyage_close::Closing::default();
-            let mut renaming: Option<(
-                crate::voyage_close::SaveTicket,
-                crate::content::rename::Plan,
-                crate::voyage_close::RenameRelease,
-            )> = None;
+            let mut closing = Closing::default();
+            let mut renaming: Option<(SaveTicket, crate::content::rename::Plan, RenameRelease)> =
+                None;
             loop {
                 seen.note(version, &layout);
                 let gate = |event: &_| door.gate(&Envelope::report(event)).is_ok();
@@ -605,7 +599,7 @@ impl Client {
                     } => {
                         program = from;
                         if renaming.as_ref().is_some_and(|(ticket, _, _)| {
-                            *ticket == crate::voyage_close::SaveTicket::new(&request.request_id)
+                            *ticket == SaveTicket::new(&request.request_id)
                         }) {
                             rename_ready = renaming.take().map(|(ticket, plan, release)| {
                                 rename_release = Some(release);
@@ -1693,7 +1687,11 @@ impl Client {
                                                 version.structure,
                                                 id,
                                                 &request.request_id,
-                                                &terminals?,
+                                                Observed {
+                                                    terminals: &terminals?,
+                                                    notes_type: crate::vessel_type::NOTES_TYPE,
+                                                },
+                                                worktree_changes,
                                             )?;
                                             response.message = Some(
                                                 "Confirm the Voyage shutdown; no work has stopped"
@@ -1724,7 +1722,7 @@ impl Client {
                                             let scope = scope.clone();
                                             let reply = reply.clone();
                                             thread::spawn(move || {
-                                                let result = crate::voyage_close::execute(
+                                                let result = crate::families::voyage_close::execute(
                                                     &worker, confirmed,
                                                 );
                                                 let _ = sender.send_blocking(Message::CloseDone {
@@ -1792,7 +1790,7 @@ impl Client {
                                                 .map_err(Error::Uncertain)?;
                                             }
                                         }
-                                        rename_rebind = Some(crate::voyage_close::RenamedNotes {
+                                        rename_rebind = Some(RenamedNotes {
                                             files: plan.moved_files(),
                                             workspace_version: version.structure,
                                             snapshot,
@@ -1812,12 +1810,10 @@ impl Client {
                                             ));
                                         }
                                         let saves = closing.saves.as_ref().ok_or_else(|| rejected("The native Notes save service is unavailable; nothing was renamed".into()))?;
-                                        let ticket = crate::voyage_close::SaveTicket::new(
-                                            &request.request_id,
-                                        );
+                                        let ticket = SaveTicket::new(&request.request_id);
                                         let (ready, waiting) = async_channel::bounded(1);
-                                        saves.try_send(crate::voyage_close::SaveRequest::PrepareRename { ticket: ticket.clone(), vessels: plan.vessels.clone(), files: plan.files.clone(), reply: ready }).map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
-                                        let release = crate::voyage_close::RenameRelease::new(
+                                        saves.try_send(SaveRequest::PrepareRename { ticket: ticket.clone(), vessels: plan.vessels.clone(), files: plan.files.clone(), reply: ready }).map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
+                                        let release = RenameRelease::new(
                                             saves.clone(),
                                             ticket.clone(),
                                             plan.vessels.clone(),
@@ -2343,7 +2339,7 @@ impl Client {
 
     pub fn content_native_save(
         &self,
-        ticket: Option<crate::voyage_close::SaveTicket>,
+        ticket: Option<SaveTicket>,
         view: &crate::content::ViewBinding,
         request: voyager_contract::content::Request,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
@@ -2361,9 +2357,7 @@ impl Client {
         )
     }
 
-    pub fn close_save_requests(
-        &self,
-    ) -> Result<async_channel::Receiver<crate::voyage_close::SaveRequest>, String> {
+    pub fn close_save_requests(&self) -> Result<async_channel::Receiver<SaveRequest>, String> {
         let (sender, receiver) = async_channel::bounded(4);
         self.sender
             .try_send(Message::CloseSaves { sender })
@@ -2376,7 +2370,7 @@ impl Client {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
         view: Option<&crate::content::ViewBinding>,
-        close_ticket: Option<crate::voyage_close::SaveTicket>,
+        close_ticket: Option<SaveTicket>,
         native_save: bool,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
         check_content_size(&request)?;

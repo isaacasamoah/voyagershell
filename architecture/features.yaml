@@ -313,7 +313,7 @@ features:
     summary: 'Close a Voyage, quit the app and find the session restored on the next launch.'
     group: startup-quit
     owner: desktop-presentation
-    shared_with: [application-queue, placement, core-adapter]
+    shared_with: [application-queue, core-adapter, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -324,7 +324,7 @@ features:
     sources:
       - desktop/src/quit.rs
       - app/src/families/terminal/lifecycle.rs
-      - app/src/voyage_close.rs
+      - app/src/families/voyage_close.rs
       - contract/src/voyage_close.rs
       - desktop/canvas/voyage-close.ts
       - desktop/canvas/stop-session.ts
@@ -335,7 +335,7 @@ features:
       - app/src/client.rs
       - app/src/core.rs
       - app/src/families/terminal/lifecycle.rs
-      - app/src/voyage_close.rs
+      - app/src/families/voyage_close.rs
       - contract/src/voyage_close.rs
       - desktop/canvas/stop-session.ts
       - desktop/canvas/voyage-close.ts
