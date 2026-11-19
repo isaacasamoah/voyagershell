@@ -1294,36 +1294,38 @@ impl Client {
                                         &task_request.action
                                     {
                                         (|| {
-                                            let checkout = crate::worktrees::open(
+                                            let checkout = crate::families::worktree::open(
                                                 std::path::Path::new(&directory),
                                                 path,
                                             )?;
                                             if checkout.main {
-                                                return Err(crate::worktrees::Error::Rejected(
-                                                    "Cannot remove the main checkout".into(),
-                                                ));
+                                                return Err(
+                                                    crate::families::worktree::Error::Rejected(
+                                                        "Cannot remove the main checkout".into(),
+                                                    ),
+                                                );
                                             }
                                             let (approval, receive) = mpsc::sync_channel(1);
-                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
-                                            let live = receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
-                                            crate::worktrees::check_live_directories(
+                                            task_sender.send_blocking(Message::WorktreeRemoveReady { scope: scope.clone(), request: task_request.clone(), source_directory: directory.clone(), reply: approval }).map_err(|_| crate::families::worktree::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
+                                            let live = receive.recv().map_err(|_| crate::families::worktree::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::families::worktree::Error::Rejected)?;
+                                            crate::families::worktree::check_live_directories(
                                                 &checkout.path,
                                                 &live,
                                             )
                                             .map_err(
                                                 |error| {
-                                                    crate::worktrees::Error::Rejected(format!(
-                                                        "{error:?}"
-                                                    ))
+                                                    crate::families::worktree::Error::Rejected(
+                                                        format!("{error:?}"),
+                                                    )
                                                 },
                                             )?;
-                                            crate::worktrees::remove(
+                                            crate::families::worktree::remove(
                                                 std::path::Path::new(&directory),
                                                 &checkout.path,
                                             )
                                         })()
                                     } else {
-                                        crate::worktrees::execute(
+                                        crate::families::worktree::execute(
                                             std::path::Path::new(&directory),
                                             &task_request.action,
                                             &live,
@@ -1331,10 +1333,12 @@ impl Client {
                                     };
                                     let (status, message, checkouts) = match result {
                                         Ok(checkouts) => (WorktreeStatus::Applied, None, checkouts),
-                                        Err(crate::worktrees::Error::Rejected(message)) => {
-                                            (WorktreeStatus::Rejected, Some(message), Vec::new())
-                                        }
-                                        Err(crate::worktrees::Error::Uncertain(message)) => {
+                                        Err(crate::families::worktree::Error::Rejected(
+                                            message,
+                                        )) => (WorktreeStatus::Rejected, Some(message), Vec::new()),
+                                        Err(crate::families::worktree::Error::Uncertain(
+                                            message,
+                                        )) => {
                                             (WorktreeStatus::Uncertain, Some(message), Vec::new())
                                         }
                                     };
