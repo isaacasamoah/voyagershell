@@ -17,6 +17,7 @@ mod slow_list;
 mod slow_save;
 mod voyage_close;
 mod workspace;
+mod worktrees;
 
 use crate::native::{Native, Sidebar};
 use crate::system::save;
@@ -126,6 +127,7 @@ journeys! {
     CoreEvents => "core-events" in core_events, sidebar: None, window: None;
     SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {

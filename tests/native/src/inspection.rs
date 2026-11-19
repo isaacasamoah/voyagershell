@@ -131,6 +131,26 @@ impl Target {
         Self::keyed(Role::VoyageCloseStatus, &voyage.0)
     }
 
+    pub fn new_worktree(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::NewWorktree, &voyage.0)
+    }
+
+    pub fn remove_worktree(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::RemoveWorktree, &voyage.0)
+    }
+
+    pub fn worktree_confirm(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::WorktreeConfirm, &voyage.0)
+    }
+
+    pub fn worktree_cancel(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::WorktreeCancel, &voyage.0)
+    }
+
+    pub fn worktree_status(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::WorktreeStatus, &voyage.0)
+    }
+
     pub fn worker(launch: &str) -> Self {
         Self::keyed(Role::CreateWorker, launch)
     }
