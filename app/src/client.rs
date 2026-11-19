@@ -1,7 +1,7 @@
 pub use crate::core::CallError;
 pub use crate::families::terminal::Lifecycle;
-use crate::families::voyage_close::{Closing, Observed, RenameRelease};
-pub use crate::families::voyage_close::{RenamedNotes, SaveRequest, SaveTicket};
+use crate::families::voyage_close::{Closing, Observed, RenameRelease, RenamedNotes};
+pub use crate::families::voyage_close::{SaveRequest, SaveTicket};
 use crate::{
     activity::Activity,
     core::{Error, Viewer, WeakViewer},
