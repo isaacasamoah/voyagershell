@@ -43,14 +43,12 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: ${{ env.ZIG_VERSION }}
-      - name: Record runner image version
-        run: echo "RUNNER_IMAGE_VERSION=$ImageVersion" >> "$GITHUB_ENV"
       - name: Restore native library packages
         id: apt-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/apt-archives
-          key: apt-${{ runner.os }}-${{ env.RUNNER_IMAGE_VERSION }}-${{ hashFiles('.github/native-apt-packages.txt') }}
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/native-apt-packages.txt') }}
       - name: Native build libraries
         timeout-minutes: 10
         env:
@@ -58,10 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           archives="$HOME/apt-archives"
-          if [ "$APT_CACHE_HIT" = "true" ] && sudo dpkg -i "$archives"/*.deb; then
+          if [ "$APT_CACHE_HIT" = "true" ] && sudo dpkg -i --refuse-downgrade "$archives"/*.deb; then
             exit 0
           fi
           mkdir -p "$archives/partial"
+          { echo "http://azure.archive.ubuntu.com/ubuntu/"; cat /etc/apt/apt-mirrors.txt; } | sudo tee /etc/apt/apt-mirrors.txt.new >/dev/null
+          sudo mv /etc/apt/apt-mirrors.txt.new /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
           xargs -a .github/native-apt-packages.txt sudo apt-get install -y --no-install-recommends \
             -o Acquire::Retries=5 -o Acquire::http::Timeout=30 \
