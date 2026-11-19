@@ -6,6 +6,7 @@ const { parseTables } = require("./toml.cjs");
 const { owners } = require("./owners.cjs");
 
 const REGISTRY = "tests/native/features.toml";
+const INVARIANTS = "tests/native/declared-invariants.toml";
 const VOCABULARY = "tests/architecture/vocabulary.yaml";
 const GROUPS = "architecture/atlas-features.yaml";
 const MAP = "architecture/features.yaml";
@@ -133,6 +134,39 @@ function pythonJourneys(repository) {
   return new Set(choices.split('"').filter((_, index) => index % 2));
 }
 
+function linkInvariants(repository, rows, problems) {
+  const linked = new Map(rows.map((row) => [row.id, []]));
+  const entries = parseTables(read(repository, INVARIANTS), "invariant", [
+    "envelope",
+    "out_of_scope",
+  ]);
+  for (const invariant of entries) {
+    const entry = {
+      id: invariant.id,
+      kind: invariant.kind,
+      says: invariant.says,
+      ...(invariant.owner && { owner: invariant.owner }),
+      guards: invariant.guard,
+      checks: invariant.check,
+      formal: invariant.formal ?? [],
+      journeys: [
+        ...new Set(
+          invariant.check
+            .filter((link) => link.startsWith("journey:"))
+            .map((link) => link.slice("journey:".length).split("/")[0]),
+        ),
+      ].sort(),
+    };
+    for (const feature of invariant.features)
+      if (linked.has(feature)) linked.get(feature).push(entry);
+      else
+        problems.push(
+          `${INVARIANTS}: invariant ${invariant.id} names feature ${feature}, which is not in ${REGISTRY}; use a feature id from it`,
+        );
+  }
+  return linked;
+}
+
 function build(repository) {
   const rows = loadRegistry(repository);
   const { groups, checks } = loadGroups(repository);
@@ -147,6 +181,7 @@ function build(repository) {
   const native = nativeJourneys(repository);
   const python = pythonJourneys(repository);
   const problems = [];
+  const invariants = linkInvariants(repository, rows, problems);
   for (const check of checks)
     if (!rows.some((row) => row.id === check.feature) || !check.run)
       problems.push(
@@ -250,6 +285,7 @@ function build(repository) {
       checks: own.map((check) => check.run),
       native_journeys: row.journeys,
       python_journeys: row.python,
+      invariants: invariants.get(id),
       docs: [...docs].sort(),
       sources: row.sources,
       code,
@@ -273,21 +309,22 @@ function pageText(model) {
       feature.proof,
       feature.native_journeys.join(", ") || "-",
       feature.python_journeys.join(", ") || "-",
+      feature.invariants.map((invariant) => invariant.id).join(", ") || "-",
       feature.docs.map(link).join(", ") || "-",
     ].join(" | "),
   );
   return `# Feature map
 
-Generated from \`${REGISTRY}\`, \`${GROUPS}\` and the context owners in \`${VOCABULARY}\` by \`npm run features:generate\`. Edit those inputs, then regenerate. The complete map with code paths and state is \`${MAP}\`.
+Generated from \`${REGISTRY}\`, \`${GROUPS}\`, the declared invariants in \`${INVARIANTS}\` and the context owners in \`${VOCABULARY}\` by \`npm run features:generate\`. Edit those inputs, then regenerate. The complete map with code paths and state is \`${MAP}\`. For each feature it lists the declared invariants that name the feature, and for each invariant its guards, checks, formal properties and the journeys its checks run.
 
 \`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`tests\` when it has no journey and a CI step named in \`${GROUPS}\` is its proof, shown as proven by its tests. Only a feature with no journey may take such a step.
 
 ## The change gate
 
-On a pull request, \`npm run features:check -- --base <base>\` fails when a change touches a feature's source paths with no change to its map entry and no recorded run. Record the run by adding a line \`Journeys run: <journey>, <journey>\` to the PR description, then push a new commit, because editing the description does not rerun CI. Every such line counts. A feature needs all of its native journeys, or one Python journey when it has no native journey. Another way through is to change the feature's entry in \`${REGISTRY}\` and run \`npm run features:generate\`. A feature proven by its tests needs no record, because that CI step runs on the same pull request.
+On a pull request, \`npm run features:check -- --base <base>\` fails when a change touches a feature's source paths with no change to its map entry and no recorded run. Record the run by adding a line \`Journeys run: <journey>, <journey>\` to the PR description, then push a new commit, because editing the description does not rerun CI. Every such line counts. A feature needs all of its native journeys, or one Python journey when it has no native journey. Another way through is to change the feature's entry in \`${REGISTRY}\` and run \`npm run features:generate\`. A change to a declared invariant alone does not count, because the gate compares each entry without its invariants. A feature proven by its tests needs no record, because that CI step runs on the same pull request.
 
-| Feature | Group | Owner | Proof | Native journeys | Python journeys | Docs |
-| --- | --- | --- | --- | --- | --- | --- |
+| Feature | Group | Owner | Proof | Native journeys | Python journeys | Declared invariants | Docs |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 ${rows.map((row) => `| ${row} |`).join("\n")}
 `;
 }
@@ -326,9 +363,8 @@ function changedCode(repository, base, ran) {
   const changed = git(repository, ["diff", "--name-only", base, "HEAD"])
     .split("\n")
     .filter(Boolean);
-  const before = new Map(
-    previous.map((entry) => [entry.id, JSON.stringify(entry)]),
-  );
+  const own = ({ invariants, ...entry }) => JSON.stringify(entry);
+  const before = new Map(previous.map((entry) => [entry.id, own(entry)]));
   const problems = [];
   for (const feature of head) {
     const hit = changed.filter((file) =>
@@ -337,7 +373,7 @@ function changedCode(repository, base, ran) {
     if (
       !hit.length ||
       feature.checks.length ||
-      before.get(feature.id) !== JSON.stringify(feature)
+      before.get(feature.id) !== own(feature)
     )
       continue;
     const named = feature.native_journeys.length

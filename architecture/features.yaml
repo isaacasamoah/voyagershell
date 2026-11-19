@@ -11,6 +11,53 @@ features:
     checks: []
     native_journeys: [workspace]
     python_journeys: [demo-feedback]
+    invariants:
+      - id: placement-survives-relaunch
+        kind: user
+        says: 'The Voyages, Fleets, placements, Portals, names, arrangements, the avatar''s dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/relaunch-restores'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+          - 'journey:portals/relaunch-restores-portal'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:voyage-close/closed-after-restart'
+          - 'journey:workspace/split-focus-remembered'
+          - 'journey:workspace/reopen-voyage-restores-fleet'
+          - 'journey:workspace/relaunch-restores-focus'
+          - 'journey:workspace/maximize-focus-remembered'
+          - 'journey:workspace/fleet-tab-focus-remembered'
+        formal: []
+        journeys: [arrangement, portals, quit-restore, voyage-close, workspace]
+      - id: rename-and-drag-everything
+        kind: user
+        says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/rename-fleet-enter'
+          - 'journey:workspace/rename-voyage-blur'
+          - 'journey:workspace/rename-vessel-f2'
+          - 'journey:workspace/rename-escape-cancels'
+          - 'journey:portals/rename-portal'
+          - 'journey:arrangement/move-vessel'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+        formal: []
+        journeys: [arrangement, portals, workspace]
+      - id: drag-never-moves-window
+        kind: user
+        says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/tab-drag-does-not-move-window'
+          - 'journey:workspace/voyage-drag-does-not-move-window'
+          - 'journey:workspace/terminal-selection-does-not-move-window'
+          - 'journey:workspace/drag-bar-moves-window'
+          - 'journey:workspace/sidebar-drag-moves-window'
+        formal: []
+        journeys: [workspace]
     docs: [docs/content.md, docs/terminal.md, docs/workspace.md]
     sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', desktop/canvas/voyage-colours.ts, app/src/workspace.rs, app/src/content/rename.rs, app/src/scope.rs]
     code:
@@ -34,6 +81,80 @@ features:
     checks: []
     native_journeys: [workspace]
     python_journeys: []
+    invariants:
+      - id: views-never-start-or-stop-programs
+        kind: user
+        says: 'Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program.'
+        owner: placement
+        guards: ['type:contract/src/lib.rs#Placement']
+        checks:
+          - 'journey:portals/hide-portals'
+          - 'journey:portals/portal-across-fleets'
+          - 'journey:portals/close-portal'
+          - 'journey:portals/reopen-portal'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+        formal: []
+        journeys: [adopt-by-label, portals]
+      - id: placement-survives-relaunch
+        kind: user
+        says: 'The Voyages, Fleets, placements, Portals, names, arrangements, the avatar''s dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/relaunch-restores'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+          - 'journey:portals/relaunch-restores-portal'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:voyage-close/closed-after-restart'
+          - 'journey:workspace/split-focus-remembered'
+          - 'journey:workspace/reopen-voyage-restores-fleet'
+          - 'journey:workspace/relaunch-restores-focus'
+          - 'journey:workspace/maximize-focus-remembered'
+          - 'journey:workspace/fleet-tab-focus-remembered'
+        formal: []
+        journeys: [arrangement, portals, quit-restore, voyage-close, workspace]
+      - id: rename-and-drag-everything
+        kind: user
+        says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/rename-fleet-enter'
+          - 'journey:workspace/rename-voyage-blur'
+          - 'journey:workspace/rename-vessel-f2'
+          - 'journey:workspace/rename-escape-cancels'
+          - 'journey:portals/rename-portal'
+          - 'journey:arrangement/move-vessel'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+        formal: []
+        journeys: [arrangement, portals, workspace]
+      - id: drag-never-moves-window
+        kind: user
+        says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/tab-drag-does-not-move-window'
+          - 'journey:workspace/voyage-drag-does-not-move-window'
+          - 'journey:workspace/terminal-selection-does-not-move-window'
+          - 'journey:workspace/drag-bar-moves-window'
+          - 'journey:workspace/sidebar-drag-moves-window'
+        formal: []
+        journeys: [workspace]
+      - id: user-placement-is-kept
+        kind: user
+        says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: fleets-stay-readable
+        kind: user
+        says: 'No Vessel is shown narrower than a measured readable width. Past that point the Fleet becomes a grid.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs]
     code: [app/src/workspace.rs, desktop/canvas/creation.js, desktop/canvas/creation.ts, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/navigation-view.js, desktop/canvas/navigation-view.ts]
@@ -49,6 +170,60 @@ features:
     checks: []
     native_journeys: [arrangement]
     python_journeys: [layouts, arrangement]
+    invariants:
+      - id: placement-survives-relaunch
+        kind: user
+        says: 'The Voyages, Fleets, placements, Portals, names, arrangements, the avatar''s dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/relaunch-restores'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+          - 'journey:portals/relaunch-restores-portal'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:voyage-close/closed-after-restart'
+          - 'journey:workspace/split-focus-remembered'
+          - 'journey:workspace/reopen-voyage-restores-fleet'
+          - 'journey:workspace/relaunch-restores-focus'
+          - 'journey:workspace/maximize-focus-remembered'
+          - 'journey:workspace/fleet-tab-focus-remembered'
+        formal: []
+        journeys: [arrangement, portals, quit-restore, voyage-close, workspace]
+      - id: rename-and-drag-everything
+        kind: user
+        says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/rename-fleet-enter'
+          - 'journey:workspace/rename-voyage-blur'
+          - 'journey:workspace/rename-vessel-f2'
+          - 'journey:workspace/rename-escape-cancels'
+          - 'journey:portals/rename-portal'
+          - 'journey:arrangement/move-vessel'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+        formal: []
+        journeys: [arrangement, portals, workspace]
+      - id: drag-never-moves-window
+        kind: user
+        says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/tab-drag-does-not-move-window'
+          - 'journey:workspace/voyage-drag-does-not-move-window'
+          - 'journey:workspace/terminal-selection-does-not-move-window'
+          - 'journey:workspace/drag-bar-moves-window'
+          - 'journey:workspace/sidebar-drag-moves-window'
+        formal: []
+        journeys: [workspace]
+      - id: user-placement-is-kept
+        kind: user
+        says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/arrangement.md, docs/terminal.md, docs/workspace.md]
     sources: [app/src/panels.rs, desktop/src/arrangement.rs, docs/arrangement.md, 'desktop/canvas/panel-view.*']
     code: [app/src/panels.rs, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/arrangement.rs, docs/arrangement.md]
@@ -64,6 +239,58 @@ features:
     checks: []
     native_journeys: [workspace]
     python_journeys: []
+    invariants:
+      - id: views-never-start-or-stop-programs
+        kind: user
+        says: 'Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program.'
+        owner: placement
+        guards: ['type:contract/src/lib.rs#Placement']
+        checks:
+          - 'journey:portals/hide-portals'
+          - 'journey:portals/portal-across-fleets'
+          - 'journey:portals/close-portal'
+          - 'journey:portals/reopen-portal'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+        formal: []
+        journeys: [adopt-by-label, portals]
+      - id: live-vessel-attaches
+        kind: user
+        says: 'A view of a live Program always attaches, and the user never sees a stale-revision refusal for it.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: rename-and-drag-everything
+        kind: user
+        says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/rename-fleet-enter'
+          - 'journey:workspace/rename-voyage-blur'
+          - 'journey:workspace/rename-vessel-f2'
+          - 'journey:workspace/rename-escape-cancels'
+          - 'journey:portals/rename-portal'
+          - 'journey:arrangement/move-vessel'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+        formal: []
+        journeys: [arrangement, portals, workspace]
+      - id: conversation-acts-through-operations
+        kind: user
+        says: 'The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name.'
+        owner: conversation-provider
+        guards: []
+        checks: ['journey:chat/streamed-reply', 'journey:chat/provider-error', 'journey:chat/tool-call-inspect', 'journey:chat/tool-call-effect']
+        formal: []
+        journeys: [chat]
+      - id: terminals-never-run-out
+        kind: user
+        says: 'Opening and ending terminals any number of times in one session never stops input to the live ones.'
+        owner: core-adapter
+        guards: ['type:app/src/core_viewer.rs#Lease']
+        checks: ['test:app/tests/viewer_streams.rs#ended_terminals_do_not_exhaust_viewers']
+        formal: ['core-viewers:BridgeStaysUp', 'core-viewers:SlotsWithinLimit', 'core-viewers:EveryOccupiedSlotHasAViewer', 'core-viewers:BufferAccounting']
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources: ['desktop/canvas/main.*', 'desktop/canvas/panel-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs, app/src/launch.rs, app/src/families/terminal/lifecycle.rs]
     code:
@@ -88,6 +315,95 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [arrangement, terminal-agent]
+    invariants:
+      - id: restart-reopens-plain-shells
+        kind: user
+        says: 'An adopted agent''s Vessel whose program ended closes, at once or on the next reopen, and starts no new program. A Vessel the person opened keeps its shell when an agent run inside it ends, a typed exit closes it, and after a restart or a Voyage reopen it runs a new plain shell in place of a program that ended. An agent is never resumed automatically.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:quit-restore/cold-restart-restores'
+          - 'journey:voyage-close/reopen-voyage'
+          - 'journey:voyage-close/reopen-after-restart'
+          - 'journey:adopt-by-label/reopen-restarts-own-terminal'
+          - 'journey:adopt-by-label/reopen-closes-ended-adopted'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+          - 'journey:adopt-by-label/agent-exit-in-own-shell-keeps-shell'
+          - 'journey:adopt-by-label/user-started-agent-vessel-keeps-shell'
+          - 'journey:adopt-by-label/typed-exit-closes-vessel'
+        formal: []
+        journeys: [adopt-by-label, quit-restore, voyage-close]
+      - id: user-placement-is-kept
+        kind: user
+        says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: adopted-agents-follow-their-label
+        kind: user
+        says: 'An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:adopt-by-label/agent-in-fleet'
+          - 'journey:adopt-by-label/agent-in-portal'
+          - 'journey:adopt-by-label/command-fleet-holds-only-its-agent'
+          - 'journey:adopt-by-label/dock-agent'
+          - 'journey:adopt-by-label/reopen-closes-ended-adopted'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+        formal: []
+        journeys: [adopt-by-label]
+      - id: authority-comes-from-assignment
+        kind: user
+        says: 'The avatar always acts with its user''s authority. Any other agent instructs another only through a recorded Assignment with a Rank, stored by the app. Fleet membership and Core parentage grant nothing.'
+        owner: application-queue
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: typing-feels-immediate
+        kind: user
+        says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: wheel-scrolls-full-screen-programs
+        kind: user
+        says: 'The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise, including after reattach.'
+        owner: desktop-presentation
+        guards: []
+        checks: ['journey:terminal-scrolling/mouse', 'journey:terminal-scrolling/normal-history', 'journey:terminal-scrolling/arrows', 'journey:terminal-scrolling/reattached-history']
+        formal: []
+        journeys: [terminal-scrolling]
+      - id: status-is-reported-or-unknown
+        kind: user
+        says: 'A Program''s status is Core''s latest report or unknown. Silence, or a turn that ended while the agent''s work continues, is never shown as idle or finished.'
+        owner: core-adapter
+        guards: []
+        checks:
+          - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
+          - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
+          - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+        formal: []
+        journeys: []
+      - id: agent-setup-untouched
+        kind: developer
+        says: 'Voyager never writes to an agent''s own home or configuration. It passes its settings through launch flags and the environment.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: any-agent-works
+        kind: structure
+        says: 'The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer''s agent setup. Agent-specific code lives only in that agent''s adapter.'
+        owner: conversation-provider
+        guards: ['gate:agent-names-stay-in-adapters']
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources: [app/src/launch.rs, desktop/canvas/agents.ts, desktop/canvas/processes.ts]
     code: [app/src/launch.rs, desktop/canvas/agents.ts, desktop/canvas/processes.ts]
@@ -103,6 +419,69 @@ features:
     checks: []
     native_journeys: [portals]
     python_journeys: [portal-terminal]
+    invariants:
+      - id: views-never-start-or-stop-programs
+        kind: user
+        says: 'Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program.'
+        owner: placement
+        guards: ['type:contract/src/lib.rs#Placement']
+        checks:
+          - 'journey:portals/hide-portals'
+          - 'journey:portals/portal-across-fleets'
+          - 'journey:portals/close-portal'
+          - 'journey:portals/reopen-portal'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+        formal: []
+        journeys: [adopt-by-label, portals]
+      - id: placement-survives-relaunch
+        kind: user
+        says: 'The Voyages, Fleets, placements, Portals, names, arrangements, the avatar''s dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/relaunch-restores'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+          - 'journey:portals/relaunch-restores-portal'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:voyage-close/closed-after-restart'
+          - 'journey:workspace/split-focus-remembered'
+          - 'journey:workspace/reopen-voyage-restores-fleet'
+          - 'journey:workspace/relaunch-restores-focus'
+          - 'journey:workspace/maximize-focus-remembered'
+          - 'journey:workspace/fleet-tab-focus-remembered'
+        formal: []
+        journeys: [arrangement, portals, quit-restore, voyage-close, workspace]
+      - id: portal-belongs-to-voyage
+        kind: user
+        says: 'A Portal belongs to its Voyage. It stays shown with the same program on every Fleet of that Voyage, is not drawn in other Voyages, and opens as an overlay by default with make-room as the other mode.'
+        owner: placement
+        guards: []
+        checks: ['journey:portals/portal-across-fleets', 'journey:portals/portal-stays-in-its-voyage']
+        formal: []
+        journeys: [portals]
+      - id: rename-and-drag-everything
+        kind: user
+        says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/rename-fleet-enter'
+          - 'journey:workspace/rename-voyage-blur'
+          - 'journey:workspace/rename-vessel-f2'
+          - 'journey:workspace/rename-escape-cancels'
+          - 'journey:portals/rename-portal'
+          - 'journey:arrangement/move-vessel'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+        formal: []
+        journeys: [arrangement, portals, workspace]
+      - id: context-follows-dock
+        kind: user
+        says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
+        owner: placement
+        guards: []
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        formal: []
+        journeys: [portals]
     docs: ['.agents/skills/verify/features/portals.md', docs/content.md, docs/terminal.md, docs/workspace.md]
     sources: [app/src/content.rs, 'app/src/content/*.rs', app/src/workspace.rs, app/src/panels.rs, desktop/canvas/panels.ts, desktop/canvas/panel-view.ts]
     code:
@@ -131,6 +510,48 @@ features:
     checks: []
     native_journeys: [arrangement]
     python_journeys: [workspace-ux]
+    invariants:
+      - id: placement-survives-relaunch
+        kind: user
+        says: 'The Voyages, Fleets, placements, Portals, names, arrangements, the avatar''s dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:workspace/relaunch-restores'
+          - 'journey:arrangement/relaunch-keeps-arrangement'
+          - 'journey:portals/relaunch-restores-portal'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:voyage-close/closed-after-restart'
+          - 'journey:workspace/split-focus-remembered'
+          - 'journey:workspace/reopen-voyage-restores-fleet'
+          - 'journey:workspace/relaunch-restores-focus'
+          - 'journey:workspace/maximize-focus-remembered'
+          - 'journey:workspace/fleet-tab-focus-remembered'
+        formal: []
+        journeys: [arrangement, portals, quit-restore, voyage-close, workspace]
+      - id: split-resize-maximize
+        kind: user
+        says: 'Any panel can be split, resized and maximized, by pointer and by shortcut, and a window resize keeps the grid.'
+        owner: placement
+        guards: ['type:contract/src/lib.rs#SplitShare']
+        checks:
+          - 'journey:arrangement/split-below'
+          - 'journey:arrangement/split-right-shortcut'
+          - 'journey:arrangement/split-below-shortcut'
+          - 'journey:arrangement/resize-dividers'
+          - 'journey:arrangement/maximize-button'
+          - 'journey:arrangement/restore-shortcut'
+          - 'journey:arrangement/maximize-shortcut-restore-button'
+          - 'journey:arrangement/window-resize-fits-grid'
+        formal: []
+        journeys: [arrangement]
+      - id: fleets-stay-readable
+        kind: user
+        says: 'No Vessel is shown narrower than a measured readable width. Past that point the Fleet becomes a grid.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources: [desktop/src/split.rs, 'desktop/canvas/panel-view.*', 'desktop/canvas/main.*', app/src/panels.rs]
     code: [app/src/panels.rs, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/split.rs]
@@ -145,6 +566,40 @@ features:
     checks: []
     native_journeys: [terminal-input]
     python_journeys: [terminal-grid, portal-terminal]
+    invariants:
+      - id: typing-feels-immediate
+        kind: user
+        says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: terminal-input-arrives-intact
+        kind: user
+        says: 'Every key, paste and click in a focused terminal, Tab included, reaches the Program once and in order, and selecting or copying sends no bytes.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:terminal-input/keys-reach-the-program'
+          - 'journey:terminal-input/typed-command-runs'
+          - 'journey:terminal-input/keys-follow-program-modes'
+          - 'journey:terminal-input/paste-sends-another-clients-text'
+          - 'journey:terminal-input/input-reaches-one-terminal-while-another-floods'
+          - 'journey:terminal-input/a-click-sends-no-bytes-and-a-middle-click-pastes-primary'
+          - 'journey:terminal-input/a-click-in-the-shell-input-line-moves-the-cursor-there'
+          - 'journey:terminal-input/a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column'
+          - 'journey:terminal-input/a-click-across-a-wide-character-sends-one-arrow-per-character'
+        formal: []
+        journeys: [terminal-input]
+      - id: terminals-never-run-out
+        kind: user
+        says: 'Opening and ending terminals any number of times in one session never stops input to the live ones.'
+        owner: core-adapter
+        guards: ['type:app/src/core_viewer.rs#Lease']
+        checks: ['test:app/tests/viewer_streams.rs#ended_terminals_do_not_exhaust_viewers']
+        formal: ['core-viewers:BridgeStaysUp', 'core-viewers:SlotsWithinLimit', 'core-viewers:EveryOccupiedSlotHasAViewer', 'core-viewers:BufferAccounting']
+        journeys: []
     docs: [docs/terminal.md]
     sources:
       - desktop/src/terminal.rs
@@ -173,6 +628,15 @@ features:
     checks: []
     native_journeys: [terminal-scrolling]
     python_journeys: [terminal-scrolling]
+    invariants:
+      - id: wheel-scrolls-full-screen-programs
+        kind: user
+        says: 'The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise, including after reattach.'
+        owner: desktop-presentation
+        guards: []
+        checks: ['journey:terminal-scrolling/mouse', 'journey:terminal-scrolling/normal-history', 'journey:terminal-scrolling/arrows', 'journey:terminal-scrolling/reattached-history']
+        formal: []
+        journeys: [terminal-scrolling]
     docs: ['.agents/skills/verify/features/terminal-scrolling.md', docs/terminal.md]
     sources: [desktop/src/terminal_scroll.rs, desktop/src/terminal.rs, desktop/src/terminal_screen.rs, desktop/src/terminal_view.rs]
     code: [desktop/src/terminal.rs, desktop/src/terminal_screen.rs, desktop/src/terminal_scroll.rs, desktop/src/terminal_view.rs]
@@ -187,6 +651,37 @@ features:
     checks: []
     native_journeys: [terminal-input]
     python_journeys: []
+    invariants:
+      - id: drag-never-moves-window
+        kind: user
+        says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/tab-drag-does-not-move-window'
+          - 'journey:workspace/voyage-drag-does-not-move-window'
+          - 'journey:workspace/terminal-selection-does-not-move-window'
+          - 'journey:workspace/drag-bar-moves-window'
+          - 'journey:workspace/sidebar-drag-moves-window'
+        formal: []
+        journeys: [workspace]
+      - id: terminal-input-arrives-intact
+        kind: user
+        says: 'Every key, paste and click in a focused terminal, Tab included, reaches the Program once and in order, and selecting or copying sends no bytes.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:terminal-input/keys-reach-the-program'
+          - 'journey:terminal-input/typed-command-runs'
+          - 'journey:terminal-input/keys-follow-program-modes'
+          - 'journey:terminal-input/paste-sends-another-clients-text'
+          - 'journey:terminal-input/input-reaches-one-terminal-while-another-floods'
+          - 'journey:terminal-input/a-click-sends-no-bytes-and-a-middle-click-pastes-primary'
+          - 'journey:terminal-input/a-click-in-the-shell-input-line-moves-the-cursor-there'
+          - 'journey:terminal-input/a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column'
+          - 'journey:terminal-input/a-click-across-a-wide-character-sends-one-arrow-per-character'
+        formal: []
+        journeys: [terminal-input]
     docs: [docs/terminal.md]
     sources: [desktop/src/terminal_screen.rs, desktop/src/terminal_input.rs]
     code: [desktop/src/terminal_input.rs, desktop/src/terminal_screen.rs]
@@ -201,6 +696,24 @@ features:
     checks: []
     native_journeys: [terminal-input]
     python_journeys: [notes-lifetime]
+    invariants:
+      - id: terminal-input-arrives-intact
+        kind: user
+        says: 'Every key, paste and click in a focused terminal, Tab included, reaches the Program once and in order, and selecting or copying sends no bytes.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:terminal-input/keys-reach-the-program'
+          - 'journey:terminal-input/typed-command-runs'
+          - 'journey:terminal-input/keys-follow-program-modes'
+          - 'journey:terminal-input/paste-sends-another-clients-text'
+          - 'journey:terminal-input/input-reaches-one-terminal-while-another-floods'
+          - 'journey:terminal-input/a-click-sends-no-bytes-and-a-middle-click-pastes-primary'
+          - 'journey:terminal-input/a-click-in-the-shell-input-line-moves-the-cursor-there'
+          - 'journey:terminal-input/a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column'
+          - 'journey:terminal-input/a-click-across-a-wide-character-sends-one-arrow-per-character'
+        formal: []
+        journeys: [terminal-input]
     docs: [docs/terminal.md]
     sources: [desktop/src/text.rs, desktop/src/terminal_input.rs]
     code: [desktop/src/terminal_input.rs, desktop/src/text.rs]
@@ -215,6 +728,15 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [notes, notes-lifetime]
+    invariants:
+      - id: live-edit-keeps-last-good
+        kind: user
+        says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
+        owner: content
+        guards: []
+        checks: ['journey:profile/live-edit-recolours']
+        formal: []
+        journeys: [profile]
     docs: [docs/terminal.md]
     sources: [desktop/src/notes.rs, 'desktop/src/notes_*.rs']
     code: [desktop/src/notes.rs, desktop/src/notes_draft.rs, desktop/src/notes_input.rs, desktop/src/notes_scope.rs, desktop/src/notes_session.rs]
@@ -229,6 +751,54 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [avatar, portal-avatar]
+    invariants:
+      - id: context-follows-dock
+        kind: user
+        says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
+        owner: placement
+        guards: []
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        formal: []
+        journeys: [portals]
+      - id: avatar-stays-put
+        kind: user
+        says: 'The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: avatar-click-minimizes
+        kind: user
+        says: 'Clicking the avatar minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: authority-comes-from-assignment
+        kind: user
+        says: 'The avatar always acts with its user''s authority. Any other agent instructs another only through a recorded Assignment with a Rank, stored by the app. Fleet membership and Core parentage grant nothing.'
+        owner: application-queue
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: avatar-stays-fast
+        kind: user
+        says: 'Each avatar tool call is one round trip and finishes within the limit in the usage envelope. A dock adds model work only when a dock behaviour the user chose asks for it.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: any-agent-works
+        kind: structure
+        says: 'The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer''s agent setup. Agent-specific code lives only in that agent''s adapter.'
+        owner: conversation-provider
+        guards: ['gate:agent-names-stay-in-adapters']
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md]
     sources: [desktop/src/avatar.rs, 'desktop/src/avatar/*.rs', desktop/src/avatar_motion.rs, desktop/src/avatar_pack.rs, 'desktop/src/avatar_pack/*.rs', contract/src/avatar_animation.rs]
     code:
@@ -251,6 +821,42 @@ features:
     checks: []
     native_journeys: [chat]
     python_journeys: [conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content]
+    invariants:
+      - id: context-follows-dock
+        kind: user
+        says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
+        owner: placement
+        guards: []
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        formal: []
+        journeys: [portals]
+      - id: conversation-acts-through-operations
+        kind: user
+        says: 'The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name.'
+        owner: conversation-provider
+        guards: []
+        checks: ['journey:chat/streamed-reply', 'journey:chat/provider-error', 'journey:chat/tool-call-inspect', 'journey:chat/tool-call-effect']
+        formal: []
+        journeys: [chat]
+      - id: reports-wait-for-the-user
+        kind: user
+        says: 'Reports to Voyager never interrupt the user''s chat. Only click-yes cards and blockers raise a badge.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: waiting-never-blocks-app
+        kind: user
+        says: 'Waiting on the Provider or a slow Core reply never holds up ordinary workspace actions or inspection.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:chat/rename-while-provider-works'
+          - 'journey:slow-save/inspect-answered-during-held-save'
+          - 'journey:slow-list/inspect-answered-during-held-list'
+          - 'test:app/tests/selected_stop.rs#delayed_process_send_does_not_hold_workspace_inspection'
+        formal: []
+        journeys: [chat, slow-list, slow-save]
     docs: ['.agents/skills/verify/features/chat.md', docs/conversation.md, docs/terminal.md]
     sources: [desktop/src/conversation.rs, app/src/conversation.rs, 'app/src/conversation_*.rs', 'app/src/codex*.rs', 'app/src/provider*.rs', desktop/canvas/chat.ts]
     code:
@@ -276,6 +882,30 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [conversation-voice]
+    invariants:
+      - id: context-follows-dock
+        kind: user
+        says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
+        owner: placement
+        guards: []
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        formal: []
+        journeys: [portals]
+      - id: voice-is-audible
+        kind: user
+        says: 'When the assistant speaks, the person hears it through the selected output.'
+        owner: conversation-provider
+        guards: []
+        checks: ['manual:an agent proof where one exists, otherwise Isaac by ear']
+        formal: []
+        journeys: []
+      - id: voice-is-click-to-talk
+        kind: user
+        says: 'Voice listens only after the user clicks, and it never adds per-use API charges.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/conversation.md, docs/terminal.md]
     sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs']
     code: [app/src/voice.rs, app/src/voice_host.rs, app/src/voice_session.rs, app/src/voice_transcript.rs, app/src/voice_wire.rs, desktop/src/speech.rs]
@@ -290,6 +920,18 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [layouts, workspace-ux]
+    invariants:
+      - id: status-is-reported-or-unknown
+        kind: user
+        says: 'A Program''s status is Core''s latest report or unknown. Silence, or a turn that ended while the agent''s work continues, is never shown as idle or finished.'
+        owner: core-adapter
+        guards: []
+        checks:
+          - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
+          - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
+          - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+        formal: []
+        journeys: []
     docs: [docs/layouts.md, docs/terminal.md]
     sources: [desktop/canvas/navigation-view.ts, desktop/canvas/menu.ts, docs/layouts.md]
     code: [desktop/canvas/menu.ts, desktop/canvas/navigation-view.ts, docs/layouts.md]
@@ -305,6 +947,7 @@ features:
     checks: []
     native_journeys: [worktrees]
     python_journeys: []
+    invariants: []
     docs: ['.agents/skills/verify/features/worktrees.md', docs/terminal.md, docs/workspace.md]
     sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts, app/src/families/worktree.rs, app/src/families/worktree/git.rs]
     code: [app/src/families/worktree.rs, app/src/families/worktree/git.rs, contract/src/worktree.rs, desktop/canvas/worktrees.ts]
@@ -320,6 +963,73 @@ features:
     checks: []
     native_journeys: [quit-restore, voyage-close]
     python_journeys: []
+    invariants:
+      - id: quit-keeps-programs
+        kind: user
+        says: 'Ctrl+Q, the window''s close button and a window-manager close all quit and keep. Core, every program and its output carry on, and the next launch reattaches to the same programs.'
+        owner: application-queue
+        guards: ['type:app/src/families/terminal/lifecycle.rs#Lifecycle']
+        checks:
+          - 'journey:quit-restore/quit-and-keep'
+          - 'journey:quit-restore/relaunch-reattaches'
+          - 'journey:quit-restore/relaunch-adopts-and-attaches'
+          - 'journey:quit-restore/quit-busy-keeps-output'
+          - 'journey:quit-restore/close-window-keeps'
+          - 'journey:quit-restore/close-button-keeps'
+        formal: []
+        journeys: [quit-restore]
+      - id: stop-is-explicit
+        kind: user
+        says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'
+        owner: application-queue
+        guards: ['type:contract/src/lib.rs#Action']
+        checks: ['journey:quit-restore/stop-session', 'journey:voyage-close/close-voyage-asks', 'journey:voyage-close/close-voyage-cancel', 'journey:voyage-close/close-voyage-confirm']
+        formal: []
+        journeys: [quit-restore, voyage-close]
+      - id: restart-reopens-plain-shells
+        kind: user
+        says: 'An adopted agent''s Vessel whose program ended closes, at once or on the next reopen, and starts no new program. A Vessel the person opened keeps its shell when an agent run inside it ends, a typed exit closes it, and after a restart or a Voyage reopen it runs a new plain shell in place of a program that ended. An agent is never resumed automatically.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:quit-restore/cold-restart-restores'
+          - 'journey:voyage-close/reopen-voyage'
+          - 'journey:voyage-close/reopen-after-restart'
+          - 'journey:adopt-by-label/reopen-restarts-own-terminal'
+          - 'journey:adopt-by-label/reopen-closes-ended-adopted'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+          - 'journey:adopt-by-label/agent-exit-in-own-shell-keeps-shell'
+          - 'journey:adopt-by-label/user-started-agent-vessel-keeps-shell'
+          - 'journey:adopt-by-label/typed-exit-closes-vessel'
+        formal: []
+        journeys: [adopt-by-label, quit-restore, voyage-close]
+      - id: window-controls-work
+        kind: user
+        says: 'Under client decorations the window buttons, the corner grip and a double-click on the bar send the right window-manager requests, and under server decorations the app draws none of them.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:quit-restore/window-buttons-send-minimise-and-maximise-requests'
+          - 'journey:quit-restore/bottom-right-grip-sends-resize-request'
+          - 'journey:quit-restore/controls-absent-under-server-decorations'
+          - 'journey:workspace/double-click-bar-maximises-window'
+        formal: []
+        journeys: [quit-restore, workspace]
+      - id: one-window-by-default
+        kind: user
+        says: 'Launching the app again reveals the existing window and avatar. A second instance opens only when the person asks for one explicitly, such as New Window from the right-click menu.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: irreversible-needs-the-user
+        kind: user
+        says: 'Stopping Core, updating Core and removing a machine each wait for the user''s click.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources:
       - desktop/src/quit.rs
@@ -352,6 +1062,32 @@ features:
     checks: []
     native_journeys: [workspace]
     python_journeys: []
+    invariants:
+      - id: drag-never-moves-window
+        kind: user
+        says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/tab-drag-does-not-move-window'
+          - 'journey:workspace/voyage-drag-does-not-move-window'
+          - 'journey:workspace/terminal-selection-does-not-move-window'
+          - 'journey:workspace/drag-bar-moves-window'
+          - 'journey:workspace/sidebar-drag-moves-window'
+        formal: []
+        journeys: [workspace]
+      - id: window-controls-work
+        kind: user
+        says: 'Under client decorations the window buttons, the corner grip and a double-click on the bar send the right window-manager requests, and under server decorations the app draws none of them.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:quit-restore/window-buttons-send-minimise-and-maximise-requests'
+          - 'journey:quit-restore/bottom-right-grip-sends-resize-request'
+          - 'journey:quit-restore/controls-absent-under-server-decorations'
+          - 'journey:workspace/double-click-bar-maximises-window'
+        formal: []
+        journeys: [quit-restore, workspace]
     docs: [docs/terminal.md]
     sources: ['desktop/canvas/navigation-view.*', desktop/src/window_frame.rs, desktop/patches/gpui-shell-window-drag.patch]
     code: [desktop/canvas/navigation-view.js, desktop/canvas/navigation-view.ts, desktop/patches/gpui-shell-window-drag.patch, desktop/src/window_frame.rs]
@@ -366,6 +1102,36 @@ features:
     checks: []
     native_journeys: [profile]
     python_journeys: []
+    invariants:
+      - id: personal-edits-kept
+        kind: user
+        says: 'An update never overwrites or moves a Profile file the person edited. It announces each kept file once with a diff, and does not announce it again until a newer version of that file ships.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:profile-updates/untouched-files-update-and-stop-session-shows'
+          - 'journey:profile-updates/edited-files-stay-as-they-were'
+          - 'journey:profile-updates/edited-files-are-announced-with-a-diff'
+          - 'journey:profile-updates/a-dropped-file-is-deleted-only-when-untouched'
+          - 'journey:profile/second-build-keeps-voyage'
+        formal: []
+        journeys: [profile, profile-updates]
+      - id: live-edit-keeps-last-good
+        kind: user
+        says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
+        owner: content
+        guards: []
+        checks: ['journey:profile/live-edit-recolours']
+        formal: []
+        journeys: [profile]
+      - id: pass-means-observed
+        kind: developer
+        says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
+        owner: verification
+        guards: ['type:tests/native/src/lifecycle.rs#Run']
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md]
     sources: [desktop/themes/voyager.json, desktop/src/lib.rs, desktop/src/host.rs]
     code: [desktop/src/host.rs, desktop/src/lib.rs, desktop/themes/voyager.json]
@@ -381,6 +1147,36 @@ features:
     checks: []
     native_journeys: [profile-updates]
     python_journeys: []
+    invariants:
+      - id: personal-edits-kept
+        kind: user
+        says: 'An update never overwrites or moves a Profile file the person edited. It announces each kept file once with a diff, and does not announce it again until a newer version of that file ships.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:profile-updates/untouched-files-update-and-stop-session-shows'
+          - 'journey:profile-updates/edited-files-stay-as-they-were'
+          - 'journey:profile-updates/edited-files-are-announced-with-a-diff'
+          - 'journey:profile-updates/a-dropped-file-is-deleted-only-when-untouched'
+          - 'journey:profile/second-build-keeps-voyage'
+        formal: []
+        journeys: [profile, profile-updates]
+      - id: kept-edit-never-blanks-workspace
+        kind: user
+        says: 'After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: pass-means-observed
+        kind: developer
+        says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
+        owner: verification
+        guards: ['type:tests/native/src/lifecycle.rs#Run']
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/content.md, docs/terminal.md]
     sources: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/shipped.rs, desktop/src/lib.rs, desktop/src/host.rs]
     code: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/host.rs, desktop/src/lib.rs, desktop/src/shipped.rs]
@@ -395,6 +1191,23 @@ features:
     checks: []
     native_journeys: []
     python_journeys: [canvas-stack]
+    invariants:
+      - id: kept-edit-never-blanks-workspace
+        kind: user
+        says: 'After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix.'
+        owner: desktop-presentation
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: live-edit-keeps-last-good
+        kind: user
+        says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
+        owner: content
+        guards: []
+        checks: ['journey:profile/live-edit-recolours']
+        formal: []
+        journeys: [profile]
     docs: [docs/terminal.md]
     sources: [desktop/canvas/main.ts, desktop/src/script_types.rs, desktop/script-types.json]
     code: [desktop/canvas/main.ts, desktop/script-types.json, desktop/src/script_types.rs]
@@ -410,6 +1223,31 @@ features:
     checks: []
     native_journeys: [layout-compat, layout-refused, layout-corrupt]
     python_journeys: []
+    invariants:
+      - id: layout-is-never-lost
+        kind: user
+        says: 'An older build keeps the fields of a newer Layout that it does not know. A Layout it cannot read is backed up and left unchanged, the app starts fresh, and a notice naming the backup stays until the person acts.'
+        owner: placement
+        guards: []
+        checks:
+          - 'journey:layout-compat/newer-layout-opens'
+          - 'journey:layout-compat/rename-keeps-added-fields'
+          - 'journey:layout-refused/refusal-message-drawn'
+          - 'journey:layout-refused/newer-layout-copied-to-backup'
+          - 'journey:layout-refused/newer-layout-left-unchanged'
+          - 'journey:layout-corrupt/corrupt-layout-notice-drawn'
+          - 'journey:layout-corrupt/corrupt-layout-copied-to-backup'
+          - 'journey:layout-corrupt/workspace-starts-fresh'
+        formal: []
+        journeys: [layout-compat, layout-corrupt, layout-refused]
+      - id: pass-means-observed
+        kind: developer
+        says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
+        owner: verification
+        guards: ['type:tests/native/src/lifecycle.rs#Run']
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/workspace.md]
     sources: [contract/src/layout_document.rs, app/src/layout_store.rs]
     code: [app/src/layout_store.rs, contract/src/layout_document.rs]
@@ -425,6 +1263,26 @@ features:
     checks: []
     native_journeys: [slow-save]
     python_journeys: []
+    invariants:
+      - id: waiting-never-blocks-app
+        kind: user
+        says: 'Waiting on the Provider or a slow Core reply never holds up ordinary workspace actions or inspection.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:chat/rename-while-provider-works'
+          - 'journey:slow-save/inspect-answered-during-held-save'
+          - 'journey:slow-list/inspect-answered-during-held-list'
+          - 'test:app/tests/selected_stop.rs#delayed_process_send_does_not_hold_workspace_inspection'
+        formal: []
+        journeys: [chat, slow-list, slow-save]
+      - id: one-operation-list
+        kind: developer
+        says: 'Views, agents, the voyager command and the authority check all use one catalogue of Operations.'
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
     sources: [app/src/front_door.rs, app/src/client.rs, app/src/client_core.rs]
     code: [app/src/client.rs, app/src/client_core.rs, app/src/front_door.rs]
@@ -440,6 +1298,31 @@ features:
     checks: []
     native_journeys: [outcomes]
     python_journeys: []
+    invariants:
+      - id: uncertain-settled-by-reading
+        kind: user
+        says: 'When the app cannot tell whether an action took effect, it asks the provider of that hop (Core for the app, the app for the canvas and the avatar). It retries only when the read proves the effect did not happen and a retry cannot double it.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:outcomes/rename-stalled-applied'
+          - 'journey:outcomes/rename-dropped-retried'
+          - 'journey:outcomes/stop-dropped-retried'
+          - 'journey:outcomes/stop-held-closed'
+          - 'journey:outcomes/rename-uncertain-declines-second-enter'
+          - 'journey:outcomes/close-unanswered-stops-nothing'
+          - 'journey:outcomes/start-held-adopted'
+          - 'journey:outcomes/start-stalled-not-repeated'
+        formal: []
+        journeys: [outcomes]
+      - id: refusal-says-why
+        kind: user
+        says: 'An action the app declines leaves the state unchanged and shows the owner''s reason, to the person and to an agent caller alike.'
+        owner: application-queue
+        guards: []
+        checks: ['journey:outcomes/refused-shows-reason', 'journey:outcomes/tool-refusal-carries-reason', 'journey:outcomes/close-refused-says-why', 'journey:workspace/rename-empty-refused']
+        formal: []
+        journeys: [outcomes, workspace]
     docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
     sources: [app/src/client_reply.rs, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts, contract/generated/workspace.ts]
     code: [app/src/client_reply.rs, contract/generated/workspace.ts, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts]
@@ -455,6 +1338,30 @@ features:
     checks: []
     native_journeys: [core-events, slow-list]
     python_journeys: []
+    invariants:
+      - id: status-is-reported-or-unknown
+        kind: user
+        says: 'A Program''s status is Core''s latest report or unknown. Silence, or a turn that ended while the agent''s work continues, is never shown as idle or finished.'
+        owner: core-adapter
+        guards: []
+        checks:
+          - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
+          - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
+          - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+        formal: []
+        journeys: []
+      - id: waiting-never-blocks-app
+        kind: user
+        says: 'Waiting on the Provider or a slow Core reply never holds up ordinary workspace actions or inspection.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:chat/rename-while-provider-works'
+          - 'journey:slow-save/inspect-answered-during-held-save'
+          - 'journey:slow-list/inspect-answered-during-held-list'
+          - 'test:app/tests/selected_stop.rs#delayed_process_send_does_not_hold_workspace_inspection'
+        formal: []
+        journeys: [chat, slow-list, slow-save]
     docs: [docs/terminal.md, docs/workspace.md]
     sources: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, 'desktop/canvas/agents.*']
     code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
@@ -470,6 +1377,38 @@ features:
     checks: []
     native_journeys: [adopt-by-label]
     python_journeys: []
+    invariants:
+      - id: restart-reopens-plain-shells
+        kind: user
+        says: 'An adopted agent''s Vessel whose program ended closes, at once or on the next reopen, and starts no new program. A Vessel the person opened keeps its shell when an agent run inside it ends, a typed exit closes it, and after a restart or a Voyage reopen it runs a new plain shell in place of a program that ended. An agent is never resumed automatically.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:quit-restore/cold-restart-restores'
+          - 'journey:voyage-close/reopen-voyage'
+          - 'journey:voyage-close/reopen-after-restart'
+          - 'journey:adopt-by-label/reopen-restarts-own-terminal'
+          - 'journey:adopt-by-label/reopen-closes-ended-adopted'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+          - 'journey:adopt-by-label/agent-exit-in-own-shell-keeps-shell'
+          - 'journey:adopt-by-label/user-started-agent-vessel-keeps-shell'
+          - 'journey:adopt-by-label/typed-exit-closes-vessel'
+        formal: []
+        journeys: [adopt-by-label, quit-restore, voyage-close]
+      - id: adopted-agents-follow-their-label
+        kind: user
+        says: 'An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:adopt-by-label/agent-in-fleet'
+          - 'journey:adopt-by-label/agent-in-portal'
+          - 'journey:adopt-by-label/command-fleet-holds-only-its-agent'
+          - 'journey:adopt-by-label/dock-agent'
+          - 'journey:adopt-by-label/reopen-closes-ended-adopted'
+          - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
+        formal: []
+        journeys: [adopt-by-label]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
     sources:
       - contract/src/place.rs
@@ -504,6 +1443,31 @@ features:
     checks: ['cargo test --locked --manifest-path tests/native/Cargo.toml']
     native_journeys: []
     python_journeys: []
+    invariants:
+      - id: pass-means-observed
+        kind: developer
+        says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
+        owner: verification
+        guards: ['type:tests/native/src/lifecycle.rs#Run']
+        checks: []
+        formal: []
+        journeys: []
+      - id: verification-leaves-nothing-behind
+        kind: developer
+        says: 'A verifier unit-test run or a crew, passed, failed or killed, leaves no folder, repository copy or scratch file behind.'
+        owner: verification
+        guards: []
+        checks: []
+        formal: []
+        journeys: []
+      - id: every-journey-has-a-control
+        kind: developer
+        says: 'Each journey has a control patch that must fail it.'
+        owner: verification
+        guards: ['type:tests/native/src/journey.rs#control']
+        checks: ['test:tests/native/src/journey.rs#every_control_patch_still_applies']
+        formal: []
+        journeys: []
     docs: [tests/native/README.md]
     sources: ['tests/native/src/**']
     code:

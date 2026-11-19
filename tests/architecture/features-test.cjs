@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const { ROOT, ENV, scratch, edit } = require("./fixture.cjs");
+const { parse } = require("./yaml.cjs");
 
 const SCRIPT = path.join(__dirname, "features.cjs");
 
@@ -318,4 +319,83 @@ test("a base without a map prints no git error", () => {
   commit(directory, "base");
   const result = check(directory, ["--base", "HEAD"]);
   assert.strictEqual(result.err, "");
+});
+
+const INVARIANT = `
+[[invariant]]
+id = "planted-invariant"
+says = "A planted rule."
+kind = "user"
+owner = "placement"
+source = "a test"
+features = ["portals"]
+guard = ["gate:file-size"]
+check = ["journey:portals/close-portal", "test:app/x.rs#y"]
+formal = ["core-viewers:SlotsWithinLimit"]
+formal_why = "A planted defect."
+confidence = "inferred"
+`;
+
+function invariantsOf(directory, feature) {
+  const map = parse(
+    fs.readFileSync(path.join(directory, "architecture/features.yaml"), "utf8"),
+  );
+  return map.features.find((entry) => entry.id === feature).invariants;
+}
+
+test("a feature shows each declared invariant that names it, with its guards, checks and journeys", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "tests/native/declared-invariants.toml",
+    (text) => text + INVARIANT,
+  );
+  generate(directory);
+  const planted = invariantsOf(directory, "portals").find(
+    (entry) => entry.id === "planted-invariant",
+  );
+  assert.deepStrictEqual(planted, {
+    id: "planted-invariant",
+    kind: "user",
+    says: "A planted rule.",
+    owner: "placement",
+    guards: ["gate:file-size"],
+    checks: ["journey:portals/close-portal", "test:app/x.rs#y"],
+    formal: ["core-viewers:SlotsWithinLimit"],
+    journeys: ["portals"],
+  });
+  assert.ok(
+    !invariantsOf(directory, "notes").some(
+      (entry) => entry.id === "planted-invariant",
+    ),
+  );
+});
+
+test("a declared invariant naming an unknown feature fails and names it", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "tests/native/declared-invariants.toml",
+    (text) => text + INVARIANT.replace('["portals"]', '["portalz"]'),
+  );
+  fails(
+    check(directory),
+    "FAIL tests/native/declared-invariants.toml: invariant planted-invariant names feature portalz, which is not in tests/native/features.toml; use a feature id from it",
+  );
+});
+
+test("a declared invariant change alone does not satisfy the change gate", () => {
+  const directory = branched();
+  edit(directory, "desktop/canvas/panels.ts", (text) => `${text}\n`);
+  edit(
+    directory,
+    "tests/native/declared-invariants.toml",
+    (text) => text + INVARIANT,
+  );
+  generate(directory);
+  commit(directory, "touch panels and invariants");
+  fails(
+    check(directory, ["--base", "HEAD~1"]),
+    "FAIL Portals (portals) changed in desktop/canvas/panels.ts",
+  );
 });

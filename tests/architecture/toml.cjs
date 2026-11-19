@@ -9,18 +9,26 @@ function value(text, line) {
   throw new Error(`line ${line}: only strings and string lists are supported`);
 }
 
-function parseTables(text, table) {
+function parseTables(text, table, skipped = []) {
   const rows = [];
   let current = null;
+  let skipping = false;
   text.split("\n").forEach((raw, index) => {
     const line = index + 1;
     const trimmed = raw.trim();
-    if (!trimmed) return;
+    if (!trimmed || trimmed.startsWith("#")) return;
     if (trimmed === `[[${table}]]`) {
       current = {};
+      skipping = false;
       rows.push(current);
       return;
     }
+    if (skipped.some((name) => trimmed === `[[${name}]]`)) {
+      current = null;
+      skipping = true;
+      return;
+    }
+    if (skipping) return;
     const match = trimmed.match(/^([A-Za-z_][\w-]*) = (.+)$/);
     if (!match || !current)
       throw new Error(`line ${line}: cannot read ${trimmed}`);
