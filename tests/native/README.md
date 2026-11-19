@@ -883,7 +883,7 @@ with `cargo build --release --locked -p voyager-desktop -p voyager-app --bin voy
 ```sh
 candidate="$PWD/target/release/voyager-shell"
 expected=$(sha256sum "$candidate" | cut -d" " -f1)
-core=$(sha256sum "$(command -v hc)" | cut -d" " -f1)
+core=$(sha256sum "${VOYAGER_VERIFY_HC:-$(command -v hc)}" | cut -d" " -f1)
 tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets"
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
 tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/scrolling"
@@ -935,7 +935,7 @@ The candidate reads its avatar artwork from the `desktop/assets` folder of the
 checkout that built it. Name that folder with `--assets`. Without it the app
 does not start.
 
-`hc` comes from the caller's `PATH` and must match `--hc-sha256`. `doctor.json`
+`hc` comes from `VOYAGER_VERIFY_HC` when that is set, else from the caller's `PATH`, and must match `--hc-sha256`. A crew session sets the variable to the real `hc`, because the first `hc` on a crew's `PATH` is a stand-in and the sandbox holds no other `hc`. Compute `--hc-sha256` from the same path, `${VOYAGER_VERIFY_HC:-$(command -v hc)}`. `doctor.json`
 records its path and hash. The verifier refuses a different binary before it
 starts anything, and the driver checks the bound copy again before each launch.
 

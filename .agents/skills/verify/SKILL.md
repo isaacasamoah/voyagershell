@@ -36,7 +36,7 @@ Run this read-only check first and after anything surprising:
 ```sh
 candidate="$PWD/target/release/voyager-shell"
 expected=$(sha256sum "$candidate" | cut -d" " -f1)
-core=$(sha256sum "$(command -v hc)" | cut -d" " -f1)
+core=$(sha256sum "${VOYAGER_VERIFY_HC:-$(command -v hc)}" | cut -d" " -f1)
 tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets"
 ```
 

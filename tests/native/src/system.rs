@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
@@ -615,11 +616,31 @@ fn executable(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
 }
 
-pub fn installed(name: &str) -> Result<PathBuf> {
-    std::env::split_paths(&std::env::var_os("PATH").context("Missing PATH")?)
-        .map(|folder| folder.join(name))
-        .find(|path| executable(path))
-        .with_context(|| format!("Required tool is missing: {name}"))
+/// The Core the harness pins and binds into its sandbox: `VOYAGER_VERIFY_HC` when it is set and
+/// not empty, else the first `hc` on `PATH`. A crew's first `hc` is a stand-in that hands off to
+/// the real one on `PATH`, and the sandbox holds no other `hc`, so a crew names the real one here.
+pub fn core_binary() -> Result<PathBuf> {
+    core_from(
+        std::env::var_os("VOYAGER_VERIFY_HC"),
+        std::env::var_os("PATH"),
+    )
+}
+
+fn core_from(named: Option<OsString>, path: Option<OsString>) -> Result<PathBuf> {
+    match named.filter(|value| !value.is_empty()).map(PathBuf::from) {
+        Some(named) => {
+            ensure!(
+                executable(&named),
+                "VOYAGER_VERIFY_HC is not an executable file: {}",
+                named.display()
+            );
+            Ok(named)
+        }
+        None => std::env::split_paths(&path.context("Missing PATH")?)
+            .map(|folder| folder.join("hc"))
+            .find(|path| executable(path))
+            .context("Required tool is missing: hc"),
+    }
 }
 
 pub const LIMITS: [&str; 1] =
@@ -686,6 +707,38 @@ pub(crate) mod tests {
     use crate::scratch::Scratch;
     use std::cell::Cell;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn core_comes_from_the_named_file_else_the_first_hc_on_path() -> Result<()> {
+        let folder = Scratch::new("core-choice")?;
+        let make = |dir: &str, mode: u32| -> Result<PathBuf> {
+            let dir = folder.path().join(dir);
+            fs::create_dir_all(&dir)?;
+            let file = dir.join("hc");
+            fs::write(&file, b"#!/bin/sh\n")?;
+            fs::set_permissions(&file, fs::Permissions::from_mode(mode))?;
+            Ok(file)
+        };
+        let stand_in = make("crew-path", 0o755)?;
+        let real = make("real", 0o755)?;
+        let path = std::env::join_paths([stand_in.parent().unwrap(), real.parent().unwrap()])?;
+        assert_eq!(core_from(None, Some(path.clone()))?, stand_in);
+        assert_eq!(
+            core_from(Some(OsString::new()), Some(path.clone()))?,
+            stand_in
+        );
+        assert_eq!(
+            core_from(Some(real.clone().into()), Some(path.clone()))?,
+            real
+        );
+        assert_eq!(core_from(Some(real.clone().into()), None)?, real);
+        let plain = make("plain", 0o644)?;
+        assert!(core_from(Some(plain.into()), Some(path.clone())).is_err());
+        assert!(core_from(Some(folder.path().join("none").into()), Some(path)).is_err());
+        assert!(core_from(None, Some(OsString::new())).is_err());
+        assert!(core_from(None, None).is_err());
+        Ok(())
+    }
 
     #[test]
     fn a_core_that_stops_answering_is_named_in_the_error() {
