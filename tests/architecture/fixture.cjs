@@ -10,7 +10,9 @@ const ROOT = path.resolve(__dirname, "../..");
 const GATE = path.join(__dirname, "gate.cjs");
 const KNOWN = path.join(__dirname, "known-violations.yaml");
 const ENV = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith("HC_")),
+  Object.entries(process.env).filter(
+    ([key]) => !key.startsWith("HC_") && !key.startsWith("GITHUB_EVENT_"),
+  ),
 );
 
 const RUNS = "architecture-gate-test-";
