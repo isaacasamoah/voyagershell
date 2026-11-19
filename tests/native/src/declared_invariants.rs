@@ -868,6 +868,11 @@ confidence = "stated"
                 "\"type:app/src/core_viewer.rs\"",
                 "invariant keep: type:app/src/core_viewer.rs is not type:<path>#<name>",
             ),
+            (
+                "\"manual:Isaac by ear\"",
+                "\"manual:   \"",
+                "invariant keep: manual: names nobody",
+            ),
         ];
         for (from, to, expected) in seeds {
             let message = broken(from, to);
@@ -958,6 +963,13 @@ confidence = "stated"
         assert_eq!(
             broken("fact = \"Reply time.\"", "fact = \"\""),
             "envelope latency: fact is empty"
+        );
+        assert_eq!(
+            broken(
+                "gap = \"No check yet; DI5 links one.\"",
+                "gap = \"No check yet; DI5 links one.\"\ntype_gap = \" \""
+            ),
+            "invariant tidy: type_gap is empty"
         );
     }
 
