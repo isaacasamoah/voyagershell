@@ -346,6 +346,17 @@ export function renderSidebar(
                 ] as const
               ).map((mode) => ({
                 label: `${mode === "new" ? "New" : mode === "open" ? "Open" : "Remove"} worktree`,
+                ...(mode === "open"
+                  ? {}
+                  : {
+                      marker: {
+                        role:
+                          mode === "new"
+                            ? ("new-worktree" as const)
+                            : ("remove-worktree" as const),
+                        key: item.id,
+                      },
+                    }),
                 choose: (version: string, cx: import("gpui-kit").Context) =>
                   workspace.worktrees.open(
                     item.id,

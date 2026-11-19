@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { VirtualListScrollHandle, v_virtual_list } from "gpui-base";
-import { Name, NameState } from "voyager_native";
+import { Marker, Name, NameState } from "voyager_native";
 import { request_id, worktree } from "voyager_workspace";
 import {
   worktreeRequest as validRequest,
@@ -430,6 +430,7 @@ export class WorktreeControls {
       actionButton("worktree-cancel", "Cancel worktree")
         .disabled(opening.pending)
         .child("Cancel")
+        .child(Marker.new("worktree-cancel", opening.voyage))
         .on_click((_event, cx) => {
           this.close();
           cx.notify();
@@ -523,10 +524,14 @@ export class WorktreeControls {
             "Creates a new branch and checkout in the project's .worktrees folder.",
           ),
       );
+      const ready = !opening.pending && Boolean(opening.checkouts);
       actions.child(
         actionButton("worktree-create-submit", "Create worktree")
-          .disabled(opening.pending || !opening.checkouts)
+          .disabled(!ready)
           .child("Create")
+          .children(
+            ready ? [Marker.new("worktree-confirm", opening.voyage)] : [],
+          )
           .on_click((_event, cx) => this.choose(opening, cx)),
       );
     } else {
@@ -555,16 +560,26 @@ export class WorktreeControls {
                   : "Changes could not be checked.",
           ),
       );
+      const ready = !opening.pending && checkout?.dirty === false;
       actions.child(
         actionButton("worktree-remove-submit", "Remove worktree")
-          .disabled(opening.pending || checkout?.dirty !== false)
+          .disabled(!ready)
           .child("Remove worktree")
+          .children(
+            ready ? [Marker.new("worktree-confirm", opening.voyage)] : [],
+          )
           .on_click((_event, cx) => this.choose(opening, cx)),
       );
     }
     if (opening.message)
       panel.child(
-        div().text_size(11).text_color("#ffcad3").child(opening.message),
+        div()
+          .text_size(11)
+          .text_color("#ffcad3")
+          .child(opening.message)
+          .child(
+            Marker.new("worktree-status", opening.voyage, opening.message),
+          ),
       );
     return panel.child(actions);
   }

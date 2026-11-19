@@ -319,6 +319,15 @@ export function renderSidebar(workspace, layout, voyage) {
                   : []),
               ].map((mode) => ({
                 label: `${mode === "new" ? "New" : mode === "open" ? "Open" : "Remove"} worktree`,
+                ...(mode === "open"
+                  ? {}
+                  : {
+                      marker: {
+                        role:
+                          mode === "new" ? "new-worktree" : "remove-worktree",
+                        key: item.id,
+                      },
+                    }),
                 choose: (version, cx) =>
                   workspace.worktrees.open(
                     item.id,
