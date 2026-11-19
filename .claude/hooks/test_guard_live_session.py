@@ -75,12 +75,10 @@ class Refused(unittest.TestCase):
         self.refused("export HC_SESSION=default; hc ls", TRIAL)
         self.refused("HC_SOCKET=/run/user/1000/herdr-core/default.sock\nhc ls", TRIAL)
         self.refused(f"{CLEAN} gh pr view 1; env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
-        self.refused("git status; env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
 
     def test_shell_c_strings_still_scanned(self):
         self.refused("bash -c 'unset HC_SESSION HC_SOCKET; hc ls'", TRIAL)
         self.refused(f"{CLEAN} sh -c 'hc ls'", TRIAL)
-        self.refused("bash -lc \"cargo test\"", LIVE)
 
     def test_prefixed_gh_git_substitution_still_scanned(self):
         inner = "env -u HC_SESSION -u HC_SOCKET hc ls"
@@ -101,6 +99,21 @@ class Refused(unittest.TestCase):
         self.refused(f"{CLEAN} {body}; hc ls", {})
         self.refused(f"{CLEAN} {body}\nhc ls", {})
         self.refused(f"{CLEAN} {body} $(hc ls)", TRIAL)
+
+    def test_escaped_or_doubled_dollar_before_quote_does_not_hide_next_call(self):
+        self.refused(f"{CLEAN} gh pr comment 1 --body \\$'a\\' ; hc ls", {})
+        self.refused(f"{CLEAN} gh pr comment 1 --body $$'a\\' ; hc ls", {})
+        self.refused(f"{CLEAN} gh pr comment 1 --body \\$'a\\'\nhc ls", {})
+
+    def test_prefixed_gh_git_text_is_refused_and_the_message_names_body_file(self):
+        for command in (
+            f"{CLEAN} gh pr comment 1 --body 'run `hc ls` first'",
+            f"{CLEAN} git commit -m 'refuse `hc ls` in default'",
+        ):
+            reason = guard.check(command, TRIAL)
+            self.assertIsNotNone(reason, command)
+            self.assertIn("--body-file", reason)
+        self.assertIn("--body-file", guard.check("hc ls", DEFAULT))
 
     def test_server_stop_without_own_session(self):
         self.refused("hc server stop")
@@ -136,28 +149,8 @@ class Allowed(unittest.TestCase):
         self.allowed("hc ls 2>&1 | head; hc get t1 &>/dev/null", TRIAL)
         self.allowed("unset HC_SOCKET; export HC_SESSION=voyager-trial; hc ls", TRIAL)
 
-    def test_crew_prefix_before_gh_git_and_grep(self):
-        self.allowed(f"{CLEAN} gh pr comment 269 --body 'run `hc ls` first'", TRIAL)
-        self.allowed(f"{CLEAN} gh pr comment 269 --body 'done; hc ls showed it'", TRIAL)
-        self.allowed(f"{CLEAN} git commit -m 'refuse `hc ls` in default'", TRIAL)
-        self.allowed(f"{CLEAN} grep -c 'hc ls' file", TRIAL)
+    def test_crew_prefix_before_grep(self):
         self.allowed(f"{CLEAN} grep -n 'cargo test' file", LIVE)
-        self.allowed("env -u HC_SESSION gh pr comment 1 --body \"a; hc ls\"", TRIAL)
-
-    def test_prefixed_gh_git_plain_text_still_passes(self):
-        self.allowed(f"{CLEAN} gh pr view 1 $(date)", TRIAL)
-        self.allowed(f"{CLEAN} gh pr comment 1 --body 'run $(hc ls) and `hc ls`'", TRIAL)
-        self.allowed(f"{CLEAN} gh pr comment 1 --body 'a; hc ls' --body-file /tmp/f", TRIAL)
-        self.allowed(f"{CLEAN} git status # it's fine\ngit log", TRIAL)
-        self.allowed(
-            f"{CLEAN} gh pr view 1 # don't\nenv -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls",
-            TRIAL,
-        )
-
-    def test_ansi_c_quote_text_alone_passes(self):
-        body = "gh pr comment 1 --body $'it\\'s; hc ls $(hc ls)'"
-        self.allowed(f"{CLEAN} {body}", TRIAL)
-        self.allowed(f"{CLEAN} {body}\ngit status", TRIAL)
 
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")

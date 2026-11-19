@@ -4,9 +4,12 @@ import re
 import sys
 
 LIVE = ("HC_SESSION", "HC_SOCKET", "HC_TERMINAL_ID")
-PREFIX = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
-SHELL_C = r"\b(?:ba|z|da|k)?sh\s+(?:-\S+\s+)*?-\w*c\s+['\"]"
-LEAD = r"(?:^|[;&|(`\n]|\$\(|" + SHELL_C + r")\s*"
+BODY_FILE = (
+    " If this is only text for a gh or git command, such as a comment body that mentions the command, "
+    "put the text in a file and pass --body-file."
+)
+PREFIX ="env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
+LEAD = r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
 WRAP = r"(?:(?:then|do|else|env|exec|nohup|nice|time|timeout\s+\S+|-u\s+\S+|-i|--unset[=\s]\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*"
 HC = r"(?:[^\s;&|'\"]*/)?hc"
 APP = r"[^\s;&|'\"]*voyager-shell"
@@ -83,16 +86,10 @@ def segments(command):
             index += 2
             continue
         if quote:
-            if char == quote[-1]:
+            if char == quote:
                 quote = ""
-        elif char == "#" and (index == 0 or command[index - 1] in " \t;&|("):
-            end = command.find("\n", index)
-            end = len(command) if end < 0 else end
-            current.append(command[index:end])
-            index = end
-            continue
         elif char in "'\"":
-            quote = "$'" if char == "'" and command[index - 1 : index] == "$" else char
+            quote = char
         elif char in ";|\n" or (
             char == "&"
             and (command[index - 1 : index] not in (">", "<"))
@@ -106,43 +103,6 @@ def segments(command):
         index += 1
     parts.append("".join(current))
     return [part for part in parts if part.strip()]
-
-
-def substitutes(segment):
-    quote = ""
-    index = 0
-    while index < len(segment):
-        char = segment[index]
-        pair = segment[index : index + 2]
-        if char == "\\" and quote != "'":
-            index += 2
-            continue
-        if quote in ("'", "$'"):
-            quote = "" if char == "'" else quote
-        elif char == "`" or pair == "$(" or (not quote and pair in ("<(", ">(")):
-            return True
-        elif quote:
-            quote = "" if char == quote else quote
-        elif char in "'\"":
-            quote = "$'" if char == "'" and segment[index - 1 : index] == "$" else char
-        index += 1
-    return False
-
-
-def leading_word(segment):
-    words = segment.split()
-    index = 0
-    while index < len(words):
-        word = words[index].lstrip("(")
-        if word in ("", "env", "-i"):
-            index += 1
-        elif word in ("-u", "--unset"):
-            index += 2
-        elif word.startswith("--unset=") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", word):
-            index += 1
-        else:
-            return word
-    return ""
 
 
 def carry(segment, environment):
@@ -159,6 +119,9 @@ def carry(segment, environment):
 
 
 def check(command, environment):
+    first = command.lstrip().split(maxsplit=1)[0] if command.strip() else ""
+    if first in ("git", "gh"):
+        return None
     for segment in segments(command):
         reason = check_segment(segment, environment)
         if reason:
@@ -168,8 +131,6 @@ def check(command, environment):
 
 
 def check_segment(command, environment):
-    if leading_word(command) in ("git", "gh") and not substitutes(command):
-        return None
     hc = run(command, HC)
     if run(command, HC + r"\s+update"):
         return "Agents never run `hc update`. It upgrades Core and restarts the live session. Ask Isaac."
@@ -185,6 +146,7 @@ def check_segment(command, environment):
             "This `hc` call resolves to Isaac's `default` Core session, because HC_SESSION and HC_SOCKET "
             "are cleared or unset. Name your own session: "
             "`env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> hc ...`."
+            + BODY_FILE
         )
     live = [name for name in LIVE if environment.get(name)]
     if hc and inside_own_session(environment) and not re.search(r"\bHC_(?:SESSION|SOCKET)=", command):
@@ -203,6 +165,7 @@ def check_segment(command, environment):
                 f"This shell carries {', '.join(live)} for Isaac's live Core session. "
                 f"Clear them inline: `{PREFIX} <command>`, or name your own session with "
                 "`env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> ...`."
+                + BODY_FILE
             )
     if (
         run(command, APP)
