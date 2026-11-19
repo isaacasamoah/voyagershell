@@ -108,11 +108,24 @@ function readBlobs(head, paths, cwd) {
   return texts;
 }
 
+const EVERY_LINE = { has: () => true };
+
+function trackedPaths(head, cwd) {
+  const result = git(["ls-tree", "-r", "--name-only", "-z", head], cwd);
+  if (result.status !== 0) {
+    throw new UsageError(
+      `git ls-tree failed: ${result.stderr.toString("utf8").trim()}`,
+    );
+  }
+  return result.stdout.toString("utf8").split("\0").filter(Boolean);
+}
+
 function changedFiles({
   base = "origin/main",
   head = "HEAD",
   cwd = process.cwd(),
   select,
+  whole,
 }) {
   const baseSha = resolveCommit(base, cwd);
   const headSha = resolveCommit(head, cwd);
@@ -131,11 +144,21 @@ function changedFiles({
   for (const path of renamedTo(diff)) {
     if (!added.has(path)) added.set(path, new Set());
   }
-  const paths = [...added.keys()].filter((path) => select(path));
+  const entire = new Set(whole ? trackedPaths(headSha, cwd).filter(whole) : []);
+  const paths = [
+    ...new Set([
+      ...[...added.keys()].filter((path) => select(path)),
+      ...entire,
+    ]),
+  ];
   const texts = readBlobs(headSha, paths, cwd);
   return paths
     .filter((path) => texts.has(path))
-    .map((path) => ({ path, added: added.get(path), text: texts.get(path) }));
+    .map((path) => ({
+      path,
+      added: entire.has(path) ? EVERY_LINE : (added.get(path) ?? new Set()),
+      text: texts.get(path),
+    }));
 }
 
 function count(n, noun) {
@@ -177,9 +200,11 @@ function runCli(name, argv, check) {
       base: options.base,
       head: options.head,
       select: check.select,
+      whole: check.whole,
     });
+    const noun = check.whole ? "file" : "changed file";
     if (files.length === 0) {
-      console.log(`${name}: no changed files in scope against ${options.base}`);
+      console.log(`${name}: no ${noun}s in scope against ${options.base}`);
       return 0;
     }
     const findings = [];
@@ -194,7 +219,7 @@ function runCli(name, argv, check) {
     for (const finding of findings) console.log(finding);
     if (findings.length === 0) {
       console.log(
-        `${name}: no findings in ${count(files.length, "changed file")} against ${options.base}`,
+        `${name}: no findings in ${count(files.length, noun)} against ${options.base}`,
       );
       return 0;
     }

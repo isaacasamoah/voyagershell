@@ -57,20 +57,44 @@ function proseFindings(text) {
   return findings;
 }
 
-function inScope(path) {
+const RULE_FILES = new Set([
+  "CONSTRAINTS.md",
+  "CONTRIBUTING.md",
+  "tests/native/README.md",
+  "tests/native/declared-invariants.toml",
+]);
+
+function ruleFile(path) {
+  if (RULE_FILES.has(path)) return true;
+  if (/^docs\/[^/]+\.md$/.test(path)) return true;
+  if (/^\.agents\/skills\/.+\.md$/.test(path)) return true;
   return (
-    path === "README.md" ||
-    path === "AGENTS.md" ||
-    /^docs\/[^/]+\.md$/.test(path)
+    /(^|\/)AGENTS\.md$/.test(path) &&
+    !path.startsWith("tests/native/fixtures/") &&
+    !path.startsWith("experiments/")
   );
+}
+
+function inScope(path) {
+  return path === "README.md" || ruleFile(path);
+}
+
+function statements(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => /^says = "(.*)"\s*$/.exec(line)?.[1] ?? "")
+    .join("\n");
 }
 
 const check = {
   describe:
-    "Rejects a long dash, curly quote or mid-sentence colon on an added line of docs/*.md, README.md and AGENTS.md.",
+    "Rejects a long dash, curly quote or mid-sentence colon, outside code spans and fenced code, on an added line of README.md and in every line of each rule file: AGENTS.md files, CONSTRAINTS.md, CONTRIBUTING.md, docs/*.md, tests/native/README.md, the project skills under .agents/skills/ and the says statements of tests/native/declared-invariants.toml.",
   select: inScope,
+  whole: ruleFile,
   scan: (file) =>
-    proseFindings(file.text).map(({ line, rule }) => ({
+    proseFindings(
+      file.path.endsWith(".toml") ? statements(file.text) : file.text,
+    ).map(({ line, rule }) => ({
       line,
       message: `${rule}. Fix: ${FIXES[rule]}.`,
     })),
@@ -80,4 +104,4 @@ if (require.main === module) {
   process.exitCode = runCli("prose-check", process.argv.slice(2), check);
 }
 
-module.exports = { proseFindings, inScope, check };
+module.exports = { proseFindings, inScope, ruleFile, check };
