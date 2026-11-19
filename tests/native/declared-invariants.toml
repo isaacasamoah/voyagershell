@@ -6,46 +6,56 @@
 [[invariant]]
 id = "quit-keeps-programs"
 says = "Ctrl+Q, the window's close button and a window-manager close all quit and keep. Core, every program and its output carry on, and the next launch reattaches to the same programs."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
-checked_by = ["quit-restore:quit-and-keep", "quit-restore:relaunch-reattaches", "quit-restore:relaunch-adopts-and-attaches", "quit-restore:quit-busy-keeps-output", "quit-restore:close-window-keeps", "quit-restore:close-button-keeps"]
+guard = []
+check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "hide-keeps-backend"
 says = "Closing or hiding a Vessel or Portal panel, moving it or switching Fleets never stops its program, and reopening it shows the same program."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view must not stop its backend'; Isaac, 3 Nov 2026: 'Preserve the existing distinction between removing/hiding a view and explicitly stopping its program'"
 features = ["vessels", "portals", "fleets"]
-checked_by = ["portals:hide-portals", "portals:portal-across-fleets", "portals:close-portal", "portals:reopen-portal"]
+guard = []
+check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "stop-is-explicit"
 says = "Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. No key chord stops the session."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Explicit stop must target only the verified selected program'; docs/terminal.md, Lifecycle"
 features = ["close-quit-restore"]
-checked_by = ["quit-restore:stop-session", "voyage-close:close-voyage-asks", "voyage-close:close-voyage-cancel"]
+guard = []
+check = ["journey:quit-restore/stop-session", "journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "close-voyage-confirms"
 says = "Close Voyage lists exactly the programs it will stop and stops nothing before Confirm. Cancel changes nothing. A closed Voyage stays closed across a restart and reopens with plain shells in the same Fleets and Vessels."
-hurts = "user"
+kind = "user"
 source = "docs/workspace.md, Confirmed Voyage shutdown; Isaac's accepted shutdown, 5 Nov 2026 (saves Notes, keeps worktrees, reopens plain shells)"
 features = ["close-quit-restore", "notes", "worktrees"]
-checked_by = ["voyage-close:close-voyage-asks", "voyage-close:close-voyage-cancel", "voyage-close:close-voyage-confirm", "voyage-close:reopen-voyage", "voyage-close:closed-after-restart", "voyage-close:reopen-after-restart"]
+guard = []
+check = ["journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel", "journey:voyage-close/close-voyage-confirm", "journey:voyage-close/reopen-voyage", "journey:voyage-close/closed-after-restart", "journey:voyage-close/reopen-after-restart"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "inferred"
 
 [[invariant]]
 id = "restart-reopens-plain-shells"
 says = "After the machine restarts, every Voyage, Fleet, Vessel, name and the selection come back, and each Vessel whose program ended runs a new plain shell. An agent is never resumed automatically."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Never automatically replay an uncertain operation or restore an uncertain process' and 'Do not ... recreate native agent session recovery'; docs/terminal.md, Lifecycle"
 features = ["close-quit-restore", "agent-vessels"]
-checked_by = ["quit-restore:cold-restart-restores", "voyage-close:reopen-after-restart"]
+guard = []
+check = ["journey:quit-restore/cold-restart-restores", "journey:voyage-close/reopen-after-restart"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 # Placement and arrangement
@@ -53,46 +63,56 @@ confidence = "stated"
 [[invariant]]
 id = "placement-survives-relaunch"
 says = "The Voyages, Fleets, Vessels, Portals, names, split arrangement and avatar dock Isaac set are the same after a relaunch."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'"
 features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-maximize"]
-checked_by = ["workspace:relaunch-restores", "arrangement:relaunch-keeps-arrangement", "portals:relaunch-restores-portal", "quit-restore:relaunch-reattaches"]
+guard = []
+check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "portal-belongs-to-voyage"
 says = "A Portal belongs to its Voyage. It stays shown with the same program on every Fleet of that Voyage, is not drawn in other Voyages, and opens as an overlay by default with make-room as the other mode."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'A Portal is a persistent placement across a Voyage ... overlay as the default and make-room also supported'; Isaac, 3 Nov 2026: selected overlay and make-room modes with overlay as default"
 features = ["portals"]
-checked_by = ["portals:portal-across-fleets", "portals:portal-stays-in-its-voyage"]
+guard = []
+check = ["journey:portals/portal-across-fleets", "journey:portals/portal-stays-in-its-voyage"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "rename-and-drag-everything"
 says = "Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept."
-hurts = "user"
+kind = "user"
 source = "Isaac's handwritten notes, 1 Nov 2026: 'Drag and drop everything. Rename everything.'"
 features = ["voyages", "fleets", "vessels", "portals", "fleet-arrangement"]
-checked_by = ["workspace:rename-fleet-enter", "workspace:rename-voyage-blur", "workspace:rename-vessel-f2", "workspace:rename-escape-cancels", "portals:rename-portal", "arrangement:move-vessel", "arrangement:relaunch-keeps-arrangement"]
+guard = []
+check = ["journey:workspace/rename-fleet-enter", "journey:workspace/rename-voyage-blur", "journey:workspace/rename-vessel-f2", "journey:workspace/rename-escape-cancels", "journey:portals/rename-portal", "journey:arrangement/move-vessel", "journey:arrangement/relaunch-keeps-arrangement"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "drag-never-moves-window"
 says = "A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar moves it."
-hurts = "user"
+kind = "user"
 source = "#189 verdict: a Fleet tab dragged 7 px past the row end onto the empty bar moved the window in 3 of 3 runs"
 features = ["fleets", "fleet-arrangement", "voyages", "selection"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 [[invariant]]
 id = "renamed-vessel-is-addressable"
 says = "After a Vessel is renamed, the assistant knows it by the new name, not only the label."
-hurts = "user"
+kind = "user"
 source = "Isaac, 3 Nov 2026 owner UX note: wants to rename a Vessel such as Terminal T1 and then address it through the native assistant using that new name"
 features = ["vessels", "chat"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 # Avatar and context
@@ -100,38 +120,45 @@ confidence = "stated"
 [[invariant]]
 id = "context-follows-dock"
 says = "The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'context must remain explicit and separate from keyboard focus, visual selection and delegated assignment'; Isaac, 3 Nov 2026: 'derived from the avatar's dock rather than keyboard focus'"
 features = ["avatar", "chat", "voice", "portals"]
-checked_by = ["portals:dock-portal", "portals:portal-stays-in-its-voyage", "portals:hide-portals"]
+guard = []
+check = ["journey:portals/dock-portal", "journey:portals/portal-stays-in-its-voyage", "journey:portals/hide-portals"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "avatar-stays-put"
 says = "The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it."
-hurts = "user"
+kind = "user"
 source = "Isaac, 26 Oct 2026 (withdrew automatic return), 3 Nov 2026 owner UX note (switching screens leaves the avatar where placed), 9 Nov 2026 decision (still avatar replaces floating and periodic stretching)"
 features = ["avatar"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 [[invariant]]
 id = "avatar-click-minimizes"
 says = "Clicking the avatar minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position."
-hurts = "user"
+kind = "user"
 source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026"
 features = ["avatar"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 [[invariant]]
 id = "any-agent-works"
 says = "The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer's agent setup. Agent-specific code lives only in that agent's adapter."
-hurts = "developer"
+kind = "developer"
 source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
 features = ["agent-vessels", "avatar"]
-checked_by = []
-verified_by = "architecture gate rule agent-names-stay-in-adapters (npm run architecture:check): the terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit"
+guard = ["gate:agent-names-stay-in-adapters"]
+check = []
+gap = "The old entry named no owner and no check. Its verified_by named the architecture gate, now its guard, run by npm run architecture:check. The terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit. Owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 # Terminals
@@ -139,37 +166,45 @@ confidence = "stated"
 [[invariant]]
 id = "typing-feels-immediate"
 says = "Typing into a terminal or agent Vessel feels as immediate as the same program in Herdr, while a full captain and crew run is going, which is ordinary load."
-hurts = "user"
+kind = "user"
 source = "Isaac, 8 Nov 2026: 'Typing into Codex in Voyager should feel as immediate under representative load as Isaac's current responsive typing experience' (he reported 5 to 10 s delays, then about 1 s on 9 Nov)"
 features = ["terminal-io", "agent-vessels"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 [[invariant]]
 id = "keys-reach-the-program"
 says = "Every key typed into a focused terminal, Tab and Shift+Tab included, reaches the program in order, and focus stays in the terminal."
-hurts = "user"
+kind = "user"
 source = "#142 and its issue #141, which Isaac hit in daily use: Tab moved focus out of the terminal"
 features = ["terminal-io"]
-checked_by = ["terminal-input:keys-reach-the-program"]
+guard = []
+check = ["journey:terminal-input/keys-reach-the-program"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "inferred"
 
 [[invariant]]
 id = "wheel-scrolls-full-screen-programs"
 says = "The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise."
-hurts = "user"
+kind = "user"
 source = "Isaac's agent-scrolling report and his acceptance of the fix, 10 Nov 2026"
 features = ["terminal-scrolling", "agent-vessels"]
-checked_by = ["terminal-scrolling:mouse", "terminal-scrolling:normal-history"]
+guard = []
+check = ["journey:terminal-scrolling/mouse", "journey:terminal-scrolling/normal-history"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "terminals-never-run-out"
 says = "Opening and ending terminals any number of times in one session never stops input to the live ones."
-hurts = "user"
+kind = "user"
 source = "#105: after about 64 terminals were opened and ended, every pane stopped taking input until restart"
 features = ["terminal-io", "vessels"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 # Results of an action
@@ -177,37 +212,45 @@ confidence = "inferred"
 [[invariant]]
 id = "uncertain-never-replayed"
 says = "When the app cannot tell whether an action took effect, it asks the provider of that hop (Core for the app, the app for the canvas and the avatar). It retries only when the read proves the effect did not happen and a retry cannot double it."
-hurts = "user"
+kind = "user"
 source = "Isaac, 16 Nov 2026: settle an uncertain outcome by asking the provider (replaces the never-replay rule); AGENTS.md: 'A received request is not a completed effect'"
 features = ["outcomes"]
-checked_by = ["outcomes:rename-stalled-applied", "outcomes:rename-dropped-retried", "outcomes:stop-dropped-retried", "outcomes:stop-held-closed", "outcomes:rename-uncertain-declines-second-enter", "outcomes:close-unanswered-stops-nothing", "outcomes:start-held-adopted", "outcomes:start-stalled-not-repeated"]
+guard = []
+check = ["journey:outcomes/rename-stalled-applied", "journey:outcomes/rename-dropped-retried", "journey:outcomes/stop-dropped-retried", "journey:outcomes/stop-held-closed", "journey:outcomes/rename-uncertain-declines-second-enter", "journey:outcomes/close-unanswered-stops-nothing", "journey:outcomes/start-held-adopted", "journey:outcomes/start-stalled-not-repeated"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "refusal-says-why"
 says = "An action the app declines leaves the state unchanged and shows the owner's reason, to the person and to an agent caller alike."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Preserve request/target identity, structured Core errors and the difference between known refusal and uncertain effect'"
 features = ["outcomes"]
-checked_by = ["outcomes:refused-shows-reason", "outcomes:tool-refusal-carries-reason", "outcomes:close-refused-says-why", "workspace:rename-empty-refused"]
+guard = []
+check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "unknown-is-not-invented"
 says = "A fact the app does not know, such as an agent's status, shows as unknown. Silence is never shown as finished or idle work done."
-hurts = "user"
+kind = "user"
 source = "Isaac, 3 Nov 2026 owner UX note: 'Unknown/unavailable facts must not be invented'"
 features = ["agent-vessels", "layouts-home"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 [[invariant]]
 id = "assistant-never-blocks-app"
 says = "Waiting on the assistant or its provider never holds up ordinary workspace actions."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Do not block application actions on provider work'"
 features = ["chat", "front-door"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 # Stored layout and profile across builds
@@ -215,55 +258,67 @@ confidence = "stated"
 [[invariant]]
 id = "newer-layout-kept"
 says = "A layout a newer build wrote opens in an older build and keeps every field it does not know when it saves. One that needs a newer reader is refused, left unchanged and copied to the backup."
-hurts = "user"
+kind = "user"
 source = "#171 verdict: an older build replaced a newer layout with a fresh one-Voyage workspace"
 features = ["layout-compat"]
-checked_by = ["layout-compat:newer-layout-opens", "layout-compat:rename-keeps-added-fields", "layout-refused:refusal-message-drawn", "layout-refused:newer-layout-copied-to-backup", "layout-refused:newer-layout-left-unchanged"]
+guard = []
+check = ["journey:layout-compat/newer-layout-opens", "journey:layout-compat/rename-keeps-added-fields", "journey:layout-refused/refusal-message-drawn", "journey:layout-refused/newer-layout-copied-to-backup", "journey:layout-refused/newer-layout-left-unchanged"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "inferred"
 
 [[invariant]]
 id = "unreadable-layout-says-so"
 says = "When the stored layout cannot be read, the app copies it to the backup, starts fresh and keeps a notice naming the backup on screen until the person changes something."
-hurts = "user"
+kind = "user"
 source = "#171 verdict: the corrupt-layout notice vanished before anyone could read it; docs/workspace.md, Unreadable documents"
 features = ["layout-compat"]
-checked_by = ["layout-corrupt:corrupt-layout-notice-drawn", "layout-corrupt:corrupt-layout-copied-to-backup", "layout-corrupt:workspace-starts-fresh"]
+guard = []
+check = ["journey:layout-corrupt/corrupt-layout-notice-drawn", "journey:layout-corrupt/corrupt-layout-copied-to-backup", "journey:layout-corrupt/workspace-starts-fresh"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "inferred"
 
 [[invariant]]
 id = "personal-edits-kept"
 says = "An update never overwrites or moves a profile file the person edited. It replaces only untouched first-party files and announces each edited one with a diff."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'Keep personal source edits and instance data when considering updates'"
 features = ["profile-updates", "profile-theme"]
-checked_by = ["profile-updates:untouched-files-update-and-stop-session-shows", "profile-updates:edited-files-stay-as-they-were", "profile-updates:edited-files-are-announced-with-a-diff", "profile-updates:a-dropped-file-is-deleted-only-when-untouched", "profile:second-build-keeps-voyage"]
+guard = []
+check = ["journey:profile-updates/untouched-files-update-and-stop-session-shows", "journey:profile-updates/edited-files-stay-as-they-were", "journey:profile-updates/edited-files-are-announced-with-a-diff", "journey:profile-updates/a-dropped-file-is-deleted-only-when-untouched", "journey:profile/second-build-keeps-voyage"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "kept-edit-never-blanks-workspace"
 says = "After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix."
-hurts = "user"
+kind = "user"
 source = "#173 verdict: 'Canvas load failed: cannot resolve module' for the retired theme module name, and no workspace, after an edited canvas file was kept"
 features = ["profile-updates", "scripts-live-edit"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 [[invariant]]
 id = "update-notice-settles"
 says = "Once the person has seen or dismissed the notice for an edited file, it does not return on later starts until a newer version of that file ships."
-hurts = "user"
+kind = "user"
 source = "#173 verdict: 'The notice returned on the second start ... I found no way to say keep mine'"
 features = ["profile-updates"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 [[invariant]]
 id = "live-edit-keeps-last-good"
 says = "A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running."
-hurts = "user"
+kind = "user"
 source = "AGENTS.md: 'A valid edit updates the existing instance; a broken edit must expose its error and retain the usable version where supported'"
 features = ["scripts-live-edit", "profile-theme", "notes"]
-checked_by = ["profile:live-edit-recolours"]
+guard = []
+check = ["journey:profile/live-edit-recolours"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 # Developer experience
@@ -271,19 +326,23 @@ confidence = "stated"
 [[invariant]]
 id = "battery-gives-a-verdict"
 says = "The journey battery gives each journey the fixtures and second build it needs. A journey it cannot supply is listed as not run with its reason, never reported inconclusive on every merge."
-hurts = "developer"
+kind = "developer"
 source = "#169: the battery would have reported profile journeys inconclusive on every merge; observed in the #171 verdict"
 features = ["verification-environment", "profile-theme", "profile-updates", "layout-compat"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 [[invariant]]
 id = "unit-tests-leave-no-folders"
 says = "A verifier unit-test run, passing, failing or killed, leaves no folder in the temp directory, so leftovers never break the next run."
-hurts = "developer"
+kind = "developer"
 source = "#129 verdict: with old-style folders present the suite failed with 'File exists (os error 17)'"
 features = ["verification-environment"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "inferred"
 
 # Usage envelope. Leave measured empty until a real measurement exists.
@@ -371,20 +430,23 @@ confidence = "inferred"
 [[invariant]]
 id = "voice-is-audible"
 says = "When the assistant speaks, the person hears it through the selected output."
-hurts = "user"
+kind = "user"
 source = "Isaac, 16 Nov 2026: prove it with an agent if there is a way, otherwise Isaac confirms by ear"
 features = ["voice"]
-checked_by = []
-verified_by = "an agent proof where one exists, otherwise Isaac by ear"
+guard = []
+check = ["manual:an agent proof where one exists, otherwise Isaac by ear"]
+gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "one-window-by-default"
 says = "Launching the app again reveals the existing window and avatar. A second instance opens only when the person asks for one explicitly, such as New Window from the right-click menu."
-hurts = "user"
+kind = "user"
 source = "Isaac, 16 Nov 2026, following Ghostty's model"
 features = ["close-quit-restore"]
-checked_by = []
+guard = []
+check = []
+gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
 confidence = "stated"
 
 # Out of scope. Each was checked on origin/main at 87ffcd4.

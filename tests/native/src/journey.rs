@@ -24,7 +24,6 @@ use crate::system::save;
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -133,18 +132,6 @@ journeys! {
 impl Journey {
     pub fn names() -> Vec<&'static str> {
         Self::ALL.iter().map(|journey| journey.name()).collect()
-    }
-
-    pub fn case_ids() -> BTreeSet<String> {
-        Self::ALL
-            .iter()
-            .flat_map(|journey| {
-                journey
-                    .cases()
-                    .iter()
-                    .map(move |case| format!("{}:{case}", journey.name()))
-            })
-            .collect()
     }
 
     pub fn parse(name: &str) -> Result<Self> {
@@ -405,6 +392,7 @@ impl<'a, C: Case> Cases<'a, C> {
 mod tests {
     use super::*;
     use crate::native::Cause;
+    use std::collections::BTreeSet;
     use std::path::Path;
     use std::process::Command;
 

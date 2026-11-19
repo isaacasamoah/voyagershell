@@ -57,6 +57,32 @@ validates it and prints the coverage table. `features --write` regenerates the t
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
 `features --changed GIT_RANGE` lists the features and journeys a diff touches.
 
+### Declared invariants
+
+`tests/native/declared-invariants.toml` holds the promises the app keeps. The same
+`features` run parses it and resolves every link, and `committed_model_passes` runs that
+check in `cargo test`. Each `[[invariant]]` has these fields.
+
+| Field | Takes |
+| --- | --- |
+| `kind` | `user`, `developer`, `structure` or `process` |
+| `owner` | A context id from `tests/architecture/vocabulary.yaml` |
+| `guard` | `type:<path>#<item>`, `gate:<rules.yaml id>`, `lint:<comments, prose, clippy or fmt>`, `hook:<path>` or `policy:<review-policy rule>` |
+| `check` | `journey:<journey>/<case>`, `test:<path>#<fn>`, `perf:<envelope id>` or `manual:<who and how>` |
+| `formal` | `<model>:<property>`, a property in the INVARIANTS block of a `.cfg` under `tests/formal/<model>/` |
+| `formal_why` | The defect that justified the model. Required with `formal`. |
+| `type_gap` | Why no `type:` guard keeps the promise |
+| `gap` | Why `check` is empty or `owner` is unset, and which unit closes it. Required when either is. |
+
+Links parse into typed values at load. A journey link must name a native journey and one
+of its cases. A type or test link must name a file and an item it defines, a gate must be
+in `tests/architecture/rules.yaml` and a perf link must name an `[[envelope]]` entry.
+Every failure is one line that names the entry and the fix, with the nearest valid id
+where one exists. The status of an invariant is derived from its links, never written.
+It is guarded and checked, checked only, guarded only or a gap, and the `features`
+summary prints the counts. The `policy:` ids mirror the rules `bin/review-policy` in the
+Workshop reports, so a renamed rule there needs the same rename in `Policy`.
+
 ### Journeys
 
 `journeys!` in `src/journey.rs` is the one list of native journeys. Each row

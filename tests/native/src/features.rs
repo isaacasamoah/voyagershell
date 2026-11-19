@@ -245,7 +245,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         .collect();
     registry.validate(&files, &Journey::names(), &python_journeys(root)?)?;
     let ids = registry.feature.iter().map(|f| f.id.as_str()).collect();
-    let model = declared_invariants::load(root, &ids, &Journey::case_ids())?;
+    let model = declared_invariants::load(root, &ids)?;
     let readme_path = root.join(TABLE_FILE);
     match args {
         [] => {
