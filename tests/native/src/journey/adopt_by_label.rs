@@ -26,6 +26,10 @@ cases! {
     FocusHookTime => "focus-hook-time",
     ReopenRestartsOwnTerminal => "reopen-restarts-own-terminal",
     ReopenClosesEndedAdopted => "reopen-closes-ended-adopted",
+    EndedAwayAdoptedRemovedWhenShown => "ended-away-adopted-removed-when-shown",
+    AgentExitInOwnShellKeepsShell => "agent-exit-in-own-shell-keeps-shell",
+    UserStartedAgentVesselKeepsShell => "user-started-agent-vessel-keeps-shell",
+    TypedExitClosesVessel => "typed-exit-closes-vessel",
 }
 
 const HOOK_SETTINGS: &str = r#"{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"/voyager/bin/voyager focus --hook claude"}]}]}}"#;
@@ -723,5 +727,164 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("finisher", &finisher)?
             .observed("placement", &placed)?
             .observed("created", &created)
+    })?;
+
+    let shell_placement = first.placement().clone();
+    cases.check(native, Case::EndedAwayAdoptedRemovedWhenShown, |native| {
+        let first = Terminal::bind(native, &shell_placement)?;
+        native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
+        native.observe("the first Fleet selected", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(&fleet)).then_some(())
+        })?;
+        typed(
+            &first,
+            native,
+            &format!(
+                "hc run --bg --name wanderer --label voyager.place=fleet:{} bash -c 'sleep 6'",
+                fleet.0
+            ),
+        )?;
+        let wanderer = address(native, "wanderer")?;
+        let placement = native.observe(
+            "the labelled program adopted into the first Fleet",
+            |seen| bound_to(seen.document, &wanderer).map(|placement| placement.id),
+        )?;
+        until("Core reporting the program finished", || {
+            let reported = native
+                .system
+                .watch("terminal.get", json!({"terminal":wanderer}))?;
+            Ok((reported["state"] == "finished").then_some(()))
+        })?;
+        let known = terminal_addresses(native)?;
+        let removed = native.observe("the ended program gone from the first Fleet", |seen| {
+            let placed = fleets(seen.document)
+                .filter(|item| item.id == fleet)
+                .any(|item| on_canvas(item.root.as_ref(), &placement));
+            (!placed && !seen.shows(&Target::terminal(&placement))).then_some(true)
+        })?;
+        let started: Vec<String> = terminal_addresses(native)?
+            .into_iter()
+            .filter(|address| !known.contains(address))
+            .collect();
+        native.keep_window("ended-away-adopted-removed-when-shown")?;
+        Verdict::new()
+            .expect("the program that ended is gone from its Fleet", removed)
+            .expect("its ending started no terminal in Core", started.is_empty())
+            .observed("wanderer", &wanderer)?
+            .observed("started", &started)
+    })?;
+
+    cases.check(native, Case::AgentExitInOwnShellKeepsShell, |native| {
+        let own = Terminal::bind(native, &shell_placement)?;
+        typed(&own, native, "claude 'Run inside the shell'")?;
+        own.printed(
+            native,
+            "Stand-in claude took the task: Run inside the shell",
+        )?;
+        native.press(Key::Char('d').ctrl())?;
+        typed(&own, native, "echo shell-after-agent")?;
+        let prompt = own.printed(native, "shell-after-agent")?;
+        let (_, after) = native.document()?.context("Missing saved layout")?;
+        let kept = fleets(&after)
+            .filter(|item| item.id == fleet)
+            .any(|item| on_canvas(item.root.as_ref(), &shell_placement));
+        let program = own.program(native)?;
+        native.keep_window("agent-exit-in-own-shell-keeps-shell")?;
+        Verdict::new()
+            .expect("the Vessel stays after the agent ends", kept)
+            .expect(
+                "the same terminal keeps running its shell",
+                program.state.as_deref() == Some("live") && program.same,
+            )
+            .expect("the shell takes input after the agent ended", prompt)
+            .observed("program", &program)
+    })?;
+
+    cases.check(native, Case::UserStartedAgentVesselKeepsShell, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let before = terminal_addresses(native)?;
+        let known: Vec<_> = layout.vessels.iter().map(|content| content.id.clone()).collect();
+        let own = Terminal::bind(native, &shell_placement)?;
+        native.edit_profile_file(
+            "launches.json",
+            br#"{"default":"claude","entries":[{"id":"claude","name":"Claude","launch":{"kind":"program","argv":["claude","Own task"]}},{"id":"terminal","name":"Terminal","launch":{"kind":"terminal"}}]}"#,
+        )?;
+        own.focus(native)?;
+        native.press(Key::Char('o').ctrl().shift())?;
+        native.click(&Target::worker("claude"))?;
+        let agent_placement = native.observe("the user-started agent Vessel drawn", |seen| {
+            let content = seen.document.vessels.iter().find(|content| {
+                !known.contains(&content.id)
+                    && content.backend.is_some()
+                    && content.launch.is_some()
+            })?;
+            let placement = fleets(seen.document)
+                .flat_map(|item| &item.placements)
+                .find(|placement| placement.vessel == content.id)?
+                .id
+                .clone();
+            seen.shows(&Target::terminal(&placement)).then_some(placement)
+        })?;
+        let agent = Terminal::bind(native, &agent_placement)?;
+        let started_agent = agent.printed(native, "Stand-in claude took the task: Own task")?;
+        let started_before = terminal_addresses(native)?;
+        agent.focus(native)?;
+        native.press(Key::Char('d').ctrl())?;
+        typed(&agent, native, "echo shell-replaced-agent")?;
+        let takes_input = agent.printed(native, "shell-replaced-agent")?;
+        let (_, after) = native.document()?.context("Missing saved layout")?;
+        let kept = fleets(&after)
+            .filter(|item| item.id == fleet)
+            .any(|item| on_canvas(item.root.as_ref(), &agent_placement));
+        let program = agent.program(native)?;
+        let started: Vec<String> = terminal_addresses(native)?
+            .into_iter()
+            .filter(|address| !started_before.contains(address))
+            .collect();
+        native.keep_window("user-started-agent-vessel-keeps-shell")?;
+        Verdict::new()
+            .expect("the Vessel the user started runs the agent", started_agent)
+            .expect("the Vessel stays where the user started it", kept)
+            .expect("its terminal keeps running, as a shell", program.state.as_deref() == Some("live"))
+            .expect("the shell in its place takes input", takes_input)
+            .expect("no new terminal started in Core", started.is_empty())
+            .observed("program", &program)?
+            .observed("before", &before)
+    })?;
+
+    cases.check(native, Case::TypedExitClosesVessel, |native| {
+        let own = Terminal::bind(native, &shell_placement)?;
+        let before = terminal_addresses(native)?;
+        own.focus(native)?;
+        native.press(Key::Char('d').ctrl())?;
+        own.ended(native)?;
+        let removed = native.observe("the exited shell's Vessel gone from the Fleet", |seen| {
+            let placed = fleets(seen.document)
+                .filter(|item| item.id == fleet)
+                .any(|item| on_canvas(item.root.as_ref(), &shell_placement));
+            (!placed && !seen.shows(&Target::terminal(&shell_placement))).then_some(true)
+        })?;
+        let started: Vec<String> = terminal_addresses(native)?
+            .into_iter()
+            .filter(|address| !before.contains(address))
+            .collect();
+        native.keep_window("typed-exit-closes-vessel")?;
+        Verdict::new()
+            .expect("a typed exit closes the Vessel", removed)
+            .expect("no new terminal started in Core", started.is_empty())
+            .observed("started", &started)
     })
+}
+
+fn terminal_addresses(native: &Native) -> Result<Vec<String>> {
+    let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+    Ok(listed["terminals"]
+        .as_array()
+        .map(|terminals| {
+            terminals
+                .iter()
+                .filter_map(|terminal| terminal["address"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default())
 }
