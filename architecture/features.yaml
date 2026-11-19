@@ -8,6 +8,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [workspace]
     python_journeys: [demo-feedback]
     docs: [docs/content.md, docs/terminal.md, docs/workspace.md]
@@ -30,6 +31,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [workspace]
     python_journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
@@ -44,6 +46,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: python-only, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [arrangement]
     python_journeys: [layouts, arrangement]
     docs: [docs/arrangement.md, docs/terminal.md, docs/workspace.md]
@@ -58,6 +61,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [workspace]
     python_journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
@@ -81,6 +85,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [arrangement, terminal-agent]
     docs: [docs/terminal.md, docs/workspace.md]
@@ -95,6 +100,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: python-only, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [portals]
     python_journeys: [portal-terminal]
     docs: ['.agents/skills/verify/features/portals.md', docs/content.md, docs/terminal.md, docs/workspace.md]
@@ -122,6 +128,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [arrangement]
     python_journeys: [workspace-ux]
     docs: [docs/terminal.md, docs/workspace.md]
@@ -135,6 +142,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: covered, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [terminal-input]
     python_journeys: [terminal-grid, portal-terminal]
     docs: [docs/terminal.md]
@@ -162,6 +170,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: covered, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [terminal-scrolling]
     python_journeys: [terminal-scrolling]
     docs: ['.agents/skills/verify/features/terminal-scrolling.md', docs/terminal.md]
@@ -175,6 +184,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: covered, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [terminal-input]
     python_journeys: []
     docs: [docs/terminal.md]
@@ -188,6 +198,7 @@ features:
     proof: native
     state: {behavior: python-only, performance: none, visual: none, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: [terminal-input]
     python_journeys: [notes-lifetime]
     docs: [docs/terminal.md]
@@ -201,6 +212,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [notes, notes-lifetime]
     docs: [docs/terminal.md]
@@ -214,6 +226,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [avatar, portal-avatar]
     docs: [docs/terminal.md]
@@ -235,6 +248,7 @@ features:
     proof: native
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: [chat]
     python_journeys: [conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content]
     docs: ['.agents/skills/verify/features/chat.md', docs/conversation.md, docs/terminal.md]
@@ -259,6 +273,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: none, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [conversation-voice]
     docs: [docs/conversation.md, docs/terminal.md]
@@ -272,6 +287,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [layouts, workspace-ux]
     docs: [docs/layouts.md, docs/terminal.md]
@@ -286,6 +302,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: none, visual: none, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [demo-feedback]
     docs: [docs/terminal.md, docs/workspace.md]
@@ -300,6 +317,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [quit-restore, voyage-close]
     python_journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
@@ -331,6 +349,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [workspace]
     python_journeys: []
     docs: [docs/terminal.md]
@@ -344,6 +363,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [profile]
     python_journeys: []
     docs: [docs/terminal.md]
@@ -358,6 +378,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [profile-updates]
     python_journeys: []
     docs: [docs/content.md, docs/terminal.md]
@@ -371,6 +392,7 @@ features:
     proof: python-only
     state: {behavior: python-only, performance: python-only, visual: python-only, debug: python-only}
     platforms: [linux]
+    checks: []
     native_journeys: []
     python_journeys: [canvas-stack]
     docs: [docs/terminal.md]
@@ -385,6 +407,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [layout-compat, layout-refused, layout-corrupt]
     python_journeys: []
     docs: [docs/workspace.md]
@@ -399,6 +422,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [slow-save]
     python_journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
@@ -413,6 +437,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [outcomes]
     python_journeys: []
     docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
@@ -427,6 +452,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [core-events, slow-list]
     python_journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
@@ -441,6 +467,7 @@ features:
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
+    checks: []
     native_journeys: [adopt-by-label]
     python_journeys: []
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
@@ -471,9 +498,10 @@ features:
     summary: 'Run the verifier''s own unit tests and the journey battery and get a verdict that leaves nothing behind.'
     group: diagnostics
     owner: verification
-    proof: unproved
+    proof: ci-check
     state: {behavior: none, performance: none, visual: none, debug: none}
     platforms: [linux]
+    checks: ['cargo test --locked --manifest-path tests/native/Cargo.toml']
     native_journeys: []
     python_journeys: []
     docs: [tests/native/README.md]

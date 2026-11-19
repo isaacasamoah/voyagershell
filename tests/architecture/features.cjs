@@ -25,7 +25,8 @@ const FIELDS = [
   "python",
   ...TIERS,
 ];
-const RAN = /^journeys run:\s*(.*)$/im;
+const RAN = /^journeys run:\s*(.*)$/gim;
+const WORKFLOW = ".github/workflows/checks.yml";
 
 class Missing extends Error {}
 
@@ -94,7 +95,8 @@ function loadRegistry(repository) {
 }
 
 function loadGroups(repository) {
-  const groups = parse(read(repository, GROUPS)).groups ?? [];
+  const document = parse(read(repository, GROUPS)) ?? {};
+  const groups = document.groups ?? [];
   const problems = [];
   const ids = new Set();
   for (const group of groups) {
@@ -112,7 +114,7 @@ function loadGroups(repository) {
     ids.add(group.id);
   }
   if (problems.length) throw new Error(problems.join("\n"));
-  return groups;
+  return { groups, checks: document.checks ?? [] };
 }
 
 function nativeJourneys(repository) {
@@ -133,7 +135,11 @@ function pythonJourneys(repository) {
 
 function build(repository) {
   const rows = loadRegistry(repository);
-  const groups = loadGroups(repository);
+  const { groups, checks } = loadGroups(repository);
+  const workflow = read(repository, WORKFLOW);
+  const runs = new Set(
+    [...workflow.matchAll(/^\s*- run: (.+)$/gm)].map((m) => m[1].trim()),
+  );
   const vocabulary = parse(read(repository, VOCABULARY));
   const contexts = vocabulary.contexts;
   const generated = (vocabulary.settings?.generated ?? []).map(matcher);
@@ -141,6 +147,11 @@ function build(repository) {
   const native = nativeJourneys(repository);
   const python = pythonJourneys(repository);
   const problems = [];
+  for (const check of checks)
+    if (!rows.some((row) => row.id === check.feature) || !check.run)
+      problems.push(
+        `${GROUPS}: a check needs a feature in ${REGISTRY} and a run, got ${JSON.stringify(check)}`,
+      );
 
   const groupOf = new Map();
   for (const group of groups)
@@ -192,14 +203,21 @@ function build(repository) {
         problems.push(
           `${id}: Python journey ${journey} does not exist in ${PYTHON}`,
         );
-    const declared = TIERS.some((tier) => row[tier] !== "none");
-    if (!row.journeys.length && !row.python.length && declared)
-      problems.push(`${id} has no journey, name one in ${REGISTRY}`);
+    const own = checks.filter((check) => check.feature === id);
+    for (const check of own)
+      if (!runs.has(check.run))
+        problems.push(
+          `${id}: check "${check.run}" is not a run step in ${WORKFLOW}`,
+        );
+    if (!row.journeys.length && !row.python.length && !own.length)
+      problems.push(
+        `${id} has no journey, name one in ${REGISTRY} or a CI check in ${GROUPS}`,
+      );
     const proof = row.journeys.length
       ? "native"
       : row.python.length
         ? "python-only"
-        : "unproved";
+        : "ci-check";
     const docs = new Set();
     for (const [owner] of ranked) {
       const guide = contexts.find((context) => context.id === owner)?.guide;
@@ -225,6 +243,7 @@ function build(repository) {
       proof,
       state: Object.fromEntries(TIERS.map((tier) => [tier, row[tier]])),
       platforms: row.platforms,
+      checks: own.map((check) => check.run),
       native_journeys: row.journeys,
       python_journeys: row.python,
       docs: [...docs].sort(),
@@ -257,7 +276,11 @@ function pageText(model) {
 
 Generated from \`${REGISTRY}\`, \`${GROUPS}\` and the context owners in \`${VOCABULARY}\` by \`npm run features:generate\`. Edit those inputs, then regenerate. The complete map with code paths and state is \`${MAP}\`.
 
-\`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`unproved\` when the registry declares every tier \`none\`.
+\`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`ci-check\` when it has no journey and a CI step named in \`${GROUPS}\` is its proof.
+
+## The change gate
+
+On a pull request, \`npm run features:check -- --base <base>\` fails when a change touches a feature's source paths with no change to its map entry and no recorded run. Record the run by adding a line \`Journeys run: <journey>, <journey>\` to the PR description, then push a new commit, because editing the description does not rerun CI. Every such line counts. A feature needs all of its native journeys, or one Python journey when it has no native journey. Another way through is to change the feature's entry in \`${REGISTRY}\` and run \`npm run features:generate\`. A feature whose proof is a \`ci-check\` needs no record, because that CI step runs on the same pull request.
 
 | Feature | Group | Owner | Proof | Native journeys | Python journeys | Docs |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -266,7 +289,10 @@ ${rows.map((row) => `| ${row} |`).join("\n")}
 }
 
 function git(repository, args) {
-  return execFileSync("git", ["-C", repository, ...args], { encoding: "utf8" });
+  return execFileSync("git", ["-C", repository, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 function baseMap(repository, base) {
@@ -283,7 +309,7 @@ function recorded(argument, environment) {
   if (!text && environment.GITHUB_EVENT_NAME === "pull_request" && event) {
     const body =
       JSON.parse(fs.readFileSync(event, "utf8")).pull_request?.body ?? "";
-    text = (body.match(RAN) ?? [])[1] ?? "";
+    text = [...body.matchAll(RAN)].map((m) => m[1]).join(",");
   }
   return new Set(text.split(/[\s,]+/).filter(Boolean));
 }
@@ -304,7 +330,11 @@ function changedCode(repository, base, ran) {
     const hit = changed.filter((file) =>
       feature.sources.some((pattern) => matcher(pattern).test(file)),
     );
-    if (!hit.length || before.get(feature.id) !== JSON.stringify(feature))
+    if (
+      !hit.length ||
+      feature.checks.length ||
+      before.get(feature.id) !== JSON.stringify(feature)
+    )
       continue;
     const named = feature.native_journeys.length
       ? feature.native_journeys
@@ -314,7 +344,7 @@ function changedCode(repository, base, ran) {
       : named.some((journey) => ran.has(journey));
     if (!proved)
       problems.push(
-        `${feature.name} (${feature.id}) changed in ${hit.slice(0, 3).join(", ")} with no map change and no recorded run, add "Journeys run: ${named.join(", ")}" to the PR description or regenerate the map`,
+        `${feature.name} (${feature.id}) changed in ${hit.slice(0, 3).join(", ")} with no map change and no recorded run, add "Journeys run: ${named.join(", ")}" to the PR description and push again, or change its entry in ${REGISTRY} and run npm run features:generate`,
       );
   }
   return { problems, note: null };
@@ -373,7 +403,7 @@ function main(argv, environment = process.env) {
   out(
     problems.length
       ? "FAIL"
-      : `PASS ${model.features.length} features, ${model.features.filter((f) => f.proof === "unproved").length} unproved`,
+      : `PASS ${model.features.length} features, ${model.features.filter((f) => f.proof === "ci-check").length} proved by a CI check`,
   );
   return problems.length ? 1 : 0;
 }

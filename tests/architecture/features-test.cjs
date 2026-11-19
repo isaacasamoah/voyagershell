@@ -57,7 +57,7 @@ debug = "covered"
 test("the committed map and page match their inputs", () => {
   const result = check(ROOT);
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /^PASS 28 features, 1 unproved\n$/);
+  assert.match(result.out, /^PASS 28 features, 1 proved by a CI check\n$/);
 });
 
 test("a feature row added without regenerating fails and names it", () => {
@@ -225,4 +225,82 @@ test("a base without a map skips the change gate and says so", () => {
   commit(directory, "base");
   const result = check(directory, ["--base", "HEAD"]);
   assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("a tests/native/src edit with no map change clears through its cargo check", () => {
+  const directory = branched();
+  edit(directory, "tests/native/src/journey.rs", (text) => `${text}\n`);
+  commit(directory, "touch the verifier");
+  const result = check(directory, ["--base", "HEAD~1"]);
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("a feature with every tier none and no check no longer passes", () => {
+  const directory = scratch();
+  edit(directory, "architecture/atlas-features.yaml", (text) =>
+    text.replace(/\nchecks:[\s\S]*$/, "\n"),
+  );
+  fails(
+    check(directory),
+    "FAIL verification-environment has no journey, name one in tests/native/features.toml or a CI check in architecture/atlas-features.yaml",
+  );
+});
+
+test("a named check that CI does not run fails", () => {
+  const directory = scratch();
+  edit(directory, "architecture/atlas-features.yaml", (text) =>
+    text.replace("cargo test --locked", "cargo test"),
+  );
+  fails(
+    check(directory),
+    'verification-environment: check "cargo test --manifest-path tests/native/Cargo.toml" is not a run step',
+  );
+});
+
+test("an empty atlas file reports its groups cleanly", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "architecture/atlas-features.yaml"),
+    "",
+  );
+  const result = check(directory);
+  fails(result, "is in no group");
+  assert.ok(!result.out.includes("Cannot read properties"), result.out);
+});
+
+test("every Journeys run line in the description counts", () => {
+  const directory = branched();
+  edit(directory, "desktop/canvas/panels.ts", (text) => `${text}\n`);
+  commit(directory, "touch panels");
+  const event = path.join(directory, "event.json");
+  fs.writeFileSync(
+    event,
+    JSON.stringify({
+      pull_request: {
+        body: "Journeys run: portals\n\nJourneys run: arrangement, workspace\n",
+      },
+    }),
+  );
+  const result = check(directory, ["--base", "HEAD~1"], {
+    GITHUB_EVENT_NAME: "pull_request",
+    GITHUB_EVENT_PATH: event,
+  });
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("the gate failure names a remedy that works", () => {
+  const directory = branched();
+  edit(directory, "desktop/canvas/panels.ts", (text) => `${text}\n`);
+  commit(directory, "touch panels");
+  fails(
+    check(directory, ["--base", "HEAD~1"]),
+    "to the PR description and push again, or change its entry in tests/native/features.toml and run npm run features:generate",
+  );
+});
+
+test("a base without a map prints no git error", () => {
+  const directory = scratch();
+  commit(directory, "base");
+  const result = check(directory, ["--base", "HEAD"]);
+  assert.strictEqual(result.err, "");
 });
