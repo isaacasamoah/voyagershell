@@ -18,12 +18,13 @@ Every rule has an `id` and a `check`. The `id` starts each report line, so a rec
 
 | Check                         | Fails when                                                         |
 | ----------------------------- | ------------------------------------------------------------------ |
-| `forbid_code`                 | An edge from a `from` node to a `to` node exists.                  |
+| `forbid_code`                 | An edge from a `from` node to a `to` node outside `except` exists. |
 | `forbid_unresolved`           | The observer could not resolve an include.                         |
 | `forbid_reach`                | A crate reaches a forbidden crate through `Cargo.lock`.            |
 | `acyclic`                     | Modules or scripts use each other in a loop.                       |
 | `max_lines`                   | A file is longer than `limit`.                                     |
 | `forbid_terms`                | A retired word from `vocabulary.yaml` appears.                     |
+| `forbid_text`                 | A `pattern` matches the code of a file under `roots`.              |
 | `forbid_literal`              | A listed string literal appears outside its owner file.            |
 | `one_owner`, `intended_edges` | A file has no single owner, or a cross-owner edge is not intended. |
 
@@ -53,6 +54,30 @@ Test scope is explicit. With `tests: skip`, the rule ignores a file named `tests
 A violation is `<rule id>: "<literal>" in <file>` with the number of occurrences. A recorded entry carries a numeric `limit`. The count may fall, and a lower count asks for a lower limit. A higher count fails.
 
 Rule `notes-type-has-one-home` keeps the Notes type id in `NOTES_TYPE` in `app/src/vessel_type.rs`. Its test scope is `skip` because fixtures name the type they create. The base of the pull request "Give Core terminal states, agent programs and the Notes type id one home" (#149) spread `"notes"` across `client`, `content`, `context`, `panels` and `voyage_close`.
+
+## Families
+
+A family is one module under `app/src/families/`. It keeps its internals private and offers a few `pub(crate)` entry points in its own file. A submodule is private, and the family file re-exports what callers need, so a caller writes `families::terminal::exited` and not `families::terminal::lifecycle::exited`. Rust stops a sibling from naming a private function, field or submodule. It cannot stop a sibling from calling an entry point, because visibility can only name an ancestor module and every sibling is inside `families`. Of the 21 plants in `families-test.cjs`, the compiler stops one, the call through the private `lifecycle` module. The gate stops the others.
+
+| Rule | Fails when |
+| ---- | ---------- |
+| `families-stay-apart` | A family uses another family, or uses or is used by the `families` root. |
+| `families-not-aliased` | The crate root uses any `families` module, such as `pub(crate) use families::terminal as process;` in `lib.rs`. |
+| `families-reach-shared-only` | A family uses a module outside `families` and the shared modules in the rule's `except` list, such as an alias in `client.rs`. |
+| `families-no-widened-visibility` | A file under `app/src/families/` writes `pub(super)` or `pub(in`. `pub(super)` in a family file is visible to every sibling and the compiler does not warn. |
+
+`except` on `forbid_code` lists nodes that do not count as a `to`. Each shared module needs two entries, `X` and `X::*`, because a wildcard such as `core*` would also match `core_reader` and `core_endpoint`. Add a module to the list only when two families must own a type, and then put the type in that shared module, never in `families.rs`.
+
+`forbid_text` takes a `pattern` and `roots`. It reads code with comments removed and reports `<pattern match> in <file>` with the number of hits.
+
+The rules read edges that the observer sees. These forms stay invisible to them, and the compiler accepts all of them.
+
+- a3 is `use crate as c;` followed by `c::families::terminal::..`.
+- a4 is `self::super::terminal::..`.
+- m2 is a macro in a family, which expands at the caller. A macro marked `#[macro_export]` in a family reaches the entry points through the crate root, and no rule sees that edge.
+- c2 is code under `#[cfg(any(test, debug_assertions))]` that calls another family.
+
+A crate per family would make a sibling call a Cargo error. It was declined, so these residuals stay.
 
 ## Record a violation
 
