@@ -67,6 +67,21 @@ class Refused(unittest.TestCase):
         self.refused("hc ls", {"HC_TERMINAL_ID": "t9"})
         self.refused("for t in t1 t2; do env -u HC_SESSION -u HC_SOCKET hc get $t; done", TRIAL)
 
+    def test_each_chained_call_resolves_on_its_own(self):
+        self.refused("env -u HC_SESSION -u HC_SOCKET hc ls; HC_SESSION=voyager-trial hc ls", TRIAL)
+        self.refused("env -u HC_SOCKET HC_SESSION=default hc ls; env -u HC_SOCKET HC_SESSION=voyager-trial hc ls", TRIAL)
+        self.refused(f"{CLEAN} hc ls && env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls", TRIAL)
+        self.refused("hc ls | cat; env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
+        self.refused("export HC_SESSION=default; hc ls", TRIAL)
+        self.refused("HC_SOCKET=/run/user/1000/herdr-core/default.sock\nhc ls", TRIAL)
+        self.refused(f"{CLEAN} gh pr view 1; env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
+        self.refused("git status; env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
+
+    def test_shell_c_strings_still_scanned(self):
+        self.refused("bash -c 'unset HC_SESSION HC_SOCKET; hc ls'", TRIAL)
+        self.refused(f"{CLEAN} sh -c 'hc ls'", TRIAL)
+        self.refused("bash -lc \"cargo test\"", LIVE)
+
     def test_server_stop_without_own_session(self):
         self.refused("hc server stop")
         self.refused("HC_SESSION=voyager-demo hc server stop")
@@ -93,6 +108,21 @@ class Allowed(unittest.TestCase):
     def test_naming_a_session_that_is_not_default(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls", TRIAL)
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls", {})
+
+    def test_chained_calls_that_each_name_a_session(self):
+        named = "env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc"
+        self.allowed(f"{named} ls; {named} get t1", TRIAL)
+        self.allowed(f"{named} ls && {named} get t1 | head", TRIAL)
+        self.allowed("hc ls 2>&1 | head; hc get t1 &>/dev/null", TRIAL)
+        self.allowed("unset HC_SOCKET; export HC_SESSION=voyager-trial; hc ls", TRIAL)
+
+    def test_crew_prefix_before_gh_git_and_grep(self):
+        self.allowed(f"{CLEAN} gh pr comment 269 --body 'run `hc ls` first'", TRIAL)
+        self.allowed(f"{CLEAN} gh pr comment 269 --body 'done; hc ls showed it'", TRIAL)
+        self.allowed(f"{CLEAN} git commit -m 'refuse `hc ls` in default'", TRIAL)
+        self.allowed(f"{CLEAN} grep -c 'hc ls' file", TRIAL)
+        self.allowed(f"{CLEAN} grep -n 'cargo test' file", LIVE)
+        self.allowed("env -u HC_SESSION gh pr comment 1 --body \"a; hc ls\"", TRIAL)
 
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")

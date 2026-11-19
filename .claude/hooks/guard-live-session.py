@@ -5,7 +5,8 @@ import sys
 
 LIVE = ("HC_SESSION", "HC_SOCKET", "HC_TERMINAL_ID")
 PREFIX = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
-LEAD = r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
+SHELL_C = r"\b(?:ba|z|da|k)?sh\s+(?:-\S+\s+)*?-\w*c\s+['\"]"
+LEAD = r"(?:^|[;&|(`\n]|\$\(|" + SHELL_C + r")\s*"
 WRAP = r"(?:(?:then|do|else|env|exec|nohup|nice|time|timeout\s+\S+|-u\s+\S+|-i|--unset[=\s]\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*"
 HC = r"(?:[^\s;&|'\"]*/)?hc"
 APP = r"[^\s;&|'\"]*voyager-shell"
@@ -70,9 +71,77 @@ def deny(reason):
     sys.exit(0)
 
 
+def segments(command):
+    parts = []
+    current = []
+    quote = ""
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\" and quote != "'" and index + 1 < len(command):
+            current.append(" " if command[index + 1] == "\n" else command[index : index + 2])
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char in ";|\n" or (
+            char == "&"
+            and (command[index - 1 : index] not in (">", "<"))
+            and command[index + 1 : index + 2] != ">"
+        ):
+            parts.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    parts.append("".join(current))
+    return [part for part in parts if part.strip()]
+
+
+def leading_word(segment):
+    words = segment.split()
+    index = 0
+    while index < len(words):
+        word = words[index].lstrip("(")
+        if word in ("", "env", "-i"):
+            index += 1
+        elif word in ("-u", "--unset"):
+            index += 2
+        elif word.startswith("--unset=") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", word):
+            index += 1
+        else:
+            return word
+    return ""
+
+
+def carry(segment, environment):
+    unset = re.fullmatch(r"\s*\(?\s*unset\s+([\w\s]+?)\s*\)?\s*", segment)
+    if unset:
+        return {k: v for k, v in environment.items() if k not in unset.group(1).split()}
+    bare = re.fullmatch(r"\s*(?:export\s+)?((?:[A-Za-z_][A-Za-z0-9_]*=\S*\s*)+)", segment)
+    if bare:
+        updated = dict(environment)
+        for name, value in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)=(\S*)", bare.group(1)):
+            updated[name] = value.strip("'\"")
+        return updated
+    return environment
+
+
 def check(command, environment):
-    first = command.lstrip().split(maxsplit=1)[0] if command.strip() else ""
-    if first in ("git", "gh"):
+    for segment in segments(command):
+        reason = check_segment(segment, environment)
+        if reason:
+            return reason
+        environment = carry(segment, environment)
+    return None
+
+
+def check_segment(command, environment):
+    if leading_word(command) in ("git", "gh"):
         return None
     hc = run(command, HC)
     if run(command, HC + r"\s+update"):
