@@ -21,6 +21,11 @@ DEFAULT = {
     "HC_TERMINAL_ID": "t9",
 }
 CROSSED = {**LIVE, "HC_SOCKET": "/run/user/1000/herdr-core/default.sock"}
+TRIAL = {
+    "HC_SESSION": "voyager-trial",
+    "HC_SOCKET": "/run/user/1000/herdr-core/voyager-trial.sock",
+    "HC_TERMINAL_ID": "t6v",
+}
 CLEAN = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
 
 
@@ -48,6 +53,20 @@ class Refused(unittest.TestCase):
         self.refused("ZIG=/z bash -c 'cargo test -p voyager-app'")
         self.refused("./target/release/voyager-shell --profile /p --session voyager-x")
 
+    def test_fixture_session_named_inline(self):
+        self.refused("HC_SESSION=voyager-live-conversation-20261108 hc ls", TRIAL)
+        self.refused("HC_SESSION=voyager-live-conversation-20261108 hc ls", LIVE)
+
+    def test_resolves_to_default_session(self):
+        self.refused("env -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
+        self.refused("unset HC_SESSION HC_SOCKET; hc ls", TRIAL)
+        self.refused("env -u HC_SOCKET hc ls", {"HC_SESSION": "default"})
+        self.refused(f"{CLEAN} hc ls", TRIAL)
+        self.refused("env -i hc ls", TRIAL)
+        self.refused("hc ls", {})
+        self.refused("hc ls", {"HC_TERMINAL_ID": "t9"})
+        self.refused("for t in t1 t2; do env -u HC_SESSION -u HC_SOCKET hc get $t; done", TRIAL)
+
     def test_server_stop_without_own_session(self):
         self.refused("hc server stop")
         self.refused("HC_SESSION=voyager-demo hc server stop")
@@ -71,6 +90,10 @@ class Allowed(unittest.TestCase):
         self.allowed("hc send t5v 'co1 code-ready workshop#27@fc0468a reports/co1.md'")
         self.allowed("hc get --json t64", {"HC_SESSION": "voyager-trial", "HC_TERMINAL_ID": "t64"})
 
+    def test_naming_a_session_that_is_not_default(self):
+        self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls", TRIAL)
+        self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls", {})
+
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-try hc send t1 'echo hi'")
@@ -81,7 +104,7 @@ class Allowed(unittest.TestCase):
         self.allowed("ls ~/.local/bin/hc")
         self.allowed("grep -rn cargo app/src")
         self.allowed("cargo build --release --locked")
-        self.allowed("hc ls", {})
+        self.allowed("echo hc ls", {})
         self.allowed(
             "grep -o '[^\" ]*/voyager-shell --profile [^ ]* --session voyager-live' transcript.jsonl | sort"
         )

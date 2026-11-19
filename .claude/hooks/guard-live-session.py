@@ -39,6 +39,23 @@ def inside_own_session(environment):
     )
 
 
+def assigned(command, name):
+    found = re.findall(r"(?:^|[\s;&|(`'\"])" + name + r"=['\"]?([^\s;&|'\")]+)", command)
+    return found[-1] if found else ""
+
+
+def resolved_session(command, environment):
+    socket = assigned(command, "HC_SOCKET") or (
+        "" if cleared(command, "HC_SOCKET") else environment.get("HC_SOCKET", "")
+    )
+    if socket:
+        return os.path.basename(socket).removesuffix(".sock")
+    session = assigned(command, "HC_SESSION") or (
+        "" if cleared(command, "HC_SESSION") else environment.get("HC_SESSION", "")
+    )
+    return session or "default"
+
+
 def deny(reason):
     json.dump(
         {
@@ -66,6 +83,12 @@ def check(command, environment):
         return (
             "`hc server stop|restart` needs an explicit session you created: "
             "`env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> hc server stop`."
+        )
+    if hc and resolved_session(command, environment) == "default":
+        return (
+            "This `hc` call resolves to Isaac's `default` Core session, because HC_SESSION and HC_SOCKET "
+            "are cleared or unset. Name your own session: "
+            "`env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> hc ...`."
         )
     live = [name for name in LIVE if environment.get(name)]
     if hc and inside_own_session(environment) and not re.search(r"\bHC_(?:SESSION|SOCKET)=", command):
