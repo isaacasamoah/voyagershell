@@ -209,6 +209,10 @@ function build(repository) {
         problems.push(
           `${id}: check "${check.run}" is not a run step in ${WORKFLOW}`,
         );
+    if (own.length && (row.journeys.length || row.python.length))
+      problems.push(
+        `${id} names a journey, so it cannot take a CI check in ${GROUPS}`,
+      );
     if (!row.journeys.length && !row.python.length && !own.length)
       problems.push(
         `${id} has no journey, name one in ${REGISTRY} or a CI check in ${GROUPS}`,
@@ -217,7 +221,7 @@ function build(repository) {
       ? "native"
       : row.python.length
         ? "python-only"
-        : "ci-check";
+        : "tests";
     const docs = new Set();
     for (const [owner] of ranked) {
       const guide = contexts.find((context) => context.id === owner)?.guide;
@@ -276,11 +280,11 @@ function pageText(model) {
 
 Generated from \`${REGISTRY}\`, \`${GROUPS}\` and the context owners in \`${VOCABULARY}\` by \`npm run features:generate\`. Edit those inputs, then regenerate. The complete map with code paths and state is \`${MAP}\`.
 
-\`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`ci-check\` when it has no journey and a CI step named in \`${GROUPS}\` is its proof.
+\`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`tests\` when it has no journey and a CI step named in \`${GROUPS}\` is its proof, shown as proven by its tests. Only a feature with no journey may take such a step.
 
 ## The change gate
 
-On a pull request, \`npm run features:check -- --base <base>\` fails when a change touches a feature's source paths with no change to its map entry and no recorded run. Record the run by adding a line \`Journeys run: <journey>, <journey>\` to the PR description, then push a new commit, because editing the description does not rerun CI. Every such line counts. A feature needs all of its native journeys, or one Python journey when it has no native journey. Another way through is to change the feature's entry in \`${REGISTRY}\` and run \`npm run features:generate\`. A feature whose proof is a \`ci-check\` needs no record, because that CI step runs on the same pull request.
+On a pull request, \`npm run features:check -- --base <base>\` fails when a change touches a feature's source paths with no change to its map entry and no recorded run. Record the run by adding a line \`Journeys run: <journey>, <journey>\` to the PR description, then push a new commit, because editing the description does not rerun CI. Every such line counts. A feature needs all of its native journeys, or one Python journey when it has no native journey. Another way through is to change the feature's entry in \`${REGISTRY}\` and run \`npm run features:generate\`. A feature proven by its tests needs no record, because that CI step runs on the same pull request.
 
 | Feature | Group | Owner | Proof | Native journeys | Python journeys | Docs |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -403,7 +407,7 @@ function main(argv, environment = process.env) {
   out(
     problems.length
       ? "FAIL"
-      : `PASS ${model.features.length} features, ${model.features.filter((f) => f.proof === "ci-check").length} proved by a CI check`,
+      : `PASS ${model.features.length} features, ${model.features.filter((f) => f.proof === "tests").length} proven by its tests`,
   );
   return problems.length ? 1 : 0;
 }

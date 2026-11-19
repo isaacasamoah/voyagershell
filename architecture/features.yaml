@@ -498,7 +498,7 @@ features:
     summary: 'Run the verifier''s own unit tests and the journey battery and get a verdict that leaves nothing behind.'
     group: diagnostics
     owner: verification
-    proof: ci-check
+    proof: tests
     state: {behavior: none, performance: none, visual: none, debug: none}
     platforms: [linux]
     checks: ['cargo test --locked --manifest-path tests/native/Cargo.toml']

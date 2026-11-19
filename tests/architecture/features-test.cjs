@@ -57,7 +57,7 @@ debug = "covered"
 test("the committed map and page match their inputs", () => {
   const result = check(ROOT);
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /^PASS 28 features, 1 proved by a CI check\n$/);
+  assert.match(result.out, /^PASS 28 features, 1 proven by its tests\n$/);
 });
 
 test("a feature row added without regenerating fails and names it", () => {
@@ -271,21 +271,36 @@ test("an empty atlas file reports its groups cleanly", () => {
 test("every Journeys run line in the description counts", () => {
   const directory = branched();
   edit(directory, "desktop/canvas/panels.ts", (text) => `${text}\n`);
-  commit(directory, "touch panels");
+  edit(directory, "desktop/src/split.rs", (text) => `${text}\n`);
+  commit(directory, "touch panels and split");
   const event = path.join(directory, "event.json");
-  fs.writeFileSync(
-    event,
-    JSON.stringify({
-      pull_request: {
-        body: "Journeys run: portals\n\nJourneys run: arrangement, workspace\n",
-      },
-    }),
+  const run = (body) => {
+    fs.writeFileSync(event, JSON.stringify({ pull_request: { body } }));
+    return check(directory, ["--base", "HEAD~1"], {
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_EVENT_PATH: event,
+    });
+  };
+  fails(
+    run("Journeys run: portals\n"),
+    "Split / resize / maximize (split-resize-maximize) changed in desktop/src/split.rs",
   );
-  const result = check(directory, ["--base", "HEAD~1"], {
-    GITHUB_EVENT_NAME: "pull_request",
-    GITHUB_EVENT_PATH: event,
-  });
+  const result = run("Journeys run: portals\n\nJourneys run: arrangement\n");
   assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("a CI check on a feature that names a journey fails", () => {
+  const directory = scratch();
+  edit(directory, "architecture/atlas-features.yaml", (text) =>
+    text.replace(
+      "checks:\n",
+      "checks:\n  - feature: portals\n    run: npm test\n",
+    ),
+  );
+  fails(
+    check(directory),
+    "FAIL portals names a journey, so it cannot take a CI check in architecture/atlas-features.yaml",
+  );
 });
 
 test("the gate failure names a remedy that works", () => {
