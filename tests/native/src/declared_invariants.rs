@@ -16,7 +16,6 @@ pub enum Kind {
     User,
     Developer,
     Structure,
-    Process,
 }
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -593,14 +592,13 @@ impl Model {
         };
         let ownerless = self.invariant.iter().filter(|e| e.owner.is_none()).count();
         format!(
-            "{} invariants ({} user, {} developer, {} structure, {} process), {} envelope entries, {} out of scope, {stated} stated\n\
+            "{} invariants ({} user, {} developer, {} structure), {} envelope entries, {} out of scope, {stated} stated\n\
              status: {} guarded and checked, {} checked only, {} guarded only, {} gap; {ownerless} with no owner\n\
              envelope entries with no measurement ({}): {}",
             self.invariant.len(),
             kind(Kind::User),
             kind(Kind::Developer),
             kind(Kind::Structure),
-            kind(Kind::Process),
             self.envelope.len(),
             self.out_of_scope.len(),
             status(Status::GuardedAndChecked),
@@ -700,7 +698,7 @@ confidence = "stated"
 [[invariant]]
 id = "tidy"
 says = "Tests leave nothing."
-kind = "process"
+kind = "developer"
 source = "a verdict"
 features = []
 guard = []
@@ -770,7 +768,7 @@ confidence = "stated"
         model.validate(&targets()).unwrap();
         let counts = model.counts();
         assert!(
-            counts.contains("1 user, 0 developer, 0 structure, 1 process"),
+            counts.contains("1 user, 1 developer, 0 structure"),
             "{counts}"
         );
         assert!(
@@ -867,6 +865,11 @@ confidence = "stated"
                 "\"type:app/src/core_viewer.rs#Lease\"",
                 "\"type:app/src/core_viewer.rs\"",
                 "invariant keep: type:app/src/core_viewer.rs is not type:<path>#<name>",
+            ),
+            (
+                "kind = \"user\"",
+                "kind = \"process\"",
+                "invariant keep: unknown variant `process`, expected one of `user`, `developer`, `structure`",
             ),
             (
                 "\"manual:Isaac by ear\"",
