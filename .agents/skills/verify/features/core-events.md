@@ -2,8 +2,8 @@
 
 ## Sub-features
 
-Core tells the app what its programs do: one started, the program in front
-changed, one exited. The app takes each report as it arrives. The Agents list
+Core tells the app what its programs do. One started, the program in front
+changed, or one exited. The app takes each report as it arrives. The Agents list
 names a new foreground program without waiting for its 3 s loop, and the Vessel
 of a shell that exited closes even when Core was stopped while it exited.
 

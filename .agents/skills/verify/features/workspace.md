@@ -73,7 +73,7 @@ the next case needs.
 Every case up to `fleet-tab-focus-remembered`, except `maximize-focus-remembered`,
 also ends with the expectation `the saved and drawn workspace match the journey's
 model`, once the case has made
-its inputs. The journey keeps a model of the whole workspace: the Home Voyage
+its inputs. The journey keeps a model of the whole workspace. It holds the Home Voyage
 as it was at the start, and each Voyage, Fleet and Vessel with its name, in
 order, each Fleet's split arrangement, the selected Voyage and Fleet, and the
 dock. It changes the model only by what each case did, so a later case
@@ -160,7 +160,7 @@ dock on a Vessel in another Fleet or Voyage, the avatar must be drawn and
 overlap no drawn terminal. The avatar animates between landings, so each
 step is read until the value holds for 150 ms and the avatar is on its dock.
 
-The journey keeps its own model of what it created: the first Voyage, Fleet and
+The journey keeps its own model of what it created. It holds the first Voyage, Fleet and
 Vessel, the split Vessel, the created Fleet and its Vessel, and the created
 Voyage with its Fleet and Vessel. Before Ctrl+Q and again after the relaunch
 it compares the saved document with the model, and the keys of the drawn
@@ -203,7 +203,7 @@ Three checks are not driven.
   maximises the window, would pass them.
 
 The Python `workspace` and `placement` journeys are deleted. The native
-`portals` journey covers the Portal checks that `placement` kept: creating a
+`portals` journey covers the Portal checks that `placement` kept. These are creating a
 Portal, docking to it, renaming it and keeping it across a new Fleet. The
 native `quit-restore` journey covers Quit, a warm relaunch, a cold restart and
 the reopen of the saved workspace. The native `voyage-close` journey covers

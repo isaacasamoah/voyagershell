@@ -91,8 +91,7 @@ fn an_edit_with_no_record_is_kept_and_flagged_and_gets_no_record() {
 fn the_history_holds_the_versions_shipped_before_records() {
     let table = history();
     assert!(table.iter().all(|(path, _)| plain(path)));
-    let guide = include_bytes!("../../../../desktop/canvas/AGENTS.md");
-    assert!(table.contains(&("canvas/AGENTS.md", fingerprint(guide))));
+    assert!(table.contains(&("canvas/AGENTS.md", 0x0ef4_64fd_ceb3_f66d)));
 }
 
 #[test]

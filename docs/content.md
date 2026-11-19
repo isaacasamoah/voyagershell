@@ -187,7 +187,7 @@ host-task lifetime remain required native/resource observations.
 
 ## First-party profile files
 
-`app/src/content/install.rs` owns the first-party files in a profile: the
+`app/src/content/install.rs` owns the first-party files in a profile. They are the
 canvas package, the themes and the Notes package. The table of shipped files is
 `desktop/src/shipped.rs`. On every start the app compares each file with
 `installed.json` in the profile, which maps the file's path to the FNV-1a 64
@@ -272,7 +272,7 @@ the owner confirms an update. Schema warnings and last-good data remain visible.
 Packages are seeded once into the selected profile. Personal JavaScript is not
 overwritten. The shipped Notes composition is authored in `content/notes/main.ts` and emitted
 to the same `main.js` by the existing strict TypeScript pipeline. The gate checks
-Canvas and Notes separately using the same compiler/configuration: Notes receives
+Canvas and Notes separately using the same compiler/configuration. Notes receives
 its actual `export-script-types --notes` declarations, not the canvas's broader
 registry. Native Title/Body signatures and the content request/result types come
 from the actual registry exporter and generated Rust contract. Each scope records

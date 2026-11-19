@@ -5,7 +5,7 @@
 
 [[invariant]]
 id = "quit-keeps-programs"
-says = "Ctrl+Q, the window's close button and a window-manager close all quit and keep: Core, every program and its output carry on, and the next launch reattaches to the same programs."
+says = "Ctrl+Q, the window's close button and a window-manager close all quit and keep. Core, every program and its output carry on, and the next launch reattaches to the same programs."
 hurts = "user"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
@@ -61,7 +61,7 @@ confidence = "stated"
 
 [[invariant]]
 id = "portal-belongs-to-voyage"
-says = "A Portal belongs to its Voyage: it stays shown with the same program on every Fleet of that Voyage, is not drawn in other Voyages, and opens as an overlay by default with make-room as the other mode."
+says = "A Portal belongs to its Voyage. It stays shown with the same program on every Fleet of that Voyage, is not drawn in other Voyages, and opens as an overlay by default with make-room as the other mode."
 hurts = "user"
 source = "AGENTS.md: 'A Portal is a persistent placement across a Voyage ... overlay as the default and make-room also supported'; Isaac, 3 Nov 2026: selected overlay and make-room modes with overlay as default"
 features = ["portals"]

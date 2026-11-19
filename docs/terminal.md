@@ -312,7 +312,7 @@ color, including the reference default.
 
 The initial release demonstrated a shell's colored wide Unicode glyph in the
 alternate screen, native window resize from 101 by 41 to 88 by 35, and the same
-terminal address and numeric PID. That result remains bounded: it did not prove
+terminal address and numeric PID. That result remains bounded. It did not prove
 all full-screen applications, a coding agent, selection, clipboard, IME, hidden
 output, compositor timing, another platform or the complete terminal module.
 Its proof-size gate remains held.
@@ -365,7 +365,7 @@ Nothing is sent when any of these holds, and each has a desktop unit test in
 - An input-method composition is active.
 - The clicked row is not the cursor's row or on its soft-wrapped line, so the
   path to it crosses a hard newline.
-- Prompt marks are on screen and show a running command: the cursor is not at a
+- Prompt marks are on screen and show a running command. The cursor is not at a
   prompt or input area, and a row at or above the cursor carries an OSC 133 mark.
 
 The gates need no prompt marks. Bash 5.3 with ble.sh emits none, so the
@@ -385,7 +385,7 @@ GPUI's native input handler retains a local UTF-16 composition preview and draws
 it at the actual terminal cursor. The running program receives only committed UTF-8
 text. Composition is limited to 64 KiB and one preview line, and candidate-window
 positioning uses the same font shaping as the preview. Terminal output is not
-an editable document: native replacement ranges refer to the active preview,
+an editable document. Native replacement ranges refer to the active preview,
 and committed text goes to the existing terminal input path. Blur cancels the
 local preview. Operating-system IME activation and composition still require a
 real input-method journey; reducer tests and Unicode keysyms cannot prove it.
@@ -471,8 +471,8 @@ read work this way.
   which is the version of the layout it was built from, even when an effect
   lands before Core replies. Send, Interrupt and Stop name the version when
   they finish. At most three reads are pending at once, beside the eight
-  process effects: one for each reader that waits for its answer before it
-  reads again. A caller waits 25 s, longer than Core's 20 s deadline, so a
+  process effects. Each reader that waits for its answer before it reads again
+  accounts for one. A caller waits 25 s, longer than Core's 20 s deadline, so a
   read settles before its reader can send another. The administrator runs one
   tool call at a time. The Agents list reads again only after its last read
   returns. The content chooser reads once when it opens, and a canvas read at
@@ -492,11 +492,11 @@ read work this way.
   their 256 KiB limit.
 
 The connection allows eighteen pending requests, and `app/src/core_pending.rs`
-adds them up: eight process effects, three process reads at two calls each, the
+adds them up as eight process effects, three process reads at two calls each, the
 observation list, one save or list in flight, the subscription and one ordinary
 owner call. So a save or an Inspect is never refused as busy behind reads or
 behind [delayed process effects](workspace.md). Calls whose reply
-decides the next effect stay on the owner in order: document reads and the
+decides the next effect stay on the owner in order. They are document reads and the
 saves outside the workspace kind, the open/run/attach chain, liveness checks
 before a Send, Stop or reopen, the first Inspect's reopen list, Quit, and
 context preparation.
@@ -529,7 +529,7 @@ A program that exited with reason `exited` is reported by a `finished` event,
 or by a snapshot that lists it. Closing its Vessel is the one effect the `core`
 caller causes, and it needs no `terminal.list`. It passes the gate like any
 other effect. It waits while a save or a list is in flight, and it is dropped
-while Voyager quits. It runs once when the layout is fresh: the owner closes
+while Voyager quits. It runs once when the layout is fresh. The owner closes
 each retained panel whose terminal was bound as live, saves the layout and
 notifies the canvas. A save that fails marks the layout not fresh and is not
 tried again. A foreign program in the same session produces reports that match

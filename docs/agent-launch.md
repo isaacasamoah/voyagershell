@@ -66,7 +66,7 @@ Codex uses `--no-daemon` so its worker remains within Core's process ownership.
 The existing start marker, receipts, known refusal and uncertainty behavior stay
 in the same owner. Missing executables retain the chosen launch with no backend.
 An unconfirmed start is not repeated. A saved launch description does not grant
-new permission to run it: reopening a Client without the original new-creation
+new permission to run it. Reopening a Client without the original new-creation
 eligibility refuses an unbound worker. Existing bound backends reattach, and
 loading a saved layout never grants another launch. Core's `keep` replacement
 option remains disabled. Reported idle/done, process exit and verified task

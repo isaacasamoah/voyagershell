@@ -85,7 +85,7 @@ restore compatible source.
 
 ## Viewer controls
 
-Each panel title bar has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
+Each panel title bar has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`. It removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
 
 The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-placement` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
 

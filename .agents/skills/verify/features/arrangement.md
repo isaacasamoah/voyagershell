@@ -45,7 +45,7 @@ V1 is the first Vessel, and the journey makes V2, V3 and V4.
   terminals return to where they were, and typing still reaches V3.
 - `move-vessel` drags V3's title onto V1's left edge. The tree puts V3 left of
   V1, above V2, with the root share kept, and V3's shell is the same program.
-- `move-cancelled` cancels three live drags: by Escape, by release over the
+- `move-cancelled` cancels three live drags, by Escape, by release over the
   dragged Vessel itself, and by release outside every Vessel. Nothing is
   saved, the sidebar stays open, and Escape never reaches the shell.
 - `relaunch-keeps-arrangement` quits and launches. The document, its version,

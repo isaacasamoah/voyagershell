@@ -1,4 +1,4 @@
-# voyager: arrange your VoyagerShell workspace
+# Arrange your VoyagerShell workspace with voyager
 
 `voyager` is the agent command for VoyagerShell. Run it inside a Vessel, which
 is a terminal that VoyagerShell shows. It covers workspace actions only:
@@ -105,7 +105,7 @@ socket.
 ## Authority
 
 Your Vessel's socket tells VoyagerShell which Vessel is calling. That identity
-is advisory. Nothing is enforced: the command acts with the person's
+is advisory. Nothing is enforced. The command acts with the person's
 authority, and any program of the same user can reach the socket. The socket
 exists only while the Vessel is placed. It is a Unix socket. Linux is the
 verified platform, and Windows has no socket yet.
