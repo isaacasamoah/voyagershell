@@ -82,6 +82,20 @@ class Refused(unittest.TestCase):
         self.refused(f"{CLEAN} sh -c 'hc ls'", TRIAL)
         self.refused("bash -lc \"cargo test\"", LIVE)
 
+    def test_prefixed_gh_git_substitution_still_scanned(self):
+        inner = "env -u HC_SESSION -u HC_SOCKET hc ls"
+        self.refused(f"{CLEAN} gh pr view 1 $({inner})", TRIAL)
+        self.refused(f"{CLEAN} gh pr view 1 `{inner}`", TRIAL)
+        self.refused(f"{CLEAN} gh pr comment 1 --body \"$({inner})\"", TRIAL)
+        self.refused(f"{CLEAN} gh pr comment 1 --body-file <({inner})", TRIAL)
+        self.refused(f"{CLEAN} git log >({inner})", TRIAL)
+        self.refused(f"{CLEAN} gh pr view 1 $(hc ls)", {})
+        self.refused(f"unset HC_SESSION HC_SOCKET; {CLEAN} gh pr view 1 $(hc ls)", TRIAL)
+
+    def test_comment_apostrophe_does_not_hide_next_line(self):
+        self.refused(f"{CLEAN} git status # it's\nenv -u HC_SESSION -u HC_SOCKET hc ls", TRIAL)
+        self.refused(f"{CLEAN} gh pr view 1 # don't\nhc ls", {})
+
     def test_server_stop_without_own_session(self):
         self.refused("hc server stop")
         self.refused("HC_SESSION=voyager-demo hc server stop")
@@ -123,6 +137,16 @@ class Allowed(unittest.TestCase):
         self.allowed(f"{CLEAN} grep -c 'hc ls' file", TRIAL)
         self.allowed(f"{CLEAN} grep -n 'cargo test' file", LIVE)
         self.allowed("env -u HC_SESSION gh pr comment 1 --body \"a; hc ls\"", TRIAL)
+
+    def test_prefixed_gh_git_plain_text_still_passes(self):
+        self.allowed(f"{CLEAN} gh pr view 1 $(date)", TRIAL)
+        self.allowed(f"{CLEAN} gh pr comment 1 --body 'run $(hc ls) and `hc ls`'", TRIAL)
+        self.allowed(f"{CLEAN} gh pr comment 1 --body 'a; hc ls' --body-file /tmp/f", TRIAL)
+        self.allowed(f"{CLEAN} git status # it's fine\ngit log", TRIAL)
+        self.allowed(
+            f"{CLEAN} gh pr view 1 # don't\nenv -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ls",
+            TRIAL,
+        )
 
     def test_own_session(self):
         self.allowed("env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-demo hc server stop")

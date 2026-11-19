@@ -85,6 +85,12 @@ def segments(command):
         if quote:
             if char == quote:
                 quote = ""
+        elif char == "#" and (index == 0 or command[index - 1] in " \t;&|("):
+            end = command.find("\n", index)
+            end = len(command) if end < 0 else end
+            current.append(command[index:end])
+            index = end
+            continue
         elif char in "'\"":
             quote = char
         elif char in ";|\n" or (
@@ -100,6 +106,27 @@ def segments(command):
         index += 1
     parts.append("".join(current))
     return [part for part in parts if part.strip()]
+
+
+def substitutes(segment):
+    quote = ""
+    index = 0
+    while index < len(segment):
+        char = segment[index]
+        pair = segment[index : index + 2]
+        if char == "\\" and quote != "'":
+            index += 2
+            continue
+        if quote == "'":
+            quote = "" if char == "'" else quote
+        elif char == "`" or pair == "$(" or (not quote and pair in ("<(", ">(")):
+            return True
+        elif quote:
+            quote = "" if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        index += 1
+    return False
 
 
 def leading_word(segment):
@@ -141,7 +168,7 @@ def check(command, environment):
 
 
 def check_segment(command, environment):
-    if leading_word(command) in ("git", "gh"):
+    if leading_word(command) in ("git", "gh") and not substitutes(command):
         return None
     hc = run(command, HC)
     if run(command, HC + r"\s+update"):
