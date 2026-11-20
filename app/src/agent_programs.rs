@@ -259,4 +259,39 @@ mod tests {
             assert!(crate::launch::spec_argv(&entry.launch).is_ok());
         }
     }
+
+    #[test]
+    fn a_layout_saved_with_a_codex_launch_opens_with_the_same_vessel_and_command() {
+        use voyager_contract::layout_document::{Reading, read};
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Saved".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let mut saved = serde_json::to_value(&model.layout).unwrap();
+        let before = saved["vessels"][0].clone();
+        saved["vessels"][0]["launch"] = json!({
+            "kind": "codex", "model": "gpt-6.1-sol", "effort": "high", "permissions": "yolo"
+        });
+        saved["vessels"][0]["backend"] = json!("t7");
+        assert!(matches!(read(saved.clone()), Reading::Unreadable { .. }));
+        upgrade_stored_launches(&mut saved);
+        let Reading::Open { layout, kept } = read(saved) else {
+            panic!("the saved layout opens");
+        };
+        assert!(kept.is_empty());
+        let vessel = &layout.vessels[0];
+        assert_eq!(vessel.type_id, before["typeId"]);
+        assert_eq!(vessel.id.0, before["id"]);
+        assert_eq!(
+            vessel.backend.as_ref().map(|backend| backend.0.as_str()),
+            Some("t7")
+        );
+        assert_eq!(
+            crate::launch::argv(vessel.launch.as_ref().unwrap()).unwrap(),
+            argv("codex", None, None, None).unwrap()
+        );
+    }
 }
