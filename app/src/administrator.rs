@@ -20,47 +20,11 @@ enum Dispatch {
 
 impl Dispatch {
     fn receipt(&self) -> ToolAction {
-        use voyager_contract::content::{Action as Content, Receipt};
         match self {
             Self::Workspace(action) => ToolAction::Workspace(action.clone()),
             Self::Process(action) => ToolAction::Process(action.clone()),
             Self::Worktree(input) => ToolAction::Worktree(input.clone()),
-            Self::Content(action) => ToolAction::Content(match action {
-                Content::Configure { vessel_id, .. } => Receipt::Configure {
-                    vessel_id: vessel_id.clone(),
-                },
-                Content::Describe { vessel_id } => Receipt::Describe {
-                    vessel_id: vessel_id.clone(),
-                },
-                Content::Inspect { vessel_id } => Receipt::Inspect {
-                    vessel_id: vessel_id.clone(),
-                },
-                Content::MigrateNote { vessel_id } => Receipt::MigrateNote {
-                    vessel_id: vessel_id.clone(),
-                },
-                Content::ListNotes { vessel_id } => Receipt::ListNotes {
-                    vessel_id: vessel_id.clone(),
-                },
-                Content::NewNote { vessel_id, title } => Receipt::NewNote {
-                    vessel_id: vessel_id.clone(),
-                    title: title.clone(),
-                },
-                Content::OpenNote {
-                    vessel_id,
-                    filename,
-                } => Receipt::OpenNote {
-                    vessel_id: vessel_id.clone(),
-                    filename: filename.clone(),
-                },
-                Content::Update {
-                    vessel_id,
-                    expected_revision,
-                    ..
-                } => Receipt::Update {
-                    vessel_id: vessel_id.clone(),
-                    expected_revision: expected_revision.clone(),
-                },
-            }),
+            Self::Content(action) => ToolAction::Content(action.receipt()),
         }
     }
 }
@@ -454,7 +418,7 @@ impl Tools {
                     }
                 }
                 Dispatch::Content(action) => {
-                    let request = crate::content::request(action, effect_id, expected_version);
+                    let request = action.into_request(effect_id, expected_version);
                     match client.content(
                         crate::content::Access::Agent {
                             scope,
@@ -580,6 +544,21 @@ fn content_result(response: &voyager_contract::content::Response) -> EffectResul
         Response::Described { vessel_id, .. } | Response::NotesList { vessel_id, .. } => {
             (Status::Applied, vessel_id, None, None)
         }
+        Response::State {
+            vessel_id,
+            snapshot,
+            ..
+        }
+        | Response::Invoked {
+            vessel_id,
+            snapshot,
+            ..
+        } => (
+            Status::Applied,
+            vessel_id,
+            Some(snapshot.revision.clone()),
+            None,
+        ),
         Response::Configured {
             vessel_id,
             workspace_version,

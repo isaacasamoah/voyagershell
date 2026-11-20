@@ -1771,6 +1771,31 @@
             "expectedRevision"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "expectedRevision": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "invoke",
+              "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "vesselId",
+            "action",
+            "expectedRevision"
+          ],
+          "type": "object"
         }
       ]
     },

@@ -614,6 +614,29 @@ The workspace owner checks only that a type ID is well formed. Removing a
 manifest package moves its folder to `.<folder>.removed` as for Notes, and
 restoring moves it back. Instance data stays in `data/` through both.
 
-The checker and the registry decide what a manifest declares. They run no action
-and draw no view. Notes, the terminal and the agents are not manifests, and the
-view markup language is not parsed.
+### Running a declared action
+
+`content.invoke` runs one declared action on one Vessel of a manifest type. It
+takes the Vessel, the action name, its arguments and the revision the caller last
+read. A view and an agent send the same request, and the one path in
+`app/src/content/manifest/invoke.rs` runs it, so both change the state the same
+way. The type's entry in the content catalogue lists each action with its typed arguments.
+
+The owner checks that the action is declared and that the arguments match its
+`params`. It applies the action's effects to a copy of the state, one after
+another, and checks the copy against the state schema. Only then does it write
+`data/<vessel>.json` with the next revision, by a write and a rename. A refused
+action leaves the file as it was. A stale revision is refused when the action's
+`rebase` is `refuse`. For `by-key` and `always` the effects run on the current
+state, and a `by-key` effect whose item is gone refuses with `target is gone`.
+`$uuid` in an effect is derived from the Vessel and the revision, so a repeated
+request makes the same identifier. A confirmation that cannot fit the content envelope limit is reported as Uncertain after the state was saved, and `inspect` reports its revision. A `backend` effect refuses, because no backend
+is connected. `inspect` returns the state and its revision.
+
+The registry, not the layout, decides which Vessels have a manifest type. A
+Vessel in the layout whose type has no manifest is not reachable here, and an
+instance's data stays in `data/` when its package is removed.
+
+Local state, merge fields, migrations and the view markup are declared and
+checked. None of them runs yet. Notes, the terminal and the agents are not
+manifests.

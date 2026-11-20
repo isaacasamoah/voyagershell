@@ -236,7 +236,9 @@ fn describe(entry: &Entry) -> Description {
             schema: Some(manifest.state.schema.clone()),
             defaults: manifest.state.initial.clone(),
         }),
-        actions: None,
+        actions: ready
+            .then(|| super::operations::actions(manifest).ok())
+            .flatten(),
         backend: manifest
             .backend
             .as_ref()

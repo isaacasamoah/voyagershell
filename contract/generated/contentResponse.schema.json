@@ -108,6 +108,24 @@
       ],
       "type": "object"
     },
+    "StateSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "state": true,
+        "vesselId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vesselId",
+        "revision",
+        "state"
+      ],
+      "type": "object"
+    },
     "Version": {
       "enum": [
         "1"
@@ -347,6 +365,64 @@
         },
         "status": {
           "const": "applied",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "vesselId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/StateSnapshot"
+        },
+        "status": {
+          "const": "state",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "vesselId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/StateSnapshot"
+        },
+        "status": {
+          "const": "invoked",
           "type": "string"
         },
         "version": {

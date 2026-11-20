@@ -5048,7 +5048,7 @@ return errors === 0;
 }
 
 export const contentRequest = validate38;
-const schema56 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"},"Version":{"enum":["1"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"expectedVersion":{"type":"string"},"operation":{"const":"content.configure","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.describe","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.inspect","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"operation":{"const":"content.migrate-note","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.list-notes","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"operation":{"const":"content.new-note","type":"string"},"requestId":{"type":"string"},"title":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","title"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"filename":{"type":"string"},"operation":{"const":"content.open-note","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"content.update","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedRevision","data"],"type":"object"}],"title":"Request"};
+const schema56 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"},"Version":{"enum":["1"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"expectedVersion":{"type":"string"},"operation":{"const":"content.configure","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.describe","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.inspect","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"operation":{"const":"content.migrate-note","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"content.list-notes","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"operation":{"const":"content.new-note","type":"string"},"requestId":{"type":"string"},"title":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","title"],"type":"object"},{"additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"filename":{"type":"string"},"operation":{"const":"content.open-note","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedVersion","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"content.update","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedRevision","data"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"type":"string"},"args":true,"expectedRevision":{"type":"string"},"operation":{"const":"content.invoke","type":"string"},"requestId":{"type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["operation","version","requestId","vesselId","expectedRevision","action","args"],"type":"object"}],"title":"Request"};
 const schema59 = {"enum":["1"],"type":"string"};
 const schema66 = {"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"};
 const schema57 = {"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"};
@@ -6668,6 +6668,195 @@ if(_valid0){
 valid0 = true;
 passing0 = 7;
 }
+const _errs120 = errors;
+if(errors === _errs120){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing9;
+if((((((((data.operation === undefined) && (missing9 = "operation")) || ((data.version === undefined) && (missing9 = "version"))) || ((data.requestId === undefined) && (missing9 = "requestId"))) || ((data.vesselId === undefined) && (missing9 = "vesselId"))) || ((data.expectedRevision === undefined) && (missing9 = "expectedRevision"))) || ((data.action === undefined) && (missing9 = "action"))) || ((data.args === undefined) && (missing9 = "args"))){
+const err84 = {instancePath,schemaPath:"#/oneOf/8/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
+if(vErrors === null){
+vErrors = [err84];
+}
+else {
+vErrors.push(err84);
+}
+errors++;
+}
+else {
+const _errs122 = errors;
+for(const key9 in data){
+if(!(((((((key9 === "action") || (key9 === "args")) || (key9 === "expectedRevision")) || (key9 === "operation")) || (key9 === "requestId")) || (key9 === "version")) || (key9 === "vesselId"))){
+const err85 = {instancePath,schemaPath:"#/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err85];
+}
+else {
+vErrors.push(err85);
+}
+errors++;
+break;
+}
+}
+if(_errs122 === errors){
+if(data.action !== undefined){
+const _errs123 = errors;
+if(typeof data.action !== "string"){
+const err86 = {instancePath:instancePath+"/action",schemaPath:"#/oneOf/8/properties/action/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err86];
+}
+else {
+vErrors.push(err86);
+}
+errors++;
+}
+var valid19 = _errs123 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.expectedRevision !== undefined){
+const _errs125 = errors;
+if(typeof data.expectedRevision !== "string"){
+const err87 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/8/properties/expectedRevision/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err87];
+}
+else {
+vErrors.push(err87);
+}
+errors++;
+}
+var valid19 = _errs125 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.operation !== undefined){
+let data45 = data.operation;
+const _errs127 = errors;
+if(typeof data45 !== "string"){
+const err88 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err88];
+}
+else {
+vErrors.push(err88);
+}
+errors++;
+}
+if("content.invoke" !== data45){
+const err89 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/const",keyword:"const",params:{allowedValue: "content.invoke"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err89];
+}
+else {
+vErrors.push(err89);
+}
+errors++;
+}
+var valid19 = _errs127 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.requestId !== undefined){
+const _errs129 = errors;
+if(typeof data.requestId !== "string"){
+const err90 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/8/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err90];
+}
+else {
+vErrors.push(err90);
+}
+errors++;
+}
+var valid19 = _errs129 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.version !== undefined){
+let data47 = data.version;
+const _errs131 = errors;
+if(typeof data47 !== "string"){
+const err91 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err91];
+}
+else {
+vErrors.push(err91);
+}
+errors++;
+}
+if(!(data47 === "1")){
+const err92 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema59.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err92];
+}
+else {
+vErrors.push(err92);
+}
+errors++;
+}
+var valid19 = _errs131 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.vesselId !== undefined){
+const _errs134 = errors;
+if(typeof data.vesselId !== "string"){
+const err93 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/8/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err93];
+}
+else {
+vErrors.push(err93);
+}
+errors++;
+}
+var valid19 = _errs134 === errors;
+}
+else {
+var valid19 = true;
+}
+}
+}
+}
+}
+}
+}
+}
+}
+else {
+const err94 = {instancePath,schemaPath:"#/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err94];
+}
+else {
+vErrors.push(err94);
+}
+errors++;
+}
+}
+var _valid0 = _errs120 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 8];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 8;
+}
+}
 }
 }
 }
@@ -6676,12 +6865,12 @@ passing0 = 7;
 }
 }
 if(!valid0){
-const err84 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err95 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err84];
+vErrors = [err95];
 }
 else {
-vErrors.push(err84);
+vErrors.push(err95);
 }
 errors++;
 validate38.errors = vErrors;
@@ -6703,12 +6892,13 @@ return errors === 0;
 }
 
 export const contentResponse = validate41;
-const schema68 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"ConfigurationSnapshot":{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"workspaceVersion":{"type":"string"}},"required":["configuration","workspaceVersion"],"type":"object"},"DataDescription":{"additionalProperties":false,"properties":{"defaults":true,"schema":true},"required":["defaults"],"type":"object"},"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"},"Snapshot":{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"revision":{"type":"string"},"vesselId":{"type":"string"},"warning":{"type":["string","null"]}},"required":["vesselId","revision","data"],"type":"object"},"Version":{"enum":["1"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"revision":{"type":["string","null"]},"status":{"const":"limited","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"warningPresent":{"type":"boolean"}},"required":["status","version","requestId","vesselId","warningPresent","message"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"anyOf":[{"$ref":"#/definitions/DataDescription"},{"type":"null"}]},"requestId":{"type":"string"},"schemaDeclared":{"type":"boolean"},"stateSchema":true,"status":{"const":"described","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","schemaDeclared"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"anyOf":[{"$ref":"#/definitions/ConfigurationSnapshot"},{"type":"null"}]},"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"snapshot","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"filenames":{"items":{"type":"string"},"type":"array"},"requestId":{"type":"string"},"status":{"const":"notes-list","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","filenames"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"note-opened","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"workspaceVersion":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot","configuration","workspaceVersion"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"requestId":{"type":"string"},"status":{"const":"configured","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"workspaceVersion":{"type":"string"}},"required":["status","version","requestId","vesselId","configuration","workspaceVersion"],"type":"object"},{"additionalProperties":false,"properties":{"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"applied","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":["string","null"]},"message":{"type":"string"},"requestId":{"type":"string"},"status":{"const":"rejected","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","message"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"message":{"type":"string"},"requestId":{"type":"string"},"status":{"const":"uncertain","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","expectedRevision","message"],"type":"object"}],"title":"Response"};
-const schema69 = {"enum":["1"],"type":"string"};
-const schema70 = {"additionalProperties":false,"properties":{"defaults":true,"schema":true},"required":["defaults"],"type":"object"};
-const schema72 = {"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"workspaceVersion":{"type":"string"}},"required":["configuration","workspaceVersion"],"type":"object"};
-const schema73 = {"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"};
-const schema74 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
+const schema69 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"ConfigurationSnapshot":{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"workspaceVersion":{"type":"string"}},"required":["configuration","workspaceVersion"],"type":"object"},"DataDescription":{"additionalProperties":false,"properties":{"defaults":true,"schema":true},"required":["defaults"],"type":"object"},"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"},"Snapshot":{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"revision":{"type":"string"},"vesselId":{"type":"string"},"warning":{"type":["string","null"]}},"required":["vesselId","revision","data"],"type":"object"},"StateSnapshot":{"additionalProperties":false,"properties":{"revision":{"type":"string"},"state":true,"vesselId":{"type":"string"}},"required":["vesselId","revision","state"],"type":"object"},"Version":{"enum":["1"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"revision":{"type":["string","null"]},"status":{"const":"limited","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"warningPresent":{"type":"boolean"}},"required":["status","version","requestId","vesselId","warningPresent","message"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"anyOf":[{"$ref":"#/definitions/DataDescription"},{"type":"null"}]},"requestId":{"type":"string"},"schemaDeclared":{"type":"boolean"},"stateSchema":true,"status":{"const":"described","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","schemaDeclared"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"anyOf":[{"$ref":"#/definitions/ConfigurationSnapshot"},{"type":"null"}]},"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"snapshot","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"filenames":{"items":{"type":"string"},"type":"array"},"requestId":{"type":"string"},"status":{"const":"notes-list","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","filenames"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"note-opened","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"workspaceVersion":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot","configuration","workspaceVersion"],"type":"object"},{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"requestId":{"type":"string"},"status":{"const":"configured","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"},"workspaceVersion":{"type":"string"}},"required":["status","version","requestId","vesselId","configuration","workspaceVersion"],"type":"object"},{"additionalProperties":false,"properties":{"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/Snapshot"},"status":{"const":"applied","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/StateSnapshot"},"status":{"const":"state","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"requestId":{"type":"string"},"snapshot":{"$ref":"#/definitions/StateSnapshot"},"status":{"const":"invoked","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","snapshot"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":["string","null"]},"message":{"type":"string"},"requestId":{"type":"string"},"status":{"const":"rejected","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","message"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"message":{"type":"string"},"requestId":{"type":"string"},"status":{"const":"uncertain","type":"string"},"version":{"$ref":"#/definitions/Version"},"vesselId":{"type":"string"}},"required":["status","version","requestId","vesselId","expectedRevision","message"],"type":"object"}],"title":"Response"};
+const schema70 = {"enum":["1"],"type":"string"};
+const schema71 = {"additionalProperties":false,"properties":{"defaults":true,"schema":true},"required":["defaults"],"type":"object"};
+const schema83 = {"additionalProperties":false,"properties":{"revision":{"type":"string"},"state":true,"vesselId":{"type":"string"}},"required":["vesselId","revision","state"],"type":"object"};
+const schema73 = {"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"workspaceVersion":{"type":"string"}},"required":["configuration","workspaceVersion"],"type":"object"};
+const schema74 = {"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"};
+const schema75 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
 
 function validate43(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -6943,8 +7133,8 @@ validate42.errors = vErrors;
 return errors === 0;
 }
 
-const schema75 = {"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"revision":{"type":"string"},"vesselId":{"type":"string"},"warning":{"type":["string","null"]}},"required":["vesselId","revision","data"],"type":"object"};
-const schema76 = {"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"};
+const schema76 = {"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"revision":{"type":"string"},"vesselId":{"type":"string"},"warning":{"type":["string","null"]}},"required":["vesselId","revision","data"],"type":"object"};
+const schema77 = {"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"};
 
 function validate46(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -7053,7 +7243,7 @@ if(data.warning !== undefined){
 let data5 = data.warning;
 const _errs14 = errors;
 if((typeof data5 !== "string") && (data5 !== null)){
-validate46.errors = [{instancePath:instancePath+"/warning",schemaPath:"#/properties/warning/type",keyword:"type",params:{type: schema75.properties.warning.type},message:"must be string,null"}];
+validate46.errors = [{instancePath:instancePath+"/warning",schemaPath:"#/properties/warning/type",keyword:"type",params:{type: schema76.properties.warning.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs14 === errors;
@@ -7153,7 +7343,7 @@ if(data.revision !== undefined){
 let data2 = data.revision;
 const _errs8 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-const err4 = {instancePath:instancePath+"/revision",schemaPath:"#/oneOf/0/properties/revision/type",keyword:"type",params:{type: schema68.oneOf[0].properties.revision.type},message:"must be string,null"};
+const err4 = {instancePath:instancePath+"/revision",schemaPath:"#/oneOf/0/properties/revision/type",keyword:"type",params:{type: schema69.oneOf[0].properties.revision.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err4];
 }
@@ -7211,7 +7401,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!(data4 === "1")){
-const err8 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -7486,7 +7676,7 @@ vErrors.push(err23);
 errors++;
 }
 if(!(data11 === "1")){
-const err24 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err24 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -7704,7 +7894,7 @@ vErrors.push(err34);
 errors++;
 }
 if(!(data17 === "1")){
-const err35 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err35 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -7898,7 +8088,7 @@ vErrors.push(err45);
 errors++;
 }
 if(!(data23 === "1")){
-const err46 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err46 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err46];
 }
@@ -8073,7 +8263,7 @@ vErrors.push(err54);
 errors++;
 }
 if(!(data29 === "1")){
-const err55 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err55 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err55];
 }
@@ -8256,7 +8446,7 @@ vErrors.push(err64);
 errors++;
 }
 if(!(data35 === "1")){
-const err65 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err65 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err65];
 }
@@ -8438,7 +8628,7 @@ vErrors.push(err74);
 errors++;
 }
 if(!(data41 === "1")){
-const err75 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+const err75 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err75];
 }
@@ -8502,7 +8692,7 @@ const _errs119 = errors;
 if(errors === _errs119){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing8;
-if((((((data.status === undefined) && (missing8 = "status")) || ((data.version === undefined) && (missing8 = "version"))) || ((data.requestId === undefined) && (missing8 = "requestId"))) || ((data.vesselId === undefined) && (missing8 = "vesselId"))) || ((data.message === undefined) && (missing8 = "message"))){
+if((((((data.status === undefined) && (missing8 = "status")) || ((data.version === undefined) && (missing8 = "version"))) || ((data.requestId === undefined) && (missing8 = "requestId"))) || ((data.vesselId === undefined) && (missing8 = "vesselId"))) || ((data.snapshot === undefined) && (missing8 = "snapshot"))){
 const err78 = {instancePath,schemaPath:"#/oneOf/7/required",keyword:"required",params:{missingProperty: missing8},message:"must have required property '"+missing8+"'"};
 if(vErrors === null){
 vErrors = [err78];
@@ -8515,7 +8705,7 @@ errors++;
 else {
 const _errs121 = errors;
 for(const key8 in data){
-if(!((((((key8 === "expectedRevision") || (key8 === "message")) || (key8 === "requestId")) || (key8 === "status")) || (key8 === "version")) || (key8 === "vesselId"))){
+if(!(((((key8 === "requestId") || (key8 === "snapshot")) || (key8 === "status")) || (key8 === "version")) || (key8 === "vesselId"))){
 const err79 = {instancePath,schemaPath:"#/oneOf/7/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key8},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err79];
@@ -8528,11 +8718,10 @@ break;
 }
 }
 if(_errs121 === errors){
-if(data.expectedRevision !== undefined){
-let data43 = data.expectedRevision;
+if(data.requestId !== undefined){
 const _errs122 = errors;
-if((typeof data43 !== "string") && (data43 !== null)){
-const err80 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/7/properties/expectedRevision/type",keyword:"type",params:{type: schema68.oneOf[7].properties.expectedRevision.type},message:"must be string,null"};
+if(typeof data.requestId !== "string"){
+const err80 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/7/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err80];
 }
@@ -8547,10 +8736,15 @@ else {
 var valid19 = true;
 }
 if(valid19){
-if(data.message !== undefined){
+if(data.snapshot !== undefined){
+let data44 = data.snapshot;
 const _errs124 = errors;
-if(typeof data.message !== "string"){
-const err81 = {instancePath:instancePath+"/message",schemaPath:"#/oneOf/7/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs125 = errors;
+if(errors === _errs125){
+if(data44 && typeof data44 == "object" && !Array.isArray(data44)){
+let missing9;
+if((((data44.vesselId === undefined) && (missing9 = "vesselId")) || ((data44.revision === undefined) && (missing9 = "revision"))) || ((data44.state === undefined) && (missing9 = "state"))){
+const err81 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
 if(vErrors === null){
 vErrors = [err81];
 }
@@ -8559,16 +8753,11 @@ vErrors.push(err81);
 }
 errors++;
 }
-var valid19 = _errs124 === errors;
-}
 else {
-var valid19 = true;
-}
-if(valid19){
-if(data.requestId !== undefined){
-const _errs126 = errors;
-if(typeof data.requestId !== "string"){
-const err82 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/7/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs127 = errors;
+for(const key9 in data44){
+if(!(((key9 === "revision") || (key9 === "state")) || (key9 === "vesselId"))){
+const err82 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err82];
 }
@@ -8576,18 +8765,14 @@ else {
 vErrors.push(err82);
 }
 errors++;
+break;
 }
-var valid19 = _errs126 === errors;
 }
-else {
-var valid19 = true;
-}
-if(valid19){
-if(data.status !== undefined){
-let data46 = data.status;
+if(_errs127 === errors){
+if(data44.revision !== undefined){
 const _errs128 = errors;
-if(typeof data46 !== "string"){
-const err83 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/7/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(typeof data44.revision !== "string"){
+const err83 = {instancePath:instancePath+"/snapshot/revision",schemaPath:"#/definitions/StateSnapshot/properties/revision/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -8596,8 +8781,16 @@ vErrors.push(err83);
 }
 errors++;
 }
-if("rejected" !== data46){
-const err84 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/7/properties/status/const",keyword:"const",params:{allowedValue: "rejected"},message:"must be equal to constant"};
+var valid21 = _errs128 === errors;
+}
+else {
+var valid21 = true;
+}
+if(valid21){
+if(data44.vesselId !== undefined){
+const _errs130 = errors;
+if(typeof data44.vesselId !== "string"){
+const err84 = {instancePath:instancePath+"/snapshot/vesselId",schemaPath:"#/definitions/StateSnapshot/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err84];
 }
@@ -8606,17 +8799,17 @@ vErrors.push(err84);
 }
 errors++;
 }
-var valid19 = _errs128 === errors;
+var valid21 = _errs130 === errors;
 }
 else {
-var valid19 = true;
+var valid21 = true;
 }
-if(valid19){
-if(data.version !== undefined){
-let data47 = data.version;
-const _errs130 = errors;
-if(typeof data47 !== "string"){
-const err85 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+}
+}
+}
+else {
+const err85 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err85];
 }
@@ -8625,8 +8818,18 @@ vErrors.push(err85);
 }
 errors++;
 }
-if(!(data47 === "1")){
-const err86 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+}
+var valid19 = _errs124 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.status !== undefined){
+let data47 = data.status;
+const _errs132 = errors;
+if(typeof data47 !== "string"){
+const err86 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/7/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err86];
 }
@@ -8635,16 +8838,8 @@ vErrors.push(err86);
 }
 errors++;
 }
-var valid19 = _errs130 === errors;
-}
-else {
-var valid19 = true;
-}
-if(valid19){
-if(data.vesselId !== undefined){
-const _errs133 = errors;
-if(typeof data.vesselId !== "string"){
-const err87 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/7/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if("state" !== data47){
+const err87 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/7/properties/status/const",keyword:"const",params:{allowedValue: "state"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err87];
 }
@@ -8653,7 +8848,54 @@ vErrors.push(err87);
 }
 errors++;
 }
-var valid19 = _errs133 === errors;
+var valid19 = _errs132 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.version !== undefined){
+let data48 = data.version;
+const _errs134 = errors;
+if(typeof data48 !== "string"){
+const err88 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err88];
+}
+else {
+vErrors.push(err88);
+}
+errors++;
+}
+if(!(data48 === "1")){
+const err89 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err89];
+}
+else {
+vErrors.push(err89);
+}
+errors++;
+}
+var valid19 = _errs134 === errors;
+}
+else {
+var valid19 = true;
+}
+if(valid19){
+if(data.vesselId !== undefined){
+const _errs137 = errors;
+if(typeof data.vesselId !== "string"){
+const err90 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/7/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err90];
+}
+else {
+vErrors.push(err90);
+}
+errors++;
+}
+var valid19 = _errs137 === errors;
 }
 else {
 var valid19 = true;
@@ -8665,14 +8907,13 @@ var valid19 = true;
 }
 }
 }
-}
 else {
-const err88 = {instancePath,schemaPath:"#/oneOf/7/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err91 = {instancePath,schemaPath:"#/oneOf/7/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err88];
+vErrors = [err91];
 }
 else {
-vErrors.push(err88);
+vErrors.push(err91);
 }
 errors++;
 }
@@ -8687,58 +8928,12 @@ if(_valid0){
 valid0 = true;
 passing0 = 7;
 }
-const _errs135 = errors;
-if(errors === _errs135){
+const _errs139 = errors;
+if(errors === _errs139){
 if(data && typeof data == "object" && !Array.isArray(data)){
-let missing9;
-if(((((((data.status === undefined) && (missing9 = "status")) || ((data.version === undefined) && (missing9 = "version"))) || ((data.requestId === undefined) && (missing9 = "requestId"))) || ((data.vesselId === undefined) && (missing9 = "vesselId"))) || ((data.expectedRevision === undefined) && (missing9 = "expectedRevision"))) || ((data.message === undefined) && (missing9 = "message"))){
-const err89 = {instancePath,schemaPath:"#/oneOf/8/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
-if(vErrors === null){
-vErrors = [err89];
-}
-else {
-vErrors.push(err89);
-}
-errors++;
-}
-else {
-const _errs137 = errors;
-for(const key9 in data){
-if(!((((((key9 === "expectedRevision") || (key9 === "message")) || (key9 === "requestId")) || (key9 === "status")) || (key9 === "version")) || (key9 === "vesselId"))){
-const err90 = {instancePath,schemaPath:"#/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
-if(vErrors === null){
-vErrors = [err90];
-}
-else {
-vErrors.push(err90);
-}
-errors++;
-break;
-}
-}
-if(_errs137 === errors){
-if(data.expectedRevision !== undefined){
-const _errs138 = errors;
-if(typeof data.expectedRevision !== "string"){
-const err91 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/8/properties/expectedRevision/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err91];
-}
-else {
-vErrors.push(err91);
-}
-errors++;
-}
-var valid21 = _errs138 === errors;
-}
-else {
-var valid21 = true;
-}
-if(valid21){
-if(data.message !== undefined){
-const _errs140 = errors;
-if(typeof data.message !== "string"){
-const err92 = {instancePath:instancePath+"/message",schemaPath:"#/oneOf/8/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+let missing10;
+if((((((data.status === undefined) && (missing10 = "status")) || ((data.version === undefined) && (missing10 = "version"))) || ((data.requestId === undefined) && (missing10 = "requestId"))) || ((data.vesselId === undefined) && (missing10 = "vesselId"))) || ((data.snapshot === undefined) && (missing10 = "snapshot"))){
+const err92 = {instancePath,schemaPath:"#/oneOf/8/required",keyword:"required",params:{missingProperty: missing10},message:"must have required property '"+missing10+"'"};
 if(vErrors === null){
 vErrors = [err92];
 }
@@ -8747,16 +8942,11 @@ vErrors.push(err92);
 }
 errors++;
 }
-var valid21 = _errs140 === errors;
-}
 else {
-var valid21 = true;
-}
-if(valid21){
-if(data.requestId !== undefined){
-const _errs142 = errors;
-if(typeof data.requestId !== "string"){
-const err93 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/8/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs141 = errors;
+for(const key10 in data){
+if(!(((((key10 === "requestId") || (key10 === "snapshot")) || (key10 === "status")) || (key10 === "version")) || (key10 === "vesselId"))){
+const err93 = {instancePath,schemaPath:"#/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key10},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err93];
 }
@@ -8764,18 +8954,14 @@ else {
 vErrors.push(err93);
 }
 errors++;
+break;
 }
-var valid21 = _errs142 === errors;
 }
-else {
-var valid21 = true;
-}
-if(valid21){
-if(data.status !== undefined){
-let data52 = data.status;
-const _errs144 = errors;
-if(typeof data52 !== "string"){
-const err94 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/8/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(_errs141 === errors){
+if(data.requestId !== undefined){
+const _errs142 = errors;
+if(typeof data.requestId !== "string"){
+const err94 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/8/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err94];
 }
@@ -8784,8 +8970,21 @@ vErrors.push(err94);
 }
 errors++;
 }
-if("uncertain" !== data52){
-const err95 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/8/properties/status/const",keyword:"const",params:{allowedValue: "uncertain"},message:"must be equal to constant"};
+var valid23 = _errs142 === errors;
+}
+else {
+var valid23 = true;
+}
+if(valid23){
+if(data.snapshot !== undefined){
+let data51 = data.snapshot;
+const _errs144 = errors;
+const _errs145 = errors;
+if(errors === _errs145){
+if(data51 && typeof data51 == "object" && !Array.isArray(data51)){
+let missing11;
+if((((data51.vesselId === undefined) && (missing11 = "vesselId")) || ((data51.revision === undefined) && (missing11 = "revision"))) || ((data51.state === undefined) && (missing11 = "state"))){
+const err95 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/required",keyword:"required",params:{missingProperty: missing11},message:"must have required property '"+missing11+"'"};
 if(vErrors === null){
 vErrors = [err95];
 }
@@ -8794,17 +8993,11 @@ vErrors.push(err95);
 }
 errors++;
 }
-var valid21 = _errs144 === errors;
-}
 else {
-var valid21 = true;
-}
-if(valid21){
-if(data.version !== undefined){
-let data53 = data.version;
-const _errs146 = errors;
-if(typeof data53 !== "string"){
-const err96 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs147 = errors;
+for(const key11 in data51){
+if(!(((key11 === "revision") || (key11 === "state")) || (key11 === "vesselId"))){
+const err96 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key11},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err96];
 }
@@ -8812,9 +9005,14 @@ else {
 vErrors.push(err96);
 }
 errors++;
+break;
 }
-if(!(data53 === "1")){
-const err97 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema69.enum},message:"must be equal to one of the allowed values"};
+}
+if(_errs147 === errors){
+if(data51.revision !== undefined){
+const _errs148 = errors;
+if(typeof data51.revision !== "string"){
+const err97 = {instancePath:instancePath+"/snapshot/revision",schemaPath:"#/definitions/StateSnapshot/properties/revision/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err97];
 }
@@ -8823,16 +9021,16 @@ vErrors.push(err97);
 }
 errors++;
 }
-var valid21 = _errs146 === errors;
+var valid25 = _errs148 === errors;
 }
 else {
-var valid21 = true;
+var valid25 = true;
 }
-if(valid21){
-if(data.vesselId !== undefined){
-const _errs149 = errors;
-if(typeof data.vesselId !== "string"){
-const err98 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/8/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(valid25){
+if(data51.vesselId !== undefined){
+const _errs150 = errors;
+if(typeof data51.vesselId !== "string"){
+const err98 = {instancePath:instancePath+"/snapshot/vesselId",schemaPath:"#/definitions/StateSnapshot/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err98];
 }
@@ -8841,21 +9039,17 @@ vErrors.push(err98);
 }
 errors++;
 }
-var valid21 = _errs149 === errors;
+var valid25 = _errs150 === errors;
 }
 else {
-var valid21 = true;
-}
-}
-}
-}
+var valid25 = true;
 }
 }
 }
 }
 }
 else {
-const err99 = {instancePath,schemaPath:"#/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err99 = {instancePath:instancePath+"/snapshot",schemaPath:"#/definitions/StateSnapshot/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err99];
 }
@@ -8865,7 +9059,106 @@ vErrors.push(err99);
 errors++;
 }
 }
-var _valid0 = _errs135 === errors;
+var valid23 = _errs144 === errors;
+}
+else {
+var valid23 = true;
+}
+if(valid23){
+if(data.status !== undefined){
+let data54 = data.status;
+const _errs152 = errors;
+if(typeof data54 !== "string"){
+const err100 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/8/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err100];
+}
+else {
+vErrors.push(err100);
+}
+errors++;
+}
+if("invoked" !== data54){
+const err101 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/8/properties/status/const",keyword:"const",params:{allowedValue: "invoked"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err101];
+}
+else {
+vErrors.push(err101);
+}
+errors++;
+}
+var valid23 = _errs152 === errors;
+}
+else {
+var valid23 = true;
+}
+if(valid23){
+if(data.version !== undefined){
+let data55 = data.version;
+const _errs154 = errors;
+if(typeof data55 !== "string"){
+const err102 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err102];
+}
+else {
+vErrors.push(err102);
+}
+errors++;
+}
+if(!(data55 === "1")){
+const err103 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err103];
+}
+else {
+vErrors.push(err103);
+}
+errors++;
+}
+var valid23 = _errs154 === errors;
+}
+else {
+var valid23 = true;
+}
+if(valid23){
+if(data.vesselId !== undefined){
+const _errs157 = errors;
+if(typeof data.vesselId !== "string"){
+const err104 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/8/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err104];
+}
+else {
+vErrors.push(err104);
+}
+errors++;
+}
+var valid23 = _errs157 === errors;
+}
+else {
+var valid23 = true;
+}
+}
+}
+}
+}
+}
+}
+}
+else {
+const err105 = {instancePath,schemaPath:"#/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err105];
+}
+else {
+vErrors.push(err105);
+}
+errors++;
+}
+}
+var _valid0 = _errs139 === errors;
 if(_valid0 && valid0){
 valid0 = false;
 passing0 = [passing0, 8];
@@ -8874,6 +9167,385 @@ else {
 if(_valid0){
 valid0 = true;
 passing0 = 8;
+}
+const _errs159 = errors;
+if(errors === _errs159){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing12;
+if((((((data.status === undefined) && (missing12 = "status")) || ((data.version === undefined) && (missing12 = "version"))) || ((data.requestId === undefined) && (missing12 = "requestId"))) || ((data.vesselId === undefined) && (missing12 = "vesselId"))) || ((data.message === undefined) && (missing12 = "message"))){
+const err106 = {instancePath,schemaPath:"#/oneOf/9/required",keyword:"required",params:{missingProperty: missing12},message:"must have required property '"+missing12+"'"};
+if(vErrors === null){
+vErrors = [err106];
+}
+else {
+vErrors.push(err106);
+}
+errors++;
+}
+else {
+const _errs161 = errors;
+for(const key12 in data){
+if(!((((((key12 === "expectedRevision") || (key12 === "message")) || (key12 === "requestId")) || (key12 === "status")) || (key12 === "version")) || (key12 === "vesselId"))){
+const err107 = {instancePath,schemaPath:"#/oneOf/9/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key12},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err107];
+}
+else {
+vErrors.push(err107);
+}
+errors++;
+break;
+}
+}
+if(_errs161 === errors){
+if(data.expectedRevision !== undefined){
+let data57 = data.expectedRevision;
+const _errs162 = errors;
+if((typeof data57 !== "string") && (data57 !== null)){
+const err108 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/9/properties/expectedRevision/type",keyword:"type",params:{type: schema69.oneOf[9].properties.expectedRevision.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err108];
+}
+else {
+vErrors.push(err108);
+}
+errors++;
+}
+var valid27 = _errs162 === errors;
+}
+else {
+var valid27 = true;
+}
+if(valid27){
+if(data.message !== undefined){
+const _errs164 = errors;
+if(typeof data.message !== "string"){
+const err109 = {instancePath:instancePath+"/message",schemaPath:"#/oneOf/9/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err109];
+}
+else {
+vErrors.push(err109);
+}
+errors++;
+}
+var valid27 = _errs164 === errors;
+}
+else {
+var valid27 = true;
+}
+if(valid27){
+if(data.requestId !== undefined){
+const _errs166 = errors;
+if(typeof data.requestId !== "string"){
+const err110 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/9/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err110];
+}
+else {
+vErrors.push(err110);
+}
+errors++;
+}
+var valid27 = _errs166 === errors;
+}
+else {
+var valid27 = true;
+}
+if(valid27){
+if(data.status !== undefined){
+let data60 = data.status;
+const _errs168 = errors;
+if(typeof data60 !== "string"){
+const err111 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/9/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err111];
+}
+else {
+vErrors.push(err111);
+}
+errors++;
+}
+if("rejected" !== data60){
+const err112 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/9/properties/status/const",keyword:"const",params:{allowedValue: "rejected"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err112];
+}
+else {
+vErrors.push(err112);
+}
+errors++;
+}
+var valid27 = _errs168 === errors;
+}
+else {
+var valid27 = true;
+}
+if(valid27){
+if(data.version !== undefined){
+let data61 = data.version;
+const _errs170 = errors;
+if(typeof data61 !== "string"){
+const err113 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err113];
+}
+else {
+vErrors.push(err113);
+}
+errors++;
+}
+if(!(data61 === "1")){
+const err114 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err114];
+}
+else {
+vErrors.push(err114);
+}
+errors++;
+}
+var valid27 = _errs170 === errors;
+}
+else {
+var valid27 = true;
+}
+if(valid27){
+if(data.vesselId !== undefined){
+const _errs173 = errors;
+if(typeof data.vesselId !== "string"){
+const err115 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/9/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err115];
+}
+else {
+vErrors.push(err115);
+}
+errors++;
+}
+var valid27 = _errs173 === errors;
+}
+else {
+var valid27 = true;
+}
+}
+}
+}
+}
+}
+}
+}
+}
+else {
+const err116 = {instancePath,schemaPath:"#/oneOf/9/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err116];
+}
+else {
+vErrors.push(err116);
+}
+errors++;
+}
+}
+var _valid0 = _errs159 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 9];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 9;
+}
+const _errs175 = errors;
+if(errors === _errs175){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing13;
+if(((((((data.status === undefined) && (missing13 = "status")) || ((data.version === undefined) && (missing13 = "version"))) || ((data.requestId === undefined) && (missing13 = "requestId"))) || ((data.vesselId === undefined) && (missing13 = "vesselId"))) || ((data.expectedRevision === undefined) && (missing13 = "expectedRevision"))) || ((data.message === undefined) && (missing13 = "message"))){
+const err117 = {instancePath,schemaPath:"#/oneOf/10/required",keyword:"required",params:{missingProperty: missing13},message:"must have required property '"+missing13+"'"};
+if(vErrors === null){
+vErrors = [err117];
+}
+else {
+vErrors.push(err117);
+}
+errors++;
+}
+else {
+const _errs177 = errors;
+for(const key13 in data){
+if(!((((((key13 === "expectedRevision") || (key13 === "message")) || (key13 === "requestId")) || (key13 === "status")) || (key13 === "version")) || (key13 === "vesselId"))){
+const err118 = {instancePath,schemaPath:"#/oneOf/10/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key13},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err118];
+}
+else {
+vErrors.push(err118);
+}
+errors++;
+break;
+}
+}
+if(_errs177 === errors){
+if(data.expectedRevision !== undefined){
+const _errs178 = errors;
+if(typeof data.expectedRevision !== "string"){
+const err119 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/10/properties/expectedRevision/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err119];
+}
+else {
+vErrors.push(err119);
+}
+errors++;
+}
+var valid29 = _errs178 === errors;
+}
+else {
+var valid29 = true;
+}
+if(valid29){
+if(data.message !== undefined){
+const _errs180 = errors;
+if(typeof data.message !== "string"){
+const err120 = {instancePath:instancePath+"/message",schemaPath:"#/oneOf/10/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err120];
+}
+else {
+vErrors.push(err120);
+}
+errors++;
+}
+var valid29 = _errs180 === errors;
+}
+else {
+var valid29 = true;
+}
+if(valid29){
+if(data.requestId !== undefined){
+const _errs182 = errors;
+if(typeof data.requestId !== "string"){
+const err121 = {instancePath:instancePath+"/requestId",schemaPath:"#/oneOf/10/properties/requestId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err121];
+}
+else {
+vErrors.push(err121);
+}
+errors++;
+}
+var valid29 = _errs182 === errors;
+}
+else {
+var valid29 = true;
+}
+if(valid29){
+if(data.status !== undefined){
+let data66 = data.status;
+const _errs184 = errors;
+if(typeof data66 !== "string"){
+const err122 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/10/properties/status/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err122];
+}
+else {
+vErrors.push(err122);
+}
+errors++;
+}
+if("uncertain" !== data66){
+const err123 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/10/properties/status/const",keyword:"const",params:{allowedValue: "uncertain"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err123];
+}
+else {
+vErrors.push(err123);
+}
+errors++;
+}
+var valid29 = _errs184 === errors;
+}
+else {
+var valid29 = true;
+}
+if(valid29){
+if(data.version !== undefined){
+let data67 = data.version;
+const _errs186 = errors;
+if(typeof data67 !== "string"){
+const err124 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err124];
+}
+else {
+vErrors.push(err124);
+}
+errors++;
+}
+if(!(data67 === "1")){
+const err125 = {instancePath:instancePath+"/version",schemaPath:"#/definitions/Version/enum",keyword:"enum",params:{allowedValues: schema70.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err125];
+}
+else {
+vErrors.push(err125);
+}
+errors++;
+}
+var valid29 = _errs186 === errors;
+}
+else {
+var valid29 = true;
+}
+if(valid29){
+if(data.vesselId !== undefined){
+const _errs189 = errors;
+if(typeof data.vesselId !== "string"){
+const err126 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/10/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err126];
+}
+else {
+vErrors.push(err126);
+}
+errors++;
+}
+var valid29 = _errs189 === errors;
+}
+else {
+var valid29 = true;
+}
+}
+}
+}
+}
+}
+}
+}
+}
+else {
+const err127 = {instancePath,schemaPath:"#/oneOf/10/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err127];
+}
+else {
+vErrors.push(err127);
+}
+errors++;
+}
+}
+var _valid0 = _errs175 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 10];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 10;
+}
+}
 }
 }
 }
@@ -8884,12 +9556,12 @@ passing0 = 8;
 }
 }
 if(!valid0){
-const err100 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err128 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err100];
+vErrors = [err128];
 }
 else {
-vErrors.push(err100);
+vErrors.push(err128);
 }
 errors++;
 validate41.errors = vErrors;
@@ -8911,11 +9583,11 @@ return errors === 0;
 }
 
 export const contentTool = validate52;
-const schema84 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision","data"],"type":"object"}]},"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"Input","type":"object"};
-const schema85 = {"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision","data"],"type":"object"}]};
-const schema88 = {"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"};
-const schema86 = {"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"};
-const schema87 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
+const schema89 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision","data"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"type":"string"},"args":true,"expectedRevision":{"type":"string"},"operation":{"const":"invoke","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","action","args","expectedRevision"],"type":"object"}]},"Notes":{"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"},"NotesConfiguration":{"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"},"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"Input","type":"object"};
+const schema90 = {"oneOf":[{"additionalProperties":false,"properties":{"configuration":{"$ref":"#/definitions/NotesConfiguration"},"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","configuration"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"data":{"$ref":"#/definitions/Notes"},"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision","data"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"type":"string"},"args":true,"expectedRevision":{"type":"string"},"operation":{"const":"invoke","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","action","args","expectedRevision"],"type":"object"}]};
+const schema93 = {"additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"type":"object"};
+const schema91 = {"additionalProperties":false,"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"type":"object"};
+const schema92 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
 
 function validate54(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -10063,6 +10735,146 @@ if(_valid0){
 valid0 = true;
 passing0 = 7;
 }
+const _errs72 = errors;
+if(errors === _errs72){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing9;
+if((((((data.operation === undefined) && (missing9 = "operation")) || ((data.vesselId === undefined) && (missing9 = "vesselId"))) || ((data.action === undefined) && (missing9 = "action"))) || ((data.args === undefined) && (missing9 = "args"))) || ((data.expectedRevision === undefined) && (missing9 = "expectedRevision"))){
+const err56 = {instancePath,schemaPath:"#/oneOf/8/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
+if(vErrors === null){
+vErrors = [err56];
+}
+else {
+vErrors.push(err56);
+}
+errors++;
+}
+else {
+const _errs74 = errors;
+for(const key9 in data){
+if(!(((((key9 === "action") || (key9 === "args")) || (key9 === "expectedRevision")) || (key9 === "operation")) || (key9 === "vesselId"))){
+const err57 = {instancePath,schemaPath:"#/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err57];
+}
+else {
+vErrors.push(err57);
+}
+errors++;
+break;
+}
+}
+if(_errs74 === errors){
+if(data.action !== undefined){
+const _errs75 = errors;
+if(typeof data.action !== "string"){
+const err58 = {instancePath:instancePath+"/action",schemaPath:"#/oneOf/8/properties/action/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err58];
+}
+else {
+vErrors.push(err58);
+}
+errors++;
+}
+var valid11 = _errs75 === errors;
+}
+else {
+var valid11 = true;
+}
+if(valid11){
+if(data.expectedRevision !== undefined){
+const _errs77 = errors;
+if(typeof data.expectedRevision !== "string"){
+const err59 = {instancePath:instancePath+"/expectedRevision",schemaPath:"#/oneOf/8/properties/expectedRevision/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err59];
+}
+else {
+vErrors.push(err59);
+}
+errors++;
+}
+var valid11 = _errs77 === errors;
+}
+else {
+var valid11 = true;
+}
+if(valid11){
+if(data.operation !== undefined){
+let data25 = data.operation;
+const _errs79 = errors;
+if(typeof data25 !== "string"){
+const err60 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err60];
+}
+else {
+vErrors.push(err60);
+}
+errors++;
+}
+if("invoke" !== data25){
+const err61 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/const",keyword:"const",params:{allowedValue: "invoke"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err61];
+}
+else {
+vErrors.push(err61);
+}
+errors++;
+}
+var valid11 = _errs79 === errors;
+}
+else {
+var valid11 = true;
+}
+if(valid11){
+if(data.vesselId !== undefined){
+const _errs81 = errors;
+if(typeof data.vesselId !== "string"){
+const err62 = {instancePath:instancePath+"/vesselId",schemaPath:"#/oneOf/8/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err62];
+}
+else {
+vErrors.push(err62);
+}
+errors++;
+}
+var valid11 = _errs81 === errors;
+}
+else {
+var valid11 = true;
+}
+}
+}
+}
+}
+}
+}
+else {
+const err63 = {instancePath,schemaPath:"#/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err63];
+}
+else {
+vErrors.push(err63);
+}
+errors++;
+}
+}
+var _valid0 = _errs72 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 8];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 8;
+}
+}
 }
 }
 }
@@ -10071,12 +10883,12 @@ passing0 = 7;
 }
 }
 if(!valid0){
-const err56 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err64 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err56];
+vErrors = [err64];
 }
 else {
-vErrors.push(err56);
+vErrors.push(err64);
 }
 errors++;
 validate53.errors = vErrors;
@@ -10155,10 +10967,10 @@ return errors === 0;
 }
 
 export const contextFacts = validate57;
-const schema89 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Branch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Directory":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"known","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"multiple","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]}},"properties":{"branch":{"$ref":"#/definitions/Branch"},"directory":{"$ref":"#/definitions/Directory"},"path":{"items":{"type":"string"},"type":"array"},"scope":{"$ref":"#/definitions/Context"},"version":{"type":"string"}},"required":["version","scope","path","directory","branch"],"title":"Facts","type":"object"};
-const schema90 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
-const schema91 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"known","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"multiple","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
-const schema92 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema94 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Branch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Directory":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"known","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"multiple","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]}},"properties":{"branch":{"$ref":"#/definitions/Branch"},"directory":{"$ref":"#/definitions/Directory"},"path":{"items":{"type":"string"},"type":"array"},"scope":{"$ref":"#/definitions/Context"},"version":{"type":"string"}},"required":["version","scope","path","directory","branch"],"title":"Facts","type":"object"};
+const schema95 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
+const schema96 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"known","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"multiple","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
+const schema97 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
 
 function validate57(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -11327,8 +12139,8 @@ return errors === 0;
 }
 
 export const conversationReply = validate58;
-const schema93 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Delivery":{"enum":["accepted","rejected","unconfirmed"],"type":"string"}},"properties":{"delivery":{"$ref":"#/definitions/Delivery"},"error":{"type":["string","null"]},"requestId":{"type":"string"}},"required":["requestId","delivery"],"title":"Reply","type":"object"};
-const schema94 = {"enum":["accepted","rejected","unconfirmed"],"type":"string"};
+const schema98 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Delivery":{"enum":["accepted","rejected","unconfirmed"],"type":"string"}},"properties":{"delivery":{"$ref":"#/definitions/Delivery"},"error":{"type":["string","null"]},"requestId":{"type":"string"}},"required":["requestId","delivery"],"title":"Reply","type":"object"};
+const schema99 = {"enum":["accepted","rejected","unconfirmed"],"type":"string"};
 
 function validate58(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -11358,7 +12170,7 @@ validate58.errors = [{instancePath:instancePath+"/delivery",schemaPath:"#/defini
 return false;
 }
 if(!(((data0 === "accepted") || (data0 === "rejected")) || (data0 === "unconfirmed"))){
-validate58.errors = [{instancePath:instancePath+"/delivery",schemaPath:"#/definitions/Delivery/enum",keyword:"enum",params:{allowedValues: schema94.enum},message:"must be equal to one of the allowed values"}];
+validate58.errors = [{instancePath:instancePath+"/delivery",schemaPath:"#/definitions/Delivery/enum",keyword:"enum",params:{allowedValues: schema99.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -11371,7 +12183,7 @@ if(data.error !== undefined){
 let data1 = data.error;
 const _errs5 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate58.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema93.properties.error.type},message:"must be string,null"}];
+validate58.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema98.properties.error.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs5 === errors;
@@ -11406,8 +12218,8 @@ return errors === 0;
 }
 
 export const conversationRequest = validate59;
-const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"text":{"type":"string"}},"required":["operation","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"start-voice","type":"string"}},"required":["operation"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"requestId":{"type":"string"}},"required":["requestId","action"],"title":"Request","type":"object"};
-const schema96 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"text":{"type":"string"}},"required":["operation","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"start-voice","type":"string"}},"required":["operation"],"type":"object"}]};
+const schema100 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"text":{"type":"string"}},"required":["operation","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"start-voice","type":"string"}},"required":["operation"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"requestId":{"type":"string"}},"required":["requestId","action"],"title":"Request","type":"object"};
+const schema101 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"text":{"type":"string"}},"required":["operation","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"start-voice","type":"string"}},"required":["operation"],"type":"object"}]};
 
 function validate59(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -11741,12 +12553,12 @@ return errors === 0;
 }
 
 export const conversationSnapshot = validate60;
-const schema97 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Action2":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]},"CallbackId":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"integer","type":"string"},"value":{"pattern":"^-?[0-9]+$","type":"string"}},"required":["kind","value"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"Input":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action2"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Message":{"additionalProperties":false,"properties":{"context":{"anyOf":[{"$ref":"#/definitions/Focus"},{"type":"null"}]},"id":{"type":"string"},"requestId":{"type":"string"},"role":{"$ref":"#/definitions/Role"},"text":{"type":"string"},"tool":{"anyOf":[{"$ref":"#/definitions/ToolOutcome"},{"type":"null"}]}},"required":["id","requestId","role","text"],"type":"object"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["idle","starting","working","completed","interrupted","failed","unconfirmed"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"ProcessAction":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]},"Receipt":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision"],"type":"object"}]},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Role":{"enum":["user","assistant","tool"],"type":"string"},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"ToolAction":{"oneOf":[{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"tool":{"const":"workspace","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"tool":{"const":"process","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Receipt"},"tool":{"const":"content","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Input"},"tool":{"const":"worktree","type":"string"}},"required":["tool","action"],"type":"object"}]},"ToolOutcome":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ToolAction"},"callId":{"type":"string"},"callbackIds":{"items":{"$ref":"#/definitions/CallbackId"},"type":"array"},"name":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":["string","null"]}},"required":["name","callId","callbackIds","requestId","action","status"],"type":"object"}},"properties":{"error":{"type":["string","null"]},"limited":{"type":"boolean"},"messages":{"items":{"$ref":"#/definitions/Message"},"type":"array"},"model":{"type":["string","null"]},"omitted":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"thread":{"type":["string","null"]},"turn":{"type":["string","null"]},"version":{"type":"string"}},"required":["version","phase","messages","limited","omitted"],"title":"Snapshot","type":"object"};
-const schema138 = {"enum":["idle","starting","working","completed","interrupted","failed","unconfirmed"],"type":"string"};
-const schema98 = {"additionalProperties":false,"properties":{"context":{"anyOf":[{"$ref":"#/definitions/Focus"},{"type":"null"}]},"id":{"type":"string"},"requestId":{"type":"string"},"role":{"$ref":"#/definitions/Role"},"text":{"type":"string"},"tool":{"anyOf":[{"$ref":"#/definitions/ToolOutcome"},{"type":"null"}]}},"required":["id","requestId","role","text"],"type":"object"};
-const schema101 = {"enum":["user","assistant","tool"],"type":"string"};
-const schema99 = {"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"};
-const schema100 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema102 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Action2":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]},"CallbackId":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"integer","type":"string"},"value":{"pattern":"^-?[0-9]+$","type":"string"}},"required":["kind","value"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"Input":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action2"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Message":{"additionalProperties":false,"properties":{"context":{"anyOf":[{"$ref":"#/definitions/Focus"},{"type":"null"}]},"id":{"type":"string"},"requestId":{"type":"string"},"role":{"$ref":"#/definitions/Role"},"text":{"type":"string"},"tool":{"anyOf":[{"$ref":"#/definitions/ToolOutcome"},{"type":"null"}]}},"required":["id","requestId","role","text"],"type":"object"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["idle","starting","working","completed","interrupted","failed","unconfirmed"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"ProcessAction":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]},"Receipt":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"type":"string"},"expectedRevision":{"type":"string"},"operation":{"const":"invoke","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","action","expectedRevision"],"type":"object"}]},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Role":{"enum":["user","assistant","tool"],"type":"string"},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"ToolAction":{"oneOf":[{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"tool":{"const":"workspace","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"tool":{"const":"process","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Receipt"},"tool":{"const":"content","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Input"},"tool":{"const":"worktree","type":"string"}},"required":["tool","action"],"type":"object"}]},"ToolOutcome":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ToolAction"},"callId":{"type":"string"},"callbackIds":{"items":{"$ref":"#/definitions/CallbackId"},"type":"array"},"name":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":["string","null"]}},"required":["name","callId","callbackIds","requestId","action","status"],"type":"object"}},"properties":{"error":{"type":["string","null"]},"limited":{"type":"boolean"},"messages":{"items":{"$ref":"#/definitions/Message"},"type":"array"},"model":{"type":["string","null"]},"omitted":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"thread":{"type":["string","null"]},"turn":{"type":["string","null"]},"version":{"type":"string"}},"required":["version","phase","messages","limited","omitted"],"title":"Snapshot","type":"object"};
+const schema143 = {"enum":["idle","starting","working","completed","interrupted","failed","unconfirmed"],"type":"string"};
+const schema103 = {"additionalProperties":false,"properties":{"context":{"anyOf":[{"$ref":"#/definitions/Focus"},{"type":"null"}]},"id":{"type":"string"},"requestId":{"type":"string"},"role":{"$ref":"#/definitions/Role"},"text":{"type":"string"},"tool":{"anyOf":[{"$ref":"#/definitions/ToolOutcome"},{"type":"null"}]}},"required":["id","requestId","role","text"],"type":"object"};
+const schema106 = {"enum":["user","assistant","tool"],"type":"string"};
+const schema104 = {"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"};
+const schema105 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
 const func5 = (function ucs2length(str) {
     const len = str.length;
     let length = 0;
@@ -11788,7 +12600,7 @@ if(data.cwd !== undefined){
 let data0 = data.cwd;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate62.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema99.properties.cwd.type},message:"must be string,null"}];
+validate62.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema104.properties.cwd.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -11831,7 +12643,7 @@ if(data.preview !== undefined){
 let data3 = data.preview;
 const _errs8 = errors;
 if((typeof data3 !== "string") && (data3 !== null)){
-validate62.errors = [{instancePath:instancePath+"/preview",schemaPath:"#/properties/preview/type",keyword:"type",params:{type: schema99.properties.preview.type},message:"must be string,null"}];
+validate62.errors = [{instancePath:instancePath+"/preview",schemaPath:"#/properties/preview/type",keyword:"type",params:{type: schema104.properties.preview.type},message:"must be string,null"}];
 return false;
 }
 if(errors === _errs8){
@@ -12390,24 +13202,24 @@ validate62.errors = vErrors;
 return errors === 0;
 }
 
-const schema102 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ToolAction"},"callId":{"type":"string"},"callbackIds":{"items":{"$ref":"#/definitions/CallbackId"},"type":"array"},"name":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":["string","null"]}},"required":["name","callId","callbackIds","requestId","action","status"],"type":"object"};
-const schema136 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"integer","type":"string"},"value":{"pattern":"^-?[0-9]+$","type":"string"}},"required":["kind","value"],"type":"object"}]};
-const schema137 = {"enum":["applied","rejected","uncertain"],"type":"string"};
-const schema103 = {"oneOf":[{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"tool":{"const":"workspace","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"tool":{"const":"process","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Receipt"},"tool":{"const":"content","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Input"},"tool":{"const":"worktree","type":"string"}},"required":["tool","action"],"type":"object"}]};
-const schema132 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]};
-const schema133 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision"],"type":"object"}]};
-const schema104 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
-const schema113 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
-const schema115 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
-const schema124 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema126 = {"enum":["first","second"],"type":"string"};
-const schema127 = {"maximum":9999,"minimum":1,"type":"integer"};
-const schema122 = {"enum":["left","right","top","bottom"],"type":"string"};
-const schema106 = {"enum":["overlay","make-room"],"type":"string"};
-const schema105 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema107 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema108 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema111 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema107 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ToolAction"},"callId":{"type":"string"},"callbackIds":{"items":{"$ref":"#/definitions/CallbackId"},"type":"array"},"name":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":["string","null"]}},"required":["name","callId","callbackIds","requestId","action","status"],"type":"object"};
+const schema141 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"integer","type":"string"},"value":{"pattern":"^-?[0-9]+$","type":"string"}},"required":["kind","value"],"type":"object"}]};
+const schema142 = {"enum":["applied","rejected","uncertain"],"type":"string"};
+const schema108 = {"oneOf":[{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"tool":{"const":"workspace","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"tool":{"const":"process","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Receipt"},"tool":{"const":"content","type":"string"}},"required":["tool","action"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Input"},"tool":{"const":"worktree","type":"string"}},"required":["tool","action"],"type":"object"}]};
+const schema137 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]};
+const schema138 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"configure","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"describe","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"migrate-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"list-notes","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"new-note","type":"string"},"title":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","title"],"type":"object"},{"additionalProperties":false,"properties":{"filename":{"type":"string"},"operation":{"const":"open-note","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","filename"],"type":"object"},{"additionalProperties":false,"properties":{"expectedRevision":{"type":"string"},"operation":{"const":"update","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedRevision"],"type":"object"},{"additionalProperties":false,"properties":{"action":{"type":"string"},"expectedRevision":{"type":"string"},"operation":{"const":"invoke","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","action","expectedRevision"],"type":"object"}]};
+const schema109 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
+const schema118 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema120 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
+const schema129 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema131 = {"enum":["first","second"],"type":"string"};
+const schema132 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema127 = {"enum":["left","right","top","bottom"],"type":"string"};
+const schema111 = {"enum":["overlay","make-room"],"type":"string"};
+const schema110 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema112 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema113 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema116 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper3 = {validate: validate68};
 
 function validate68(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -13826,7 +14638,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema111.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema116.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -14237,7 +15049,7 @@ validate67.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/defi
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate67.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema106.enum},message:"must be equal to one of the allowed values"}];
+validate67.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema111.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -14283,9 +15095,9 @@ validate67.errors = vErrors;
 return errors === 0;
 }
 
-const schema116 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema117 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema118 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema121 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema122 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema123 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate71(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -14409,7 +15221,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema117.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema122.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -14485,7 +15297,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema118.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema123.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -14680,8 +15492,8 @@ validate71.errors = vErrors;
 return errors === 0;
 }
 
-const schema120 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
-const schema121 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
+const schema125 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
+const schema126 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
 
 function validate74(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -14852,7 +15664,7 @@ vErrors.push(err10);
 errors++;
 }
 if(!((((data3 === "left") || (data3 === "right")) || (data3 === "top")) || (data3 === "bottom"))){
-const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema122.enum},message:"must be equal to one of the allowed values"};
+const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema127.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -19056,7 +19868,7 @@ vErrors.push(err214);
 errors++;
 }
 if(!((data87 === "first") || (data87 === "second"))){
-const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema126.enum},message:"must be equal to one of the allowed values"};
+const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema131.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err215];
 }
@@ -19252,7 +20064,7 @@ vErrors.push(err226);
 errors++;
 }
 if(!((((data91 === "left") || (data91 === "right")) || (data91 === "top")) || (data91 === "bottom"))){
-const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema122.enum},message:"must be equal to one of the allowed values"};
+const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema127.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err227];
 }
@@ -22068,7 +22880,7 @@ vErrors.push(err390);
 errors++;
 }
 if(!((data152 === "overlay") || (data152 === "make-room"))){
-const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema106.enum},message:"must be equal to one of the allowed values"};
+const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema111.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err391];
 }
@@ -22154,7 +22966,7 @@ if(data.visible !== undefined){
 let data154 = data.visible;
 const _errs505 = errors;
 if((typeof data154 !== "boolean") && (data154 !== null)){
-const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema104.oneOf[35].properties.visible.type},message:"must be boolean,null"};
+const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema109.oneOf[35].properties.visible.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err396];
 }
@@ -22191,7 +23003,7 @@ if(data.width !== undefined){
 let data156 = data.width;
 const _errs509 = errors;
 if((!(((typeof data156 == "number") && (!(data156 % 1) && !isNaN(data156))) && (isFinite(data156)))) && (data156 !== null)){
-const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema104.oneOf[35].properties.width.type},message:"must be integer,null"};
+const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema109.oneOf[35].properties.width.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err398];
 }
@@ -22321,8 +23133,8 @@ validate66.errors = vErrors;
 return errors === 0;
 }
 
-const schema134 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action2"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"type":"object"};
-const schema135 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
+const schema139 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action2"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"type":"object"};
+const schema140 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
 
 function validate80(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -24700,6 +25512,146 @@ if(_valid2){
 valid12 = true;
 passing2 = 7;
 }
+const _errs134 = errors;
+if(errors === _errs134){
+if(data22 && typeof data22 == "object" && !Array.isArray(data22)){
+let missing16;
+if(((((data22.operation === undefined) && (missing16 = "operation")) || ((data22.vesselId === undefined) && (missing16 = "vesselId"))) || ((data22.action === undefined) && (missing16 = "action"))) || ((data22.expectedRevision === undefined) && (missing16 = "expectedRevision"))){
+const err110 = {instancePath:instancePath+"/action",schemaPath:"#/definitions/Receipt/oneOf/8/required",keyword:"required",params:{missingProperty: missing16},message:"must have required property '"+missing16+"'"};
+if(vErrors === null){
+vErrors = [err110];
+}
+else {
+vErrors.push(err110);
+}
+errors++;
+}
+else {
+const _errs136 = errors;
+for(const key16 in data22){
+if(!((((key16 === "action") || (key16 === "expectedRevision")) || (key16 === "operation")) || (key16 === "vesselId"))){
+const err111 = {instancePath:instancePath+"/action",schemaPath:"#/definitions/Receipt/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key16},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err111];
+}
+else {
+vErrors.push(err111);
+}
+errors++;
+break;
+}
+}
+if(_errs136 === errors){
+if(data22.action !== undefined){
+const _errs137 = errors;
+if(typeof data22.action !== "string"){
+const err112 = {instancePath:instancePath+"/action/action",schemaPath:"#/definitions/Receipt/oneOf/8/properties/action/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err112];
+}
+else {
+vErrors.push(err112);
+}
+errors++;
+}
+var valid21 = _errs137 === errors;
+}
+else {
+var valid21 = true;
+}
+if(valid21){
+if(data22.expectedRevision !== undefined){
+const _errs139 = errors;
+if(typeof data22.expectedRevision !== "string"){
+const err113 = {instancePath:instancePath+"/action/expectedRevision",schemaPath:"#/definitions/Receipt/oneOf/8/properties/expectedRevision/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err113];
+}
+else {
+vErrors.push(err113);
+}
+errors++;
+}
+var valid21 = _errs139 === errors;
+}
+else {
+var valid21 = true;
+}
+if(valid21){
+if(data22.operation !== undefined){
+let data44 = data22.operation;
+const _errs141 = errors;
+if(typeof data44 !== "string"){
+const err114 = {instancePath:instancePath+"/action/operation",schemaPath:"#/definitions/Receipt/oneOf/8/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err114];
+}
+else {
+vErrors.push(err114);
+}
+errors++;
+}
+if("invoke" !== data44){
+const err115 = {instancePath:instancePath+"/action/operation",schemaPath:"#/definitions/Receipt/oneOf/8/properties/operation/const",keyword:"const",params:{allowedValue: "invoke"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err115];
+}
+else {
+vErrors.push(err115);
+}
+errors++;
+}
+var valid21 = _errs141 === errors;
+}
+else {
+var valid21 = true;
+}
+if(valid21){
+if(data22.vesselId !== undefined){
+const _errs143 = errors;
+if(typeof data22.vesselId !== "string"){
+const err116 = {instancePath:instancePath+"/action/vesselId",schemaPath:"#/definitions/Receipt/oneOf/8/properties/vesselId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err116];
+}
+else {
+vErrors.push(err116);
+}
+errors++;
+}
+var valid21 = _errs143 === errors;
+}
+else {
+var valid21 = true;
+}
+}
+}
+}
+}
+}
+}
+else {
+const err117 = {instancePath:instancePath+"/action",schemaPath:"#/definitions/Receipt/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err117];
+}
+else {
+vErrors.push(err117);
+}
+errors++;
+}
+}
+var _valid2 = _errs134 === errors;
+if(_valid2 && valid12){
+valid12 = false;
+passing2 = [passing2, 8];
+}
+else {
+if(_valid2){
+valid12 = true;
+passing2 = 8;
+}
+}
 }
 }
 }
@@ -24708,12 +25660,12 @@ passing2 = 7;
 }
 }
 if(!valid12){
-const err110 = {instancePath:instancePath+"/action",schemaPath:"#/definitions/Receipt/oneOf",keyword:"oneOf",params:{passingSchemas: passing2},message:"must match exactly one schema in oneOf"};
+const err118 = {instancePath:instancePath+"/action",schemaPath:"#/definitions/Receipt/oneOf",keyword:"oneOf",params:{passingSchemas: passing2},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err110];
+vErrors = [err118];
 }
 else {
-vErrors.push(err110);
+vErrors.push(err118);
 }
 errors++;
 }
@@ -24735,29 +25687,29 @@ var valid10 = true;
 }
 if(valid10){
 if(data.tool !== undefined){
-let data42 = data.tool;
-const _errs134 = errors;
-if(typeof data42 !== "string"){
-const err111 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/2/properties/tool/type",keyword:"type",params:{type: "string"},message:"must be string"};
+let data46 = data.tool;
+const _errs145 = errors;
+if(typeof data46 !== "string"){
+const err119 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/2/properties/tool/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
-vErrors = [err111];
+vErrors = [err119];
 }
 else {
-vErrors.push(err111);
+vErrors.push(err119);
 }
 errors++;
 }
-if("content" !== data42){
-const err112 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/2/properties/tool/const",keyword:"const",params:{allowedValue: "content"},message:"must be equal to constant"};
+if("content" !== data46){
+const err120 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/2/properties/tool/const",keyword:"const",params:{allowedValue: "content"},message:"must be equal to constant"};
 if(vErrors === null){
-vErrors = [err112];
+vErrors = [err120];
 }
 else {
-vErrors.push(err112);
+vErrors.push(err120);
 }
 errors++;
 }
-var valid10 = _errs134 === errors;
+var valid10 = _errs145 === errors;
 }
 else {
 var valid10 = true;
@@ -24767,12 +25719,12 @@ var valid10 = true;
 }
 }
 else {
-const err113 = {instancePath,schemaPath:"#/oneOf/2/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err121 = {instancePath,schemaPath:"#/oneOf/2/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err113];
+vErrors = [err121];
 }
 else {
-vErrors.push(err113);
+vErrors.push(err121);
 }
 errors++;
 }
@@ -24787,92 +25739,92 @@ if(_valid0){
 valid0 = true;
 passing0 = 2;
 }
-const _errs136 = errors;
-if(errors === _errs136){
+const _errs147 = errors;
+if(errors === _errs147){
 if(data && typeof data == "object" && !Array.isArray(data)){
-let missing16;
-if(((data.tool === undefined) && (missing16 = "tool")) || ((data.action === undefined) && (missing16 = "action"))){
-const err114 = {instancePath,schemaPath:"#/oneOf/3/required",keyword:"required",params:{missingProperty: missing16},message:"must have required property '"+missing16+"'"};
+let missing17;
+if(((data.tool === undefined) && (missing17 = "tool")) || ((data.action === undefined) && (missing17 = "action"))){
+const err122 = {instancePath,schemaPath:"#/oneOf/3/required",keyword:"required",params:{missingProperty: missing17},message:"must have required property '"+missing17+"'"};
 if(vErrors === null){
-vErrors = [err114];
+vErrors = [err122];
 }
 else {
-vErrors.push(err114);
+vErrors.push(err122);
 }
 errors++;
 }
 else {
-const _errs138 = errors;
-for(const key16 in data){
-if(!((key16 === "action") || (key16 === "tool"))){
-const err115 = {instancePath,schemaPath:"#/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key16},message:"must NOT have additional properties"};
+const _errs149 = errors;
+for(const key17 in data){
+if(!((key17 === "action") || (key17 === "tool"))){
+const err123 = {instancePath,schemaPath:"#/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key17},message:"must NOT have additional properties"};
 if(vErrors === null){
-vErrors = [err115];
+vErrors = [err123];
 }
 else {
-vErrors.push(err115);
+vErrors.push(err123);
 }
 errors++;
 break;
 }
 }
-if(_errs138 === errors){
+if(_errs149 === errors){
 if(data.action !== undefined){
-const _errs139 = errors;
+const _errs150 = errors;
 if(!(validate80(data.action, {instancePath:instancePath+"/action",parentData:data,parentDataProperty:"action",rootData}))){
 vErrors = vErrors === null ? validate80.errors : vErrors.concat(validate80.errors);
 errors = vErrors.length;
 }
-var valid21 = _errs139 === errors;
+var valid22 = _errs150 === errors;
 }
 else {
-var valid21 = true;
+var valid22 = true;
 }
-if(valid21){
+if(valid22){
 if(data.tool !== undefined){
-let data44 = data.tool;
-const _errs140 = errors;
-if(typeof data44 !== "string"){
-const err116 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/3/properties/tool/type",keyword:"type",params:{type: "string"},message:"must be string"};
+let data48 = data.tool;
+const _errs151 = errors;
+if(typeof data48 !== "string"){
+const err124 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/3/properties/tool/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
-vErrors = [err116];
+vErrors = [err124];
 }
 else {
-vErrors.push(err116);
+vErrors.push(err124);
 }
 errors++;
 }
-if("worktree" !== data44){
-const err117 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/3/properties/tool/const",keyword:"const",params:{allowedValue: "worktree"},message:"must be equal to constant"};
+if("worktree" !== data48){
+const err125 = {instancePath:instancePath+"/tool",schemaPath:"#/oneOf/3/properties/tool/const",keyword:"const",params:{allowedValue: "worktree"},message:"must be equal to constant"};
 if(vErrors === null){
-vErrors = [err117];
+vErrors = [err125];
 }
 else {
-vErrors.push(err117);
+vErrors.push(err125);
 }
 errors++;
 }
-var valid21 = _errs140 === errors;
+var valid22 = _errs151 === errors;
 }
 else {
-var valid21 = true;
+var valid22 = true;
 }
 }
 }
 }
 }
 else {
-const err118 = {instancePath,schemaPath:"#/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err126 = {instancePath,schemaPath:"#/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err118];
+vErrors = [err126];
 }
 else {
-vErrors.push(err118);
+vErrors.push(err126);
 }
 errors++;
 }
 }
-var _valid0 = _errs136 === errors;
+var _valid0 = _errs147 === errors;
 if(_valid0 && valid0){
 valid0 = false;
 passing0 = [passing0, 3];
@@ -24886,12 +25838,12 @@ passing0 = 3;
 }
 }
 if(!valid0){
-const err119 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err127 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err119];
+vErrors = [err127];
 }
 else {
-vErrors.push(err119);
+vErrors.push(err127);
 }
 errors++;
 validate65.errors = vErrors;
@@ -25256,7 +26208,7 @@ validate64.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definiti
 return false;
 }
 if(!(((data10 === "applied") || (data10 === "rejected")) || (data10 === "uncertain"))){
-validate64.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema137.enum},message:"must be equal to one of the allowed values"}];
+validate64.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema142.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs28 === errors;
@@ -25269,7 +26221,7 @@ if(data.version !== undefined){
 let data11 = data.version;
 const _errs31 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-validate64.errors = [{instancePath:instancePath+"/version",schemaPath:"#/properties/version/type",keyword:"type",params:{type: schema102.properties.version.type},message:"must be string,null"}];
+validate64.errors = [{instancePath:instancePath+"/version",schemaPath:"#/properties/version/type",keyword:"type",params:{type: schema107.properties.version.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs31 === errors;
@@ -25404,7 +26356,7 @@ validate61.errors = [{instancePath:instancePath+"/role",schemaPath:"#/definition
 return false;
 }
 if(!(((data3 === "user") || (data3 === "assistant")) || (data3 === "tool"))){
-validate61.errors = [{instancePath:instancePath+"/role",schemaPath:"#/definitions/Role/enum",keyword:"enum",params:{allowedValues: schema101.enum},message:"must be equal to one of the allowed values"}];
+validate61.errors = [{instancePath:instancePath+"/role",schemaPath:"#/definitions/Role/enum",keyword:"enum",params:{allowedValues: schema106.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs11 === errors;
@@ -25511,7 +26463,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema97.properties, key0))){
+if(!(func2.call(schema102.properties, key0))){
 validate60.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -25522,7 +26474,7 @@ if(data.error !== undefined){
 let data0 = data.error;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate60.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema97.properties.error.type},message:"must be string,null"}];
+validate60.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema102.properties.error.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -25577,7 +26529,7 @@ if(data.model !== undefined){
 let data4 = data.model;
 const _errs9 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate60.errors = [{instancePath:instancePath+"/model",schemaPath:"#/properties/model/type",keyword:"type",params:{type: schema97.properties.model.type},message:"must be string,null"}];
+validate60.errors = [{instancePath:instancePath+"/model",schemaPath:"#/properties/model/type",keyword:"type",params:{type: schema102.properties.model.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs9 === errors;
@@ -25606,7 +26558,7 @@ validate60.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitio
 return false;
 }
 if(!(((((((data6 === "idle") || (data6 === "starting")) || (data6 === "working")) || (data6 === "completed")) || (data6 === "interrupted")) || (data6 === "failed")) || (data6 === "unconfirmed"))){
-validate60.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema138.enum},message:"must be equal to one of the allowed values"}];
+validate60.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema143.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs13 === errors;
@@ -25619,7 +26571,7 @@ if(data.thread !== undefined){
 let data7 = data.thread;
 const _errs16 = errors;
 if((typeof data7 !== "string") && (data7 !== null)){
-validate60.errors = [{instancePath:instancePath+"/thread",schemaPath:"#/properties/thread/type",keyword:"type",params:{type: schema97.properties.thread.type},message:"must be string,null"}];
+validate60.errors = [{instancePath:instancePath+"/thread",schemaPath:"#/properties/thread/type",keyword:"type",params:{type: schema102.properties.thread.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs16 === errors;
@@ -25632,7 +26584,7 @@ if(data.turn !== undefined){
 let data8 = data.turn;
 const _errs18 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate60.errors = [{instancePath:instancePath+"/turn",schemaPath:"#/properties/turn/type",keyword:"type",params:{type: schema97.properties.turn.type},message:"must be string,null"}];
+validate60.errors = [{instancePath:instancePath+"/turn",schemaPath:"#/properties/turn/type",keyword:"type",params:{type: schema102.properties.turn.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -25673,12 +26625,12 @@ return errors === 0;
 }
 
 export const launchCatalog = validate85;
-const schema139 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"LaunchEntry":{"additionalProperties":false,"properties":{"id":{"type":"string"},"launch":{"$ref":"#/definitions/Launch"},"name":{"type":"string"}},"required":["id","name","launch"],"type":"object"},"LaunchSettings":{"additionalProperties":false,"properties":{"default":{"type":"string"},"entries":{"items":{"$ref":"#/definitions/LaunchEntry"},"type":"array"}},"required":["default","entries"],"type":"object"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"}},"properties":{"available":{"items":{"type":"string"},"type":"array"},"errors":{"items":{"type":"string"},"type":"array"},"path":{"type":["string","null"]},"settings":{"$ref":"#/definitions/LaunchSettings"}},"required":["settings","available","errors"],"title":"Catalog","type":"object"};
-const schema140 = {"additionalProperties":false,"properties":{"default":{"type":"string"},"entries":{"items":{"$ref":"#/definitions/LaunchEntry"},"type":"array"}},"required":["default","entries"],"type":"object"};
-const schema141 = {"additionalProperties":false,"properties":{"id":{"type":"string"},"launch":{"$ref":"#/definitions/Launch"},"name":{"type":"string"}},"required":["id","name","launch"],"type":"object"};
-const schema142 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema143 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema144 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema144 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"LaunchEntry":{"additionalProperties":false,"properties":{"id":{"type":"string"},"launch":{"$ref":"#/definitions/Launch"},"name":{"type":"string"}},"required":["id","name","launch"],"type":"object"},"LaunchSettings":{"additionalProperties":false,"properties":{"default":{"type":"string"},"entries":{"items":{"$ref":"#/definitions/LaunchEntry"},"type":"array"}},"required":["default","entries"],"type":"object"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"}},"properties":{"available":{"items":{"type":"string"},"type":"array"},"errors":{"items":{"type":"string"},"type":"array"},"path":{"type":["string","null"]},"settings":{"$ref":"#/definitions/LaunchSettings"}},"required":["settings","available","errors"],"title":"Catalog","type":"object"};
+const schema145 = {"additionalProperties":false,"properties":{"default":{"type":"string"},"entries":{"items":{"$ref":"#/definitions/LaunchEntry"},"type":"array"}},"required":["default","entries"],"type":"object"};
+const schema146 = {"additionalProperties":false,"properties":{"id":{"type":"string"},"launch":{"$ref":"#/definitions/Launch"},"name":{"type":"string"}},"required":["id","name","launch"],"type":"object"};
+const schema147 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema148 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema149 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate88(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -25802,7 +26754,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema143.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema148.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -25878,7 +26830,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema144.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema149.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -26303,7 +27255,7 @@ if(data.path !== undefined){
 let data4 = data.path;
 const _errs10 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate85.errors = [{instancePath:instancePath+"/path",schemaPath:"#/properties/path/type",keyword:"type",params:{type: schema139.properties.path.type},message:"must be string,null"}];
+validate85.errors = [{instancePath:instancePath+"/path",schemaPath:"#/properties/path/type",keyword:"type",params:{type: schema144.properties.path.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs10 === errors;
@@ -26339,7 +27291,7 @@ return errors === 0;
 }
 
 export const notes = validate92;
-const schema145 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"title":"Notes","type":"object"};
+const schema150 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"properties":{"text":{"type":"string"},"title":{"type":"string"}},"required":["title","text"],"title":"Notes","type":"object"};
 
 function validate92(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -26398,8 +27350,8 @@ return errors === 0;
 }
 
 export const notesConfiguration = validate93;
-const schema146 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"}},"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"title":"NotesConfiguration","type":"object"};
-const schema147 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
+const schema151 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"NotesFile":{"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"}},"properties":{"notesFile":{"anyOf":[{"$ref":"#/definitions/NotesFile"},{"type":"null"}]},"showHeading":{"type":"boolean"}},"required":["showHeading"],"title":"NotesConfiguration","type":"object"};
+const schema152 = {"additionalProperties":false,"properties":{"directory":{"type":"string"},"filename":{"type":"string"}},"required":["directory","filename"],"type":"object"};
 
 function validate93(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -26578,7 +27530,7 @@ return errors === 0;
 }
 
 export const place = validate94;
-const schema148 = {"$schema":"http://json-schema.org/draft-07/schema#","pattern":"^(fleet|portal):[A-Za-z0-9._-]{1,128}$","title":"Place","type":"string"};
+const schema153 = {"$schema":"http://json-schema.org/draft-07/schema#","pattern":"^(fleet|portal):[A-Za-z0-9._-]{1,128}$","title":"Place","type":"string"};
 const pattern1 = new RegExp("^(fleet|portal):[A-Za-z0-9._-]{1,128}$", "u");
 
 function validate94(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -26601,13 +27553,13 @@ return errors === 0;
 }
 
 export const processResponse = validate95;
-const schema149 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"PlacementName":{"additionalProperties":false,"properties":{"effectiveName":{"type":"string"},"placementId":{"type":"string"}},"required":["placementId","effectiveName"],"type":"object"},"ProcessInfo":{"additionalProperties":false,"properties":{"agentName":{"type":["string","null"]},"cwd":{"type":"string"},"foreground":{"type":["string","null"]},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"placementNames":{"items":{"$ref":"#/definitions/PlacementName"},"type":"array"},"reportedActivity":{"anyOf":[{"$ref":"#/definitions/ReportedActivity"},{"type":"null"}]},"state":{"type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["vesselId","terminalId","cwd","state"],"type":"object"},"ProcessOutput":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"},"processes":{"items":{"$ref":"#/definitions/ProcessInfo"},"type":"array"},"unavailable":{"items":{"type":"string"},"type":"array"}},"required":["operation","processes","unavailable"],"type":"object"},{"additionalProperties":false,"properties":{"complete":{"type":"boolean"},"how":{"type":"string"},"limited":{"type":"boolean"},"operation":{"const":"read","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"},"text":{"type":"string"},"why":{"type":["string","null"]}},"required":["operation","target","text","complete","how","limited"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"started":{"type":["boolean","null"]},"status":{"type":["string","null"]},"target":{"$ref":"#/definitions/ProcessInfo"},"turn":{"type":"string"}},"required":["operation","target","turn"],"type":"object"},{"additionalProperties":false,"properties":{"key":{"type":"string"},"operation":{"const":"interrupt","type":"string"},"outcome":{"type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","key","outcome"],"type":"object"},{"additionalProperties":false,"properties":{"observed":{"$ref":"#/definitions/ProcessInfo"},"operation":{"const":"stop","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","observed"],"type":"object"}]},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"}},"properties":{"fresh":{"type":"boolean"},"message":{"type":["string","null"]},"output":{"anyOf":[{"$ref":"#/definitions/ProcessOutput"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":"string"}},"required":["requestId","status","version","fresh"],"title":"ProcessResponse","type":"object"};
-const schema155 = {"enum":["applied","rejected","uncertain"],"type":"string"};
-const schema150 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"},"processes":{"items":{"$ref":"#/definitions/ProcessInfo"},"type":"array"},"unavailable":{"items":{"type":"string"},"type":"array"}},"required":["operation","processes","unavailable"],"type":"object"},{"additionalProperties":false,"properties":{"complete":{"type":"boolean"},"how":{"type":"string"},"limited":{"type":"boolean"},"operation":{"const":"read","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"},"text":{"type":"string"},"why":{"type":["string","null"]}},"required":["operation","target","text","complete","how","limited"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"started":{"type":["boolean","null"]},"status":{"type":["string","null"]},"target":{"$ref":"#/definitions/ProcessInfo"},"turn":{"type":"string"}},"required":["operation","target","turn"],"type":"object"},{"additionalProperties":false,"properties":{"key":{"type":"string"},"operation":{"const":"interrupt","type":"string"},"outcome":{"type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","key","outcome"],"type":"object"},{"additionalProperties":false,"properties":{"observed":{"$ref":"#/definitions/ProcessInfo"},"operation":{"const":"stop","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","observed"],"type":"object"}]};
-const schema151 = {"additionalProperties":false,"properties":{"agentName":{"type":["string","null"]},"cwd":{"type":"string"},"foreground":{"type":["string","null"]},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"placementNames":{"items":{"$ref":"#/definitions/PlacementName"},"type":"array"},"reportedActivity":{"anyOf":[{"$ref":"#/definitions/ReportedActivity"},{"type":"null"}]},"state":{"type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["vesselId","terminalId","cwd","state"],"type":"object"};
-const schema152 = {"additionalProperties":false,"properties":{"effectiveName":{"type":"string"},"placementId":{"type":"string"}},"required":["placementId","effectiveName"],"type":"object"};
-const schema153 = {"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"};
-const schema154 = {"enum":["unknown","working","blocked","idle","done","error"],"type":"string"};
+const schema154 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"PlacementName":{"additionalProperties":false,"properties":{"effectiveName":{"type":"string"},"placementId":{"type":"string"}},"required":["placementId","effectiveName"],"type":"object"},"ProcessInfo":{"additionalProperties":false,"properties":{"agentName":{"type":["string","null"]},"cwd":{"type":"string"},"foreground":{"type":["string","null"]},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"placementNames":{"items":{"$ref":"#/definitions/PlacementName"},"type":"array"},"reportedActivity":{"anyOf":[{"$ref":"#/definitions/ReportedActivity"},{"type":"null"}]},"state":{"type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["vesselId","terminalId","cwd","state"],"type":"object"},"ProcessOutput":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"},"processes":{"items":{"$ref":"#/definitions/ProcessInfo"},"type":"array"},"unavailable":{"items":{"type":"string"},"type":"array"}},"required":["operation","processes","unavailable"],"type":"object"},{"additionalProperties":false,"properties":{"complete":{"type":"boolean"},"how":{"type":"string"},"limited":{"type":"boolean"},"operation":{"const":"read","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"},"text":{"type":"string"},"why":{"type":["string","null"]}},"required":["operation","target","text","complete","how","limited"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"started":{"type":["boolean","null"]},"status":{"type":["string","null"]},"target":{"$ref":"#/definitions/ProcessInfo"},"turn":{"type":"string"}},"required":["operation","target","turn"],"type":"object"},{"additionalProperties":false,"properties":{"key":{"type":"string"},"operation":{"const":"interrupt","type":"string"},"outcome":{"type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","key","outcome"],"type":"object"},{"additionalProperties":false,"properties":{"observed":{"$ref":"#/definitions/ProcessInfo"},"operation":{"const":"stop","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","observed"],"type":"object"}]},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"}},"properties":{"fresh":{"type":"boolean"},"message":{"type":["string","null"]},"output":{"anyOf":[{"$ref":"#/definitions/ProcessOutput"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":"string"}},"required":["requestId","status","version","fresh"],"title":"ProcessResponse","type":"object"};
+const schema160 = {"enum":["applied","rejected","uncertain"],"type":"string"};
+const schema155 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"},"processes":{"items":{"$ref":"#/definitions/ProcessInfo"},"type":"array"},"unavailable":{"items":{"type":"string"},"type":"array"}},"required":["operation","processes","unavailable"],"type":"object"},{"additionalProperties":false,"properties":{"complete":{"type":"boolean"},"how":{"type":"string"},"limited":{"type":"boolean"},"operation":{"const":"read","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"},"text":{"type":"string"},"why":{"type":["string","null"]}},"required":["operation","target","text","complete","how","limited"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"started":{"type":["boolean","null"]},"status":{"type":["string","null"]},"target":{"$ref":"#/definitions/ProcessInfo"},"turn":{"type":"string"}},"required":["operation","target","turn"],"type":"object"},{"additionalProperties":false,"properties":{"key":{"type":"string"},"operation":{"const":"interrupt","type":"string"},"outcome":{"type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","key","outcome"],"type":"object"},{"additionalProperties":false,"properties":{"observed":{"$ref":"#/definitions/ProcessInfo"},"operation":{"const":"stop","type":"string"},"target":{"$ref":"#/definitions/ProcessInfo"}},"required":["operation","target","observed"],"type":"object"}]};
+const schema156 = {"additionalProperties":false,"properties":{"agentName":{"type":["string","null"]},"cwd":{"type":"string"},"foreground":{"type":["string","null"]},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"placementNames":{"items":{"$ref":"#/definitions/PlacementName"},"type":"array"},"reportedActivity":{"anyOf":[{"$ref":"#/definitions/ReportedActivity"},{"type":"null"}]},"state":{"type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["vesselId","terminalId","cwd","state"],"type":"object"};
+const schema157 = {"additionalProperties":false,"properties":{"effectiveName":{"type":"string"},"placementId":{"type":"string"}},"required":["placementId","effectiveName"],"type":"object"};
+const schema158 = {"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"};
+const schema159 = {"enum":["unknown","working","blocked","idle","done","error"],"type":"string"};
 
 function validate98(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -26622,7 +27574,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema153.properties, key0))){
+if(!(func2.call(schema158.properties, key0))){
 validate98.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -26633,7 +27585,7 @@ if(data.app !== undefined){
 let data0 = data.app;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate98.errors = [{instancePath:instancePath+"/app",schemaPath:"#/properties/app/type",keyword:"type",params:{type: schema153.properties.app.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/app",schemaPath:"#/properties/app/type",keyword:"type",params:{type: schema158.properties.app.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -26646,7 +27598,7 @@ if(data.kind !== undefined){
 let data1 = data.kind;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate98.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/properties/kind/type",keyword:"type",params:{type: schema153.properties.kind.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/properties/kind/type",keyword:"type",params:{type: schema158.properties.kind.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -26671,7 +27623,7 @@ if(data.message !== undefined){
 let data3 = data.message;
 const _errs8 = errors;
 if((typeof data3 !== "string") && (data3 !== null)){
-validate98.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema153.properties.message.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema158.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs8 === errors;
@@ -26684,7 +27636,7 @@ if(data.observedMs !== undefined){
 let data4 = data.observedMs;
 const _errs10 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate98.errors = [{instancePath:instancePath+"/observedMs",schemaPath:"#/properties/observedMs/type",keyword:"type",params:{type: schema153.properties.observedMs.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/observedMs",schemaPath:"#/properties/observedMs/type",keyword:"type",params:{type: schema158.properties.observedMs.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs10 === errors;
@@ -26697,7 +27649,7 @@ if(data.progress !== undefined){
 let data5 = data.progress;
 const _errs12 = errors;
 if((!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))) && (data5 !== null)){
-validate98.errors = [{instancePath:instancePath+"/progress",schemaPath:"#/properties/progress/type",keyword:"type",params:{type: schema153.properties.progress.type},message:"must be integer,null"}];
+validate98.errors = [{instancePath:instancePath+"/progress",schemaPath:"#/properties/progress/type",keyword:"type",params:{type: schema158.properties.progress.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs12){
@@ -26724,7 +27676,7 @@ if(data.reason !== undefined){
 let data6 = data.reason;
 const _errs14 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate98.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema153.properties.reason.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema158.properties.reason.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs14 === errors;
@@ -26737,7 +27689,7 @@ if(data.reported !== undefined){
 let data7 = data.reported;
 const _errs16 = errors;
 if((typeof data7 !== "boolean") && (data7 !== null)){
-validate98.errors = [{instancePath:instancePath+"/reported",schemaPath:"#/properties/reported/type",keyword:"type",params:{type: schema153.properties.reported.type},message:"must be boolean,null"}];
+validate98.errors = [{instancePath:instancePath+"/reported",schemaPath:"#/properties/reported/type",keyword:"type",params:{type: schema158.properties.reported.type},message:"must be boolean,null"}];
 return false;
 }
 var valid0 = _errs16 === errors;
@@ -26750,7 +27702,7 @@ if(data.sequence !== undefined){
 let data8 = data.sequence;
 const _errs18 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate98.errors = [{instancePath:instancePath+"/sequence",schemaPath:"#/properties/sequence/type",keyword:"type",params:{type: schema153.properties.sequence.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/sequence",schemaPath:"#/properties/sequence/type",keyword:"type",params:{type: schema158.properties.sequence.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -26763,7 +27715,7 @@ if(data.sourceMs !== undefined){
 let data9 = data.sourceMs;
 const _errs20 = errors;
 if((typeof data9 !== "string") && (data9 !== null)){
-validate98.errors = [{instancePath:instancePath+"/sourceMs",schemaPath:"#/properties/sourceMs/type",keyword:"type",params:{type: schema153.properties.sourceMs.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/sourceMs",schemaPath:"#/properties/sourceMs/type",keyword:"type",params:{type: schema158.properties.sourceMs.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -26780,7 +27732,7 @@ validate98.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definitio
 return false;
 }
 if(!((((((data10 === "unknown") || (data10 === "working")) || (data10 === "blocked")) || (data10 === "idle")) || (data10 === "done")) || (data10 === "error"))){
-validate98.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definitions/ActivityState/enum",keyword:"enum",params:{allowedValues: schema154.enum},message:"must be equal to one of the allowed values"}];
+validate98.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definitions/ActivityState/enum",keyword:"enum",params:{allowedValues: schema159.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs22 === errors;
@@ -26793,7 +27745,7 @@ if(data.title !== undefined){
 let data11 = data.title;
 const _errs25 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-validate98.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: schema153.properties.title.type},message:"must be string,null"}];
+validate98.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: schema158.properties.title.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs25 === errors;
@@ -26838,7 +27790,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema151.properties, key0))){
+if(!(func2.call(schema156.properties, key0))){
 validate97.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -26849,7 +27801,7 @@ if(data.agentName !== undefined){
 let data0 = data.agentName;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate97.errors = [{instancePath:instancePath+"/agentName",schemaPath:"#/properties/agentName/type",keyword:"type",params:{type: schema151.properties.agentName.type},message:"must be string,null"}];
+validate97.errors = [{instancePath:instancePath+"/agentName",schemaPath:"#/properties/agentName/type",keyword:"type",params:{type: schema156.properties.agentName.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -26874,7 +27826,7 @@ if(data.foreground !== undefined){
 let data2 = data.foreground;
 const _errs6 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate97.errors = [{instancePath:instancePath+"/foreground",schemaPath:"#/properties/foreground/type",keyword:"type",params:{type: schema151.properties.foreground.type},message:"must be string,null"}];
+validate97.errors = [{instancePath:instancePath+"/foreground",schemaPath:"#/properties/foreground/type",keyword:"type",params:{type: schema156.properties.foreground.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -26887,7 +27839,7 @@ if(data.pid !== undefined){
 let data3 = data.pid;
 const _errs8 = errors;
 if((!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))) && (data3 !== null)){
-validate97.errors = [{instancePath:instancePath+"/pid",schemaPath:"#/properties/pid/type",keyword:"type",params:{type: schema151.properties.pid.type},message:"must be integer,null"}];
+validate97.errors = [{instancePath:instancePath+"/pid",schemaPath:"#/properties/pid/type",keyword:"type",params:{type: schema156.properties.pid.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs8){
@@ -27409,7 +28361,7 @@ if(data.why !== undefined){
 let data11 = data.why;
 const _errs27 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-const err16 = {instancePath:instancePath+"/why",schemaPath:"#/oneOf/1/properties/why/type",keyword:"type",params:{type: schema150.oneOf[1].properties.why.type},message:"must be string,null"};
+const err16 = {instancePath:instancePath+"/why",schemaPath:"#/oneOf/1/properties/why/type",keyword:"type",params:{type: schema155.oneOf[1].properties.why.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -27516,7 +28468,7 @@ if(data.started !== undefined){
 let data13 = data.started;
 const _errs34 = errors;
 if((typeof data13 !== "boolean") && (data13 !== null)){
-const err22 = {instancePath:instancePath+"/started",schemaPath:"#/oneOf/2/properties/started/type",keyword:"type",params:{type: schema150.oneOf[2].properties.started.type},message:"must be boolean,null"};
+const err22 = {instancePath:instancePath+"/started",schemaPath:"#/oneOf/2/properties/started/type",keyword:"type",params:{type: schema155.oneOf[2].properties.started.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -27535,7 +28487,7 @@ if(data.status !== undefined){
 let data14 = data.status;
 const _errs36 = errors;
 if((typeof data14 !== "string") && (data14 !== null)){
-const err23 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/2/properties/status/type",keyword:"type",params:{type: schema150.oneOf[2].properties.status.type},message:"must be string,null"};
+const err23 = {instancePath:instancePath+"/status",schemaPath:"#/oneOf/2/properties/status/type",keyword:"type",params:{type: schema155.oneOf[2].properties.status.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -27916,7 +28868,7 @@ if(data.message !== undefined){
 let data1 = data.message;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate95.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema149.properties.message.type},message:"must be string,null"}];
+validate95.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema154.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -28001,7 +28953,7 @@ validate95.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definiti
 return false;
 }
 if(!(((data4 === "applied") || (data4 === "rejected")) || (data4 === "uncertain"))){
-validate95.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema155.enum},message:"must be equal to one of the allowed values"}];
+validate95.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema160.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs13 === errors;
@@ -28039,8 +28991,8 @@ return errors === 0;
 }
 
 export const processTool = validate107;
-const schema156 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ProcessAction":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"ProcessInput","type":"object"};
-const schema157 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]};
+const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ProcessAction":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/ProcessAction"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"ProcessInput","type":"object"};
+const schema162 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"lines":{"maximum":160,"minimum":0,"type":"integer"},"operation":{"const":"read","type":"string"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","lines"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"send","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"text":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid","text"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"interrupt","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"stop","type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":"integer"},"terminalId":{"type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","terminalId","pid"],"type":"object"}]};
 
 function validate107(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -28881,9 +29833,9 @@ return errors === 0;
 }
 
 export const reportedActivity = validate108;
-const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"}},"properties":{"limited":{"type":"boolean"},"reason":{"type":["string","null"]},"terminals":{"additionalProperties":{"$ref":"#/definitions/ReportedActivity"},"type":"object"}},"required":["terminals","limited"],"title":"Projection","type":"object"};
-const schema159 = {"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"};
-const schema160 = {"enum":["unknown","working","blocked","idle","done","error"],"type":"string"};
+const schema163 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"}},"properties":{"limited":{"type":"boolean"},"reason":{"type":["string","null"]},"terminals":{"additionalProperties":{"$ref":"#/definitions/ReportedActivity"},"type":"object"}},"required":["terminals","limited"],"title":"Projection","type":"object"};
+const schema164 = {"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"};
+const schema165 = {"enum":["unknown","working","blocked","idle","done","error"],"type":"string"};
 
 function validate109(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -28898,7 +29850,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema159.properties, key0))){
+if(!(func2.call(schema164.properties, key0))){
 validate109.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -28909,7 +29861,7 @@ if(data.app !== undefined){
 let data0 = data.app;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate109.errors = [{instancePath:instancePath+"/app",schemaPath:"#/properties/app/type",keyword:"type",params:{type: schema159.properties.app.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/app",schemaPath:"#/properties/app/type",keyword:"type",params:{type: schema164.properties.app.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -28922,7 +29874,7 @@ if(data.kind !== undefined){
 let data1 = data.kind;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate109.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/properties/kind/type",keyword:"type",params:{type: schema159.properties.kind.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/properties/kind/type",keyword:"type",params:{type: schema164.properties.kind.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -28947,7 +29899,7 @@ if(data.message !== undefined){
 let data3 = data.message;
 const _errs8 = errors;
 if((typeof data3 !== "string") && (data3 !== null)){
-validate109.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema159.properties.message.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema164.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs8 === errors;
@@ -28960,7 +29912,7 @@ if(data.observedMs !== undefined){
 let data4 = data.observedMs;
 const _errs10 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate109.errors = [{instancePath:instancePath+"/observedMs",schemaPath:"#/properties/observedMs/type",keyword:"type",params:{type: schema159.properties.observedMs.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/observedMs",schemaPath:"#/properties/observedMs/type",keyword:"type",params:{type: schema164.properties.observedMs.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs10 === errors;
@@ -28973,7 +29925,7 @@ if(data.progress !== undefined){
 let data5 = data.progress;
 const _errs12 = errors;
 if((!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))) && (data5 !== null)){
-validate109.errors = [{instancePath:instancePath+"/progress",schemaPath:"#/properties/progress/type",keyword:"type",params:{type: schema159.properties.progress.type},message:"must be integer,null"}];
+validate109.errors = [{instancePath:instancePath+"/progress",schemaPath:"#/properties/progress/type",keyword:"type",params:{type: schema164.properties.progress.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs12){
@@ -29000,7 +29952,7 @@ if(data.reason !== undefined){
 let data6 = data.reason;
 const _errs14 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate109.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema159.properties.reason.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema164.properties.reason.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs14 === errors;
@@ -29013,7 +29965,7 @@ if(data.reported !== undefined){
 let data7 = data.reported;
 const _errs16 = errors;
 if((typeof data7 !== "boolean") && (data7 !== null)){
-validate109.errors = [{instancePath:instancePath+"/reported",schemaPath:"#/properties/reported/type",keyword:"type",params:{type: schema159.properties.reported.type},message:"must be boolean,null"}];
+validate109.errors = [{instancePath:instancePath+"/reported",schemaPath:"#/properties/reported/type",keyword:"type",params:{type: schema164.properties.reported.type},message:"must be boolean,null"}];
 return false;
 }
 var valid0 = _errs16 === errors;
@@ -29026,7 +29978,7 @@ if(data.sequence !== undefined){
 let data8 = data.sequence;
 const _errs18 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate109.errors = [{instancePath:instancePath+"/sequence",schemaPath:"#/properties/sequence/type",keyword:"type",params:{type: schema159.properties.sequence.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/sequence",schemaPath:"#/properties/sequence/type",keyword:"type",params:{type: schema164.properties.sequence.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -29039,7 +29991,7 @@ if(data.sourceMs !== undefined){
 let data9 = data.sourceMs;
 const _errs20 = errors;
 if((typeof data9 !== "string") && (data9 !== null)){
-validate109.errors = [{instancePath:instancePath+"/sourceMs",schemaPath:"#/properties/sourceMs/type",keyword:"type",params:{type: schema159.properties.sourceMs.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/sourceMs",schemaPath:"#/properties/sourceMs/type",keyword:"type",params:{type: schema164.properties.sourceMs.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -29056,7 +30008,7 @@ validate109.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definiti
 return false;
 }
 if(!((((((data10 === "unknown") || (data10 === "working")) || (data10 === "blocked")) || (data10 === "idle")) || (data10 === "done")) || (data10 === "error"))){
-validate109.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definitions/ActivityState/enum",keyword:"enum",params:{allowedValues: schema160.enum},message:"must be equal to one of the allowed values"}];
+validate109.errors = [{instancePath:instancePath+"/state",schemaPath:"#/definitions/ActivityState/enum",keyword:"enum",params:{allowedValues: schema165.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs22 === errors;
@@ -29069,7 +30021,7 @@ if(data.title !== undefined){
 let data11 = data.title;
 const _errs25 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-validate109.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: schema159.properties.title.type},message:"must be string,null"}];
+validate109.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: schema164.properties.title.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs25 === errors;
@@ -29137,7 +30089,7 @@ if(data.reason !== undefined){
 let data1 = data.reason;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate108.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema158.properties.reason.type},message:"must be string,null"}];
+validate108.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema163.properties.reason.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -29188,20 +30140,20 @@ return errors === 0;
 }
 
 export const request = validate111;
-const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"title":"Request","type":"object"};
-const schema162 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
-const schema171 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
-const schema173 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
-const schema182 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema184 = {"enum":["first","second"],"type":"string"};
-const schema185 = {"maximum":9999,"minimum":1,"type":"integer"};
-const schema180 = {"enum":["left","right","top","bottom"],"type":"string"};
-const schema187 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema164 = {"enum":["overlay","make-room"],"type":"string"};
-const schema163 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema165 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema166 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema169 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema166 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"title":"Request","type":"object"};
+const schema167 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
+const schema176 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema178 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
+const schema187 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema189 = {"enum":["first","second"],"type":"string"};
+const schema190 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema185 = {"enum":["left","right","top","bottom"],"type":"string"};
+const schema192 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema169 = {"enum":["overlay","make-room"],"type":"string"};
+const schema168 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema170 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema171 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema174 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper6 = {validate: validate114};
 
 function validate114(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -30620,7 +31572,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema169.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema174.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -31031,7 +31983,7 @@ validate113.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/def
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate113.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema164.enum},message:"must be equal to one of the allowed values"}];
+validate113.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema169.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -31077,9 +32029,9 @@ validate113.errors = vErrors;
 return errors === 0;
 }
 
-const schema174 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema175 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema176 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema179 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema180 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema181 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate117(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -31203,7 +32155,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema175.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema180.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -31279,7 +32231,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema176.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema181.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -31474,8 +32426,8 @@ validate117.errors = vErrors;
 return errors === 0;
 }
 
-const schema178 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
-const schema179 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
+const schema183 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
+const schema184 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
 
 function validate120(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -31646,7 +32598,7 @@ vErrors.push(err10);
 errors++;
 }
 if(!((((data3 === "left") || (data3 === "right")) || (data3 === "top")) || (data3 === "bottom"))){
-const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema180.enum},message:"must be equal to one of the allowed values"};
+const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema185.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -35850,7 +36802,7 @@ vErrors.push(err214);
 errors++;
 }
 if(!((data87 === "first") || (data87 === "second"))){
-const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema184.enum},message:"must be equal to one of the allowed values"};
+const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema189.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err215];
 }
@@ -36046,7 +36998,7 @@ vErrors.push(err226);
 errors++;
 }
 if(!((((data91 === "left") || (data91 === "right")) || (data91 === "top")) || (data91 === "bottom"))){
-const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema180.enum},message:"must be equal to one of the allowed values"};
+const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema185.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err227];
 }
@@ -38862,7 +39814,7 @@ vErrors.push(err390);
 errors++;
 }
 if(!((data152 === "overlay") || (data152 === "make-room"))){
-const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema164.enum},message:"must be equal to one of the allowed values"};
+const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema169.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err391];
 }
@@ -38948,7 +39900,7 @@ if(data.visible !== undefined){
 let data154 = data.visible;
 const _errs505 = errors;
 if((typeof data154 !== "boolean") && (data154 !== null)){
-const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema162.oneOf[35].properties.visible.type},message:"must be boolean,null"};
+const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema167.oneOf[35].properties.visible.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err396];
 }
@@ -38985,7 +39937,7 @@ if(data.width !== undefined){
 let data156 = data.width;
 const _errs509 = errors;
 if((!(((typeof data156 == "number") && (!(data156 % 1) && !isNaN(data156))) && (isFinite(data156)))) && (data156 !== null)){
-const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema162.oneOf[35].properties.width.type},message:"must be integer,null"};
+const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema167.oneOf[35].properties.width.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err398];
 }
@@ -39186,12 +40138,12 @@ return errors === 0;
 }
 
 export const response = validate126;
-const schema190 = {"$schema":"http://json-schema.org/draft-07/schema#","anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}],"definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"title":"Reply"};
-const schema191 = {"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"};
-const schema223 = {"enum":["applied","refused","uncertain"],"type":"string"};
-const schema192 = {"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"};
-const schema193 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"};
-const schema194 = {"enum":["ready","saving","incomplete","closed"],"type":"string"};
+const schema195 = {"$schema":"http://json-schema.org/draft-07/schema#","anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}],"definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"title":"Reply"};
+const schema196 = {"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"};
+const schema228 = {"enum":["applied","refused","uncertain"],"type":"string"};
+const schema197 = {"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"};
+const schema198 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"};
+const schema199 = {"enum":["ready","saving","incomplete","closed"],"type":"string"};
 
 function validate128(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -39257,7 +40209,7 @@ if(data1.pid !== undefined){
 let data3 = data1.pid;
 const _errs10 = errors;
 if((!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))) && (data3 !== null)){
-validate128.errors = [{instancePath:instancePath+"/entries/" + i0+"/pid",schemaPath:"#/definitions/Entry/properties/pid/type",keyword:"type",params:{type: schema193.properties.pid.type},message:"must be integer,null"}];
+validate128.errors = [{instancePath:instancePath+"/entries/" + i0+"/pid",schemaPath:"#/definitions/Entry/properties/pid/type",keyword:"type",params:{type: schema198.properties.pid.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs10){
@@ -39284,7 +40236,7 @@ if(data1.terminal !== undefined){
 let data4 = data1.terminal;
 const _errs12 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate128.errors = [{instancePath:instancePath+"/entries/" + i0+"/terminal",schemaPath:"#/definitions/Entry/properties/terminal/type",keyword:"type",params:{type: schema193.properties.terminal.type},message:"must be string,null"}];
+validate128.errors = [{instancePath:instancePath+"/entries/" + i0+"/terminal",schemaPath:"#/definitions/Entry/properties/terminal/type",keyword:"type",params:{type: schema198.properties.terminal.type},message:"must be string,null"}];
 return false;
 }
 var valid3 = _errs12 === errors;
@@ -39361,7 +40313,7 @@ if(data.message !== undefined){
 let data8 = data.message;
 const _errs20 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate128.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema192.properties.message.type},message:"must be string,null"}];
+validate128.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema197.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -39390,7 +40342,7 @@ validate128.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definiti
 return false;
 }
 if(!((((data10 === "ready") || (data10 === "saving")) || (data10 === "incomplete")) || (data10 === "closed"))){
-validate128.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema194.enum},message:"must be equal to one of the allowed values"}];
+validate128.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema199.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs24 === errors;
@@ -39403,7 +40355,7 @@ if(data.uncommittedChanges !== undefined){
 let data11 = data.uncommittedChanges;
 const _errs27 = errors;
 if((!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))) && (data11 !== null)){
-validate128.errors = [{instancePath:instancePath+"/uncommittedChanges",schemaPath:"#/properties/uncommittedChanges/type",keyword:"type",params:{type: schema192.properties.uncommittedChanges.type},message:"must be integer,null"}];
+validate128.errors = [{instancePath:instancePath+"/uncommittedChanges",schemaPath:"#/properties/uncommittedChanges/type",keyword:"type",params:{type: schema197.properties.uncommittedChanges.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs27){
@@ -39468,15 +40420,15 @@ validate128.errors = vErrors;
 return errors === 0;
 }
 
-const schema195 = {"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"};
-const schema209 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema217 = {"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"};
-const schema222 = {"enum":["home","fleet"],"type":"string"};
-const schema196 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"};
-const schema197 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
-const schema198 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]};
-const schema199 = {"enum":["horizontal","vertical"],"type":"string"};
-const schema200 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema200 = {"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"};
+const schema214 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema222 = {"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"};
+const schema227 = {"enum":["home","fleet"],"type":"string"};
+const schema201 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"};
+const schema202 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema203 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]};
+const schema204 = {"enum":["horizontal","vertical"],"type":"string"};
+const schema205 = {"maximum":9999,"minimum":1,"type":"integer"};
 const wrapper9 = {validate: validate132};
 
 function validate132(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -39625,7 +40577,7 @@ vErrors.push(err8);
 errors++;
 }
 if(!((data2 === "horizontal") || (data2 === "vertical"))){
-const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema199.enum},message:"must be equal to one of the allowed values"};
+const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema204.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -40129,11 +41081,11 @@ validate131.errors = vErrors;
 return errors === 0;
 }
 
-const schema201 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema202 = {"enum":["overlay","make-room"],"type":"string"};
-const schema203 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema204 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema207 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema206 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema207 = {"enum":["overlay","make-room"],"type":"string"};
+const schema208 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema209 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema212 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper11 = {validate: validate136};
 
 function validate136(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -41552,7 +42504,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema207.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema212.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -41963,7 +42915,7 @@ validate135.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/def
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate135.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema202.enum},message:"must be equal to one of the allowed values"}];
+validate135.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema207.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -42009,10 +42961,10 @@ validate135.errors = vErrors;
 return errors === 0;
 }
 
-const schema210 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"};
-const schema213 = {"enum":["automatic","deliberate"],"type":"string"};
-const schema211 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"};
-const schema212 = {"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"};
+const schema215 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"};
+const schema218 = {"enum":["automatic","deliberate"],"type":"string"};
+const schema216 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"};
+const schema217 = {"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"};
 
 function validate141(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -42078,7 +43030,7 @@ validate141.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/def
 return false;
 }
 if(!((data3 === "automatic") || (data3 === "deliberate"))){
-validate141.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema213.enum},message:"must be equal to one of the allowed values"}];
+validate141.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema218.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs8 === errors;
@@ -42163,7 +43115,7 @@ if(data.maximizedPlacement !== undefined){
 let data2 = data.maximizedPlacement;
 const _errs6 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate140.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema211.properties.maximizedPlacement.type},message:"must be string,null"}];
+validate140.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema216.properties.maximizedPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -42286,7 +43238,7 @@ validate140.errors = vErrors;
 return errors === 0;
 }
 
-const schema215 = {"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"};
+const schema220 = {"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"};
 
 function validate145(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -42312,7 +43264,7 @@ if(data.maximizedPlacement !== undefined){
 let data0 = data.maximizedPlacement;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate145.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema215.properties.maximizedPlacement.type},message:"must be string,null"}];
+validate145.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema220.properties.maximizedPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -42329,7 +43281,7 @@ validate145.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitio
 return false;
 }
 if(!((data1 === "overlay") || (data1 === "make-room"))){
-validate145.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema202.enum},message:"must be equal to one of the allowed values"}];
+validate145.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema207.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -42462,7 +43414,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema210.properties, key0))){
+if(!(func2.call(schema215.properties, key0))){
 validate139.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -42497,7 +43449,7 @@ if(data.cwd !== undefined){
 let data2 = data.cwd;
 const _errs6 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate139.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema210.properties.cwd.type},message:"must be string,null"}];
+validate139.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema215.properties.cwd.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -42568,7 +43520,7 @@ validate139.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/def
 return false;
 }
 if(!((data7 === "automatic") || (data7 === "deliberate"))){
-validate139.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema213.enum},message:"must be equal to one of the allowed values"}];
+validate139.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema218.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs15 === errors;
@@ -42667,7 +43619,7 @@ if(data.primaryPlacement !== undefined){
 let data11 = data.primaryPlacement;
 const _errs27 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-validate139.errors = [{instancePath:instancePath+"/primaryPlacement",schemaPath:"#/properties/primaryPlacement/type",keyword:"type",params:{type: schema210.properties.primaryPlacement.type},message:"must be string,null"}];
+validate139.errors = [{instancePath:instancePath+"/primaryPlacement",schemaPath:"#/properties/primaryPlacement/type",keyword:"type",params:{type: schema215.properties.primaryPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs27 === errors;
@@ -42696,10 +43648,10 @@ validate139.errors = vErrors;
 return errors === 0;
 }
 
-const schema218 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
-const schema219 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema220 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema221 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema223 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
+const schema224 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema225 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema226 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate151(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -42823,7 +43775,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema220.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema225.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -42899,7 +43851,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema221.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema226.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -43108,7 +44060,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema218.properties, key0))){
+if(!(func2.call(schema223.properties, key0))){
 validate150.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -43131,7 +44083,7 @@ if(data.backend !== undefined){
 let data1 = data.backend;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate150.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema218.properties.backend.type},message:"must be string,null"}];
+validate150.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema223.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -43144,7 +44096,7 @@ if(data.configuration !== undefined){
 let data2 = data.configuration;
 const _errs6 = errors;
 if((!(data2 && typeof data2 == "object" && !Array.isArray(data2))) && (data2 !== null)){
-validate150.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema218.properties.configuration.type},message:"must be object,null"}];
+validate150.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema223.properties.configuration.type},message:"must be object,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -43237,7 +44189,7 @@ if(data.shellIntent !== undefined){
 let data6 = data.shellIntent;
 const _errs18 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate150.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema218.properties.shellIntent.type},message:"must be string,null"}];
+validate150.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema223.properties.shellIntent.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -43250,7 +44202,7 @@ if(data.startPending !== undefined){
 let data7 = data.startPending;
 const _errs20 = errors;
 if((typeof data7 !== "string") && (data7 !== null)){
-validate150.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema218.properties.startPending.type},message:"must be string,null"}];
+validate150.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema223.properties.startPending.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -43304,7 +44256,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema195.properties, key0))){
+if(!(func2.call(schema200.properties, key0))){
 validate130.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -43968,7 +44920,7 @@ if(data15.vessel !== undefined){
 let data17 = data15.vessel;
 const _errs56 = errors;
 if((typeof data17 !== "string") && (data17 !== null)){
-validate130.errors = [{instancePath:instancePath+"/navigation/" + i1+"/vessel",schemaPath:"#/definitions/LastUsed/properties/vessel/type",keyword:"type",params:{type: schema217.properties.vessel.type},message:"must be string,null"}];
+validate130.errors = [{instancePath:instancePath+"/navigation/" + i1+"/vessel",schemaPath:"#/definitions/LastUsed/properties/vessel/type",keyword:"type",params:{type: schema222.properties.vessel.type},message:"must be string,null"}];
 return false;
 }
 var valid13 = _errs56 === errors;
@@ -44031,7 +44983,7 @@ if(data.selectedFleet !== undefined){
 let data20 = data.selectedFleet;
 const _errs62 = errors;
 if((typeof data20 !== "string") && (data20 !== null)){
-validate130.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema195.properties.selectedFleet.type},message:"must be string,null"}];
+validate130.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema200.properties.selectedFleet.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs62 === errors;
@@ -44044,7 +44996,7 @@ if(data.selectedVoyage !== undefined){
 let data21 = data.selectedVoyage;
 const _errs64 = errors;
 if((typeof data21 !== "string") && (data21 !== null)){
-validate130.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema195.properties.selectedVoyage.type},message:"must be string,null"}];
+validate130.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema200.properties.selectedVoyage.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs64 === errors;
@@ -44091,7 +45043,7 @@ validate130.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitio
 return false;
 }
 if(!((data24 === "home") || (data24 === "fleet"))){
-validate130.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitions/WorkspaceView/enum",keyword:"enum",params:{allowedValues: schema222.enum},message:"must be equal to one of the allowed values"}];
+validate130.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitions/WorkspaceView/enum",keyword:"enum",params:{allowedValues: schema227.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs69 === errors;
@@ -44165,7 +45117,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema191.properties, key0))){
+if(!(func2.call(schema196.properties, key0))){
 validate127.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -44298,7 +45250,7 @@ if(data.message !== undefined){
 let data6 = data.message;
 const _errs16 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate127.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema191.properties.message.type},message:"must be string,null"}];
+validate127.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema196.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs16 === errors;
@@ -44327,7 +45279,7 @@ validate127.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!(((data8 === "applied") || (data8 === "refused")) || (data8 === "uncertain"))){
-validate127.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Outcome/enum",keyword:"enum",params:{allowedValues: schema223.enum},message:"must be equal to one of the allowed values"}];
+validate127.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Outcome/enum",keyword:"enum",params:{allowedValues: schema228.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -44367,8 +45319,8 @@ validate127.errors = vErrors;
 return errors === 0;
 }
 
-const schema224 = {"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"};
-const schema225 = {"enum":["refused","uncertain"],"type":"string"};
+const schema229 = {"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"};
+const schema230 = {"enum":["refused","uncertain"],"type":"string"};
 
 function validate157(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -44422,7 +45374,7 @@ validate157.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!((data2 === "refused") || (data2 === "uncertain"))){
-validate157.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Unapplied/enum",keyword:"enum",params:{allowedValues: schema225.enum},message:"must be equal to one of the allowed values"}];
+validate157.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Unapplied/enum",keyword:"enum",params:{allowedValues: schema230.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -44494,10 +45446,10 @@ return errors === 0;
 }
 
 export const socketReply = validate159;
-const schema226 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Reply":{"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"VesselPlacement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"},"VesselStatus":{"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"status","type":"string"},"status":{"$ref":"#/definitions/VesselStatus"}},"required":["kind","status"],"type":"object"},{"additionalProperties":false,"properties":{"focus":{"$ref":"#/definitions/Focus"},"kind":{"const":"focus","type":"string"}},"required":["kind","focus"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"},"reply":{"$ref":"#/definitions/Reply"}},"required":["kind","reply"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"refused","type":"string"},"message":{"type":"string"}},"required":["kind","message"],"type":"object"}],"title":"SocketReply"};
-const schema227 = {"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"};
-const schema228 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"};
-const schema229 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema231 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Arrangement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Entry":{"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"},"Fleet":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"},"Focus":{"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"},"LastUsed":{"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Layout":{"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"},"NameOrigin":{"enum":["automatic","deliberate"],"type":"string"},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Outcome":{"enum":["applied","refused","uncertain"],"type":"string"},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"Phase":{"enum":["ready","saving","incomplete","closed"],"type":"string"},"Placement":{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"Plan":{"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"},"PortalLayout":{"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"Reply":{"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]},"Response":{"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"},"Unanswered":{"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"},"Unapplied":{"enum":["refused","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"VesselPlacement":{"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"},"VesselStatus":{"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"},"WorkspaceView":{"enum":["home","fleet"],"type":"string"}},"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"status","type":"string"},"status":{"$ref":"#/definitions/VesselStatus"}},"required":["kind","status"],"type":"object"},{"additionalProperties":false,"properties":{"focus":{"$ref":"#/definitions/Focus"},"kind":{"const":"focus","type":"string"}},"required":["kind","focus"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"},"reply":{"$ref":"#/definitions/Reply"}},"required":["kind","reply"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"refused","type":"string"},"message":{"type":"string"}},"required":["kind","message"],"type":"object"}],"title":"SocketReply"};
+const schema232 = {"additionalProperties":false,"properties":{"placements":{"items":{"$ref":"#/definitions/VesselPlacement"},"type":"array"},"terminal":{"type":"string"},"version":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","terminal","version","placements"],"type":"object"};
+const schema233 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"placement":{"type":"string"},"voyage":{"type":"string"}},"required":["placement","voyage","owner","name"],"type":"object"};
+const schema234 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
 
 function validate161(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -44903,8 +45855,8 @@ validate160.errors = vErrors;
 return errors === 0;
 }
 
-const schema230 = {"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"};
-const schema231 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema235 = {"additionalProperties":false,"properties":{"cwd":{"type":["string","null"]},"path":{"items":{"type":"string"},"type":"array"},"preview":{"maxLength":8192,"type":["string","null"]},"revision":{"type":"string"},"scope":{"$ref":"#/definitions/Context"}},"required":["scope","path","revision"],"type":"object"};
+const schema236 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
 
 function validate164(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -44930,7 +45882,7 @@ if(data.cwd !== undefined){
 let data0 = data.cwd;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate164.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema230.properties.cwd.type},message:"must be string,null"}];
+validate164.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema235.properties.cwd.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -44973,7 +45925,7 @@ if(data.preview !== undefined){
 let data3 = data.preview;
 const _errs8 = errors;
 if((typeof data3 !== "string") && (data3 !== null)){
-validate164.errors = [{instancePath:instancePath+"/preview",schemaPath:"#/properties/preview/type",keyword:"type",params:{type: schema230.properties.preview.type},message:"must be string,null"}];
+validate164.errors = [{instancePath:instancePath+"/preview",schemaPath:"#/properties/preview/type",keyword:"type",params:{type: schema235.properties.preview.type},message:"must be string,null"}];
 return false;
 }
 if(errors === _errs8){
@@ -45532,12 +46484,12 @@ validate164.errors = vErrors;
 return errors === 0;
 }
 
-const schema232 = {"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]};
-const schema233 = {"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"};
-const schema265 = {"enum":["applied","refused","uncertain"],"type":"string"};
-const schema234 = {"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"};
-const schema235 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"};
-const schema236 = {"enum":["ready","saving","incomplete","closed"],"type":"string"};
+const schema237 = {"anyOf":[{"$ref":"#/definitions/Response"},{"$ref":"#/definitions/Unanswered"}]};
+const schema238 = {"additionalProperties":false,"properties":{"closePlan":{"anyOf":[{"$ref":"#/definitions/Plan"},{"type":"null"}]},"createdVessels":{"items":{"type":"string"},"type":"array"},"createdWorkspace":{"type":"boolean"},"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Outcome"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh","createdWorkspace","createdVessels"],"type":"object"};
+const schema270 = {"enum":["applied","refused","uncertain"],"type":"string"};
+const schema239 = {"additionalProperties":false,"properties":{"entries":{"items":{"$ref":"#/definitions/Entry"},"type":"array"},"id":{"type":"string"},"message":{"type":["string","null"]},"name":{"type":"string"},"phase":{"$ref":"#/definitions/Phase"},"uncommittedChanges":{"default":null,"maximum":4294967295,"minimum":0,"type":["integer","null"]},"version":{"type":"string"},"voyage":{"type":"string"}},"required":["id","voyage","name","version","phase","entries"],"type":"object"};
+const schema240 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"pid":{"maximum":4294967295,"minimum":0,"type":["integer","null"]},"terminal":{"type":["string","null"]},"typeId":{"type":"string"},"vessel":{"type":"string"}},"required":["vessel","name","typeId"],"type":"object"};
+const schema241 = {"enum":["ready","saving","incomplete","closed"],"type":"string"};
 
 function validate168(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -45603,7 +46555,7 @@ if(data1.pid !== undefined){
 let data3 = data1.pid;
 const _errs10 = errors;
 if((!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))) && (data3 !== null)){
-validate168.errors = [{instancePath:instancePath+"/entries/" + i0+"/pid",schemaPath:"#/definitions/Entry/properties/pid/type",keyword:"type",params:{type: schema235.properties.pid.type},message:"must be integer,null"}];
+validate168.errors = [{instancePath:instancePath+"/entries/" + i0+"/pid",schemaPath:"#/definitions/Entry/properties/pid/type",keyword:"type",params:{type: schema240.properties.pid.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs10){
@@ -45630,7 +46582,7 @@ if(data1.terminal !== undefined){
 let data4 = data1.terminal;
 const _errs12 = errors;
 if((typeof data4 !== "string") && (data4 !== null)){
-validate168.errors = [{instancePath:instancePath+"/entries/" + i0+"/terminal",schemaPath:"#/definitions/Entry/properties/terminal/type",keyword:"type",params:{type: schema235.properties.terminal.type},message:"must be string,null"}];
+validate168.errors = [{instancePath:instancePath+"/entries/" + i0+"/terminal",schemaPath:"#/definitions/Entry/properties/terminal/type",keyword:"type",params:{type: schema240.properties.terminal.type},message:"must be string,null"}];
 return false;
 }
 var valid3 = _errs12 === errors;
@@ -45707,7 +46659,7 @@ if(data.message !== undefined){
 let data8 = data.message;
 const _errs20 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate168.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema234.properties.message.type},message:"must be string,null"}];
+validate168.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema239.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -45736,7 +46688,7 @@ validate168.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definiti
 return false;
 }
 if(!((((data10 === "ready") || (data10 === "saving")) || (data10 === "incomplete")) || (data10 === "closed"))){
-validate168.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema236.enum},message:"must be equal to one of the allowed values"}];
+validate168.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema241.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs24 === errors;
@@ -45749,7 +46701,7 @@ if(data.uncommittedChanges !== undefined){
 let data11 = data.uncommittedChanges;
 const _errs27 = errors;
 if((!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))) && (data11 !== null)){
-validate168.errors = [{instancePath:instancePath+"/uncommittedChanges",schemaPath:"#/properties/uncommittedChanges/type",keyword:"type",params:{type: schema234.properties.uncommittedChanges.type},message:"must be integer,null"}];
+validate168.errors = [{instancePath:instancePath+"/uncommittedChanges",schemaPath:"#/properties/uncommittedChanges/type",keyword:"type",params:{type: schema239.properties.uncommittedChanges.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs27){
@@ -45814,13 +46766,13 @@ validate168.errors = vErrors;
 return errors === 0;
 }
 
-const schema237 = {"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"};
-const schema259 = {"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"};
-const schema264 = {"enum":["home","fleet"],"type":"string"};
-const schema238 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"};
-const schema240 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]};
-const schema241 = {"enum":["horizontal","vertical"],"type":"string"};
-const schema242 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema242 = {"additionalProperties":false,"properties":{"arrangements":{"default":[],"items":{"$ref":"#/definitions/Arrangement"},"type":"array"},"canvas":{"allOf":[{"$ref":"#/definitions/Canvas"}],"default":{"portalMode":"overlay","root":{"children":[{"kind":"block","region":"sidebar","size":{"kind":"fixed","pixels":224}},{"children":[{"kind":"block","region":"fleet-strip","size":{"kind":"fixed","pixels":40}},{"children":[{"kind":"block","region":"active-fleet","size":{"kind":"fill"}},{"kind":"block","region":"portals","size":{"kind":"fixed","pixels":340}}],"kind":"row","size":{"kind":"fill"}},{"kind":"block","region":"context-bar","size":{"kind":"content"}}],"kind":"column","size":{"kind":"fill"}}],"kind":"row","size":{"kind":"fill"}},"sidebarCollapsed":false}},"context":{"$ref":"#/definitions/Context"},"home":{"anyOf":[{"$ref":"#/definitions/Voyage"},{"type":"null"}]},"navigation":{"items":{"$ref":"#/definitions/LastUsed"},"type":"array"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"},"view":{"allOf":[{"$ref":"#/definitions/WorkspaceView"}],"default":"fleet"},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","vessels","context","nextId"],"type":"object"};
+const schema264 = {"additionalProperties":false,"properties":{"fleet":{"type":"string"},"vessel":{"type":["string","null"]},"voyage":{"type":"string"}},"required":["voyage","fleet"],"type":"object"};
+const schema269 = {"enum":["home","fleet"],"type":"string"};
+const schema243 = {"additionalProperties":false,"properties":{"name":{"type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["owner","name"],"type":"object"};
+const schema245 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"},"share":{"allOf":[{"$ref":"#/definitions/SplitShare"}],"default":5000}},"required":["kind","axis","first","second"],"type":"object"}]};
+const schema246 = {"enum":["horizontal","vertical"],"type":"string"};
+const schema247 = {"maximum":9999,"minimum":1,"type":"integer"};
 const wrapper14 = {validate: validate172};
 
 function validate172(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -45969,7 +46921,7 @@ vErrors.push(err8);
 errors++;
 }
 if(!((data2 === "horizontal") || (data2 === "vertical"))){
-const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema241.enum},message:"must be equal to one of the allowed values"};
+const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema246.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -46473,11 +47425,11 @@ validate171.errors = vErrors;
 return errors === 0;
 }
 
-const schema243 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema244 = {"enum":["overlay","make-room"],"type":"string"};
-const schema245 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema246 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema249 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema248 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema249 = {"enum":["overlay","make-room"],"type":"string"};
+const schema250 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema251 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema254 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper16 = {validate: validate176};
 
 function validate176(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -47896,7 +48848,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema249.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema254.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -48307,7 +49259,7 @@ validate175.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/def
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate175.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema244.enum},message:"must be equal to one of the allowed values"}];
+validate175.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema249.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -48353,10 +49305,10 @@ validate175.errors = vErrors;
 return errors === 0;
 }
 
-const schema252 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"};
-const schema255 = {"enum":["automatic","deliberate"],"type":"string"};
-const schema253 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"};
-const schema254 = {"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"};
+const schema257 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"closedOrder":{"default":"0","type":"string"},"cwd":{"type":["string","null"]},"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"allOf":[{"$ref":"#/definitions/NameOrigin"}],"default":"deliberate"},"portalLayout":{"anyOf":[{"$ref":"#/definitions/PortalLayout"},{"type":"null"}]},"portals":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"primaryPlacement":{"type":["string","null"]}},"required":["id","name","fleets","portals"],"type":"object"};
+const schema260 = {"enum":["automatic","deliberate"],"type":"string"};
+const schema258 = {"additionalProperties":false,"properties":{"closed":{"type":"boolean"},"id":{"type":"string"},"maximizedPlacement":{"type":["string","null"]},"name":{"type":"string"},"placements":{"items":{"$ref":"#/definitions/Placement"},"type":"array"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]}},"required":["id","name","placements"],"type":"object"};
+const schema259 = {"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"name":{"type":"string"},"nameOrigin":{"$ref":"#/definitions/NameOrigin"},"vessel":{"type":"string"}},"required":["id","vessel","name"],"type":"object"};
 
 function validate181(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -48422,7 +49374,7 @@ validate181.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/def
 return false;
 }
 if(!((data3 === "automatic") || (data3 === "deliberate"))){
-validate181.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema255.enum},message:"must be equal to one of the allowed values"}];
+validate181.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema260.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs8 === errors;
@@ -48507,7 +49459,7 @@ if(data.maximizedPlacement !== undefined){
 let data2 = data.maximizedPlacement;
 const _errs6 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate180.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema253.properties.maximizedPlacement.type},message:"must be string,null"}];
+validate180.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema258.properties.maximizedPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -48630,7 +49582,7 @@ validate180.errors = vErrors;
 return errors === 0;
 }
 
-const schema257 = {"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"};
+const schema262 = {"additionalProperties":false,"properties":{"maximizedPlacement":{"type":["string","null"]},"mode":{"$ref":"#/definitions/PortalMode"},"root":{"anyOf":[{"$ref":"#/definitions/Split"},{"type":"null"}]},"visible":{"type":"boolean"},"width":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["visible","mode","width"],"type":"object"};
 
 function validate185(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -48656,7 +49608,7 @@ if(data.maximizedPlacement !== undefined){
 let data0 = data.maximizedPlacement;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate185.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema257.properties.maximizedPlacement.type},message:"must be string,null"}];
+validate185.errors = [{instancePath:instancePath+"/maximizedPlacement",schemaPath:"#/properties/maximizedPlacement/type",keyword:"type",params:{type: schema262.properties.maximizedPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -48673,7 +49625,7 @@ validate185.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitio
 return false;
 }
 if(!((data1 === "overlay") || (data1 === "make-room"))){
-validate185.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema244.enum},message:"must be equal to one of the allowed values"}];
+validate185.errors = [{instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema249.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -48806,7 +49758,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema252.properties, key0))){
+if(!(func2.call(schema257.properties, key0))){
 validate179.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -48841,7 +49793,7 @@ if(data.cwd !== undefined){
 let data2 = data.cwd;
 const _errs6 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate179.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema252.properties.cwd.type},message:"must be string,null"}];
+validate179.errors = [{instancePath:instancePath+"/cwd",schemaPath:"#/properties/cwd/type",keyword:"type",params:{type: schema257.properties.cwd.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -48912,7 +49864,7 @@ validate179.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/def
 return false;
 }
 if(!((data7 === "automatic") || (data7 === "deliberate"))){
-validate179.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema255.enum},message:"must be equal to one of the allowed values"}];
+validate179.errors = [{instancePath:instancePath+"/nameOrigin",schemaPath:"#/definitions/NameOrigin/enum",keyword:"enum",params:{allowedValues: schema260.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs15 === errors;
@@ -49011,7 +49963,7 @@ if(data.primaryPlacement !== undefined){
 let data11 = data.primaryPlacement;
 const _errs27 = errors;
 if((typeof data11 !== "string") && (data11 !== null)){
-validate179.errors = [{instancePath:instancePath+"/primaryPlacement",schemaPath:"#/properties/primaryPlacement/type",keyword:"type",params:{type: schema252.properties.primaryPlacement.type},message:"must be string,null"}];
+validate179.errors = [{instancePath:instancePath+"/primaryPlacement",schemaPath:"#/properties/primaryPlacement/type",keyword:"type",params:{type: schema257.properties.primaryPlacement.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs27 === errors;
@@ -49040,10 +49992,10 @@ validate179.errors = vErrors;
 return errors === 0;
 }
 
-const schema260 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
-const schema261 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema262 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema263 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema265 = {"additionalProperties":false,"properties":{"adopted":{"type":"boolean"},"backend":{"type":["string","null"]},"configuration":{"additionalProperties":true,"type":["object","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"shellIntent":{"type":["string","null"]},"startPending":{"type":["string","null"]},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
+const schema266 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema267 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema268 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate191(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -49167,7 +50119,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema262.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema267.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -49243,7 +50195,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema263.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema268.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -49452,7 +50404,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema260.properties, key0))){
+if(!(func2.call(schema265.properties, key0))){
 validate190.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -49475,7 +50427,7 @@ if(data.backend !== undefined){
 let data1 = data.backend;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate190.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema260.properties.backend.type},message:"must be string,null"}];
+validate190.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema265.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -49488,7 +50440,7 @@ if(data.configuration !== undefined){
 let data2 = data.configuration;
 const _errs6 = errors;
 if((!(data2 && typeof data2 == "object" && !Array.isArray(data2))) && (data2 !== null)){
-validate190.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema260.properties.configuration.type},message:"must be object,null"}];
+validate190.errors = [{instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: schema265.properties.configuration.type},message:"must be object,null"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -49581,7 +50533,7 @@ if(data.shellIntent !== undefined){
 let data6 = data.shellIntent;
 const _errs18 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate190.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema260.properties.shellIntent.type},message:"must be string,null"}];
+validate190.errors = [{instancePath:instancePath+"/shellIntent",schemaPath:"#/properties/shellIntent/type",keyword:"type",params:{type: schema265.properties.shellIntent.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs18 === errors;
@@ -49594,7 +50546,7 @@ if(data.startPending !== undefined){
 let data7 = data.startPending;
 const _errs20 = errors;
 if((typeof data7 !== "string") && (data7 !== null)){
-validate190.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema260.properties.startPending.type},message:"must be string,null"}];
+validate190.errors = [{instancePath:instancePath+"/startPending",schemaPath:"#/properties/startPending/type",keyword:"type",params:{type: schema265.properties.startPending.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -49648,7 +50600,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema237.properties, key0))){
+if(!(func2.call(schema242.properties, key0))){
 validate170.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -50312,7 +51264,7 @@ if(data15.vessel !== undefined){
 let data17 = data15.vessel;
 const _errs56 = errors;
 if((typeof data17 !== "string") && (data17 !== null)){
-validate170.errors = [{instancePath:instancePath+"/navigation/" + i1+"/vessel",schemaPath:"#/definitions/LastUsed/properties/vessel/type",keyword:"type",params:{type: schema259.properties.vessel.type},message:"must be string,null"}];
+validate170.errors = [{instancePath:instancePath+"/navigation/" + i1+"/vessel",schemaPath:"#/definitions/LastUsed/properties/vessel/type",keyword:"type",params:{type: schema264.properties.vessel.type},message:"must be string,null"}];
 return false;
 }
 var valid13 = _errs56 === errors;
@@ -50375,7 +51327,7 @@ if(data.selectedFleet !== undefined){
 let data20 = data.selectedFleet;
 const _errs62 = errors;
 if((typeof data20 !== "string") && (data20 !== null)){
-validate170.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema237.properties.selectedFleet.type},message:"must be string,null"}];
+validate170.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema242.properties.selectedFleet.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs62 === errors;
@@ -50388,7 +51340,7 @@ if(data.selectedVoyage !== undefined){
 let data21 = data.selectedVoyage;
 const _errs64 = errors;
 if((typeof data21 !== "string") && (data21 !== null)){
-validate170.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema237.properties.selectedVoyage.type},message:"must be string,null"}];
+validate170.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema242.properties.selectedVoyage.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs64 === errors;
@@ -50435,7 +51387,7 @@ validate170.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitio
 return false;
 }
 if(!((data24 === "home") || (data24 === "fleet"))){
-validate170.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitions/WorkspaceView/enum",keyword:"enum",params:{allowedValues: schema264.enum},message:"must be equal to one of the allowed values"}];
+validate170.errors = [{instancePath:instancePath+"/view",schemaPath:"#/definitions/WorkspaceView/enum",keyword:"enum",params:{allowedValues: schema269.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs69 === errors;
@@ -50509,7 +51461,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema233.properties, key0))){
+if(!(func2.call(schema238.properties, key0))){
 validate167.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -50642,7 +51594,7 @@ if(data.message !== undefined){
 let data6 = data.message;
 const _errs16 = errors;
 if((typeof data6 !== "string") && (data6 !== null)){
-validate167.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema233.properties.message.type},message:"must be string,null"}];
+validate167.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema238.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs16 === errors;
@@ -50671,7 +51623,7 @@ validate167.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!(((data8 === "applied") || (data8 === "refused")) || (data8 === "uncertain"))){
-validate167.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Outcome/enum",keyword:"enum",params:{allowedValues: schema265.enum},message:"must be equal to one of the allowed values"}];
+validate167.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Outcome/enum",keyword:"enum",params:{allowedValues: schema270.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs20 === errors;
@@ -50711,8 +51663,8 @@ validate167.errors = vErrors;
 return errors === 0;
 }
 
-const schema266 = {"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"};
-const schema267 = {"enum":["refused","uncertain"],"type":"string"};
+const schema271 = {"additionalProperties":false,"properties":{"message":{"type":"string"},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Unapplied"}},"required":["requestId","status","message"],"type":"object"};
+const schema272 = {"enum":["refused","uncertain"],"type":"string"};
 
 function validate197(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -50766,7 +51718,7 @@ validate197.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!((data2 === "refused") || (data2 === "uncertain"))){
-validate197.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Unapplied/enum",keyword:"enum",params:{allowedValues: schema267.enum},message:"must be equal to one of the allowed values"}];
+validate197.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Unapplied/enum",keyword:"enum",params:{allowedValues: schema272.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs6 === errors;
@@ -51256,21 +52208,21 @@ return errors === 0;
 }
 
 export const socketRequest = validate200;
-const schema268 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Request":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"type":"object"},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"oneOf":[{"additionalProperties":false,"properties":{"command":{"const":"status","type":"string"}},"required":["command"],"type":"object"},{"additionalProperties":false,"properties":{"command":{"const":"focus","type":"string"}},"required":["command"],"type":"object"},{"additionalProperties":false,"properties":{"command":{"const":"workspace","type":"string"},"request":{"$ref":"#/definitions/Request"}},"required":["command","request"],"type":"object"}],"title":"SocketRequest"};
-const schema269 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"type":"object"};
-const schema270 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
-const schema279 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
-const schema281 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
-const schema290 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema292 = {"enum":["first","second"],"type":"string"};
-const schema293 = {"maximum":9999,"minimum":1,"type":"integer"};
-const schema288 = {"enum":["left","right","top","bottom"],"type":"string"};
-const schema295 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema272 = {"enum":["overlay","make-room"],"type":"string"};
-const schema271 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema273 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema274 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema277 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema273 = {"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Request":{"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"type":"object"},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"oneOf":[{"additionalProperties":false,"properties":{"command":{"const":"status","type":"string"}},"required":["command"],"type":"object"},{"additionalProperties":false,"properties":{"command":{"const":"focus","type":"string"}},"required":["command"],"type":"object"},{"additionalProperties":false,"properties":{"command":{"const":"workspace","type":"string"},"request":{"$ref":"#/definitions/Request"}},"required":["command","request"],"type":"object"}],"title":"SocketRequest"};
+const schema274 = {"additionalProperties":false,"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"type":"object"};
+const schema275 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
+const schema284 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema286 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
+const schema295 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema297 = {"enum":["first","second"],"type":"string"};
+const schema298 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema293 = {"enum":["left","right","top","bottom"],"type":"string"};
+const schema300 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema277 = {"enum":["overlay","make-room"],"type":"string"};
+const schema276 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema278 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema279 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema282 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper19 = {validate: validate204};
 
 function validate204(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -52689,7 +53641,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema277.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema282.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -53100,7 +54052,7 @@ validate203.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/def
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate203.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema272.enum},message:"must be equal to one of the allowed values"}];
+validate203.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema277.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -53146,9 +54098,9 @@ validate203.errors = vErrors;
 return errors === 0;
 }
 
-const schema282 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema283 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema284 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema287 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema288 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema289 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate207(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -53272,7 +54224,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema283.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema288.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -53348,7 +54300,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema284.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema289.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -53543,8 +54495,8 @@ validate207.errors = vErrors;
 return errors === 0;
 }
 
-const schema286 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
-const schema287 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
+const schema291 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
+const schema292 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
 
 function validate210(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -53715,7 +54667,7 @@ vErrors.push(err10);
 errors++;
 }
 if(!((((data3 === "left") || (data3 === "right")) || (data3 === "top")) || (data3 === "bottom"))){
-const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema288.enum},message:"must be equal to one of the allowed values"};
+const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema293.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -57919,7 +58871,7 @@ vErrors.push(err214);
 errors++;
 }
 if(!((data87 === "first") || (data87 === "second"))){
-const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema292.enum},message:"must be equal to one of the allowed values"};
+const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema297.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err215];
 }
@@ -58115,7 +59067,7 @@ vErrors.push(err226);
 errors++;
 }
 if(!((((data91 === "left") || (data91 === "right")) || (data91 === "top")) || (data91 === "bottom"))){
-const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema288.enum},message:"must be equal to one of the allowed values"};
+const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema293.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err227];
 }
@@ -60931,7 +61883,7 @@ vErrors.push(err390);
 errors++;
 }
 if(!((data152 === "overlay") || (data152 === "make-room"))){
-const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema272.enum},message:"must be equal to one of the allowed values"};
+const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema277.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err391];
 }
@@ -61017,7 +61969,7 @@ if(data.visible !== undefined){
 let data154 = data.visible;
 const _errs505 = errors;
 if((typeof data154 !== "boolean") && (data154 !== null)){
-const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema270.oneOf[35].properties.visible.type},message:"must be boolean,null"};
+const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema275.oneOf[35].properties.visible.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err396];
 }
@@ -61054,7 +62006,7 @@ if(data.width !== undefined){
 let data156 = data.width;
 const _errs509 = errors;
 if((!(((typeof data156 == "number") && (!(data156 % 1) && !isNaN(data156))) && (isFinite(data156)))) && (data156 !== null)){
-const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema270.oneOf[35].properties.width.type},message:"must be integer,null"};
+const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema275.oneOf[35].properties.width.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err398];
 }
@@ -61535,7 +62487,7 @@ return errors === 0;
 }
 
 export const terminalRequest = validate217;
-const schema298 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"requestId":{"type":"string"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","expectedVersion"],"title":"TerminalRequest","type":"object"};
+const schema303 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"properties":{"expectedVersion":{"type":"string"},"requestId":{"type":"string"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","expectedVersion"],"title":"TerminalRequest","type":"object"};
 
 function validate217(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -61607,9 +62559,9 @@ return errors === 0;
 }
 
 export const terminalResponse = validate218;
-const schema299 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"TerminalReason":{"enum":["ended","changed"],"type":"string"}},"properties":{"message":{"type":["string","null"]},"reason":{"anyOf":[{"$ref":"#/definitions/TerminalReason"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","status"],"title":"TerminalResponse","type":"object"};
-const schema300 = {"enum":["ended","changed"],"type":"string"};
-const schema301 = {"enum":["applied","rejected","uncertain"],"type":"string"};
+const schema304 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"TerminalReason":{"enum":["ended","changed"],"type":"string"}},"properties":{"message":{"type":["string","null"]},"reason":{"anyOf":[{"$ref":"#/definitions/TerminalReason"},{"type":"null"}]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"vesselId":{"type":"string"}},"required":["requestId","vesselId","status"],"title":"TerminalResponse","type":"object"};
+const schema305 = {"enum":["ended","changed"],"type":"string"};
+const schema306 = {"enum":["applied","rejected","uncertain"],"type":"string"};
 
 function validate218(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -61635,7 +62587,7 @@ if(data.message !== undefined){
 let data0 = data.message;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate218.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema299.properties.message.type},message:"must be string,null"}];
+validate218.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema304.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -61661,7 +62613,7 @@ vErrors.push(err0);
 errors++;
 }
 if(!((data1 === "ended") || (data1 === "changed"))){
-const err1 = {instancePath:instancePath+"/reason",schemaPath:"#/definitions/TerminalReason/enum",keyword:"enum",params:{allowedValues: schema300.enum},message:"must be equal to one of the allowed values"};
+const err1 = {instancePath:instancePath+"/reason",schemaPath:"#/definitions/TerminalReason/enum",keyword:"enum",params:{allowedValues: schema305.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err1];
 }
@@ -61736,7 +62688,7 @@ validate218.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!(((data3 === "applied") || (data3 === "rejected")) || (data3 === "uncertain"))){
-validate218.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema301.enum},message:"must be equal to one of the allowed values"}];
+validate218.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema306.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs13 === errors;
@@ -61773,9 +62725,9 @@ return errors === 0;
 }
 
 export const voiceState = validate219;
-const schema302 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Capability":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"checking","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"},"reason":{"type":"string"}},"required":["kind","reason"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"candidate","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"compatible","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"}]},"Phase":{"enum":["off","preparing","negotiating","active","stopping","failed","unconfirmed"],"type":"string"}},"properties":{"capability":{"$ref":"#/definitions/Capability"},"error":{"type":["string","null"]},"generation":{"type":"string"},"microphonePeak":{"maximum":65535,"minimum":0,"type":"integer"},"phase":{"$ref":"#/definitions/Phase"},"realtimeSession":{"type":["string","null"]},"speakerPeak":{"maximum":65535,"minimum":0,"type":"integer"},"thread":{"type":["string","null"]},"turn":{"type":["string","null"]},"version":{"type":"string"}},"required":["version","generation","phase","capability","microphonePeak","speakerPeak"],"title":"State","type":"object"};
-const schema303 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"checking","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"},"reason":{"type":"string"}},"required":["kind","reason"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"candidate","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"compatible","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"}]};
-const schema304 = {"enum":["off","preparing","negotiating","active","stopping","failed","unconfirmed"],"type":"string"};
+const schema307 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Capability":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"checking","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"},"reason":{"type":"string"}},"required":["kind","reason"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"candidate","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"compatible","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"}]},"Phase":{"enum":["off","preparing","negotiating","active","stopping","failed","unconfirmed"],"type":"string"}},"properties":{"capability":{"$ref":"#/definitions/Capability"},"error":{"type":["string","null"]},"generation":{"type":"string"},"microphonePeak":{"maximum":65535,"minimum":0,"type":"integer"},"phase":{"$ref":"#/definitions/Phase"},"realtimeSession":{"type":["string","null"]},"speakerPeak":{"maximum":65535,"minimum":0,"type":"integer"},"thread":{"type":["string","null"]},"turn":{"type":["string","null"]},"version":{"type":"string"}},"required":["version","generation","phase","capability","microphonePeak","speakerPeak"],"title":"State","type":"object"};
+const schema308 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"checking","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"},"reason":{"type":"string"}},"required":["kind","reason"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"candidate","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"compatible","type":"string"},"version":{"type":"string"}},"required":["kind","version"],"type":"object"}]};
+const schema309 = {"enum":["off","preparing","negotiating","active","stopping","failed","unconfirmed"],"type":"string"};
 
 function validate219(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -61790,7 +62742,7 @@ return false;
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(func2.call(schema302.properties, key0))){
+if(!(func2.call(schema307.properties, key0))){
 validate219.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -62214,7 +63166,7 @@ if(data.error !== undefined){
 let data8 = data.error;
 const _errs31 = errors;
 if((typeof data8 !== "string") && (data8 !== null)){
-validate219.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema302.properties.error.type},message:"must be string,null"}];
+validate219.errors = [{instancePath:instancePath+"/error",schemaPath:"#/properties/error/type",keyword:"type",params:{type: schema307.properties.error.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs31 === errors;
@@ -62270,7 +63222,7 @@ validate219.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definiti
 return false;
 }
 if(!(((((((data11 === "off") || (data11 === "preparing")) || (data11 === "negotiating")) || (data11 === "active")) || (data11 === "stopping")) || (data11 === "failed")) || (data11 === "unconfirmed"))){
-validate219.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema304.enum},message:"must be equal to one of the allowed values"}];
+validate219.errors = [{instancePath:instancePath+"/phase",schemaPath:"#/definitions/Phase/enum",keyword:"enum",params:{allowedValues: schema309.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs37 === errors;
@@ -62283,7 +63235,7 @@ if(data.realtimeSession !== undefined){
 let data12 = data.realtimeSession;
 const _errs40 = errors;
 if((typeof data12 !== "string") && (data12 !== null)){
-validate219.errors = [{instancePath:instancePath+"/realtimeSession",schemaPath:"#/properties/realtimeSession/type",keyword:"type",params:{type: schema302.properties.realtimeSession.type},message:"must be string,null"}];
+validate219.errors = [{instancePath:instancePath+"/realtimeSession",schemaPath:"#/properties/realtimeSession/type",keyword:"type",params:{type: schema307.properties.realtimeSession.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs40 === errors;
@@ -62323,7 +63275,7 @@ if(data.thread !== undefined){
 let data14 = data.thread;
 const _errs44 = errors;
 if((typeof data14 !== "string") && (data14 !== null)){
-validate219.errors = [{instancePath:instancePath+"/thread",schemaPath:"#/properties/thread/type",keyword:"type",params:{type: schema302.properties.thread.type},message:"must be string,null"}];
+validate219.errors = [{instancePath:instancePath+"/thread",schemaPath:"#/properties/thread/type",keyword:"type",params:{type: schema307.properties.thread.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs44 === errors;
@@ -62336,7 +63288,7 @@ if(data.turn !== undefined){
 let data15 = data.turn;
 const _errs46 = errors;
 if((typeof data15 !== "string") && (data15 !== null)){
-validate219.errors = [{instancePath:instancePath+"/turn",schemaPath:"#/properties/turn/type",keyword:"type",params:{type: schema302.properties.turn.type},message:"must be string,null"}];
+validate219.errors = [{instancePath:instancePath+"/turn",schemaPath:"#/properties/turn/type",keyword:"type",params:{type: schema307.properties.turn.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs46 === errors;
@@ -62378,10 +63330,10 @@ return errors === 0;
 }
 
 export const workspaceObservation = validate220;
-const schema305 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Branch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"Directory":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"live","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"voyage","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"starting","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"PlacementObservation":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"conversationName":{"type":["string","null"]},"directory":{"$ref":"#/definitions/Directory"},"effectiveName":{"type":"string"},"placementId":{"type":"string"},"program":{"type":["string","null"]},"vesselId":{"type":"string"}},"required":["placementId","vesselId","directory","effectiveName"],"type":"object"}},"properties":{"active":{"type":["string","null"]},"branch":{"$ref":"#/definitions/Branch"},"directory":{"$ref":"#/definitions/Directory"},"panels":{"items":{"$ref":"#/definitions/PlacementObservation"},"type":"array"},"version":{"type":"string"}},"required":["version","directory","panels","branch"],"title":"WorkspaceObservation","type":"object"};
-const schema306 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
-const schema307 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"live","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"voyage","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"starting","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
-const schema308 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"conversationName":{"type":["string","null"]},"directory":{"$ref":"#/definitions/Directory"},"effectiveName":{"type":"string"},"placementId":{"type":"string"},"program":{"type":["string","null"]},"vesselId":{"type":"string"}},"required":["placementId","vesselId","directory","effectiveName"],"type":"object"};
+const schema310 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Branch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"Directory":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"live","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"voyage","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"starting","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]},"PlacementObservation":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"conversationName":{"type":["string","null"]},"directory":{"$ref":"#/definitions/Directory"},"effectiveName":{"type":"string"},"placementId":{"type":"string"},"program":{"type":["string","null"]},"vesselId":{"type":"string"}},"required":["placementId","vesselId","directory","effectiveName"],"type":"object"}},"properties":{"active":{"type":["string","null"]},"branch":{"$ref":"#/definitions/Branch"},"directory":{"$ref":"#/definitions/Directory"},"panels":{"items":{"$ref":"#/definitions/PlacementObservation"},"type":"array"},"version":{"type":"string"}},"required":["version","directory","panels","branch"],"title":"WorkspaceObservation","type":"object"};
+const schema311 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"named","type":"string"},"name":{"type":"string"}},"required":["kind","name"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"detached","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
+const schema312 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"live","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"voyage","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"starting","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"unavailable","type":"string"}},"required":["kind"],"type":"object"}]};
+const schema313 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"conversationName":{"type":["string","null"]},"directory":{"$ref":"#/definitions/Directory"},"effectiveName":{"type":"string"},"placementId":{"type":"string"},"program":{"type":["string","null"]},"vesselId":{"type":"string"}},"required":["placementId","vesselId","directory","effectiveName"],"type":"object"};
 
 function validate221(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -62407,7 +63359,7 @@ if(data.backend !== undefined){
 let data0 = data.backend;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate221.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema308.properties.backend.type},message:"must be string,null"}];
+validate221.errors = [{instancePath:instancePath+"/backend",schemaPath:"#/properties/backend/type",keyword:"type",params:{type: schema313.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -62420,7 +63372,7 @@ if(data.conversationName !== undefined){
 let data1 = data.conversationName;
 const _errs4 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate221.errors = [{instancePath:instancePath+"/conversationName",schemaPath:"#/properties/conversationName/type",keyword:"type",params:{type: schema308.properties.conversationName.type},message:"must be string,null"}];
+validate221.errors = [{instancePath:instancePath+"/conversationName",schemaPath:"#/properties/conversationName/type",keyword:"type",params:{type: schema313.properties.conversationName.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs4 === errors;
@@ -62870,7 +63822,7 @@ if(data.program !== undefined){
 let data12 = data.program;
 const _errs39 = errors;
 if((typeof data12 !== "string") && (data12 !== null)){
-validate221.errors = [{instancePath:instancePath+"/program",schemaPath:"#/properties/program/type",keyword:"type",params:{type: schema308.properties.program.type},message:"must be string,null"}];
+validate221.errors = [{instancePath:instancePath+"/program",schemaPath:"#/properties/program/type",keyword:"type",params:{type: schema313.properties.program.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs39 === errors;
@@ -62933,7 +63885,7 @@ if(data.active !== undefined){
 let data0 = data.active;
 const _errs2 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate220.errors = [{instancePath:instancePath+"/active",schemaPath:"#/properties/active/type",keyword:"type",params:{type: schema305.properties.active.type},message:"must be string,null"}];
+validate220.errors = [{instancePath:instancePath+"/active",schemaPath:"#/properties/active/type",keyword:"type",params:{type: schema310.properties.active.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -63700,20 +64652,20 @@ return errors === 0;
 }
 
 export const workspaceTool = validate223;
-const schema310 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"WorkspaceInput","type":"object"};
-const schema311 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
-const schema320 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
-const schema322 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
-const schema331 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema333 = {"enum":["first","second"],"type":"string"};
-const schema334 = {"maximum":9999,"minimum":1,"type":"integer"};
-const schema329 = {"enum":["left","right","top","bottom"],"type":"string"};
-const schema336 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema313 = {"enum":["overlay","make-room"],"type":"string"};
-const schema312 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
-const schema314 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
-const schema315 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
-const schema318 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
+const schema315 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]},"Canvas":{"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"},"ContentDestination":{"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"DirectorySource":{"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]},"Effort":{"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"},"Launch":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]},"Node":{"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]},"Permissions":{"enum":["yolo","workspace-write","read-only"],"type":"string"},"PlacementInsertion":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]},"PlacementOwner":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]},"PortalMode":{"enum":["overlay","make-room"],"type":"string"},"Region":{"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Side":{"enum":["left","right","top","bottom"],"type":"string"},"Size":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]},"SplitChild":{"enum":["first","second"],"type":"string"},"SplitShare":{"maximum":9999,"minimum":1,"type":"integer"}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"}},"required":["expectedVersion","action"],"title":"WorkspaceInput","type":"object"};
+const schema316 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"home","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"canvas":{"$ref":"#/definitions/Canvas"},"operation":{"const":"update-canvas","type":"string"}},"required":["operation","canvas"],"type":"object"},{"additionalProperties":false,"properties":{"collapsed":{"type":"boolean"},"operation":{"const":"set-sidebar","type":"string"}},"required":["operation","collapsed"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"save-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"load-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-voyage-from-source","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"}},"required":["operation","source"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"name":{"type":"string"},"operation":{"const":"create-fleet-with-vessel","type":"string"},"source":{"$ref":"#/definitions/DirectorySource"},"typeId":{"type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name","source","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"launch":{"anyOf":[{"$ref":"#/definitions/Launch"},{"type":"null"}]},"operation":{"const":"create-vessel","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId","destination"],"type":"object"},{"additionalProperties":false,"properties":{"expectedBackend":{"type":"string"},"operation":{"const":"start-new-shell","type":"string"},"vesselId":{"type":"string"}},"required":["operation","vesselId","expectedBackend"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"restore-vessel-package","type":"string"},"typeId":{"type":"string"}},"required":["operation","typeId"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"resize-placement-split","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"},"path":{"items":{"$ref":"#/definitions/SplitChild"},"maxItems":128,"type":"array"},"share":{"$ref":"#/definitions/SplitShare"}},"required":["operation","owner","path","share"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"move-placement","type":"string"},"side":{"$ref":"#/definitions/Side"},"target":{"type":"string"}},"required":["operation","id","target","side"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-voyage","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"before":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"move-fleet","type":"string"},"target":{"type":"string"}},"required":["operation","id","target","before"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"confirm-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"cancel-voyage-close","type":"string"},"plan":{"type":"string"}},"required":["operation","id","plan"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"focus-vessel","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"close-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reopen-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"reveal-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"destination":{"$ref":"#/definitions/ContentDestination"},"id":{"type":"string"},"operation":{"const":"reopen-placement","type":"string"}},"required":["operation","id","destination"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"maximized":{"type":"boolean"},"operation":{"const":"set-placement-maximized","type":"string"}},"required":["operation","id","maximized"],"type":"object"},{"additionalProperties":false,"properties":{"hidden":{"type":"boolean"},"id":{"type":"string"},"operation":{"const":"set-placement-hidden","type":"string"}},"required":["operation","id","hidden"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"remove-placement","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"remove-arrangement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["operation","owner","name"],"type":"object"},{"additionalProperties":false,"properties":{"mode":{"anyOf":[{"$ref":"#/definitions/PortalMode"},{"type":"null"}]},"operation":{"const":"set-portal-presentation","type":"string"},"visible":{"type":["boolean","null"]},"voyage":{"type":"string"},"width":{"maximum":4096,"minimum":1,"type":["integer","null"]}},"required":["operation","voyage"],"type":"object"}]};
+const schema325 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"portals","type":"string"},"voyage":{"type":"string"}},"required":["kind","voyage"],"type":"object"}]};
+const schema327 = {"oneOf":[{"additionalProperties":false,"properties":{"backend":{"type":"string"},"cwd":{"type":"string"},"kind":{"const":"live","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","backend","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"voyage","type":"string"},"voyageId":{"type":"string"}},"required":["kind","voyageId","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"kind":{"const":"starting","type":"string"},"placementId":{"type":"string"},"vesselId":{"type":"string"}},"required":["kind","placementId","vesselId","cwd"],"type":"object"}]};
+const schema336 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema338 = {"enum":["first","second"],"type":"string"};
+const schema339 = {"maximum":9999,"minimum":1,"type":"integer"};
+const schema334 = {"enum":["left","right","top","bottom"],"type":"string"};
+const schema341 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema318 = {"enum":["overlay","make-room"],"type":"string"};
+const schema317 = {"additionalProperties":false,"properties":{"portalMode":{"allOf":[{"$ref":"#/definitions/PortalMode"}],"default":"overlay"},"root":{"$ref":"#/definitions/Node"},"sidebarCollapsed":{"default":false,"type":"boolean"}},"required":["root"],"type":"object"};
+const schema319 = {"oneOf":[{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"row","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"column","type":"string"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","children"],"type":"object"},{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/definitions/Node"},"type":"array"},"kind":{"const":"stack","type":"string"},"selected":{"maximum":65535,"minimum":0,"type":"integer"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","selected","children"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"block","type":"string"},"region":{"$ref":"#/definitions/Region"},"size":{"allOf":[{"$ref":"#/definitions/Size"}],"default":{"kind":"fill"}}},"required":["kind","region"],"type":"object"}]};
+const schema320 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"fill","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"content","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"fixed","type":"string"},"pixels":{"maximum":4096,"minimum":1,"type":"integer"}},"required":["kind","pixels"],"type":"object"}]};
+const schema323 = {"enum":["sidebar","fleet-strip","active-fleet","portals","context-bar"],"type":"string"};
 const wrapper22 = {validate: validate226};
 
 function validate226(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -65132,7 +66084,7 @@ vErrors.push(err82);
 errors++;
 }
 if(!(((((data26 === "sidebar") || (data26 === "fleet-strip")) || (data26 === "active-fleet")) || (data26 === "portals")) || (data26 === "context-bar"))){
-const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema318.enum},message:"must be equal to one of the allowed values"};
+const err83 = {instancePath:instancePath+"/region",schemaPath:"#/definitions/Region/enum",keyword:"enum",params:{allowedValues: schema323.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -65543,7 +66495,7 @@ validate225.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/def
 return false;
 }
 if(!((data0 === "overlay") || (data0 === "make-room"))){
-validate225.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema313.enum},message:"must be equal to one of the allowed values"}];
+validate225.errors = [{instancePath:instancePath+"/portalMode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema318.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs2 === errors;
@@ -65589,9 +66541,9 @@ validate225.errors = vErrors;
 return errors === 0;
 }
 
-const schema323 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
-const schema324 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
-const schema325 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
+const schema328 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"terminal","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"effort":{"allOf":[{"$ref":"#/definitions/Effort"}],"default":"high"},"kind":{"const":"codex","type":"string"},"model":{"default":"gpt-6.1-sol","type":"string"},"permissions":{"allOf":[{"$ref":"#/definitions/Permissions"}],"default":"yolo"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"argv":{"items":{"type":"string"},"type":"array"},"kind":{"const":"program","type":"string"}},"required":["kind","argv"],"type":"object"}]};
+const schema329 = {"enum":["low","medium","high","xhigh","max","ultra"],"type":"string"};
+const schema330 = {"enum":["yolo","workspace-write","read-only"],"type":"string"};
 
 function validate229(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -65715,7 +66667,7 @@ vErrors.push(err7);
 errors++;
 }
 if(!((((((data1 === "low") || (data1 === "medium")) || (data1 === "high")) || (data1 === "xhigh")) || (data1 === "max")) || (data1 === "ultra"))){
-const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema324.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/effort",schemaPath:"#/definitions/Effort/enum",keyword:"enum",params:{allowedValues: schema329.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -65791,7 +66743,7 @@ vErrors.push(err12);
 errors++;
 }
 if(!(((data4 === "yolo") || (data4 === "workspace-write")) || (data4 === "read-only"))){
-const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema325.enum},message:"must be equal to one of the allowed values"};
+const err13 = {instancePath:instancePath+"/permissions",schemaPath:"#/definitions/Permissions/enum",keyword:"enum",params:{allowedValues: schema330.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -65986,8 +66938,8 @@ validate229.errors = vErrors;
 return errors === 0;
 }
 
-const schema327 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
-const schema328 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
+const schema332 = {"oneOf":[{"additionalProperties":false,"properties":{"insertion":{"$ref":"#/definitions/PlacementInsertion"},"kind":{"const":"placement","type":"string"},"owner":{"$ref":"#/definitions/PlacementOwner"}},"required":["kind","owner","insertion"],"type":"object"}]};
+const schema333 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"empty","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"beside","type":"string"},"side":{"$ref":"#/definitions/Side"}},"required":["kind","id","side"],"type":"object"}]};
 
 function validate232(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -66158,7 +67110,7 @@ vErrors.push(err10);
 errors++;
 }
 if(!((((data3 === "left") || (data3 === "right")) || (data3 === "top")) || (data3 === "bottom"))){
-const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema329.enum},message:"must be equal to one of the allowed values"};
+const err11 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema334.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -70362,7 +71314,7 @@ vErrors.push(err214);
 errors++;
 }
 if(!((data87 === "first") || (data87 === "second"))){
-const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema333.enum},message:"must be equal to one of the allowed values"};
+const err215 = {instancePath:instancePath+"/path/" + i0,schemaPath:"#/definitions/SplitChild/enum",keyword:"enum",params:{allowedValues: schema338.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err215];
 }
@@ -70558,7 +71510,7 @@ vErrors.push(err226);
 errors++;
 }
 if(!((((data91 === "left") || (data91 === "right")) || (data91 === "top")) || (data91 === "bottom"))){
-const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema329.enum},message:"must be equal to one of the allowed values"};
+const err227 = {instancePath:instancePath+"/side",schemaPath:"#/definitions/Side/enum",keyword:"enum",params:{allowedValues: schema334.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err227];
 }
@@ -73374,7 +74326,7 @@ vErrors.push(err390);
 errors++;
 }
 if(!((data152 === "overlay") || (data152 === "make-room"))){
-const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema313.enum},message:"must be equal to one of the allowed values"};
+const err391 = {instancePath:instancePath+"/mode",schemaPath:"#/definitions/PortalMode/enum",keyword:"enum",params:{allowedValues: schema318.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err391];
 }
@@ -73460,7 +74412,7 @@ if(data.visible !== undefined){
 let data154 = data.visible;
 const _errs505 = errors;
 if((typeof data154 !== "boolean") && (data154 !== null)){
-const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema311.oneOf[35].properties.visible.type},message:"must be boolean,null"};
+const err396 = {instancePath:instancePath+"/visible",schemaPath:"#/oneOf/35/properties/visible/type",keyword:"type",params:{type: schema316.oneOf[35].properties.visible.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err396];
 }
@@ -73497,7 +74449,7 @@ if(data.width !== undefined){
 let data156 = data.width;
 const _errs509 = errors;
 if((!(((typeof data156 == "number") && (!(data156 % 1) && !isNaN(data156))) && (isFinite(data156)))) && (data156 !== null)){
-const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema311.oneOf[35].properties.width.type},message:"must be integer,null"};
+const err398 = {instancePath:instancePath+"/width",schemaPath:"#/oneOf/35/properties/width/type",keyword:"type",params:{type: schema316.oneOf[35].properties.width.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err398];
 }
@@ -73685,8 +74637,8 @@ return errors === 0;
 }
 
 export const worktreeRequest = validate238;
-const schema339 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"},"voyage":{"type":"string"}},"required":["requestId","expectedVersion","voyage","action"],"title":"Request","type":"object"};
-const schema340 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
+const schema344 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"},"voyage":{"type":"string"}},"required":["requestId","expectedVersion","voyage","action"],"title":"Request","type":"object"};
+const schema345 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
 
 function validate238(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -74210,9 +75162,9 @@ return errors === 0;
 }
 
 export const worktreeResponse = validate239;
-const schema341 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Checkout":{"additionalProperties":false,"properties":{"branch":{"type":["string","null"]},"commonDir":{"type":"string"},"dirty":{"default":null,"type":["boolean","null"]},"locked":{"type":"boolean"},"main":{"type":"boolean"},"path":{"type":"string"},"prunable":{"type":"boolean"}},"required":["path","commonDir","main","locked","prunable"],"type":"object"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"}},"properties":{"checkouts":{"items":{"$ref":"#/definitions/Checkout"},"type":"array"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"}},"required":["requestId","status","checkouts"],"title":"Response","type":"object"};
-const schema342 = {"additionalProperties":false,"properties":{"branch":{"type":["string","null"]},"commonDir":{"type":"string"},"dirty":{"default":null,"type":["boolean","null"]},"locked":{"type":"boolean"},"main":{"type":"boolean"},"path":{"type":"string"},"prunable":{"type":"boolean"}},"required":["path","commonDir","main","locked","prunable"],"type":"object"};
-const schema343 = {"enum":["applied","rejected","uncertain"],"type":"string"};
+const schema346 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Checkout":{"additionalProperties":false,"properties":{"branch":{"type":["string","null"]},"commonDir":{"type":"string"},"dirty":{"default":null,"type":["boolean","null"]},"locked":{"type":"boolean"},"main":{"type":"boolean"},"path":{"type":"string"},"prunable":{"type":"boolean"}},"required":["path","commonDir","main","locked","prunable"],"type":"object"},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"}},"properties":{"checkouts":{"items":{"$ref":"#/definitions/Checkout"},"type":"array"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"}},"required":["requestId","status","checkouts"],"title":"Response","type":"object"};
+const schema347 = {"additionalProperties":false,"properties":{"branch":{"type":["string","null"]},"commonDir":{"type":"string"},"dirty":{"default":null,"type":["boolean","null"]},"locked":{"type":"boolean"},"main":{"type":"boolean"},"path":{"type":"string"},"prunable":{"type":"boolean"}},"required":["path","commonDir","main","locked","prunable"],"type":"object"};
+const schema348 = {"enum":["applied","rejected","uncertain"],"type":"string"};
 
 function validate239(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -74266,7 +75218,7 @@ if(data1.branch !== undefined){
 let data2 = data1.branch;
 const _errs8 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate239.errors = [{instancePath:instancePath+"/checkouts/" + i0+"/branch",schemaPath:"#/definitions/Checkout/properties/branch/type",keyword:"type",params:{type: schema342.properties.branch.type},message:"must be string,null"}];
+validate239.errors = [{instancePath:instancePath+"/checkouts/" + i0+"/branch",schemaPath:"#/definitions/Checkout/properties/branch/type",keyword:"type",params:{type: schema347.properties.branch.type},message:"must be string,null"}];
 return false;
 }
 var valid3 = _errs8 === errors;
@@ -74291,7 +75243,7 @@ if(data1.dirty !== undefined){
 let data4 = data1.dirty;
 const _errs12 = errors;
 if((typeof data4 !== "boolean") && (data4 !== null)){
-validate239.errors = [{instancePath:instancePath+"/checkouts/" + i0+"/dirty",schemaPath:"#/definitions/Checkout/properties/dirty/type",keyword:"type",params:{type: schema342.properties.dirty.type},message:"must be boolean,null"}];
+validate239.errors = [{instancePath:instancePath+"/checkouts/" + i0+"/dirty",schemaPath:"#/definitions/Checkout/properties/dirty/type",keyword:"type",params:{type: schema347.properties.dirty.type},message:"must be boolean,null"}];
 return false;
 }
 var valid3 = _errs12 === errors;
@@ -74382,7 +75334,7 @@ if(data.message !== undefined){
 let data9 = data.message;
 const _errs22 = errors;
 if((typeof data9 !== "string") && (data9 !== null)){
-validate239.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema341.properties.message.type},message:"must be string,null"}];
+validate239.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema346.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs22 === errors;
@@ -74411,7 +75363,7 @@ validate239.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definit
 return false;
 }
 if(!(((data11 === "applied") || (data11 === "rejected")) || (data11 === "uncertain"))){
-validate239.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema343.enum},message:"must be equal to one of the allowed values"}];
+validate239.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema348.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs26 === errors;
@@ -74435,8 +75387,8 @@ return errors === 0;
 }
 
 export const worktreeTool = validate240;
-const schema344 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"title":"Input","type":"object"};
-const schema345 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
+const schema349 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"voyage":{"type":"string"}},"required":["expectedVersion","voyage","action"],"title":"Input","type":"object"};
+const schema350 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"list","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"base":{"type":"string"},"branch":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create","type":"string"}},"required":["operation","name","branch","base"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"open","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"remove","type":"string"},"path":{"type":"string"}},"required":["operation","path"],"type":"object"}]};
 
 function validate240(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;

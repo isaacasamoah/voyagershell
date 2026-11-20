@@ -24,6 +24,7 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
         Response::Applied { .. }
             | Response::Configured { .. }
             | Response::NoteOpened { .. }
+            | Response::Invoked { .. }
             | Response::Uncertain { .. }
     ) {
         let (id, request_id, expected) = identity(request);
@@ -37,6 +38,7 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
             Response::Snapshot { snapshot, .. } => {
                 (Some(snapshot.revision.clone()), snapshot.warning.is_some())
             }
+            Response::State { snapshot, .. } => (Some(snapshot.revision.clone()), false),
             Response::Rejected { .. } => (None, true),
             _ => (None, false),
         };
@@ -81,6 +83,9 @@ pub(crate) fn run(
     access: &Access,
     request: Request,
 ) -> Response {
+    if let Some(response) = owner.manifest_call(layout, version, access, &request) {
+        return response;
+    }
     let binding = match admit(owner, layout, version, access, &request) {
         Ok(binding) => binding,
         Err(message) => return reject(&request, message),
@@ -106,6 +111,19 @@ pub(crate) fn run(
         *configuration = metadata;
     }
     response
+}
+
+pub(crate) fn bind(
+    owner: &mut Owner,
+    layout: &std::sync::Arc<Layout>,
+    id: &VesselId,
+) -> Result<Binding, String> {
+    if owner.manifest_entry(layout, id).is_some() {
+        super::manifest::placed(layout, None, id)?;
+        return Ok(Binding(id.clone()));
+    }
+    member(layout, None, id)?;
+    register_content(owner, layout, id)
 }
 
 pub(crate) fn admit(
@@ -318,34 +336,48 @@ impl Refusal {
 }
 
 pub(crate) fn is_write(request: &Request) -> bool {
-    matches!(
-        request,
+    match request {
         Request::Update { .. }
-            | Request::Configure { .. }
-            | Request::MigrateNote { .. }
-            | Request::NewNote { .. }
-            | Request::OpenNote { .. }
-    )
+        | Request::Configure { .. }
+        | Request::MigrateNote { .. }
+        | Request::NewNote { .. }
+        | Request::OpenNote { .. }
+        | Request::Invoke { .. } => true,
+        Request::Inspect { .. } | Request::Describe { .. } | Request::ListNotes { .. } => false,
+    }
 }
 
 pub(crate) fn is_selection(request: &Request) -> bool {
-    matches!(
-        request,
-        Request::MigrateNote { .. } | Request::NewNote { .. } | Request::OpenNote { .. }
-    )
+    match request {
+        Request::MigrateNote { .. } | Request::NewNote { .. } | Request::OpenNote { .. } => true,
+        Request::Update { .. }
+        | Request::Configure { .. }
+        | Request::Invoke { .. }
+        | Request::Inspect { .. }
+        | Request::Describe { .. }
+        | Request::ListNotes { .. } => false,
+    }
+}
+
+fn workspace_write(request: &Request) -> bool {
+    match request {
+        Request::Configure { .. }
+        | Request::NewNote { .. }
+        | Request::OpenNote { .. }
+        | Request::MigrateNote { .. } => true,
+        Request::Update { .. }
+        | Request::Invoke { .. }
+        | Request::Inspect { .. }
+        | Request::Describe { .. }
+        | Request::ListNotes { .. } => false,
+    }
 }
 
 pub(crate) fn notifies(request: &Request, response: &Response) -> bool {
     matches!(
         response,
         Response::Configured { .. } | Response::NoteOpened { .. }
-    ) || (matches!(
-        request,
-        Request::Configure { .. }
-            | Request::NewNote { .. }
-            | Request::OpenNote { .. }
-            | Request::MigrateNote { .. }
-    ) && matches!(response, Response::Uncertain { .. }))
+    ) || (workspace_write(request) && matches!(response, Response::Uncertain { .. }))
 }
 
 pub(crate) fn check_envelope(request: &Request) -> Result<(), String> {

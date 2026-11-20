@@ -298,6 +298,41 @@
         "data"
       ],
       "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "args": true,
+        "expectedRevision": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.invoke",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "vesselId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "vesselId",
+        "expectedRevision",
+        "action",
+        "args"
+      ],
+      "type": "object"
     }
   ],
   "title": "Request"

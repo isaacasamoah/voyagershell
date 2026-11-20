@@ -35,6 +35,13 @@ export type Action =
       expectedRevision: string;
       operation: "update";
       vesselId: string;
+    }
+  | {
+      action: string;
+      args: unknown;
+      expectedRevision: string;
+      operation: "invoke";
+      vesselId: string;
     };
 
 export interface Input {
