@@ -107,10 +107,16 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let voice = voyager_app::voice_layer::start(
         client.clone(),
         voyager_app::omni::Settings::from_environment(),
-        std::sync::Arc::new(voyager_app::voice_voyager::Bound::new(
-            client.clone(),
-            profile.clone(),
-        )),
+        std::sync::Arc::new(
+            voyager_app::voice_voyager::Bound::new(client.clone(), profile.clone()).with_notes({
+                let conversation = conversation.clone();
+                std::sync::Arc::new(move |line: &str| {
+                    if let Err(error) = conversation.note(line) {
+                        eprintln!("The refusal was not added to the chat: {error}");
+                    }
+                })
+            }),
+        ),
         client.replies(),
         {
             let client = client.clone();

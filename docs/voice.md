@@ -103,7 +103,11 @@ binding, or a program that Core reports ended or gone, Voyager counts as not run
 nothing is sent. A failed read of Core, or a live program that has not reported a state
 yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
 Speech does the opposite and waits on an unknown standing.
-An unconfirmed send is reported and never repeated. Audio goes
+A send that Core refuses after the acknowledgement is a known refusal. The app plays
+the cached "Voyager isn't running. Resume it in the chat." clip once, adds the refusal
+as a line in the chat, and shows it in the voice control's tooltip. The design page has
+no phrase for a failed send, so it reuses that clip. An unconfirmed send stays silent
+and is shown only in the tooltip. A send is never repeated. Audio goes
 through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
 PulseAudio command line tools, which PipeWire also serves. Linux is the only
 verified platform.

@@ -214,7 +214,18 @@ impl Exchange<'_> {
                     } else if send {
                         match self.voyager.say(&crate::spoken::prompt(&heard)) {
                             Ok(()) => self.trace.mark("sent"),
-                            Err(reason) => notice = Some(reason),
+                            Err(failure) => {
+                                if failure.refused {
+                                    self.voyager.note(&failure.reason);
+                                    if let Some(done) = finish.take() {
+                                        done();
+                                    }
+                                    finish = self.play(Phrase::NotRunning, None);
+                                    self.trace
+                                        .mark_words("refusal-started", Phrase::NotRunning.key());
+                                }
+                                notice = Some(failure.reason);
+                            }
                         }
                     }
                 }
@@ -364,7 +375,10 @@ pub fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{speech::Standing, voice_parts::Frames};
+    use crate::{
+        speech::Standing,
+        voice_parts::{Frames, SendFailure},
+    };
     use std::io;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -421,19 +435,23 @@ mod tests {
     struct Standin {
         standing: Standing,
         said: Mutex<Vec<String>>,
-        refuse: bool,
+        failure: Option<SendFailure>,
+        notes: Mutex<Vec<String>>,
     }
 
     impl Voyager for Standin {
         fn standing(&self) -> Standing {
             self.standing
         }
-        fn say(&self, text: &str) -> Result<(), String> {
-            if self.refuse {
-                return Err("Not sent. Voyager needs you on Home".into());
+        fn say(&self, text: &str) -> Result<(), SendFailure> {
+            if let Some(failure) = &self.failure {
+                return Err(failure.clone());
             }
             self.said.lock().unwrap().push(text.into());
             Ok(())
+        }
+        fn note(&self, line: &str) {
+            self.notes.lock().unwrap().push(line.into());
         }
     }
 
@@ -488,6 +506,18 @@ mod tests {
 
     impl Rig {
         fn new(frames: Vec<Vec<i16>>, standing: Standing, refuse: bool) -> Self {
+            let failure = refuse.then(|| SendFailure {
+                reason: "Not sent. Voyager needs you on Home".into(),
+                refused: true,
+            });
+            Self::failing(frames, standing, failure)
+        }
+
+        fn failing(
+            frames: Vec<Vec<i16>>,
+            standing: Standing,
+            failure: Option<SendFailure>,
+        ) -> Self {
             Self {
                 audio: Fake {
                     frames: Mutex::new(Some(frames)),
@@ -498,7 +528,8 @@ mod tests {
                 voyager: Standin {
                     standing,
                     said: Mutex::default(),
-                    refuse,
+                    failure,
+                    notes: Mutex::default(),
                 },
                 clips: clips(),
                 shared: shared(),
@@ -596,13 +627,35 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_send_is_reported_in_the_notice_and_never_retried() {
+    fn a_refused_send_is_said_aloud_once_and_put_in_the_chat_and_never_retried() {
         let rig = Rig::new(speech_then_pause(), Standing::Idle, true);
         let (_keep, commands) = mpsc::channel();
         rig.run("open the roadmap", &commands);
         let notice = rig.snapshot().notice.unwrap();
         assert_eq!(notice, "Not sent. Voyager needs you on Home");
         assert!(rig.said().is_empty());
+        assert_eq!(
+            rig.played(),
+            vec![mark(Phrase::Asking), mark(Phrase::NotRunning)]
+        );
+        assert_eq!(
+            rig.voyager.notes.lock().unwrap().clone(),
+            vec!["Not sent. Voyager needs you on Home"]
+        );
+    }
+
+    #[test]
+    fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
+        let failure = SendFailure {
+            reason: "The send is unconfirmed and was not repeated. Core did not answer".into(),
+            refused: false,
+        };
+        let rig = Rig::failing(speech_then_pause(), Standing::Idle, Some(failure));
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert!(rig.snapshot().notice.unwrap().contains("unconfirmed"));
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+        assert!(rig.voyager.notes.lock().unwrap().is_empty());
     }
 
     #[test]

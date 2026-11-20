@@ -84,3 +84,23 @@ fn the_configured_or_default_settings_reach_the_provider_through_the_trait() {
     );
     fs::remove_dir_all(profile).unwrap();
 }
+
+#[test]
+fn a_note_is_a_line_in_the_chat_and_makes_room_for_itself() {
+    let workspace = Workspace::open("invalid-for-core-start".into(), "/tmp".into());
+    let private = Client::open(std::env::temp_dir(), workspace);
+    private.note("Not sent. Voyager needs you on Home").unwrap();
+    let state = private.snapshot(None).unwrap().unwrap();
+    assert_eq!(state.messages.len(), 1);
+    assert_eq!(
+        state.messages[0].text,
+        "Not sent. Voyager needs you on Home"
+    );
+    assert_eq!(state.messages[0].role, Role::Assistant);
+    for _ in 0..70 {
+        private.note("again").unwrap();
+    }
+    let state = private.snapshot(None).unwrap().unwrap();
+    assert_eq!(state.messages.len(), 64);
+    assert!(state.omitted >= 7);
+}

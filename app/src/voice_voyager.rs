@@ -1,19 +1,31 @@
 use crate::{
     client::{Client, ProgramError, ProgramReply, ProgramRequest},
     speech::Standing,
-    voice_parts::Voyager,
+    voice_parts::{SendFailure, Voyager},
     voyager_binding::Binding,
 };
 use std::path::PathBuf;
 
+pub type Notes = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
+
 pub struct Bound {
     client: Client,
     profile: PathBuf,
+    notes: Option<Notes>,
 }
 
 impl Bound {
     pub fn new(client: Client, profile: PathBuf) -> Self {
-        Self { client, profile }
+        Self {
+            client,
+            profile,
+            notes: None,
+        }
+    }
+
+    pub fn with_notes(mut self, notes: Notes) -> Self {
+        self.notes = Some(notes);
+        self
     }
 
     fn terminal(&self) -> Option<String> {
@@ -49,6 +61,13 @@ pub fn refusal(error: &ProgramError) -> String {
     }
 }
 
+pub fn failure_of(error: &ProgramError) -> SendFailure {
+    SendFailure {
+        reason: refusal(error),
+        refused: matches!(error, ProgramError::Rejected { .. }),
+    }
+}
+
 impl Voyager for Bound {
     fn standing(&self) -> Standing {
         let Some(terminal) = self.terminal() else {
@@ -57,17 +76,24 @@ impl Voyager for Bound {
         standing_from(self.client.service(ProgramRequest::Status { terminal }))
     }
 
-    fn say(&self, text: &str) -> Result<(), String> {
-        let terminal = self
-            .terminal()
-            .ok_or_else(|| "Not sent. Voyager is not bound to the avatar.".to_owned())?;
+    fn say(&self, text: &str) -> Result<(), SendFailure> {
+        let terminal = self.terminal().ok_or_else(|| SendFailure {
+            reason: "Not sent. Voyager is not bound to the avatar.".to_owned(),
+            refused: true,
+        })?;
         self.client
             .service(ProgramRequest::Send {
                 terminal,
                 text: text.to_owned(),
             })
             .map(|_| ())
-            .map_err(|error| refusal(&error))
+            .map_err(|error| failure_of(&error))
+    }
+
+    fn note(&self, line: &str) {
+        if let Some(notes) = &self.notes {
+            notes(line);
+        }
     }
 }
 
@@ -104,6 +130,20 @@ mod tests {
             message: "no such program".into(),
         };
         assert_eq!(standing_from(Err(refused)), Standing::Unknown);
+    }
+
+    #[test]
+    fn a_refusal_from_core_is_known_and_an_unconfirmed_send_is_not() {
+        let removed = ProgramError::Rejected {
+            kind: "not_found".into(),
+            message: "no such terminal".into(),
+        };
+        let known = failure_of(&removed);
+        assert!(known.refused);
+        assert_eq!(known.reason, "Not sent. no such terminal");
+        let lost = failure_of(&ProgramError::Uncertain("no answer".into()));
+        assert!(!lost.refused);
+        assert!(lost.reason.contains("not repeated"));
     }
 
     #[test]

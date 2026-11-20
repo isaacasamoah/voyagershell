@@ -11,9 +11,16 @@ use std::{
 
 pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SendFailure {
+    pub reason: String,
+    pub refused: bool,
+}
+
 pub trait Voyager: Send + Sync {
     fn standing(&self) -> Standing;
-    fn say(&self, text: &str) -> Result<(), String>;
+    fn say(&self, text: &str) -> Result<(), SendFailure>;
+    fn note(&self, _line: &str) {}
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

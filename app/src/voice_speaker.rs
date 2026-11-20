@@ -152,7 +152,7 @@ mod tests {
             self.0
         }
 
-        fn say(&self, _: &str) -> Result<(), String> {
+        fn say(&self, _: &str) -> Result<(), crate::voice_parts::SendFailure> {
             Ok(())
         }
     }

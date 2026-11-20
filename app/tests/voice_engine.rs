@@ -39,8 +39,11 @@ impl Voyager for Absent {
         Standing::NotRunning
     }
 
-    fn say(&self, _: &str) -> Result<(), String> {
-        Err("Not sent. Voyager is absent.".into())
+    fn say(&self, _: &str) -> Result<(), voyager_app::voice_parts::SendFailure> {
+        Err(voyager_app::voice_parts::SendFailure {
+            reason: "Not sent. Voyager is absent.".into(),
+            refused: true,
+        })
     }
 }
 
