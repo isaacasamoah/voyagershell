@@ -21,6 +21,7 @@ mod scope;
 pub mod vessel_socket;
 pub mod vessel_type;
 pub mod voyager_binding;
+mod voyager_start;
 pub mod workspace;
 
 #[cfg(test)]

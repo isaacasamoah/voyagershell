@@ -42,6 +42,16 @@ array. Codex permission names are not translated into Claude permission names.
 Settings affect future deliberate creations, not existing programs or the
 private administrator's permission profile.
 
+## Voyager's entry
+
+An entry with the id `voyager` and a program launch sets the command Voyager
+starts with, for example `{"kind":"program","argv":["claude","--model","claude-sonnet-5-5","--effort","low"]}`.
+Without one, the app uses that command. The app adds `--session-id` or
+`--resume`, `-n voyager`, its identity prompt and its focus hook after the
+entry's arguments. A `voyager` entry that is not a program launch refuses
+Voyager's start and says so in the status line. The Create Vessel picker never
+lists it. [Voyager's start](workspace.md#voyagers-start) describes the rest.
+
 ## One application and process owner
 
 The picker captures its destination and workspace revision when it opens.

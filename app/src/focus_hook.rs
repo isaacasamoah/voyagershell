@@ -1,11 +1,78 @@
+use crate::core_shapes::Terminal;
 use serde_json::json;
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 use voyager_contract::{
+    Vessel,
     context::Focus,
+    launch::Launch,
     socket::{SocketReply, SocketRequest},
 };
 
 pub const DEADLINE: Duration = Duration::from_millis(200);
+
+const PROGRAM: &str = "claude";
+const FRESH: &str = "--session-id";
+const RESUME: &str = "--resume";
+const NAME: &str = "voyager";
+pub(crate) const DEFAULT_ARGV: [&str; 5] =
+    [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
+
+const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. You act with their authority through the voyager and hc commands. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
+
+fn value<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
+    argv.windows(2)
+        .find(|pair| flags.contains(&pair[0].as_str()))
+        .map(|pair| pair[1].as_str())
+}
+
+pub(crate) fn saved_launch(session: &str) -> Launch {
+    Launch::Program {
+        argv: vec![PROGRAM.into(), FRESH.into(), session.into()],
+    }
+}
+
+pub(crate) fn session(vessel: &Vessel) -> Option<&str> {
+    match vessel.launch.as_ref()? {
+        Launch::Program { argv } => value(argv, &[FRESH]),
+        _ => None,
+    }
+}
+
+fn quoted(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
+pub(crate) fn voyager_arguments(
+    session: &str,
+    resume: bool,
+    command: Option<&Path>,
+) -> Vec<String> {
+    let mut words = vec![
+        if resume { RESUME } else { FRESH }.to_owned(),
+        session.to_owned(),
+        "-n".into(),
+        NAME.into(),
+        "--append-system-prompt".into(),
+        IDENTITY.into(),
+    ];
+    if let Some(command) = command {
+        let hook = format!("{} focus --hook {PROGRAM}", quoted(command));
+        let settings =
+            json!({"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":hook}]}]}});
+        words.extend(["--settings".into(), settings.to_string()]);
+    }
+    words
+}
+
+pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
+    terminal.is_live()
+        && terminal
+            .argv
+            .first()
+            .is_some_and(|program| program.to_ascii_lowercase().contains(PROGRAM))
+        && value(&terminal.argv, &[FRESH, RESUME]) == Some(session)
+        && value(&terminal.argv, &["-n"]) == Some(NAME)
+}
 
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();

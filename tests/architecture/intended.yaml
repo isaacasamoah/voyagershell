@@ -63,6 +63,7 @@ edges:
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_app::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_app::layout_parts', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_contract::administrator', from_owner: application-queue, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::client::owner', to: 'rs:voyager_contract::content', from_owner: application-queue, to_owner: content}
@@ -77,6 +78,9 @@ edges:
   - {from: 'rs:voyager_app::client::owner::structure_calls', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner::structure_calls', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner::structure_calls', to: 'rs:voyager_contract::content', from_owner: application-queue, to_owner: content}
+  - {from: 'rs:voyager_app::client::owner::voyager_calls', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
+  - {from: 'rs:voyager_app::client::owner::voyager_calls', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::client::owner::voyager_calls', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::owner::worktree_calls', to: 'rs:voyager_app::client::core_calls', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client::owner::worktree_calls', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client::owner::worktree_calls', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
@@ -84,6 +88,7 @@ edges:
   - {from: 'rs:voyager_app::client::reply', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::reply', to: 'rs:voyager_contract::administrator', from_owner: application-queue, to_owner: conversation-provider}
   - {from: 'rs:voyager_app::client::terminal_start', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
+  - {from: 'rs:voyager_app::client::terminal_start', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::terminal_start', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_app::scope', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
@@ -168,6 +173,7 @@ edges:
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::voice_session', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voyager_binding', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::voyager_start', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::workspace', to: 'rs:voyager_app::content', from_owner: placement, to_owner: content}
   - {from: 'rs:voyager_app::workspace', to: 'rs:voyager_app::launch', from_owner: placement, to_owner: application-queue}
   - {from: 'rs:voyager_app::workspace', to: 'rs:voyager_contract::launch', from_owner: placement, to_owner: application-queue}

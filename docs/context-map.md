@@ -53,6 +53,9 @@ Owns files:
 - `app/src/adoption.rs`
 - `app/src/vessel_socket.rs`
 - `app/src/voyager_binding.rs`
+- `app/src/voyager_start.rs`
+- `app/src/client_voyager.rs`
+- `app/tests/voyager_start.rs`
 - `app/src/focus_hook.rs`
 - `app/src/bin/voyager.rs`
 - `contract/src/socket.rs`

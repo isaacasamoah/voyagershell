@@ -294,11 +294,18 @@ impl Owner {
                     expected_backend,
                 } = &request.action
                 {
+                    let launch = candidate
+                        .vessels
+                        .iter()
+                        .find(|item| &item.id == vessel_id)
+                        .and_then(|item| item.launch.clone())
+                        .unwrap_or_default();
                     grant_new_shell(
                         &mut self.created_vessels,
                         vessel_id,
                         expected_backend,
                         &request.request_id,
+                        launch,
                     );
                     self.unconfirmed.remove(&vessel_id.0);
                 }
@@ -889,11 +896,12 @@ pub(super) fn grant_new_shell(
     content: &VesselId,
     backend: &CoreTerminalId,
     intent: &str,
+    launch: voyager_contract::launch::Launch,
 ) {
     pending.retain(|item| &item.id != content);
     pending.push(CreatedTerminal {
         id: content.clone(),
-        launch: voyager_contract::launch::Launch::Terminal,
+        launch,
         backend: Some(backend.clone()),
         shell_intent: Some(intent.into()),
     });

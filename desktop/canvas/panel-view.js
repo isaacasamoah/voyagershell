@@ -19,6 +19,7 @@ function noteFocus(workspace, id, cx) {
     ),
   );
 }
+const VOYAGER_VESSEL = "voyager";
 export function acceptDockResult(workspace, cx) {
   const raw = take_result();
   if (raw === null) return;
@@ -327,11 +328,19 @@ export function renderPanel(workspace, placement, scope, group) {
                             startShell
                               ? [
                                   Button.new(`start-shell-${placement.id}`)
-                                    .accessibility_label("Start new shell")
+                                    .accessibility_label(
+                                      content.id === VOYAGER_VESSEL
+                                        ? "Resume"
+                                        : "Start new shell",
+                                    )
                                     .disabled(
                                       workspace.busy || !workspace.fresh,
                                     )
-                                    .child("Start new shell")
+                                    .child(
+                                      content.id === VOYAGER_VESSEL
+                                        ? "Resume"
+                                        : "Start new shell",
+                                    )
                                     .on_click((_event, cx) =>
                                       workspace.run(startShell, cx),
                                     ),

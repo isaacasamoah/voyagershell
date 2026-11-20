@@ -33,6 +33,8 @@ use voyager_contract::{
 
 #[path = "client_structure.rs"]
 mod structure_calls;
+#[path = "client_voyager.rs"]
+mod voyager_calls;
 #[path = "client_worktree.rs"]
 mod worktree_calls;
 
@@ -86,6 +88,7 @@ struct Owner {
     unconfirmed: HashMap<String, String>,
     created_vessels: Vec<CreatedTerminal>,
     live_bindings: Vec<CoreTerminalId>,
+    voyager_started: bool,
     listing: Listing,
     notices: Notices,
     closing: Closing,
@@ -93,6 +96,10 @@ struct Owner {
 }
 
 impl Client {
+    pub fn open_with_profile(session: String, cwd: String, profile: PathBuf) -> Self {
+        Self::start_with_profile(session, cwd, None, Some(profile))
+    }
+
     pub(super) fn start_with_profile(
         session: String,
         cwd: String,
@@ -181,6 +188,7 @@ impl Owner {
             unconfirmed: HashMap::new(),
             created_vessels: Vec::new(),
             live_bindings: Vec::new(),
+            voyager_started: false,
             listing: Listing::default(),
             closing: Closing::default(),
             renaming: None,
@@ -221,6 +229,7 @@ impl Owner {
         );
         let before = self.version;
         self.prepare();
+        self.voyager();
         if self.version != before
             && let Some(owner) = self.content.as_mut()
         {
@@ -784,6 +793,7 @@ impl Owner {
                 }
                 Admission::Refused(message) => return drop(reply.send(Err(rejected(message)))),
             };
+        let mut started = false;
         let result = if !self.fresh {
             Err(rejected(
                 "Inspect the workspace before opening a terminal".into(),
@@ -815,27 +825,39 @@ impl Owner {
         } else {
             match self.core.as_mut() {
                 Ok(core) => terminal_start::open_terminal(
-                    core,
-                    &mut self.layout,
-                    &mut self.version,
-                    &mut self.fresh,
-                    &mut self.unconfirmed,
-                    &mut self.created_vessels,
+                    terminal_start::Owned {
+                        core,
+                        layout: &mut self.layout,
+                        version: &mut self.version,
+                        fresh: &mut self.fresh,
+                        unconfirmed: &mut self.unconfirmed,
+                        created_vessels: &mut self.created_vessels,
+                        launches: self.launches.as_deref(),
+                    },
                     &request,
-                ),
+                )
+                .map(|(viewer, created)| {
+                    started = created;
+                    viewer
+                }),
                 Err(error) => Err(error.clone()),
             }
         };
+        let opened = self
+            .layout
+            .vessels
+            .iter()
+            .find(|item| item.id == content)
+            .and_then(|item| Some((item.backend.clone()?, crate::workspace::is_voyager(item))));
         if result.is_ok()
-            && let Some(backend) = self
-                .layout
-                .vessels
-                .iter()
-                .find(|item| item.id == content)
-                .and_then(|item| item.backend.clone())
-            && !self.live_bindings.contains(&backend)
+            && let Some((backend, voyager)) = opened
         {
-            self.live_bindings.push(backend);
+            if voyager && started {
+                self.bind_voyager(&backend);
+            }
+            if !self.live_bindings.contains(&backend) {
+                self.live_bindings.push(backend);
+            }
         }
         settle_created_content(&mut self.created_vessels, &content, &result);
         self.door
