@@ -42,7 +42,7 @@ impl Phrase {
             Phrase::OkayAsking => "Okay, asking Voyager.",
             Phrase::Queued => "Queued for Voyager.",
             Phrase::NeedsYou => "Voyager needs you on Home first.",
-            Phrase::NotRunning => "Voyager isn't running. Resume it in the chat.",
+            Phrase::NotRunning => "I couldn't pass that to Voyager.",
             Phrase::Missed => "I didn't catch that.",
             Phrase::Failed => "That didn't work. The reason is in the chat.",
             Phrase::Blocked => "I need you on Home.",

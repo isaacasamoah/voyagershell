@@ -20,7 +20,7 @@ fn owner(profile: &Path) -> Owner {
     });
     let (events, _) = mpsc::sync_channel(2);
     let (scopes, _) = mpsc::sync_channel(1);
-    Owner::new(
+    let mut owner = Owner::new(
         projection,
         profile.into(),
         Workspace::open("invalid-for-core-start".into(), "/tmp".into()),
@@ -28,10 +28,16 @@ fn owner(profile: &Path) -> Owner {
         Vec::new(),
         events,
         scopes,
-    )
+    );
+    owner.active = "conversation-0".into();
+    owner
 }
 
 fn opened_through_the_stand_in(profile: &Path) -> Vec<String> {
+    opened_with(profile, |_| {})
+}
+
+fn opened_with(profile: &Path, between: impl FnOnce(&Owner)) -> Vec<String> {
     let mut owner = owner(profile);
     owner.settings = Settings::read(profile).unwrap();
     let seen = Arc::default();
@@ -44,7 +50,13 @@ fn opened_through_the_stand_in(profile: &Path) -> Vec<String> {
             model: None,
         },
     ];
+    let mut between = Some(between);
     for (id, answer) in (1..).zip(answers) {
+        if id == 2
+            && let Some(between) = between.take()
+        {
+            between(&owner);
+        }
         let outcome = Outcome::Applied(answer);
         owner
             .receive(ProviderEvent::Response { id, outcome })
@@ -103,4 +115,31 @@ fn a_note_is_a_line_in_the_chat_and_makes_room_for_itself() {
     let state = private.snapshot(None).unwrap().unwrap();
     assert_eq!(state.messages.len(), 64);
     assert!(state.omitted >= 7);
+}
+
+#[test]
+fn a_note_landing_before_the_turn_starts_is_never_sent_as_the_users_message() {
+    let profile = std::env::temp_dir().join(format!("voyager-note-turn-{}", std::process::id()));
+    fs::create_dir(&profile).unwrap();
+    let seen = opened_with(&profile, |owner| {
+        owner
+            .projection
+            .edit(|state| {
+                state.messages.push(Message {
+                    id: "conversation-9".into(),
+                    request_id: "conversation-9".into(),
+                    role: Role::Assistant,
+                    text: "Not sent. Voyager needs you on Home".into(),
+                    context: None,
+                    tool: None,
+                });
+                true
+            })
+            .unwrap();
+    });
+    let turns: Vec<_> = seen.iter().filter(|line| line.contains(" turn ")).collect();
+    assert_eq!(turns.len(), 1);
+    assert!(turns[0].ends_with("turn Hello high"));
+    assert!(seen.iter().all(|line| !line.contains("Not sent")));
+    fs::remove_dir_all(profile).unwrap();
 }

@@ -6,7 +6,7 @@ mod provider_tests;
 use crate::{
     administrator::{self, Tools},
     client::Client as Workspace,
-    conversation::{defer, fail, notification},
+    conversation::{accepted, defer, fail, notification},
     provider::{
         Answer, Command, Event as ProviderEvent, Operation, Outcome, Provider, ToolCall, Visible,
     },
@@ -707,22 +707,21 @@ impl Owner {
     }
 
     fn start_turn(&mut self) -> Result<(), String> {
-        let (thread, message, context) = self.projection.read(|state| {
-            (
-                state.thread.clone(),
-                state.messages.last().map(|m| m.text.clone()),
-                state.messages.last().and_then(|m| m.context.clone()),
-            )
-        })?;
+        let (thread, message) = self
+            .projection
+            .read(|state| (state.thread.clone(), accepted(state, &self.active).cloned()))?;
         self.projection.edit(|state| {
             state.phase = Phase::Working;
             true
         })?;
         self.rpc(Command::StartTurn {
             thread: thread.ok_or("Missing private thread identity")?,
-            text: message.ok_or("Missing accepted user message")?,
+            text: message
+                .as_ref()
+                .map(|m| m.text.clone())
+                .ok_or("Missing accepted user message")?,
             effort: self.settings.effort.clone(),
-            focus: context,
+            focus: message.and_then(|m| m.context),
         })
     }
 

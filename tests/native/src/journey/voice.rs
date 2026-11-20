@@ -7,6 +7,7 @@ use crate::native::{ENGINE_START, Native, QUIET_MIC};
 use crate::system::until;
 use anyhow::{Context as _, Result};
 use serde_json::json;
+use voyager_contract::inspection::Role;
 
 cases! {
     EngineReady => "engine-ready" setup,
@@ -17,6 +18,7 @@ cases! {
     ReplyIsSpoken => "reply-is-spoken",
     TypedReplyIsSilent => "typed-reply-is-silent",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
+    RefusalIsInTheChat => "refusal-is-in-the-chat",
 }
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
@@ -25,6 +27,8 @@ const TARGET_MS: i64 = 300;
 const RUNS: usize = 10;
 const SPOKEN_AS: &str = "Docked on this fleet. The rest is in the chat.";
 const OTHER: &str = "Opened the roadmap on the right.";
+const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
+const REFUSED: &str = "Not sent";
 
 fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
@@ -232,5 +236,45 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
             .observed("medianMs", middle)?
             .observed("targetMs", TARGET_MS)
+    })?;
+    cases.check(native, Case::RefusalIsInTheChat, |native| {
+        let bound = std::fs::read(native.profile_path("voyager.json"))?;
+        native.edit_profile_file("voyager.json", REMOVED)?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "refused", Reply::Leave);
+        native.edit_profile_file("voyager.json", &bound)?;
+        let said = said?;
+        native.click(&Target::CHAT_TOGGLE)?;
+        let lines = native.settle(
+            "the chat drawn with the refusal",
+            |seen| {
+                Some(
+                    seen.frame
+                        .elements
+                        .iter()
+                        .filter(|element| element.role == Role::ChatMessage)
+                        .filter_map(|element| element.label.clone())
+                        .filter(|label| label.starts_with(REFUSED))
+                        .collect::<Vec<_>>(),
+                )
+            },
+            |lines| !lines.is_empty(),
+        )?;
+        Verdict::new()
+            .expect(
+                "the words were not sent to a Voyager that Core no longer has",
+                !said.sent,
+            )
+            .expect(
+                "the app played the refusal clip",
+                said.marks
+                    .iter()
+                    .any(|mark| mark.event == "refusal-started"),
+            )
+            .expect(
+                "the chat shows the refusal once, as a line the user can read",
+                lines.len() == 1,
+            )
+            .observed("chatLines", lines)?
+            .observed("conversation", json!(said))
     })
 }

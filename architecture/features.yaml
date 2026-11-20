@@ -1433,9 +1433,14 @@ features:
         says: 'An action the app declines leaves the state unchanged and shows the owner''s reason, to the person and to an agent caller alike.'
         owner: application-queue
         guards: []
-        checks: ['journey:outcomes/refused-shows-reason', 'journey:outcomes/tool-refusal-carries-reason', 'journey:outcomes/close-refused-says-why', 'journey:workspace/rename-empty-refused']
+        checks:
+          - 'journey:outcomes/refused-shows-reason'
+          - 'journey:outcomes/tool-refusal-carries-reason'
+          - 'journey:outcomes/close-refused-says-why'
+          - 'journey:workspace/rename-empty-refused'
+          - 'journey:voice/refusal-is-in-the-chat'
         formal: []
-        journeys: [outcomes, workspace]
+        journeys: [outcomes, voice, workspace]
     docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
     sources: [app/src/client_reply.rs, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts, contract/generated/workspace.ts]
     code: [app/src/client_reply.rs, contract/generated/workspace.ts, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts]

@@ -71,8 +71,19 @@ fn clip(home: &Path, key: &str) -> Result<Samples> {
     let folder = fs::read_dir(&clips)
         .with_context(|| format!("The app kept no clips under {}", clips.display()))?
         .filter_map(Result::ok)
-        .map(|entry| entry.path().join(format!("{key}.wav")))
-        .find(|path| path.is_file())
+        .flat_map(|entry| fs::read_dir(entry.path()).into_iter().flatten())
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| {
+                    name.strip_prefix(key)?
+                        .strip_prefix('-')?
+                        .strip_suffix(".wav")
+                })
+                .is_some_and(|hash| hash.len() == 8 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+        })
         .with_context(|| format!("The app kept no {key} clip"))?;
     let bytes = fs::read(&folder)?;
     ensure!(

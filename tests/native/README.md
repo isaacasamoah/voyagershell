@@ -1003,6 +1003,7 @@ to the microphone and records the speaker.
 | `reply-is-spoken` | Voyager's stand-in answers the spoken prompt through the real reply hooks. The first paragraph of its final message, cut to two sentences or 30 words with "The rest is in the chat.", is the text the app speaks. The speaker capture, transcribed by the engine's own hearing, holds that sentence and not another one. A fresh render of the same sentence is not used as the judge, because the engine renders one sentence differently each time and the band correlation against it scored 0.53 for a reply that was heard word for word. |
 | `typed-reply-is-silent` | The typed turn that the stand-in sent first, with its own reply text, was never spoken, and exactly one reply was spoken for the one spoken prompt. |
 | `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
+| `refusal-is-in-the-chat` | With the Voyager binding pointed at a terminal Core no longer has, the spoken words are heard, the app plays the refusal clip, nothing is sent, and the opened chat draws one line starting with `Not sent`. The binding is restored afterward. |
 
 The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
 `VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech

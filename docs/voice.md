@@ -34,7 +34,7 @@ reply aloud.
 | Idle or done, or no state yet | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
 | Working | "Queued for Voyager." | Yes |
 | Blocked | "Voyager needs you on Home first." | No |
-| Not running (no binding, or Core reports the program ended or gone) | "Voyager isn't running. Resume it in the chat." | No |
+| Not running (no binding, or Core reports the program ended or gone) | "I couldn't pass that to Voyager." | No |
 | Nothing heard | "I didn't catch that." | No |
 
 A click made while the avatar hears or speaks is dropped. A click while Voyager
@@ -104,7 +104,7 @@ nothing is sent. A failed read of Core, or a live program that has not reported 
 yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
 Speech does the opposite and waits on an unknown standing.
 A send that Core refuses after the acknowledgement is a known refusal. The app plays
-the cached "Voyager isn't running. Resume it in the chat." clip once, adds the refusal
+the cached "I couldn't pass that to Voyager." clip once, adds the refusal
 as a line in the chat, and shows it in the voice control's tooltip. The design page has
 no phrase for a failed send, so it reuses that clip. An unconfirmed send stays silent
 and is shown only in the tooltip. A send is never repeated. Audio goes
@@ -158,7 +158,9 @@ card without a code default for it.
 ### Acknowledgement clips
 
 The clips in the table are rendered once through the engine and kept in the user
-cache folder, keyed by the model size and the voice. The app reads them into
+cache folder, keyed by the model size and the voice. Each file is named by its key and
+a short hash of its words, so a phrase with new words renders a new clip and the old
+file is never played. The app reads them into
 memory when the engine is ready. A click then costs no model run before the
 clip starts. A fresh cache renders the set once, after the first warm-up.
 
