@@ -386,7 +386,13 @@ fn explicit_new_shell_preserves_placement_and_grants_only_a_fresh_shell() {
     assert_eq!(model.layout, expected);
     let mut pending = Vec::new();
     assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
-    grant_new_shell(&mut pending, &id, &backend, "intent");
+    grant_new_shell(
+        &mut pending,
+        &id,
+        &backend,
+        "intent",
+        voyager_contract::launch::Launch::Terminal,
+    );
     model.layout.vessels[0].shell_intent = Some("changed".into());
     assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
     model.layout.vessels[0].shell_intent = Some("intent".into());

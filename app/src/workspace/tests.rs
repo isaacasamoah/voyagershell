@@ -448,3 +448,106 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
         .find(|item| item.id == only.vessel);
     assert_eq!(content.and_then(|item| item.backend.as_ref()), Some(&agent));
 }
+
+#[test]
+fn a_fleet_voyager_makes_for_the_person_opens_a_terminal_and_names_its_program() {
+    let (mut model, a, ..) = two_voyages();
+    model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+    let voyager = VesselId("voyager".into());
+    let source = || voyager_contract::DirectorySource::Voyage {
+        voyage_id: a.clone(),
+        cwd: "/tmp".into(),
+    };
+    for (name, launch) in [
+        ("Plain", None),
+        (
+            "Review",
+            Some(Launch::Program {
+                argv: vec!["claude".into()],
+            }),
+        ),
+    ] {
+        model
+            .apply_from(
+                Some(&voyager),
+                Action::CreateFleetWithVessel {
+                    voyage: a.clone(),
+                    name: name.into(),
+                    source: source(),
+                    type_id: "terminal".into(),
+                    launch,
+                },
+            )
+            .unwrap();
+    }
+    let fleets = &model.layout.voyages[0].fleets;
+    let launches: Vec<_> = [&fleets[2], &fleets[3]]
+        .into_iter()
+        .map(|fleet| {
+            let [only] = &fleet.placements[..] else {
+                panic!("the Fleet holds one Vessel");
+            };
+            model
+                .layout
+                .vessels
+                .iter()
+                .find(|item| item.id == only.vessel)
+                .and_then(|item| item.launch.clone())
+        })
+        .collect();
+    assert_eq!(
+        launches,
+        [
+            None,
+            Some(Launch::Program {
+                argv: vec!["claude".into()]
+            })
+        ]
+    );
+}
+
+#[test]
+fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
+    let mut model = Model {
+        layout: Model::prepare(Layout::default(), "/tmp").unwrap(),
+    };
+    assert!(
+        model
+            .ensure_voyager("/tmp", crate::focus_hook::saved_launch("session-1"))
+            .unwrap()
+    );
+    assert!(
+        !model
+            .ensure_voyager("/tmp", crate::focus_hook::saved_launch("session-2"))
+            .unwrap()
+    );
+    let home = model.layout.home.as_ref().unwrap();
+    let [portal] = &home.portals[..] else {
+        panic!("Home holds Voyager's Portal");
+    };
+    assert_eq!(portal.name, "Voyager");
+    let vessel = model
+        .layout
+        .vessels
+        .iter()
+        .find(|item| item.id == portal.vessel)
+        .unwrap();
+    assert!(vessel.is_voyager());
+    assert_eq!(crate::focus_hook::session(vessel), Some("session-1"));
+    let saved = model.layout.clone();
+    assert_eq!(Model::prepare(saved.clone(), "/elsewhere").unwrap(), saved);
+
+    let mut ended = saved;
+    let vessel = ended
+        .vessels
+        .iter_mut()
+        .find(|item| item.is_voyager())
+        .unwrap();
+    vessel.backend = Some(CoreTerminalId("t1".into()));
+    let gone: Vec<crate::core_shapes::Terminal> = Vec::new();
+    let (ready, closed) = crate::families::terminal::prepare_reopen(&mut ended, &gone);
+    assert!(ready.is_empty() && !closed);
+    let vessel = ended.vessels.iter().find(|item| item.is_voyager()).unwrap();
+    assert_eq!(vessel.backend, Some(CoreTerminalId("t1".into())));
+    assert_eq!(crate::focus_hook::session(vessel), Some("session-1"));
+}

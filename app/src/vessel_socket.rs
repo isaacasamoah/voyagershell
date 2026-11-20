@@ -42,6 +42,10 @@ pub(crate) struct Sockets {
 }
 
 impl Sockets {
+    pub(crate) fn binding(&self) -> &Binding {
+        &self.binding
+    }
+
     pub(crate) fn new(session: &str, call: Call, binding: Binding) -> Self {
         Self {
             session: session.into(),
@@ -151,7 +155,7 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::RemovePlacement { .. }
         | Action::SelectVoyage { .. }
         | Action::SelectFleet { .. } => true,
-        Action::Dock { .. } => bound,
+        Action::Dock { .. } | Action::CreateFleetWithVessel { .. } => bound,
         Action::Home
         | Action::UpdateCanvas { .. }
         | Action::SetSidebar { .. }
@@ -159,7 +163,6 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::LoadArrangement { .. }
         | Action::CreateVoyage { .. }
         | Action::CreateVoyageFromSource { .. }
-        | Action::CreateFleetWithVessel { .. }
         | Action::CreateVessel { .. }
         | Action::StartNewShell { .. }
         | Action::RemoveVesselPackage { .. }
@@ -185,11 +188,16 @@ const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet
 
 const DOCK_NOT_OFFERED: &str = "dock is offered only to Voyager; nothing was queued";
 
+const FLEET_WITH_VESSEL_NOT_OFFERED: &str =
+    "create-fleet-with-vessel is offered only to Voyager; nothing was queued";
+
 fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
     if offered(action, bound) {
         None
     } else if matches!(action, Action::Dock { .. }) {
         Some(DOCK_NOT_OFFERED)
+    } else if matches!(action, Action::CreateFleetWithVessel { .. }) {
+        Some(FLEET_WITH_VESSEL_NOT_OFFERED)
     } else {
         Some(NOT_OFFERED)
     }
@@ -524,6 +532,45 @@ mod tests {
         );
         assert!(matches!(reply, SocketReply::Refused { .. }));
         assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_fleet_with_a_first_vessel_is_offered_only_to_the_bound_terminal() {
+        let (call, seen) = recorded();
+        let binding = Binding::unbound();
+        binding.bind(terminal("t8")).unwrap();
+        let line = serde_json::to_string(&SocketRequest::Workspace {
+            request: Box::new(Request {
+                request_id: "fleet-1".into(),
+                expected_version: 1,
+                action: Action::CreateFleetWithVessel {
+                    voyage: voyager_contract::VoyageId("voyage-1".into()),
+                    name: "Review".into(),
+                    source: voyager_contract::DirectorySource::Voyage {
+                        voyage_id: voyager_contract::VoyageId("voyage-1".into()),
+                        cwd: "/tmp".into(),
+                    },
+                    type_id: "terminal".into(),
+                    launch: None,
+                },
+            }),
+        })
+        .unwrap();
+        let vessel = VesselId("vessel-1".into());
+        let refused = answer(&call, &binding, &vessel, &terminal("t9"), &line);
+        assert_eq!(
+            refused,
+            SocketReply::Refused {
+                message: FLEET_WITH_VESSEL_NOT_OFFERED.into()
+            }
+        );
+        assert!(seen.lock().unwrap().is_empty());
+        let accepted = answer(&call, &binding, &vessel, &terminal("t8"), &line);
+        assert!(matches!(accepted, SocketReply::Workspace { .. }));
+        assert!(matches!(
+            seen.lock().unwrap().as_slice(),
+            [Action::CreateFleetWithVessel { .. }]
+        ));
     }
 
     #[test]

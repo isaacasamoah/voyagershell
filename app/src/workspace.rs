@@ -142,6 +142,43 @@ impl Model {
             })
     }
 
+    pub(crate) fn ensure_voyager(&mut self, cwd: &str, launch: Launch) -> Result<bool, String> {
+        if self.layout.vessels.iter().any(Vessel::is_voyager) {
+            return Ok(false);
+        }
+        let home = self
+            .layout
+            .home
+            .as_ref()
+            .map(|home| home.id.clone())
+            .ok_or("Home is missing")?;
+        let placement = PlacementId(self.id("placement")?);
+        let vessel = VesselId(Vessel::VOYAGER.into());
+        self.layout.vessels.push(Vessel {
+            id: vessel.clone(),
+            type_id: "terminal".into(),
+            cwd: cwd.into(),
+            backend: None,
+            configuration: None,
+            start_pending: None,
+            launch: Some(launch),
+            shell_intent: None,
+            adopted: false,
+        });
+        self.insert(
+            &PlacementOwner::Portals { voyage: home },
+            PlacementInsertion::Empty,
+            Placement {
+                id: placement,
+                vessel,
+                name: "Voyager".into(),
+                name_origin: voyager_contract::NameOrigin::Deliberate,
+                hidden: false,
+            },
+        )?;
+        Ok(true)
+    }
+
     pub fn start_new_shell(
         &mut self,
         id: &VesselId,
@@ -160,7 +197,9 @@ impl Model {
         {
             return Err("The ended terminal binding changed or is unconfirmed".into());
         }
-        content.launch = Some(voyager_contract::launch::Launch::Terminal);
+        if !content.is_voyager() {
+            content.launch = Some(voyager_contract::launch::Launch::Terminal);
+        }
         content.shell_intent = Some(intent.into());
         Ok(())
     }

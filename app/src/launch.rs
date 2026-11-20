@@ -1,6 +1,8 @@
 use std::{collections::HashSet, io::Read as _, path::Path};
 use voyager_contract::launch::{Catalog, Effort, Launch, LaunchSettings, Permissions};
 
+pub(crate) const VOYAGER_ENTRY: &str = "voyager";
+
 pub fn load(path: &Path) -> Result<LaunchSettings, String> {
     let mut source = Vec::new();
     std::fs::File::open(path)
@@ -172,7 +174,8 @@ fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, Stri
 }
 
 pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {
-    let settings = path.map(load).transpose()?.unwrap_or_default();
+    let mut settings = path.map(load).transpose()?.unwrap_or_default();
+    settings.entries.retain(|entry| entry.id != VOYAGER_ENTRY);
     let mut available = Vec::new();
     let mut errors = Vec::new();
     for entry in &settings.entries {

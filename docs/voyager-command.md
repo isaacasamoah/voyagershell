@@ -95,6 +95,16 @@ voyager do workspace '{"requestId":"dock-1","expectedVersion":"<version>","actio
 From any other Vessel it is refused with "dock is offered only to Voyager",
 the exit code is 1 and nothing is queued.
 
+`create-fleet-with-vessel` is offered only to Voyager too. It makes a Fleet
+for the person with a first Vessel. That Vessel is a terminal running the named
+`launch`, or the default terminal when none is named. Select the Voyage first, because the
+request is refused unless its Voyage is the selected one on the Fleet view. A
+Fleet for an agent stays `create-fleet`, which opens empty.
+
+```sh
+voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Review","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<absolute directory>"},"typeId":"terminal"}}'
+```
+
 `remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
 takes that placement off the canvas and nothing else. The Vessel's content,
 name and data stay, and its program keeps running, so check it with `hc ls`

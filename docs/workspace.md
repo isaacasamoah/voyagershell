@@ -190,6 +190,50 @@ A bound terminal that no longer exists has no placed Vessel and so no socket,
 and nobody can dock. Whether Core can give a later terminal the same id after
 a restart is unproved, and the next binding write replaces the old one.
 
+### Voyager's start
+
+The app starts Voyager when it launches, once the workspace is prepared and
+before any chat opens, so the agent's own start-up time passes in Core and not
+on the first request. Voyager is the terminal Vessel with the id `voyager`,
+placed as a Portal named Voyager on Home. Its saved launch is `claude` with
+`--session-id` and a session id the app chose. That pair is the only record of
+the session, and reopening a Voyage never converts this Vessel to a shell.
+
+The step in `app/src/client_voyager.rs` runs inside the owner and holds no
+viewer. It starts Voyager through the same start marker, Core run and workspace
+save as any terminal, so an unconfirmed start is reported and never repeated.
+Core runs Voyager directly, not through the Bash wrapper that worker agents
+use, so Voyager ending ends its Core terminal. The command is the `voyager`
+entry of `launches.json`, or `claude --model claude-sonnet-5-5 --effort low`
+when the profile has none, followed by `--session-id` or `--resume`, `-n
+voyager`, a short identity prompt and a `--settings` value that holds only the
+`voyager focus --hook claude` hook. The `voyager` entry is read for Voyager
+alone and does not appear in the Create Vessel picker.
+
+At launch the app forgets what `voyager.json` held and decides again from two
+records that must agree. They are the `voyager` Vessel's saved terminal and
+Core's own record for that terminal. A terminal counts as Voyager only when Core reports
+it live, with a program path containing `claude`, `-n voyager` and the saved
+session id after `--session-id` or `--resume`.
+
+| Core says about the saved terminal | The app does |
+| --- | --- |
+| No terminal saved | Starts Voyager with `--session-id`. |
+| Live and matching | Starts nothing and writes `voyager.json` to name it. |
+| Ended, gone, or live but not matching | Starts Voyager with `--resume` and the saved session id, and writes `voyager.json` to name the new terminal. |
+| Unreadable or in a state the app cannot read | Starts nothing, leaves nothing bound and reports it in the status line. |
+
+Editing `voyager.json` alone therefore binds nothing. The file is rewritten
+from the verified Vessel at the next launch. A hand edit can take effect only
+if someone also edits the saved layout and the terminal it names was started
+with Voyager's exact arguments. That terminal is then Voyager by every test the
+app has. A program of the same user can write both records, which is the
+advisory limit stated above.
+
+A Voyager that ends while the app runs shows Resume on its Portal, in the place
+of Start new shell. Clicking it runs the same step with `--resume` and rewrites
+`voyager.json`. The app never resumes a Voyager that ended while it was open.
+
 ### What the caller is told
 
 A workspace request ends in one of three ways, and the reply's `status` says

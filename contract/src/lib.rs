@@ -150,6 +150,14 @@ pub struct Vessel {
     pub adopted: bool,
 }
 
+impl Vessel {
+    pub const VOYAGER: &'static str = "voyager";
+
+    pub fn is_voyager(&self) -> bool {
+        self.id.0 == Self::VOYAGER
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Placement {

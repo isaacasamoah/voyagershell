@@ -60,15 +60,40 @@ fn settle_run(core: &mut Core, operation: &str, message: String) -> Result<Termi
     }
 }
 
+pub(super) struct Owned<'a> {
+    pub(super) core: &'a mut Core,
+    pub(super) layout: &'a mut Arc<Layout>,
+    pub(super) version: &'a mut LayoutRevision,
+    pub(super) fresh: &'a mut bool,
+    pub(super) unconfirmed: &'a mut HashMap<String, String>,
+    pub(super) created_vessels: &'a mut Vec<CreatedTerminal>,
+    pub(super) launches: Option<&'a std::path::Path>,
+}
+
 pub(super) fn open_terminal(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut LayoutRevision,
-    fresh: &mut bool,
-    unconfirmed: &mut HashMap<String, String>,
-    created_vessels: &mut Vec<CreatedTerminal>,
+    mut owned: Owned<'_>,
     request: &TerminalRequest,
-) -> Result<Viewer, Error> {
+) -> Result<(Viewer, bool), Error> {
+    let (terminal, created) = start_terminal(&mut owned, request)?;
+    let core = owned.core;
+    let address = &terminal.address;
+    let attached = core
+        .terminal_attach(&terminal)
+        .map_err(|error| attach_failure(error, created, address))?;
+    Ok((core.viewer(&attached)?, created))
+}
+
+pub(super) fn start_terminal(
+    owned: &mut Owned<'_>,
+    request: &TerminalRequest,
+) -> Result<(Terminal, bool), Error> {
+    let core = &mut *owned.core;
+    let layout = &mut *owned.layout;
+    let version = &mut *owned.version;
+    let fresh = &mut *owned.fresh;
+    let unconfirmed = &mut *owned.unconfirmed;
+    let created_vessels = &mut *owned.created_vessels;
+    let launches = owned.launches;
     let content = &request.vessel_id;
     let request_id = &request.request_id;
     let target = layout
@@ -90,6 +115,14 @@ pub(super) fn open_terminal(
         .iter()
         .find(|pending| &pending.id == content);
     let new_shell = target.shell_intent.is_some() && accepted.is_some();
+    let voyager = target.is_voyager();
+    let argv = if voyager {
+        crate::focus_hook::session(target)
+            .ok_or_else(|| "Voyager's saved launch lost its session".to_owned())
+            .and_then(|session| crate::voyager_start::command(launches, session, new_shell, &cwd))
+    } else {
+        crate::launch::terminal_command(&launch, &cwd)
+    };
     if accepted.is_some_and(|pending| !pending.matches(target)) {
         return Err(rejected(
             "The creation launch changed; no program was started".into(),
@@ -100,7 +133,9 @@ pub(super) fn open_terminal(
             .backend
             .as_ref()
             .ok_or_else(|| rejected("New shell intent lost its original binding".into()))?;
-        require_finished(&core.terminal_get(&backend.0)?, backend)?;
+        if !voyager {
+            require_finished(&core.terminal_get(&backend.0)?, backend)?;
+        }
     }
     if target.backend.is_none()
         && (target.shell_intent.is_some()
@@ -145,24 +180,22 @@ pub(super) fn open_terminal(
                 });
             }
         }
-        let run = crate::launch::terminal_command(&launch, &cwd)
-            .map_err(rejected)
-            .and_then(|argv| {
-                let params = RunParams {
-                    argv,
-                    cwd: Some(cwd.clone()),
-                    no_parent: true,
-                    labels: HashMap::from([(LABEL.into(), operation.clone())]),
-                    env: crate::launch::path_with_command()
-                        .map(|path| HashMap::from([("PATH".into(), path)]))
-                        .unwrap_or_default(),
-                    ..Default::default()
-                };
-                match core.terminal_run_with(params) {
-                    Err(Error::Uncertain(message)) => settle_run(core, &operation, message),
-                    run => run,
-                }
-            });
+        let run = argv.map_err(rejected).and_then(|argv| {
+            let params = RunParams {
+                argv,
+                cwd: Some(cwd.clone()),
+                no_parent: true,
+                labels: HashMap::from([(LABEL.into(), operation.clone())]),
+                env: crate::launch::path_with_command()
+                    .map(|path| HashMap::from([("PATH".into(), path)]))
+                    .unwrap_or_default(),
+                ..Default::default()
+            };
+            match core.terminal_run_with(params) {
+                Err(Error::Uncertain(message)) => settle_run(core, &operation, message),
+                run => run,
+            }
+        });
         if !matches!(run, Err(Error::Rejected { .. })) {
             created_vessels.retain(|item| &item.id != content);
         }
@@ -229,11 +262,7 @@ pub(super) fn open_terminal(
         }
         started
     };
-    let address = &terminal.address;
-    let attached = core
-        .terminal_attach(&terminal)
-        .map_err(|error| attach_failure(error, created, address))?;
-    core.viewer(&attached)
+    Ok((terminal, created))
 }
 
 pub(super) fn attach_failure(error: Error, created: bool, address: &str) -> Error {

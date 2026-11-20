@@ -49,6 +49,12 @@ impl Binding {
             .is_ok_and(|bound| bound.as_ref() == Some(terminal))
     }
 
+    pub fn forget(&self) {
+        if let Ok(mut bound) = self.terminal.lock() {
+            *bound = None;
+        }
+    }
+
     pub fn bind(&self, terminal: CoreTerminalId) -> io::Result<()> {
         let mut bound = self
             .terminal
@@ -149,6 +155,19 @@ mod tests {
             );
             fs::remove_dir_all(profile).unwrap();
         }
+    }
+
+    #[test]
+    fn forgetting_leaves_the_file_and_names_nobody_until_the_next_write() {
+        let profile = profile("forget");
+        let binding = Binding::load(&profile);
+        binding.bind(terminal("t7")).unwrap();
+        binding.forget();
+        assert!(!binding.names(&terminal("t7")));
+        assert!(Binding::load(&profile).names(&terminal("t7")));
+        binding.bind(terminal("t9")).unwrap();
+        assert!(binding.names(&terminal("t9")));
+        fs::remove_dir_all(profile).unwrap();
     }
 
     #[test]
