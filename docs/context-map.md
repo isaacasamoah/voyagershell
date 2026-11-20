@@ -43,6 +43,10 @@ Owns files:
 
 - `app/src/client.rs`
 - `app/src/client_content.rs`
+- `app/src/client_owner.rs`
+- `app/src/client_owner_tests.rs`
+- `app/src/client_structure.rs`
+- `app/src/client_worktree.rs`
 - `app/src/client_reply.rs`
 - `app/src/client_terminal.rs`
 - `app/src/client_admission_tests.rs`
@@ -61,6 +65,7 @@ Owns files:
 - `app/src/observation.rs`
 - `app/src/lib.rs`
 - `app/src/families/terminal/lifecycle.rs`
+- `app/src/families/structure.rs`
 - `app/src/families/voyage_close.rs`
 - `app/src/families/worktree.rs`
 - `app/src/families/worktree/git.rs`

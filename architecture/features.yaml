@@ -4,7 +4,7 @@ features:
     summary: 'Create a Voyage from the canvas, switch between Voyages and rename one.'
     group: workspace-layout
     owner: desktop-presentation
-    shared_with: [placement, content]
+    shared_with: [application-queue, placement, content]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -59,9 +59,19 @@ features:
         formal: []
         journeys: [workspace]
     docs: [docs/content.md, docs/terminal.md, docs/workspace.md]
-    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', desktop/canvas/voyage-colours.ts, app/src/workspace.rs, app/src/content/rename.rs, app/src/scope.rs]
-    code:
+    sources:
+      - 'desktop/canvas/main.*'
+      - 'desktop/canvas/navigation-view.*'
+      - desktop/canvas/voyage-colours.ts
+      - app/src/workspace.rs
       - app/src/content/rename.rs
+      - app/src/scope.rs
+      - app/src/families/structure.rs
+      - app/src/client_structure.rs
+    code:
+      - app/src/client_structure.rs
+      - app/src/content/rename.rs
+      - app/src/families/structure.rs
       - app/src/scope.rs
       - app/src/workspace.rs
       - desktop/canvas/main.js
@@ -74,7 +84,7 @@ features:
     summary: 'Create a Fleet from the Fleet strip, switch between Fleets and rename one.'
     group: workspace-layout
     owner: desktop-presentation
-    shared_with: [placement]
+    shared_with: [application-queue, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -156,8 +166,17 @@ features:
         formal: []
         journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
-    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs]
-    code: [app/src/workspace.rs, desktop/canvas/creation.js, desktop/canvas/creation.ts, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/navigation-view.js, desktop/canvas/navigation-view.ts]
+    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs, app/src/families/structure.rs, app/src/client_structure.rs]
+    code:
+      - app/src/client_structure.rs
+      - app/src/families/structure.rs
+      - app/src/workspace.rs
+      - desktop/canvas/creation.js
+      - desktop/canvas/creation.ts
+      - desktop/canvas/main.js
+      - desktop/canvas/main.ts
+      - desktop/canvas/navigation-view.js
+      - desktop/canvas/navigation-view.ts
   - id: fleet-arrangement
     name: 'Fleet arrangement'
     summary: 'Drag the Vessels of a Fleet into a new arrangement and keep it.'
@@ -231,8 +250,8 @@ features:
     name: Vessels
     summary: 'Split a terminal Vessel beside another through the chooser, see its shell run and rename it.'
     group: workspace-layout
-    owner: desktop-presentation
-    shared_with: [application-queue, placement]
+    owner: application-queue
+    shared_with: [desktop-presentation, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -292,8 +311,18 @@ features:
         formal: ['core-viewers:BridgeStaysUp', 'core-viewers:SlotsWithinLimit', 'core-viewers:EveryOccupiedSlotHasAViewer', 'core-viewers:BufferAccounting']
         journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
-    sources: ['desktop/canvas/main.*', 'desktop/canvas/panel-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs, app/src/launch.rs, app/src/families/terminal/lifecycle.rs]
+    sources:
+      - 'desktop/canvas/main.*'
+      - 'desktop/canvas/panel-view.*'
+      - 'desktop/canvas/creation.*'
+      - app/src/workspace.rs
+      - app/src/launch.rs
+      - app/src/families/terminal/lifecycle.rs
+      - app/src/families/structure.rs
+      - app/src/client_structure.rs
     code:
+      - app/src/client_structure.rs
+      - app/src/families/structure.rs
       - app/src/families/terminal/lifecycle.rs
       - app/src/launch.rs
       - app/src/workspace.rs
@@ -963,14 +992,14 @@ features:
     python_journeys: []
     invariants: []
     docs: ['.agents/skills/verify/features/worktrees.md', docs/terminal.md, docs/workspace.md]
-    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts, app/src/families/worktree.rs, app/src/families/worktree/git.rs]
-    code: [app/src/families/worktree.rs, app/src/families/worktree/git.rs, contract/src/worktree.rs, desktop/canvas/worktrees.ts]
+    sources: [contract/src/worktree.rs, desktop/canvas/worktrees.ts, app/src/families/worktree.rs, app/src/families/worktree/git.rs, app/src/client_worktree.rs]
+    code: [app/src/client_worktree.rs, app/src/families/worktree.rs, app/src/families/worktree/git.rs, contract/src/worktree.rs, desktop/canvas/worktrees.ts]
   - id: close-quit-restore
     name: 'Close Voyage / quit / restore'
     summary: 'Close a Voyage, quit the app and find the session restored on the next launch.'
     group: startup-quit
-    owner: desktop-presentation
-    shared_with: [application-queue, core-adapter, placement]
+    owner: application-queue
+    shared_with: [desktop-presentation, core-adapter, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -1055,8 +1084,12 @@ features:
       - app/src/client.rs
       - app/src/core.rs
       - desktop/src/lib.rs
+      - app/src/client_owner.rs
+      - app/src/client_structure.rs
     code:
       - app/src/client.rs
+      - app/src/client_owner.rs
+      - app/src/client_structure.rs
       - app/src/core.rs
       - app/src/families/terminal/lifecycle.rs
       - app/src/families/voyage_close.rs
@@ -1340,8 +1373,8 @@ features:
         formal: []
         journeys: []
     docs: [docs/terminal.md, docs/workspace.md]
-    sources: [app/src/front_door.rs, app/src/client.rs, app/src/client_core.rs]
-    code: [app/src/client.rs, app/src/client_core.rs, app/src/front_door.rs]
+    sources: [app/src/front_door.rs, app/src/client.rs, app/src/client_core.rs, app/src/client_owner.rs, app/src/client_structure.rs]
+    code: [app/src/client.rs, app/src/client_core.rs, app/src/client_owner.rs, app/src/client_structure.rs, app/src/front_door.rs]
   - id: outcomes
     name: 'Refused and uncertain results'
     summary: 'Ask for something the app declines and read why, or ask while Core gives no answer and see that the result is uncertain and is not sent again.'
@@ -1419,8 +1452,8 @@ features:
         formal: []
         journeys: [chat, slow-list, slow-save]
     docs: [docs/terminal.md, docs/workspace.md]
-    sources: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, 'desktop/canvas/agents.*']
-    code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
+    sources: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/families/terminal.rs, 'desktop/canvas/agents.*', app/src/client_owner.rs]
+    code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/client_owner.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
   - id: adopted-vessels
     name: 'Labelled programs as Vessels'
     summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook.'
@@ -1477,11 +1510,13 @@ features:
       - app/src/bin/voyager.rs
       - app/src/workspace.rs
       - docs/voyager-command.md
+      - app/src/client_owner.rs
     code:
       - app/src/activity.rs
       - app/src/adoption.rs
       - app/src/bin/voyager.rs
       - app/src/client_core.rs
+      - app/src/client_owner.rs
       - app/src/focus_hook.rs
       - app/src/vessel_socket.rs
       - app/src/workspace.rs

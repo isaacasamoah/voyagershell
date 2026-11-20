@@ -73,7 +73,7 @@ observed version to the workspace listener. It leaves the earlier receipt unchan
 request, check the workspace version, run a read or an `Update` against the owner,
 choose the Notes file for `new-note`, `open-note` and `migrate-note`, and decide a
 `configure`. A handler returns its candidate workspace without saving it, and the
-Client content queue in `app/src/client.rs` and `app/src/client_content.rs` loads
+content method of `Owner` in `app/src/client_owner.rs`, with `app/src/client_content.rs`, loads
 and saves the workspace and settles the uncertain outcome. The handlers live under
 the content owner and not under `app/src/families/`, because a family reaches only
 the shared modules and `content` is not one of them, and because the content owner

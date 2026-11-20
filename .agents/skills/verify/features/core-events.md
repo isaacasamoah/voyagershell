@@ -18,7 +18,7 @@ the terminal and stop it again. Then let the shell exit.
 Follow the exact doctor and run commands in ../SKILL.md with
 `--journey core-events`. The Rust journey in
 tests/native/src/journey/core_events.rs owns the recipe. The Core reader in
-app/src/activity.rs queues each report, and the owner in app/src/client.rs
+app/src/activity.rs queues each report, and the owner in app/src/client_owner.rs
 applies it.
 
 - `foreground-reaches-agents-list` runs `sleep 30` three times and stops it
