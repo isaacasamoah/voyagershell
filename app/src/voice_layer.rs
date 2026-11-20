@@ -1,44 +1,25 @@
 use crate::{
-    audio_io::{Capture, End, Gate, Playing},
+    audio_io::{End, Gate},
     client::Client,
     omni::{self, Clips, Omni, Running, Settings},
+    replies::Replies,
     speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
-        heard_nothing,
+        Acknowledgement, Clip, Fault, Hearing, Phrase, Utterance, acknowledge, heard_nothing,
     },
+    voice_parts::{Audio, Phase, Speaker, Trace, Voyager},
+    voice_speaker,
 };
 use std::{
     collections::HashMap,
-    fs::OpenOptions,
-    io::{self, Write},
-    path::PathBuf,
     sync::{
         Arc, Condvar, Mutex,
         mpsc::{self, Receiver, Sender, TryRecvError},
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
-pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
-
-pub trait Voyager: Send + Sync {
-    fn standing(&self) -> Standing;
-    fn say(&self, text: &str) -> Result<(), String>;
-}
-
 pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Phase {
-    Starting,
-    Ready,
-    Listening,
-    Hearing,
-    Acknowledging,
-    Unavailable(String),
-    Stopped,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Snapshot {
@@ -53,52 +34,19 @@ enum Command {
     Shutdown,
 }
 
-pub trait Frames {
-    fn frame(&mut self) -> io::Result<Vec<i16>>;
-}
-
-pub trait Speaker: Send {
-    fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send>;
-}
-
-pub trait Audio: Send + Sync {
-    fn microphone(&self) -> io::Result<Box<dyn Frames>>;
-    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
-}
-
-pub struct System;
-
-impl Frames for Capture {
-    fn frame(&mut self) -> io::Result<Vec<i16>> {
-        Capture::frame(self)
-    }
-}
-
-impl Audio for System {
-    fn microphone(&self) -> io::Result<Box<dyn Frames>> {
-        Capture::open().map(|capture| Box::new(capture) as Box<dyn Frames>)
-    }
-
-    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>> {
-        Playing::open(rate).map(|playing| Box::new(playing) as Box<dyn Speaker>)
-    }
-}
-
-impl Speaker for Playing {
-    fn play(mut self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
-        Playing::play(&mut self, clip.pcm.clone());
-        Box::new(move || {
-            let _ = self.finish();
-        })
-    }
-}
-
 struct Shared {
     state: Mutex<Snapshot>,
     changed: Condvar,
 }
 
 impl Shared {
+    fn has_stopped(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.phase == Phase::Stopped)
+            .unwrap_or(true)
+    }
+
     fn set(&self, phase: Phase, notice: Option<String>) {
         if let Ok(mut state) = self.state.lock() {
             state.version += 1;
@@ -157,43 +105,6 @@ impl Layer {
             .wait_timeout_while(state, within, |state| state.phase != Phase::Stopped)
             .map(|(state, _)| state.phase == Phase::Stopped)
             .unwrap_or(false)
-    }
-}
-
-pub struct Trace(Option<PathBuf>);
-
-impl Trace {
-    pub fn from_environment() -> Self {
-        Self(std::env::var_os(TRACE_VARIABLE).map(PathBuf::from))
-    }
-
-    pub fn off() -> Self {
-        Self(None)
-    }
-
-    pub fn mark(&self, event: &str) {
-        self.record(event, None);
-    }
-
-    pub fn mark_words(&self, event: &str, words: &str) {
-        self.record(event, Some(words));
-    }
-
-    fn record(&self, event: &str, words: Option<&str>) {
-        let Some(path) = &self.0 else {
-            return;
-        };
-        let at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|elapsed| elapsed.as_millis())
-            .unwrap_or(0);
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-            let line = match words {
-                Some(words) => serde_json::json!({"event": event, "atMs": at, "words": words}),
-                None => serde_json::json!({"event": event, "atMs": at}),
-            };
-            let _ = writeln!(file, "{line}");
-        }
     }
 }
 
@@ -303,7 +214,18 @@ impl Exchange<'_> {
                     } else if send {
                         match self.voyager.say(&crate::spoken::prompt(&heard)) {
                             Ok(()) => self.trace.mark("sent"),
-                            Err(reason) => notice = Some(reason),
+                            Err(failure) => {
+                                if failure.refused {
+                                    self.voyager.note(&failure.reason);
+                                    if let Some(done) = finish.take() {
+                                        done();
+                                    }
+                                    finish = self.play(Phrase::NotRunning, None);
+                                    self.trace
+                                        .mark_words("refusal-started", Phrase::NotRunning.key());
+                                }
+                                notice = Some(failure.reason);
+                            }
                         }
                     }
                 }
@@ -334,7 +256,7 @@ struct Engine {
     running: Running,
     files: omni::Files,
     omni: Arc<Omni>,
-    clips: HashMap<Phrase, Clip>,
+    clips: Arc<HashMap<Phrase, Clip>>,
 }
 
 fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
@@ -357,11 +279,13 @@ fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
     }
 }
 
+type Prepared = (Arc<Omni>, Arc<HashMap<Phrase, Clip>>);
+
 fn prepare(
     running: &Running,
     settings: &Settings,
     files: &omni::Files,
-) -> Result<(Arc<Omni>, HashMap<Phrase, Clip>), String> {
+) -> Result<Prepared, String> {
     let engine = Arc::new(Omni::new(running.port));
     engine.warm().map_err(|fault: Fault| fault.to_string())?;
     let kept = Clips::new(settings, files);
@@ -370,13 +294,14 @@ fn prepare(
         .into_iter()
         .filter_map(|phrase| kept.load(phrase).map(|clip| (phrase, clip)))
         .collect();
-    Ok((engine, clips))
+    Ok((engine, Arc::new(clips)))
 }
 
 pub fn start(
     client: Client,
     settings: Settings,
     voyager: Arc<dyn Voyager>,
+    replies: Replies,
     vocabulary: Vocabulary,
     audio: Arc<dyn Audio>,
     trace: Trace,
@@ -406,8 +331,24 @@ pub fn start(
             }
         };
         owner.set(Phase::Ready, None);
+        let floor = Arc::new(Mutex::new(()));
+        let (status, stopped) = (owner.clone(), owner.clone());
+        voice_speaker::spawn(voice_speaker::Parts {
+            speaking: engine.omni.clone(),
+            clips: engine.clips.clone(),
+            audio: audio.clone(),
+            voyager: voyager.clone(),
+            replies,
+            trace: trace.clone(),
+            floor: floor.clone(),
+            status: Arc::new(move |phase, notice| status.set(phase, notice)),
+            stopped: Arc::new(move || stopped.has_stopped()),
+        });
         let mut turn = 0u64;
         while let Ok(Command::Click) = receiver.recv() {
+            let Ok(_floor) = floor.try_lock() else {
+                continue;
+            };
             let outcome = Exchange {
                 hearing: engine.omni.as_ref(),
                 clips: &engine.clips,
@@ -434,6 +375,11 @@ pub fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        speech::Standing,
+        voice_parts::{Frames, SendFailure},
+    };
+    use std::io;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Script(Vec<Vec<i16>>);
@@ -489,19 +435,23 @@ mod tests {
     struct Standin {
         standing: Standing,
         said: Mutex<Vec<String>>,
-        refuse: bool,
+        failure: Option<SendFailure>,
+        notes: Mutex<Vec<String>>,
     }
 
     impl Voyager for Standin {
         fn standing(&self) -> Standing {
             self.standing
         }
-        fn say(&self, text: &str) -> Result<(), String> {
-            if self.refuse {
-                return Err("Not sent. Voyager needs you on Home".into());
+        fn say(&self, text: &str) -> Result<(), SendFailure> {
+            if let Some(failure) = &self.failure {
+                return Err(failure.clone());
             }
             self.said.lock().unwrap().push(text.into());
             Ok(())
+        }
+        fn note(&self, line: &str) {
+            self.notes.lock().unwrap().push(line.into());
         }
     }
 
@@ -556,6 +506,18 @@ mod tests {
 
     impl Rig {
         fn new(frames: Vec<Vec<i16>>, standing: Standing, refuse: bool) -> Self {
+            let failure = refuse.then(|| SendFailure {
+                reason: "Not sent. Voyager needs you on Home".into(),
+                refused: true,
+            });
+            Self::failing(frames, standing, failure)
+        }
+
+        fn failing(
+            frames: Vec<Vec<i16>>,
+            standing: Standing,
+            failure: Option<SendFailure>,
+        ) -> Self {
             Self {
                 audio: Fake {
                     frames: Mutex::new(Some(frames)),
@@ -566,7 +528,8 @@ mod tests {
                 voyager: Standin {
                     standing,
                     said: Mutex::default(),
-                    refuse,
+                    failure,
+                    notes: Mutex::default(),
                 },
                 clips: clips(),
                 shared: shared(),
@@ -637,6 +600,24 @@ mod tests {
     }
 
     #[test]
+    fn a_live_voyager_with_no_state_yet_receives_the_words() {
+        let rig = Rig::new(speech_then_pause(), Standing::Unknown, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    }
+
+    #[test]
+    fn a_gone_or_ended_voyager_is_told_it_is_not_running_and_receives_nothing() {
+        let rig = Rig::new(speech_then_pause(), Standing::NotRunning, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert!(rig.said().is_empty());
+        assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
+    }
+
+    #[test]
     fn a_busy_voyager_gets_the_words_and_the_queued_phrase() {
         let rig = Rig::new(speech_then_pause(), Standing::Working, false);
         let (_keep, commands) = mpsc::channel();
@@ -646,13 +627,35 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_send_is_reported_in_the_notice_and_never_retried() {
+    fn a_refused_send_is_said_aloud_once_and_put_in_the_chat_and_never_retried() {
         let rig = Rig::new(speech_then_pause(), Standing::Idle, true);
         let (_keep, commands) = mpsc::channel();
         rig.run("open the roadmap", &commands);
         let notice = rig.snapshot().notice.unwrap();
         assert_eq!(notice, "Not sent. Voyager needs you on Home");
         assert!(rig.said().is_empty());
+        assert_eq!(
+            rig.played(),
+            vec![mark(Phrase::Asking), mark(Phrase::NotRunning)]
+        );
+        assert_eq!(
+            rig.voyager.notes.lock().unwrap().clone(),
+            vec!["Not sent. Voyager needs you on Home"]
+        );
+    }
+
+    #[test]
+    fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
+        let failure = SendFailure {
+            reason: "The send is unconfirmed and was not repeated. Core did not answer".into(),
+            refused: false,
+        };
+        let rig = Rig::failing(speech_then_pause(), Standing::Idle, Some(failure));
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert!(rig.snapshot().notice.unwrap().contains("unconfirmed"));
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+        assert!(rig.voyager.notes.lock().unwrap().is_empty());
     }
 
     #[test]

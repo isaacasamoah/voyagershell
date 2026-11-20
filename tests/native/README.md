@@ -1000,7 +1000,10 @@ to the microphone and records the speaker.
 | `voyager-stands-in` (setup) | A program that echoes what it is sent runs under Core, and the app's own binding file names it, as Voyager's start will. |
 | `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement clip for a running Voyager reaches the speaker and matches the kept clip, it starts before hearing ends, and the microphone closes. |
 | `words-reach-voyager` | The stand-in receives `[spoken] Dock on this fleet.` exactly, through the app's real send. No log, trace or terminal scrollback of the engine holds an audio payload. |
+| `reply-is-spoken` | Voyager's stand-in answers the spoken prompt through the real reply hooks. The first paragraph of its final message, cut to two sentences or 30 words with "The rest is in the chat.", is the text the app speaks. The speaker capture, transcribed by the engine's own hearing, holds that sentence and not another one. A fresh render of the same sentence is not used as the judge, because the engine renders one sentence differently each time and the band correlation against it scored 0.53 for a reply that was heard word for word. |
+| `typed-reply-is-silent` | The typed turn that the stand-in sent first, with its own reply text, was never spoken, and exactly one reply was spoken for the one spoken prompt. |
 | `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
+| `refusal-is-in-the-chat` | With the Voyager binding pointed at a terminal Core no longer has, the spoken words are heard, the app plays the refusal clip, nothing is sent, and the opened chat draws one line starting with `Not sent`. The binding is restored afterward. |
 
 The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
 `VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech
@@ -1018,11 +1021,12 @@ edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
 
-A second control, `tests/native/controls/voice-handoff.patch`, sends the words without the
-spoken marker. Built into a candidate, it must fail `words-reach-voyager`.
+Two more controls follow the same rule. `tests/native/controls/voice-handoff.patch` sends the
+words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
+`tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
+spoken or not. The typed turn comes first, so the journey hears it and `reply-is-spoken` fails.
 
-The journey does not cover the spoken result or a stalled engine. The first waits on the
-reply reader. The battery does not run `voice`, because it has no engine folder to give it.
+The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
 ### Negative controls
 

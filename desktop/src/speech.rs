@@ -5,7 +5,10 @@ use gpui::{
 };
 use gpui_base::{Button, Theme, Tooltip};
 use std::time::Duration;
-use voyager_app::voice_layer::{Layer, Phase, Snapshot};
+use voyager_app::{
+    voice_layer::{Layer, Snapshot},
+    voice_parts::Phase,
+};
 use voyager_contract::inspection::Role;
 
 struct Controller(Entity<Speech>);
@@ -126,7 +129,7 @@ impl Render for Speech {
         let shown = match phase {
             Phase::Starting => "Loading voice…".to_owned(),
             Phase::Unavailable(reason) => reason.clone(),
-            Phase::Hearing | Phase::Acknowledging => "Busy".to_owned(),
+            Phase::Hearing | Phase::Acknowledging | Phase::Speaking => "Busy".to_owned(),
             _ => label.to_owned(),
         };
         div()

@@ -1,27 +1,34 @@
-use super::adopt_by_label::address;
 use super::{Cases, Verdict, cases};
+use crate::agent::TYPED_REPLY;
 use crate::audio::speech::{DOCK_ON_THIS_FLEET, RENAME_TO_HARBOR};
-use crate::audio::voice::{self, LISTENING, READY, median, words_match};
+use crate::audio::voice::{self, LISTENING, READY, Reply, median, words_contain, words_match};
 use crate::inspection::Target;
-use crate::native::{ENGINE_START, Native, QUIET_MIC, Terminal};
-use crate::x11::Key;
+use crate::native::{ENGINE_START, Native, QUIET_MIC};
+use crate::system::until;
 use anyhow::{Context as _, Result};
 use serde_json::json;
+use voyager_contract::inspection::Role;
 
 cases! {
     EngineReady => "engine-ready" setup,
     NoCaptureWithoutClick => "no-capture-without-click",
-    VoyagerStandsIn => "voyager-stands-in" setup,
+    VoyagerIsBound => "voyager-is-bound" setup,
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
+    ReplyIsSpoken => "reply-is-spoken",
+    TypedReplyIsSilent => "typed-reply-is-silent",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
+    RefusalIsInTheChat => "refusal-is-in-the-chat",
 }
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
 const TARGET_MS: i64 = 300;
 const RUNS: usize = 10;
-const STAND_IN: &str = "voyager-standin";
+const SPOKEN_AS: &str = "Docked on this fleet. The rest is in the chat.";
+const OTHER: &str = "Opened the roadmap on the right.";
+const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
+const REFUSED: &str = "Not sent";
 
 fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
@@ -59,18 +66,25 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("looks", seen.len())
     })?;
-    let Some(standin) = cases.make(native, Case::VoyagerStandsIn, |native| {
-        let shell = Terminal::first(native)?;
-        shell.focus(native)?;
-        shell.echoed(native, &format!("hc run --bg --name {STAND_IN} cat"))?;
-        native.press(Key::Return)?;
-        let terminal = address(native, STAND_IN)?;
-        native.edit_profile_file(
-            "voyager.json",
-            json!({ "terminal": terminal }).to_string().as_bytes(),
-        )?;
+    let Some(voyager) = cases.make(native, Case::VoyagerIsBound, |native| {
+        let terminal = until("the app to bind the Voyager it started", || {
+            let bound = std::fs::read_to_string(native.profile_path("voyager.json")).ok();
+            let named = bound
+                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+                .and_then(|value| value["terminal"].as_str().map(str::to_owned));
+            let live = named.filter(|terminal| {
+                native
+                    .system
+                    .watch("terminal.get", json!({"terminal":terminal}))
+                    .is_ok_and(|found| found["state"] == "live")
+            });
+            Ok(live)
+        })?;
         let verdict = Verdict::new()
-            .expect("a stand-in Voyager runs under Core", !terminal.is_empty())
+            .expect(
+                "the app bound a live Voyager at launch",
+                !terminal.is_empty(),
+            )
             .observed("terminal", &terminal)?;
         Ok((verdict, Some(terminal)))
     })?
@@ -78,7 +92,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         return Ok(());
     };
     cases.check(native, Case::RenameIsHeard, |native| {
-        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;
+        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename", Reply::Leave)?;
         let words = said
             .heard
             .clone()
@@ -112,12 +126,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("conversation", json!(said))
     })?;
     cases.check(native, Case::WordsReachVoyager, |native| {
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock")?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock", Reply::Leave)?;
         let words = said
             .heard
             .clone()
             .context("The app recorded no heard words")?;
-        let screen = voice::terminal_text(native, &standin)?;
+        let screen = voice::terminal_text(native, &voyager)?;
         let label = native.drawn_label(
             &Target::VOICE_CONTROL,
             "the voice control ready again",
@@ -131,7 +145,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect("the app reports that it sent the words", said.sent)
             .expect(
-                "the stand-in Voyager received the spoken marker and the words exactly",
+                "Voyager received the spoken marker and the words exactly",
                 screen.contains(&spoken(DOCK_ON_THIS_FLEET.words)),
             )
             .expect("the control is ready for another click", label != LISTENING)
@@ -143,12 +157,58 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("standInScreen", screen)?
             .observed("textScan", text)
     })?;
+    let Some(said) = cases.make(native, Case::ReplyIsSpoken, |native| {
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply", Reply::Await)?;
+        let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
+        let verdict = Verdict::new()
+            .expect(
+                "the first paragraph of the spoken turn's final message is spoken, cut to the limit",
+                said.spoken_texts.iter().any(|text| text == SPOKEN_AS),
+            )
+            .expect(
+                "the engine hears the spoken reply as the expected sentence",
+                words_contain(&judged.transcript, SPOKEN_AS),
+            )
+            .expect(
+                "the engine does not hear another sentence in it",
+                !words_contain(&judged.transcript, OTHER),
+            )
+            .expect(
+                "the reply is spoken after the words were sent",
+                said.sent && said.speech_after_capture_ms.is_some(),
+            )
+            .observed("conversation", json!(said))?
+            .observed("judgement", json!(judged))?;
+        Ok((verdict, Some(said)))
+    })?
+    else {
+        return Ok(());
+    };
+    cases.check(native, Case::TypedReplyIsSilent, |_| {
+        Verdict::new()
+            .expect(
+                "the typed turn that came first was never spoken",
+                said.spoken_texts
+                    .iter()
+                    .all(|text| !text.contains(TYPED_REPLY)),
+            )
+            .expect(
+                "exactly one reply was spoken for the one spoken prompt",
+                said.spoken_texts.len() == 1,
+            )
+            .observed("spokenTexts", &said.spoken_texts)
+    })?;
     cases.check(native, Case::AcknowledgementIsPrompt, |native| {
         let mut first_sounds = Vec::new();
         let mut early = 0;
         let mut heard_right = 0;
         for run in 0..RUNS {
-            let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
+            let said = voice::converse(
+                native,
+                &DOCK_ON_THIS_FLEET,
+                &format!("prompt-{run}"),
+                Reply::Leave,
+            )?;
             first_sounds.push(said.first_sound_after_capture_ms);
             early += usize::from(said.started_before_heard);
             heard_right += usize::from(
@@ -176,5 +236,45 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
             .observed("medianMs", middle)?
             .observed("targetMs", TARGET_MS)
+    })?;
+    cases.check(native, Case::RefusalIsInTheChat, |native| {
+        let bound = std::fs::read(native.profile_path("voyager.json"))?;
+        native.edit_profile_file("voyager.json", REMOVED)?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "refused", Reply::Leave);
+        native.edit_profile_file("voyager.json", &bound)?;
+        let said = said?;
+        native.click(&Target::CHAT_TOGGLE)?;
+        let lines = native.settle(
+            "the chat drawn with the refusal",
+            |seen| {
+                Some(
+                    seen.frame
+                        .elements
+                        .iter()
+                        .filter(|element| element.role == Role::ChatMessage)
+                        .filter_map(|element| element.label.clone())
+                        .filter(|label| label.starts_with(REFUSED))
+                        .collect::<Vec<_>>(),
+                )
+            },
+            |lines| !lines.is_empty(),
+        )?;
+        Verdict::new()
+            .expect(
+                "the words were not sent to a Voyager that Core no longer has",
+                !said.sent,
+            )
+            .expect(
+                "the app played the refusal clip",
+                said.marks
+                    .iter()
+                    .any(|mark| mark.event == "refusal-started"),
+            )
+            .expect(
+                "the chat shows the refusal once, as a line the user can read",
+                lines.len() == 1,
+            )
+            .observed("chatLines", lines)?
+            .observed("conversation", json!(said))
     })
 }

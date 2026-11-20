@@ -10,7 +10,8 @@ use voyager_app::{
     core::Core,
     omni::Settings,
     speech::Standing,
-    voice_layer::{self, Phase, System, Trace, Voyager},
+    voice_layer,
+    voice_parts::{Phase, System, Trace, Voyager},
 };
 
 const SERVER: &str = r#"#!/usr/bin/env python3
@@ -38,8 +39,11 @@ impl Voyager for Absent {
         Standing::NotRunning
     }
 
-    fn say(&self, _: &str) -> Result<(), String> {
-        Err("Not sent. Voyager is absent.".into())
+    fn say(&self, _: &str) -> Result<(), voyager_app::voice_parts::SendFailure> {
+        Err(voyager_app::voice_parts::SendFailure {
+            reason: "Not sent. Voyager is absent.".into(),
+            refused: true,
+        })
     }
 }
 
@@ -94,6 +98,7 @@ fn an_engine_that_cannot_warm_up_is_stopped_and_the_reason_is_shown() {
             client,
             engine_folder(&root),
             Arc::new(Absent),
+            voyager_app::replies::Replies::default(),
             Arc::new(Vec::<String>::new),
             Arc::new(System),
             Trace::off(),

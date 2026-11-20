@@ -16,6 +16,14 @@ pub(crate) fn defer(state: &mut Snapshot, events: &mut VecDeque<Visible>, value:
     true
 }
 
+pub(crate) fn accepted<'a>(state: &'a Snapshot, request: &str) -> Option<&'a Message> {
+    state
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == Role::User && message.request_id == request)
+}
+
 pub(crate) fn fail(state: &mut Snapshot, error: String, phase: Phase) -> bool {
     if !matches!(
         state.phase,

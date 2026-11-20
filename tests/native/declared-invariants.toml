@@ -229,7 +229,7 @@ source = "Isaac, 16 Nov 2026: prove it with an agent if there is a way, otherwis
 features = ["voice"]
 guard = []
 type_gap = "Not state-shaped: it is sound reaching a speaker, outside any type."
-check = ["manual:an agent proof where one exists, otherwise Isaac by ear"]
+check = ["manual:an agent proof where one exists, otherwise Isaac by ear", "journey:voice/reply-is-spoken", "journey:voice/typed-reply-is-silent"]
 confidence = "stated"
 
 [[invariant]]
@@ -396,7 +396,7 @@ source = "AGENTS.md: 'Preserve request/target identity, structured Core errors a
 features = ["outcomes"]
 guard = []
 type_gap = "A refused Response has message: Option<String>, so a refusal with no reason can be built, and Status, Outcome and Unapplied each name refusal in their own words. DI16 makes one Outcome whose Refusal requires a reason."
-check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused"]
+check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused", "journey:voice/refusal-is-in-the-chat"]
 confidence = "stated"
 
 [[invariant]]

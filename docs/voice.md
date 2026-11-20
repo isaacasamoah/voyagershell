@@ -7,9 +7,8 @@ runtime. It hears and speaks, and Voyager acts. The Codex realtime helper
 described in [the conversation guide](conversation.md) stays compiled and has no
 control until its own adapter step.
 
-This guide covers the hearing half. The spoken reply is a later step. It reads
-the first paragraph of Voyager's final message, and the speech filter that
-prepares that text is already in place.
+This guide covers hearing a request, handing it to Voyager and reading Voyager's
+reply aloud.
 
 ## One spoken exchange
 
@@ -32,14 +31,58 @@ prepares that text is already in place.
 
 | Voyager's standing | Clip | Words sent |
 | --- | --- | --- |
-| Idle or done | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
+| Idle or done, or no state yet | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
 | Working | "Queued for Voyager." | Yes |
 | Blocked | "Voyager needs you on Home first." | No |
-| Not running | "Voyager isn't running. Resume it in the chat." | No |
+| Not running (no binding, or Core reports the program ended or gone) | "I couldn't pass that to Voyager." | No |
 | Nothing heard | "I didn't catch that." | No |
 
 A click made while the avatar hears or speaks is dropped. A click while Voyager
 works starts a new utterance, which queues. There is no interrupt and no stop.
+
+## Speaking the reply
+
+Only a turn that the app's ledger marked spoken is ever read aloud. The ledger
+marks a turn when the focus hook sees the `[spoken]` marker on its own prompt id, so a
+reply is never judged spoken by guessing which prompt came last. The voice layer reads
+the same store of Voyager's replies that the chat reads, `app/src/replies.rs`, on its
+own thread, off the canvas path. A typed turn, a Core note and a turn of any other
+Vessel stay silent.
+
+A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
+candidate when its final `Stop` is recorded and Core answers that Voyager is not
+working. Only an answered "idle", "done" or "error" counts. A failed read of Core, an
+answer for a live program that carries no state word and a state word the app cannot
+read are all unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
+first paragraph of the final message, drops paths, code, hex runs of seven or more
+characters with a digit and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25`
+and `terminal-34`, cuts what is left to two sentences or 30 words, and adds "The rest
+is in the chat." when it cut anything. The engine reads the result. Plain words and
+numbers such as "3 files" are kept. The turn is marked done, so a repeated `Stop`, a
+late chunk of the same message and a later reopen never speak it again. A failed turn
+plays one fixed clip, "That didn't work. The reason is in the chat.". While a spoken
+turn is open and Core reports Voyager blocked, one fixed clip, "I need you on Home.",
+plays once.
+
+There is no fixed hold before speech. Claude can continue a turn after `Stop` when
+a `Stop` hook in the person's own setup asks it to, so the store can settle one turn
+twice. A real run shows that case does not look settled to Core. In seven runs of
+Claude Code 2.1.322 under Core, each with a `Stop` hook that continued the turn once,
+Core reported the program working from before the first `Stop` to 42 to 66 ms after the
+last one, a gap of 0.9 to 1.0 s between the two `Stop` events with no change of
+status. Three runs without a continuation gave 52 to 69 ms from `Stop` to Core's
+`done`. The rule therefore waits on Core and not on a timer. The first `Stop` of a
+continued turn is not read aloud, because Core still says working, and the final one
+is read within about 0.1 to 0.2 s of Core's change. The residual case is a continuation
+that starts after Core already reports Voyager not working. It was not seen. If it
+happened, the first settle would be spoken and the later one never would. The app logs
+exactly one line for that turn, "spoken reply was partial; turn reopened", and does not
+speak again, which keeps the rule "at most once"; the partial reply that was spoken
+stays spoken.
+
+Speech holds the audio floor. A click while Voyager is being read is ignored, and a
+reply that is ready while an utterance is being heard waits for it to finish. There is
+no interrupt and no stop.
 
 ## The seam
 
@@ -56,8 +99,15 @@ trait, which reports its standing and takes the words. `app/src/voice_voyager.rs
 implements it over the application queue. It reads the terminal that the app wrote
 in its own binding file, asks Core for that terminal's reported status, and sends the
 words with Core's own send, which refuses a blocked program and never forces. With no
-binding, or a program that is gone, Voyager counts as not running and nothing is sent.
-An unconfirmed send is reported and never repeated. Audio goes
+binding, or a program that Core reports ended or gone, Voyager counts as not running and
+nothing is sent. A failed read of Core, or a live program that has not reported a state
+yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
+Speech does the opposite and waits on an unknown standing.
+A send that Core refuses after the acknowledgement is a known refusal. The app plays
+the cached "I couldn't pass that to Voyager." clip once, adds the refusal
+as a line in the chat, and shows it in the voice control's tooltip. The design page has
+no phrase for a failed send, so it reuses that clip. An unconfirmed send stays silent
+and is shown only in the tooltip. A send is never repeated. Audio goes
 through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
 PulseAudio command line tools, which PipeWire also serves. Linux is the only
 verified platform.
@@ -108,7 +158,9 @@ card without a code default for it.
 ### Acknowledgement clips
 
 The clips in the table are rendered once through the engine and kept in the user
-cache folder, keyed by the model size and the voice. The app reads them into
+cache folder, keyed by the model size and the voice. Each file is named by its key and
+a short hash of its words, so a phrase with new words renders a new clip and the old
+file is never played. The app reads them into
 memory when the engine is ready. A click then costs no model run before the
 clip starts. A fresh cache renders the set once, after the first warm-up.
 

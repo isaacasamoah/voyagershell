@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     env, fs,
@@ -326,13 +327,26 @@ impl Clips {
         }
     }
 
+    fn named(&self, key: &str, words: &str) -> PathBuf {
+        let digest = Sha256::digest(words);
+        let hash: String = digest[..4]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        self.folder.join(format!("{key}-{hash}.wav"))
+    }
+
+    fn file(&self, phrase: Phrase) -> PathBuf {
+        self.named(phrase.key(), phrase.words())
+    }
+
     pub fn load(&self, phrase: Phrase) -> Option<Clip> {
-        parse_wav(&fs::read(self.folder.join(format!("{}.wav", phrase.key()))).ok()?)
+        parse_wav(&fs::read(self.file(phrase)).ok()?)
     }
 
     pub fn store(&self, phrase: Phrase, clip: &Clip) -> std::io::Result<()> {
         fs::create_dir_all(&self.folder)?;
-        let file = self.folder.join(format!("{}.wav", phrase.key()));
+        let file = self.file(phrase);
         let partial = file.with_extension("part");
         fs::write(&partial, crate::audio_io::wav(clip.rate, &clip.pcm))?;
         fs::rename(partial, file)
@@ -464,6 +478,48 @@ mod tests {
         prepare_clips(&Counting(&rendered), &clips).unwrap();
         assert_eq!(rendered.lock().unwrap().len(), Phrase::ALL.len());
         assert_eq!(clips.load(Phrase::Queued).unwrap().pcm, vec![1, 0, 2, 0]);
+    }
+
+    #[test]
+    fn changed_words_render_a_new_clip_and_the_old_file_is_not_played() {
+        let root = scratch("words");
+        let settings = settings(&root);
+        touch(&settings.directory.join(MODEL));
+        let files = Files {
+            server: root.join("s"),
+            model: settings.directory.join(MODEL),
+            projector: root.join("p"),
+        };
+        let clips = Clips::new(&settings, &files);
+        let old = crate::audio_io::wav(24_000, &[9, 0, 9, 0]);
+        fs::create_dir_all(&clips.folder).unwrap();
+        fs::write(clips.folder.join("not-running.wav"), &old).unwrap();
+        fs::write(
+            clips.named(
+                "not-running",
+                "Voyager isn't running. Resume it in the chat.",
+            ),
+            &old,
+        )
+        .unwrap();
+        assert!(clips.load(Phrase::NotRunning).is_none());
+        struct Fresh;
+        impl Speaking for Fresh {
+            fn render(&self, _: Phrase) -> Result<Clip, Fault> {
+                Ok(Clip {
+                    rate: 24_000,
+                    pcm: vec![1, 0, 2, 0],
+                })
+            }
+            fn speak(&self, _: &SpokenText) -> Result<Clip, Fault> {
+                Err(Fault::Unavailable("unused".into()))
+            }
+        }
+        prepare_clips(&Fresh, &clips).unwrap();
+        assert_eq!(
+            clips.load(Phrase::NotRunning).unwrap().pcm,
+            vec![1, 0, 2, 0]
+        );
     }
 
     #[test]

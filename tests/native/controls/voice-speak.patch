@@ -1,0 +1,13 @@
+diff --git a/app/src/voice_reply.rs b/app/src/voice_reply.rs
+index 129f5806..98e5f490 100644
+--- a/app/src/voice_reply.rs
++++ b/app/src/voice_reply.rs
+@@ -46,7 +46,7 @@ impl Watcher {
+             }
+             known
+         };
+-        for turn in turns.iter().filter(|turn| turn.spoken) {
++        for turn in turns.iter() {
+             if let Some(said) = self.read.get(&turn.id) {
+                 let reopened = match &turn.ending {
+                     None => true,

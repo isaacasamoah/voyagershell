@@ -178,8 +178,14 @@ edges:
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app::replies', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app::spoken', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_parts', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_reply', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_reply', to: 'rs:voyager_app::replies', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_session', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_speaker', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_speaker', to: 'rs:voyager_app::replies', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app::voyager_binding', from_owner: conversation-provider, to_owner: application-queue}
@@ -209,6 +215,7 @@ edges:
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::conversation_client', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::omni', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_layer', from_owner: desktop-presentation, to_owner: conversation-provider}
+  - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_parts', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_voyager', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_contract::launch', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_contract::operations', from_owner: desktop-presentation, to_owner: application-queue}
@@ -258,7 +265,9 @@ edges:
   - {from: 'rs:voyager_desktop::quit', to: 'rs:voyager_app::core', from_owner: desktop-presentation, to_owner: core-adapter}
   - {from: 'rs:voyager_desktop::quit', to: 'rs:voyager_app::voice_layer', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop::shipped', to: 'rs:voyager_app::content::install', from_owner: desktop-presentation, to_owner: content}
+  - {from: 'rs:voyager_desktop::speech', to: 'rs:voyager_app', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop::speech', to: 'rs:voyager_app::voice_layer', from_owner: desktop-presentation, to_owner: conversation-provider}
+  - {from: 'rs:voyager_desktop::speech', to: 'rs:voyager_app::voice_parts', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop::split', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_desktop::terminal', to: 'rs:voyager_app::core', from_owner: desktop-presentation, to_owner: core-adapter}
   - {from: 'rs:voyager_desktop::terminal::input', to: 'rs:voyager_app::core', from_owner: desktop-presentation, to_owner: core-adapter}

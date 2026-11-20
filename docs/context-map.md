@@ -184,6 +184,9 @@ Owns files:
 - `app/src/http1.rs`
 - `app/src/voice_layer.rs`
 - `app/src/voice_voyager.rs`
+- `app/src/voice_reply.rs`
+- `app/src/voice_parts.rs`
+- `app/src/voice_speaker.rs`
 - `app/tests/voice_engine.rs`
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`
