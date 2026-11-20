@@ -13,7 +13,7 @@ struct Common {
 
 #[derive(Deserialize)]
 struct Display {
-    turn_id: String,
+    prompt_id: String,
     message_id: String,
     index: u32,
     r#final: bool,
@@ -22,11 +22,13 @@ struct Display {
 
 #[derive(Deserialize)]
 struct Stopped {
+    prompt_id: String,
     last_assistant_message: String,
 }
 
 #[derive(Deserialize)]
 struct Failed {
+    prompt_id: Option<String>,
     error: String,
     error_details: Option<String>,
 }
@@ -50,7 +52,7 @@ pub fn claude_event(input: &str) -> Option<ReplyEvent> {
     match name {
         "MessageDisplay" => match serde_json::from_str::<Display>(input) {
             Ok(display) => Some(ReplyEvent::Text {
-                turn: display.turn_id,
+                turn: display.prompt_id,
                 message: display.message_id,
                 index: display.index,
                 last: display.r#final,
@@ -60,12 +62,14 @@ pub fn claude_event(input: &str) -> Option<ReplyEvent> {
         },
         "Stop" => match serde_json::from_str::<Stopped>(input) {
             Ok(stopped) => Some(ReplyEvent::TurnEnd {
+                turn: stopped.prompt_id,
                 text: stopped.last_assistant_message,
             }),
             Err(error) => unreadable(name, error),
         },
         "StopFailure" => match serde_json::from_str::<Failed>(input) {
             Ok(failed) => Some(ReplyEvent::TurnFailed {
+                turn: failed.prompt_id,
                 error: match failed.error_details {
                     Some(details) if !details.is_empty() => format!("{}: {details}", failed.error),
                     _ => failed.error,
@@ -116,7 +120,7 @@ mod tests {
 
     fn display(extra: serde_json::Value) -> String {
         let mut base = json!({
-            "hook_event_name": "MessageDisplay", "session_id": "s", "turn_id": "t1",
+            "hook_event_name": "MessageDisplay", "session_id": "s", "turn_id": "x", "prompt_id": "p1",
             "message_id": "m1", "index": 2, "final": false, "delta": "line\n"
         });
         base.as_object_mut()
@@ -130,7 +134,7 @@ mod tests {
         assert_eq!(
             claude_event(&display(json!({}))),
             Some(ReplyEvent::Text {
-                turn: "t1".into(),
+                turn: "p1".into(),
                 message: "m1".into(),
                 index: 2,
                 last: false,
@@ -141,18 +145,29 @@ mod tests {
 
     #[test]
     fn stop_and_stop_failure_become_turn_ends() {
-        let stop = json!({"hook_event_name":"Stop","last_assistant_message":"All done."});
+        let stop =
+            json!({"hook_event_name":"Stop","prompt_id":"p1","last_assistant_message":"All done."});
         assert_eq!(
             claude_event(&stop.to_string()),
             Some(ReplyEvent::TurnEnd {
+                turn: "p1".into(),
                 text: "All done.".into()
             })
         );
-        let failure = json!({"hook_event_name":"StopFailure","error":"rate_limit","error_details":"slow down"});
+        let failure = json!({"hook_event_name":"StopFailure","prompt_id":"p1","error":"rate_limit","error_details":"slow down"});
         assert_eq!(
             claude_event(&failure.to_string()),
             Some(ReplyEvent::TurnFailed {
+                turn: Some("p1".into()),
                 error: "rate_limit: slow down".into()
+            })
+        );
+        let bare = json!({"hook_event_name":"StopFailure","error":"server_error"});
+        assert_eq!(
+            claude_event(&bare.to_string()),
+            Some(ReplyEvent::TurnFailed {
+                turn: None,
+                error: "server_error".into()
             })
         );
     }
@@ -166,7 +181,7 @@ mod tests {
 
     #[test]
     fn a_renamed_or_missing_field_is_reported_as_unreadable() {
-        let renamed = json!({"hook_event_name":"MessageDisplay","turn_id":"t1","message_id":"m1","index":0,"final":true,"text":"x"});
+        let renamed = json!({"hook_event_name":"MessageDisplay","prompt_id":"p1","message_id":"m1","index":0,"final":true,"text":"x"});
         match claude_event(&renamed.to_string()) {
             Some(ReplyEvent::Unreadable { event, error }) => {
                 assert_eq!(event, "MessageDisplay");

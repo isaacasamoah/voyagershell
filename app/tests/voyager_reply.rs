@@ -128,7 +128,8 @@ mod linux {
             send(
                 &session,
                 &terminal,
-                &json!({"command":"reply","event":{"kind":"turn-end","text":"abc"}}).to_string(),
+                &json!({"command":"reply","event":{"kind":"turn-end","turn":"t1","text":"abc"}})
+                    .to_string(),
             );
             let snapshot = until(&client, |snapshot| snapshot.turns[0].ending.is_some());
             assert_eq!(

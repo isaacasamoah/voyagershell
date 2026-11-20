@@ -57,17 +57,24 @@ struct Pending {
     held: BTreeMap<u32, (String, bool)>,
 }
 
-#[derive(Default)]
-struct Open {
-    turn: Turn,
+enum Stopping {
+    Text(String),
+    Failed(String),
+}
+
+struct Slot {
+    id: String,
+    messages: Vec<Message>,
     pending: Vec<Pending>,
     bytes: usize,
+    truncated: bool,
+    stop: Option<Stopping>,
+    lost: bool,
 }
 
 #[derive(Default)]
 struct State {
-    open: Option<Open>,
-    closed: VecDeque<Turn>,
+    turns: VecDeque<Slot>,
     unreadable: Option<Unreadable>,
 }
 
@@ -79,17 +86,15 @@ pub struct Replies {
 impl Replies {
     pub fn snapshot(&self) -> Snapshot {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        let mut turns: Vec<Turn> = state.closed.iter().cloned().collect();
-        turns.extend(state.open.iter().map(|open| open.turn.clone()));
         Snapshot {
-            turns,
+            turns: state.turns.iter().map(Slot::view).collect(),
             unreadable: state.unreadable.clone(),
         }
     }
 
     pub fn stop_missing(&self, done_since: Option<Instant>, now: Instant) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        state.open.is_some()
+        state.turns.back().is_some_and(|slot| slot.stop.is_none())
             && done_since.is_some_and(|since| now.saturating_duration_since(since) >= STOP_GRACE)
     }
 
@@ -112,74 +117,77 @@ impl State {
                 index,
                 last,
                 text,
-            } => self.text(&turn, &message, index, last, text),
-            ReplyEvent::TurnEnd { text } => self.end(|open| settle(open, text)),
-            ReplyEvent::TurnFailed { error } => self.end(|_| Ending::Failed { error }),
+            } => {
+                let (slot, started) = self.slot(&turn);
+                slot.take(&message, index, last, text);
+                if started {
+                    Step::Started(turn)
+                } else {
+                    Step::Streaming
+                }
+            }
+            ReplyEvent::TurnEnd { turn, text } => self.stop(Some(turn), Stopping::Text(text)),
+            ReplyEvent::TurnFailed { turn, error } => self.stop(turn, Stopping::Failed(error)),
         }
     }
 
-    fn text(&mut self, turn: &str, message: &str, index: u32, last: bool, text: String) -> Step {
-        if self.closed.iter().any(|closed| closed.id == turn) {
-            return Step::Streaming;
-        }
-        let mut started = false;
-        if self.open.as_ref().is_some_and(|open| open.turn.id != turn) {
-            self.close(|_| Ending::Lost);
-        }
-        let open = self.open.get_or_insert_with(|| {
-            started = true;
-            Open {
-                turn: Turn {
-                    id: turn.into(),
-                    ..Turn::default()
-                },
-                ..Open::default()
-            }
-        });
-        open.take(message, index, last, text);
+    fn slot(&mut self, turn: &str) -> (&mut Slot, bool) {
+        let found = self.turns.iter().position(|slot| slot.id == turn);
+        let started = found.is_none();
         if started {
-            Step::Started(turn.into())
-        } else {
-            Step::Streaming
-        }
-    }
-
-    fn end(&mut self, ending: impl FnOnce(&Open) -> Ending) -> Step {
-        let streamed = self.open.is_some();
-        if !streamed {
-            self.open = Some(Open::default());
-        }
-        self.close(ending);
-        if streamed { Step::Ended } else { Step::Silent }
-    }
-
-    fn close(&mut self, ending: impl FnOnce(&Open) -> Ending) {
-        if let Some(mut open) = self.open.take() {
-            open.turn.ending = Some(ending(&open));
-            self.closed.push_back(open.turn);
-            while self.closed.len() > TURNS_KEPT {
-                self.closed.pop_front();
+            if let Some(previous) = self.turns.back_mut().filter(|slot| slot.stop.is_none()) {
+                previous.lost = true;
+            }
+            self.turns.push_back(Slot::new(turn));
+            while self.turns.len() > TURNS_KEPT {
+                self.turns.pop_front();
             }
         }
+        let index = found.unwrap_or(self.turns.len() - 1);
+        (&mut self.turns[index], started)
+    }
+
+    fn stop(&mut self, turn: Option<String>, stopping: Stopping) -> Step {
+        let known = match &turn {
+            Some(turn) => self.turns.iter().any(|slot| &slot.id == turn),
+            None => !self.turns.is_empty(),
+        };
+        let id = turn.unwrap_or_else(|| {
+            self.turns
+                .back()
+                .map(|slot| slot.id.clone())
+                .unwrap_or_default()
+        });
+        let (slot, _) = self.slot(&id);
+        slot.stop = Some(stopping);
+        if known { Step::Ended } else { Step::Silent }
     }
 }
 
-impl Open {
+impl Slot {
+    fn new(id: &str) -> Self {
+        Self {
+            id: id.into(),
+            messages: Vec::new(),
+            pending: Vec::new(),
+            bytes: 0,
+            truncated: false,
+            stop: None,
+            lost: false,
+        }
+    }
+
     fn take(&mut self, message: &str, index: u32, last: bool, text: String) {
-        let slot = match self
-            .turn
-            .messages
-            .iter()
-            .position(|seen| seen.id == message)
-        {
+        let slot = match self.messages.iter().position(|seen| seen.id == message) {
             Some(slot) => slot,
             None => {
-                self.turn.messages.push(Message {
+                self.stop = None;
+                self.messages.push(Message {
                     id: message.into(),
                     ..Message::default()
                 });
                 self.pending.push(Pending::default());
-                self.turn.messages.len() - 1
+                self.messages.len() - 1
             }
         };
         let pending = &mut self.pending[slot];
@@ -187,12 +195,12 @@ impl Open {
             return;
         }
         if self.bytes + text.len() > TURN_BYTES {
-            self.turn.truncated = true;
+            self.truncated = true;
             return;
         }
         self.bytes += text.len();
         pending.held.insert(index, (text, last));
-        let message = &mut self.turn.messages[slot];
+        let message = &mut self.messages[slot];
         while let Some((text, last)) = pending.held.remove(&pending.next) {
             message.text.push_str(&text);
             message.complete |= last;
@@ -201,18 +209,31 @@ impl Open {
     }
 
     fn whole(&self) -> bool {
-        !self.turn.truncated && self.turn.messages.iter().all(|message| message.complete)
+        !self.truncated && self.messages.iter().all(|message| message.complete)
     }
-}
 
-fn settle(open: &Open, text: String) -> Ending {
-    let matched = open.whole()
-        && open
-            .turn
-            .messages
-            .last()
-            .is_some_and(|message| message.text.trim_end() == text.trim_end());
-    Ending::Stopped { text, matched }
+    fn view(&self) -> Turn {
+        let ending = match &self.stop {
+            Some(Stopping::Text(text)) => Some(Ending::Stopped {
+                text: text.clone(),
+                matched: self.whole()
+                    && self
+                        .messages
+                        .last()
+                        .is_some_and(|message| message.text.trim_end() == text.trim_end()),
+            }),
+            Some(Stopping::Failed(error)) => Some(Ending::Failed {
+                error: error.clone(),
+            }),
+            None => self.lost.then_some(Ending::Lost),
+        };
+        Turn {
+            id: self.id.clone(),
+            messages: self.messages.clone(),
+            ending,
+            truncated: self.truncated,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -229,14 +250,24 @@ mod tests {
         }
     }
 
-    fn end(text: &str) -> ReplyEvent {
-        ReplyEvent::TurnEnd { text: text.into() }
+    fn end(turn: &str, text: &str) -> ReplyEvent {
+        ReplyEvent::TurnEnd {
+            turn: turn.into(),
+            text: text.into(),
+        }
     }
 
     fn only(replies: &Replies) -> Turn {
         let mut turns = replies.snapshot().turns;
         assert_eq!(turns.len(), 1);
         turns.remove(0)
+    }
+
+    fn stopped(text: &str, matched: bool) -> Option<Ending> {
+        Some(Ending::Stopped {
+            text: text.into(),
+            matched,
+        })
     }
 
     #[test]
@@ -281,14 +312,8 @@ mod tests {
             replies.accept(chunk("t1", "m1", 1, true, "")),
             Step::Streaming
         );
-        assert_eq!(replies.accept(end("Done.")), Step::Ended);
-        assert_eq!(
-            only(&replies).ending,
-            Some(Ending::Stopped {
-                text: "Done.".into(),
-                matched: true
-            })
-        );
+        assert_eq!(replies.accept(end("t1", "Done.")), Step::Ended);
+        assert_eq!(only(&replies).ending, stopped("Done.", true));
     }
 
     #[test]
@@ -296,38 +321,48 @@ mod tests {
         let replies = Replies::default();
         replies.accept(chunk("t1", "m1", 0, false, "a\n"));
         replies.accept(chunk("t1", "m1", 2, true, "c"));
-        replies.accept(end("a\nb\nc"));
-        assert_eq!(
-            only(&replies).ending,
-            Some(Ending::Stopped {
-                text: "a\nb\nc".into(),
-                matched: false
-            })
-        );
+        replies.accept(end("t1", "a\nb\nc"));
+        assert_eq!(only(&replies).ending, stopped("a\nb\nc", false));
     }
 
     #[test]
     fn a_differing_stop_text_is_unmatched_even_when_every_chunk_arrived() {
         let replies = Replies::default();
         replies.accept(chunk("t1", "m1", 0, true, "streamed"));
-        replies.accept(end("different"));
-        assert!(matches!(
-            only(&replies).ending,
-            Some(Ending::Stopped { matched: false, .. })
-        ));
+        replies.accept(end("t1", "different"));
+        assert_eq!(only(&replies).ending, stopped("different", false));
     }
 
     #[test]
-    fn a_chunk_for_a_closed_turn_is_dropped() {
+    fn the_final_chunk_arriving_just_after_the_stop_still_matches() {
         let replies = Replies::default();
         replies.accept(chunk("t1", "m1", 0, false, "a"));
-        replies.accept(end("ab"));
+        replies.accept(end("t1", "ab"));
+        assert_eq!(only(&replies).ending, stopped("ab", false));
         assert_eq!(
             replies.accept(chunk("t1", "m1", 1, true, "b")),
             Step::Streaming
         );
-        assert_eq!(replies.snapshot().turns.len(), 1);
-        assert_eq!(only(&replies).messages[0].text, "a");
+        let turn = only(&replies);
+        assert_eq!(turn.messages[0].text, "ab");
+        assert_eq!(turn.ending, stopped("ab", true));
+    }
+
+    #[test]
+    fn a_stop_hook_that_continues_a_turn_reopens_it_and_the_second_stop_settles_it() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, true, "first"));
+        replies.accept(end("t1", "first"));
+        assert_eq!(only(&replies).ending, stopped("first", true));
+        assert_eq!(
+            replies.accept(chunk("t1", "m2", 0, true, "second")),
+            Step::Streaming
+        );
+        assert_eq!(only(&replies).ending, None);
+        assert_eq!(replies.accept(end("t1", "second")), Step::Ended);
+        let turn = only(&replies);
+        assert_eq!(turn.messages.len(), 2);
+        assert_eq!(turn.ending, stopped("second", true));
     }
 
     #[test]
@@ -336,6 +371,7 @@ mod tests {
         replies.accept(chunk("t1", "m1", 0, false, "a"));
         assert_eq!(
             replies.accept(ReplyEvent::TurnFailed {
+                turn: Some("t1".into()),
                 error: "rate_limit".into()
             }),
             Step::Ended
@@ -349,20 +385,47 @@ mod tests {
     }
 
     #[test]
-    fn a_turn_that_ends_with_no_streamed_text_is_silent_and_still_recorded() {
+    fn a_failure_with_no_turn_closes_the_latest_turn() {
         let replies = Replies::default();
-        assert_eq!(replies.accept(end("Only the stop text")), Step::Silent);
+        replies.accept(chunk("t1", "m1", 0, false, "a"));
+        replies.accept(ReplyEvent::TurnFailed {
+            turn: None,
+            error: "server_error".into(),
+        });
         assert_eq!(
             only(&replies).ending,
-            Some(Ending::Stopped {
-                text: "Only the stop text".into(),
-                matched: false
+            Some(Ending::Failed {
+                error: "server_error".into()
             })
         );
     }
 
     #[test]
-    fn a_new_turn_closes_a_turn_whose_stop_never_came() {
+    fn a_turn_that_ends_with_no_streamed_text_is_silent_and_still_recorded() {
+        let replies = Replies::default();
+        assert_eq!(
+            replies.accept(end("t1", "Only the stop text")),
+            Step::Silent
+        );
+        let turn = only(&replies);
+        assert_eq!(turn.id, "t1");
+        assert_eq!(turn.ending, stopped("Only the stop text", false));
+    }
+
+    #[test]
+    fn each_stop_settles_its_own_turn_whatever_order_the_hooks_arrive_in() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, true, "a"));
+        replies.accept(chunk("t2", "m2", 0, true, "b"));
+        replies.accept(end("t1", "a"));
+        replies.accept(end("t2", "b"));
+        let turns = replies.snapshot().turns;
+        assert_eq!(turns[0].ending, stopped("a", true));
+        assert_eq!(turns[1].ending, stopped("b", true));
+    }
+
+    #[test]
+    fn a_new_turn_marks_a_turn_whose_stop_has_not_come_as_lost_until_it_does() {
         let replies = Replies::default();
         replies.accept(chunk("t1", "m1", 0, true, "a"));
         assert_eq!(
@@ -372,6 +435,8 @@ mod tests {
         let turns = replies.snapshot().turns;
         assert_eq!(turns[0].ending, Some(Ending::Lost));
         assert_eq!(turns[1].ending, None);
+        replies.accept(end("t1", "a"));
+        assert_eq!(replies.snapshot().turns[0].ending, stopped("a", true));
     }
 
     #[test]
@@ -383,11 +448,19 @@ mod tests {
         let turn = only(&replies);
         assert!(turn.truncated);
         assert_eq!(turn.messages[0].text.len(), TURN_BYTES);
-        replies.accept(end(&format!("{big}y")));
-        assert!(matches!(
-            only(&replies).ending,
-            Some(Ending::Stopped { matched: false, .. })
-        ));
+        replies.accept(end("t1", &format!("{big}y")));
+        assert_eq!(only(&replies).ending, stopped(&format!("{big}y"), false));
+    }
+
+    #[test]
+    fn only_the_latest_turns_are_kept() {
+        let replies = Replies::default();
+        for number in 0..TURNS_KEPT + 3 {
+            replies.accept(chunk(&format!("t{number}"), "m", 0, true, "x"));
+        }
+        let turns = replies.snapshot().turns;
+        assert_eq!(turns.len(), TURNS_KEPT);
+        assert_eq!(turns[0].id, "t3");
     }
 
     #[test]
@@ -415,7 +488,7 @@ mod tests {
         assert!(!replies.stop_missing(None, done + STOP_GRACE));
         assert!(!replies.stop_missing(Some(done), done + STOP_GRACE / 2));
         assert!(replies.stop_missing(Some(done), done + STOP_GRACE));
-        replies.accept(end("a"));
+        replies.accept(end("t1", "a"));
         assert!(!replies.stop_missing(Some(done), done + STOP_GRACE));
     }
 }

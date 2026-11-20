@@ -26,10 +26,12 @@ export type ReplyEvent =
   | {
       kind: "turn-end";
       text: string;
+      turn: string;
     }
   | {
       error: string;
       kind: "turn-failed";
+      turn?: string | null;
     }
   | {
       error: string;

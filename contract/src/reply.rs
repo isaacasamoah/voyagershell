@@ -13,9 +13,12 @@ pub enum ReplyEvent {
         text: String,
     },
     TurnEnd {
+        turn: String,
         text: String,
     },
     TurnFailed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn: Option<String>,
         error: String,
     },
     Unreadable {

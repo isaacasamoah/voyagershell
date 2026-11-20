@@ -1393,10 +1393,14 @@
             },
             "text": {
               "type": "string"
+            },
+            "turn": {
+              "type": "string"
             }
           },
           "required": [
             "kind",
+            "turn",
             "text"
           ],
           "type": "object"
@@ -1410,6 +1414,12 @@
             "kind": {
               "const": "turn-failed",
               "type": "string"
+            },
+            "turn": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
