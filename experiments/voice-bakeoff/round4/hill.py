@@ -5,6 +5,13 @@ from voice_ws import WS
 S = "/var/tmp/voyager-crew/scratch/voice/round4"; os.makedirs(S + "/in", exist_ok=True)
 VOICES = ["en-GB-RyanNeural", "en-US-AndrewNeural", "en-GB-SoniaNeural"]
 WORKSPACE = "\n".join(["Voyages and Fleets: " + "; ".join(f"{vn}: " + ", ".join(n for _, n in fl) for _, vn, fl in world.TREE), "Selected Fleet: Voyager Shell/Main. Vessels (on-screen name, address, program, position):"] + [f"- {n}, {a}, {prog}, {pos}" for _, n, a, prog, pos in world.PANELS])
+def workspace_selected_first():
+    sel = [p for p in world.PANELS if p[2].startswith("Voyager Shell/Main/")]; oth = [p for p in world.PANELS if p not in sel]
+    L = ["Voyages and Fleets: " + "; ".join(f"{vn}: " + ", ".join(n for _, n in fl) for _, vn, fl in world.TREE), "", "SELECTED FLEET, Voyager Shell/Main (positions are inside this Fleet):"]
+    L += [f"- {n} ({prog}), {pos}" for _, n, a, prog, pos in sel]
+    L += ["", "OTHER FLEETS (not on screen; name them with 'in <Voyage or Fleet>'):"] + [f"- {n} ({prog}) in {a.rsplit('/', 1)[0]}" for _, n, a, prog, pos in oth]
+    return "\n".join(L)
+INSTR_PASS = "You are Voyager's voice. Act on the request with one tool call. Pass the human's own words for the target, exactly as spoken (for example 'top right', 'voyagershell 2', 'Notes in Research Notes'); the app finds it, so do not translate them into other names. After the tool result, say one short true sentence about what happened."
 INSTR_BASE = "You are Voyager's voice. The human speaks a request; act on it with a tool call, never ask back unless a tool says the name is ambiguous. Say names, addresses or positions as the human did. After the tool result, say one short true sentence about what happened."
 FAIL = ("can't", "cannot", "couldn't", "unable", "sorry", "error", "didn't", "not able", "wasn't")
 CONFIRM = ("done", "ok", "okay", "maximiz", "open", "moved", "move", "renam", "dock", "show", "here", "now", "restor", "hid", "bring", "went", "switch", "home", "got it", "on it", "sure", "taking")
@@ -42,10 +49,10 @@ def result_text(name, args, call):
     return f"{verb} {label}." if op != "home" else "Went home."
 
 def run_one(cfg, i):
-    cat, spoken, kind, grader, words = Q.R[i]; spec = cfg["spec"]; tl = names.voice_tools(spec)
+    cat, spoken, kind, grader, words = Q.R[i]; spec = cfg["spec"]; names.POSITION_FIELDS = bool(cfg.get("position_fields")); names.ASK_NOARGS = bool(cfg.get("ask_noargs")); tl = names.voice_tools(spec)
     rt_tools = [{"type": "function", "name": t["function"]["name"], "description": t["function"]["description"], "parameters": t["function"]["parameters"]} for t in tl]
     w = WS("127.0.0.1", 8112, "/v1/realtime", timeout=120); w.recv()
-    w.send({"type": "session.update", "session": {"type": "realtime", "instructions": cfg["instructions"] + "\n\n" + WORKSPACE, "tools": rt_tools, "tool_choice": cfg.get("first_choice", "auto"), "output_modalities": ["audio", "text"], "max_output_tokens": 300}})
+    w.send({"type": "session.update", "session": {"type": "realtime", "instructions": cfg["instructions"] + "\n\n" + cfg.get("workspace", WORKSPACE), "tools": rt_tools, "tool_choice": cfg.get("first_choice", "auto"), "output_modalities": ["audio", "text"], "max_output_tokens": 300}})
     data = pcm(i, spoken)
     for k in range(0, len(data), 32000): w.send({"type": "input_audio_buffer.append", "audio": base64.b64encode(data[k:k + 32000]).decode()})
     t0 = time.time(); w.send({"type": "input_audio_buffer.commit"}); w.send({"type": "response.create"})
@@ -57,14 +64,14 @@ def run_one(cfg, i):
             r["reply"] = o["text"]; r["t_sound"] = o["first_audio"]; r["outcome"] = "asked" if turn >= 0 else "no call"; break
         try: args = json.loads(o["call"]["args"] or "{}")
         except Exception: args = {}
-        kindr, val = names.to_call(o["call"]["name"], args, spec)
+        kindr, val = names.to_call(o["call"]["name"], args, spec); r.setdefault("trace", []).append([o["call"]["name"], args, kindr, val if kindr != "call" else "ok"])
         if kindr == "handoff":
             r["t_effect"] = o["call"]["t"]; r["outcome"] = "handoff"; result = "Asked Voyager. It will report back."
         elif kindr == "call":
             err = tools.validate(val)
             if err: kindr, val = "retry", {"rejected": err}
             else:
-                r["t_effect"] = o["call"]["t"]; r["call"] = val; r["outcome"] = "effect"; result = result_text(o["call"]["name"], args, val)
+                r["t_effect"] = o["call"]["t"]; r["call"] = val; r["args"] = [o["call"]["name"], args]; r["outcome"] = "effect"; result = result_text(o["call"]["name"], args, val)
         if kindr == "retry":
             r["retries"] += 1; w.send({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": o["call"]["id"], "output": json.dumps(val)}}); w.send({"type": "response.create"}); continue
         w.send({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": o["call"]["id"], "output": result}}); t1 = time.time()

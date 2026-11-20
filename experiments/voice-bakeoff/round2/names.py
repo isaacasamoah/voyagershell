@@ -50,18 +50,29 @@ SPEC = [
 ]
 REFDESC = "The thing as the human said it: an on-screen name (voyagershell 2), an address (Voyager Shell/Main/Notes), a program (codex), or a position in the selected Fleet (top right, bottom left). Add 'in <Voyage or Fleet>' when the same name exists twice."
 
+POSITIONS = ["top left", "top right", "bottom left", "bottom right", "left", "right", "top", "bottom"]
+POSITION_FIELDS = False
+ASK_NOARGS = False
+
+def ask_noargs():
+    return {"type": "function", "function": {"name": "ask_voyager", "description": "Hand this whole request to Voyager, the full agent. Use for anything that is not a direct workspace action: summaries, questions about work, messages to other agents, creating, starting or stopping things, and anything you are unsure of. The app passes the human's words to Voyager; you pass nothing.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}}
+
 def voice_tools(spec=None):
     out = []
     for name, op, desc, refs in (spec or SPEC):
         v = tools.VARIANTS[op]; props, req = {}, []
-        for field, (src, kinds) in refs.items(): props[field] = {"type": "string", "description": REFDESC}; req.append(field)
+        for field, (src, kinds) in refs.items():
+            if POSITION_FIELDS and "vessel" in kinds and len(kinds) == 1:
+                props[field] = {"type": "string", "description": "Its on-screen name or address, as said. Leave out when the human gave a position."}
+                props[field + "_position"] = {"type": "string", "enum": POSITIONS, "description": "Its position in the selected Fleet, when the human said 'top right', 'left' and the like."}
+            else: props[field] = {"type": "string", "description": REFDESC}; req.append(field)
         for k, x in v["properties"].items():
             if k in ("operation", "context", "id", "target", "voyage"): continue
             if k == "name": props["new_name"] = {"type": "string", "description": "The new name."}; req.append("new_name")
             elif k == "side": props["side"] = copy.deepcopy(tools.DEFS["Side"]); req.append("side")
             else: props[k] = {kk: vv for kk, vv in x.items() if kk != "description"}; req.append(k)
         out.append({"type": "function", "function": {"name": name, "description": desc, "parameters": {"type": "object", "properties": props, "required": req, "additionalProperties": False}}})
-    out.append(tools.ask_tool())
+    out.append(ask_noargs() if ASK_NOARGS else tools.ask_tool())
     return out
 
 def to_call(name, args, spec=None):
@@ -72,8 +83,9 @@ def to_call(name, args, spec=None):
     if not found: return "retry", f"unknown tool {name}; use one of {[s[0] for s in table]} or ask_voyager"
     op, refs = found; action = {"operation": op}; ids = {}
     for field, (src, kinds) in refs.items():
-        if field not in args: return "retry", f"missing {field}"
-        hits = resolve(str(args[field]), kinds)
+        ref = args.get(field) or args.get(field + "_position")
+        if not ref: return "retry", f"missing {field}"
+        hits = resolve(str(ref), kinds)
         if not hits: return "retry", {"error": f"nothing matches {args[field]!r}", "hint": "use a name or position from the workspace list, or ask_voyager"}
         if len(hits) > 1: return "retry", {"ambiguous": f"{args[field]!r} matches several", "candidates": [cand(e) for e in hits], "hint": "pick one by its address, or ask the human which"}
         ids[field] = hits[0]
