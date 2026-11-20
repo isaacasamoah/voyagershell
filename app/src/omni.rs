@@ -27,6 +27,7 @@ const VOICE: &str = "female";
 const READY_WITHIN: Duration = Duration::from_secs(120);
 const REQUEST_WITHIN: Duration = Duration::from_secs(30);
 const HEALTH_WITHIN: Duration = Duration::from_millis(800);
+const WARM_SAMPLES: usize = 8_000;
 const LIVENESS_EVERY: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -252,7 +253,14 @@ impl Omni {
     }
 
     pub fn warm(&self) -> Result<(), Fault> {
-        self.speech("Ready.").map(|_| ())
+        self.speech("Ready.")?;
+        self.hear(
+            &Utterance {
+                samples: vec![0; WARM_SAMPLES],
+            },
+            &[],
+        )
+        .map(|_| ())
     }
 }
 

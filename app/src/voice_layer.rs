@@ -69,9 +69,13 @@ pub trait Frames {
     fn frame(&mut self) -> io::Result<Vec<i16>>;
 }
 
+pub trait Speaker: Send {
+    fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send>;
+}
+
 pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
-    fn play(&self, clip: &Clip) -> io::Result<Box<dyn FnOnce() + Send>>;
+    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
 }
 
 pub struct System;
@@ -87,11 +91,17 @@ impl Audio for System {
         Capture::open().map(|capture| Box::new(capture) as Box<dyn Frames>)
     }
 
-    fn play(&self, clip: &Clip) -> io::Result<Box<dyn FnOnce() + Send>> {
-        let playing = Playing::start(clip)?;
-        Ok(Box::new(move || {
-            let _ = playing.finish();
-        }))
+    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>> {
+        Playing::open(rate).map(|playing| Box::new(playing) as Box<dyn Speaker>)
+    }
+}
+
+impl Speaker for Playing {
+    fn play(mut self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
+        Playing::play(&mut self, clip.pcm.clone());
+        Box::new(move || {
+            let _ = self.finish();
+        })
     }
 }
 
@@ -209,13 +219,15 @@ struct Exchange<'a> {
     shared: &'a Shared,
 }
 
+type Heard = (Option<Utterance>, Option<Box<dyn Speaker>>);
+
 enum Outcome {
     Done,
     Shutdown,
 }
 
 impl Exchange<'_> {
-    fn listen(&self, commands: &Receiver<Command>) -> Result<Option<Utterance>, Outcome> {
+    fn listen(&self, commands: &Receiver<Command>) -> Result<Heard, Outcome> {
         let mut microphone = match self.audio.microphone() {
             Ok(microphone) => microphone,
             Err(error) => {
@@ -227,6 +239,8 @@ impl Exchange<'_> {
             }
         };
         self.trace.mark("capture-open");
+        let rate = self.clips.values().next().map_or(24_000, |clip| clip.rate);
+        let speaker = self.audio.speaker(rate).ok();
         let mut gate = Gate::default();
         let mut samples = Vec::new();
         let mut spoke = true;
@@ -253,19 +267,24 @@ impl Exchange<'_> {
                 None => {}
             }
         }
-        Ok(spoke.then_some(Utterance { samples }))
+        Ok((spoke.then_some(Utterance { samples }), speaker))
     }
 
-    fn play(&self, phrase: Phrase) -> Option<Box<dyn FnOnce() + Send>> {
+    fn play(
+        &self,
+        phrase: Phrase,
+        ready: Option<Box<dyn Speaker>>,
+    ) -> Option<Box<dyn FnOnce() + Send>> {
         let clip = self.clips.get(&phrase)?;
-        self.audio.play(clip).ok()
+        let speaker = ready.or_else(|| self.audio.speaker(clip.rate).ok())?;
+        Some(speaker.play(clip))
     }
 
     fn run(&self, turn: u64, commands: &Receiver<Command>) -> Outcome {
         self.trace.mark("click");
         self.shared.set(Phase::Listening, None);
-        let utterance = match self.listen(commands) {
-            Ok(utterance) => utterance,
+        let (utterance, speaker) = match self.listen(commands) {
+            Ok(heard) => heard,
             Err(outcome) => return outcome,
         };
         self.trace.mark("utterance-ended");
@@ -282,7 +301,7 @@ impl Exchange<'_> {
         };
         self.trace.mark_words("heard", &heard);
         let Acknowledgement { phrase, send } = acknowledge(&heard, self.voyager.standing(), turn);
-        let finish = self.play(phrase);
+        let finish = self.play(phrase, speaker);
         self.trace.mark("acknowledgement-started");
         self.shared.set(Phase::Acknowledging, None);
         let mut notice = None;
@@ -415,8 +434,18 @@ mod tests {
 
     struct Fake {
         frames: Mutex<Option<Vec<Vec<i16>>>>,
-        played: Mutex<Vec<usize>>,
+        played: Arc<Mutex<Vec<usize>>>,
         opened: AtomicUsize,
+        speakers: AtomicUsize,
+    }
+
+    struct Voice(Arc<Mutex<Vec<usize>>>);
+
+    impl Speaker for Voice {
+        fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
+            self.0.lock().unwrap().push(clip.pcm.len());
+            Box::new(|| {})
+        }
     }
 
     impl Audio for Fake {
@@ -427,9 +456,9 @@ mod tests {
             )))
         }
 
-        fn play(&self, clip: &Clip) -> io::Result<Box<dyn FnOnce() + Send>> {
-            self.played.lock().unwrap().push(clip.pcm.len());
-            Ok(Box::new(|| {}))
+        fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
+            self.speakers.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(Voice(self.played.clone())))
         }
     }
 
@@ -514,8 +543,9 @@ mod tests {
             Self {
                 audio: Fake {
                     frames: Mutex::new(Some(frames)),
-                    played: Mutex::default(),
+                    played: Arc::default(),
                     opened: AtomicUsize::new(0),
+                    speakers: AtomicUsize::new(0),
                 },
                 voyager: Standin {
                     standing,
@@ -641,6 +671,15 @@ mod tests {
         assert!(matches!(commands.try_recv(), Err(TryRecvError::Empty)));
         command.send(Command::Shutdown).unwrap();
         assert!(drain(&commands));
+    }
+
+    #[test]
+    fn the_speaker_is_opened_with_the_microphone_so_the_clip_starts_at_once() {
+        let rig = Rig::new(speech_then_pause(), Standing::Idle, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert_eq!(rig.audio.speakers.load(Ordering::SeqCst), 1);
+        assert_eq!(rig.audio.opened.load(Ordering::SeqCst), 1);
     }
 
     #[test]

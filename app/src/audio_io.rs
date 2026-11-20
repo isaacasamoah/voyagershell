@@ -116,17 +116,19 @@ impl Drop for Capture {
 
 pub struct Playing {
     child: Child,
+    input: Option<ChildStdin>,
     writer: Option<JoinHandle<()>>,
 }
 
 impl Playing {
-    pub fn start(clip: &Clip) -> io::Result<Self> {
+    pub fn open(rate: u32) -> io::Result<Self> {
         let mut child = Command::new("paplay")
             .args([
                 "--raw",
                 "--format=s16le",
-                &format!("--rate={}", clip.rate),
+                &format!("--rate={rate}"),
                 "--channels=1",
+                "--latency-msec=40",
                 "--client-name=voyager-voice",
                 "--stream-name=voyager-voice",
             ])
@@ -134,21 +136,27 @@ impl Playing {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
-        let mut input: ChildStdin = child
+        let input = child
             .stdin
             .take()
             .ok_or_else(|| io::Error::other("The speaker stream has no input"))?;
-        let pcm = clip.pcm.clone();
-        let writer = thread::spawn(move || {
-            let _ = input.write_all(&pcm);
-        });
         Ok(Self {
             child,
-            writer: Some(writer),
+            input: Some(input),
+            writer: None,
         })
     }
 
+    pub fn play(&mut self, pcm: Vec<u8>) {
+        if let Some(mut input) = self.input.take() {
+            self.writer = Some(thread::spawn(move || {
+                let _ = input.write_all(&pcm);
+            }));
+        }
+    }
+
     pub fn finish(mut self) -> io::Result<()> {
+        self.input = None;
         if let Some(writer) = self.writer.take() {
             let _ = writer.join();
         }
@@ -158,7 +166,7 @@ impl Playing {
 
 impl Drop for Playing {
     fn drop(&mut self) {
-        if self.writer.is_some() {
+        if self.writer.is_none() {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
