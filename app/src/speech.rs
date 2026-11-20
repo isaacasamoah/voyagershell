@@ -205,6 +205,8 @@ impl SpokenText {
                 && let Some(last) = words.last_mut()
                 && !last.ends_with(['.', '!', '?'])
             {
+                let kept = last.trim_end_matches([':', ';', ',']).len();
+                last.truncate(kept);
                 last.push('.');
             }
         }
@@ -437,6 +439,27 @@ mod tests {
     fn a_wrapped_paragraph_keeps_its_own_punctuation() {
         let text = SpokenText::from_reply("The build\npassed on the\nsecond try.").unwrap();
         assert_eq!(text.as_str(), "The build passed on the second try.");
+    }
+
+    const REAL_THREE_SENTENCES: &str = "A tidy workspace helps you find what you need quickly, so you spend your time working instead of searching. It also makes mistakes less likely, because old drafts and stray files are less likely to get mixed up with the current ones. And it makes it easier to hand work to someone else or come back to it later, since anyone can see how things are organised.";
+
+    const REAL_LIST_SUMMARY: &str = "Rust has about forty keywords in use, plus a dozen or so reserved for the future. Here they are by group:\n\n- **Declaring things:** let, fn, struct, enum, trait, impl, type, const, static, mod.\n- **Control flow:** if, else, match, loop, while, for, in, break, continue, return.\n- **Ownership and mutability:** mut, ref, move.\n- **Modules and paths:** use, pub, crate, self, super, extern, as.\n- **Other:** async, await, dyn, unsafe, where, true, false.\n\nDo you want me to go through each one and say what it does?";
+
+    #[test]
+    fn a_real_three_sentence_answer_from_claude_is_spoken_whole() {
+        let text = SpokenText::from_reply(REAL_THREE_SENTENCES).unwrap();
+        assert_eq!(text.as_str(), REAL_THREE_SENTENCES);
+    }
+
+    #[test]
+    fn a_real_summary_of_a_long_list_from_claude_is_spoken_whole_with_its_offer() {
+        let spoken = SpokenText::from_reply(REAL_LIST_SUMMARY).unwrap();
+        let text = spoken.as_str();
+        assert!(text.starts_with("Rust has about forty keywords in use, plus a dozen"));
+        assert!(text.contains("Here they are by group. Declaring things: let, fn,"));
+        assert!(text.contains("Other: async, await, dyn, unsafe, where, true, false."));
+        assert!(text.ends_with("Do you want me to go through each one and say what it does?"));
+        assert!(!text.contains('*') && !text.contains("chat") && !text.contains(OFFER_MORE));
     }
 
     #[test]

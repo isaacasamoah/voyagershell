@@ -16,7 +16,7 @@ pub fn is_spoken(prompt: &str) -> bool {
 
 pub fn policy_rule() -> String {
     format!(
-        "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. Summarise a very long answer, such as a list, and offer more. Never point to the chat."
+        "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. If the answer would pass about 100 words, such as a list, say the gist and offer more. Never point to the chat."
     )
 }
 

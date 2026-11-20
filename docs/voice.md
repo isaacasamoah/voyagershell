@@ -138,8 +138,8 @@ audio thread that owns the microphone and the speaker is later work.
 Voice is the primary surface, and the chat is an alternative. A spoken reply is the
 whole answer and never says that more is in the chat. The agent's launch policy,
 `spoken::policy_rule`, tells it to answer a spoken prompt aloud in full, brief and
-plain, with no ids, paths or code, to say the reason when something fails, to summarise a
-very long answer such as a list and offer more, and never to point to the chat. Each word
+plain, with no ids, paths or code, to say the reason when something fails, to say only the gist of an answer that would pass about 100 words, such as a list, and
+offer more, and never to point to the chat. Each word
 of the rule is sent on every spoken turn, so it stays short.
 
 The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
