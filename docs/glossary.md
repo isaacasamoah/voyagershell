@@ -13,6 +13,7 @@ Retired words fail `npm run vocabulary:check`.
 | Avatar | The Voyager assistant figure. It holds its user's authority, and docking it selects the Context. | Desktop presentation |  |
 | Backend | The Core terminal that runs behind a Vessel. Hiding, moving or uninstalling the Vessel leaves it running. | Content |  |
 | Canvas | The whole window surface and the script package in desktop/canvas that draws it. | Desktop presentation | `header package`, `header script`, `header mod` |
+| Codex Voice Live | Codex's own live voice, which runs inside Codex and holds its own conversation turn. It is a Relay engine behind the voice interface, compiled and never offered to a user. | Conversation and provider |  |
 | Context | What the avatar acts on, which is the workspace, a Voyage, a Fleet, a Vessel or a Portal. Docking sets it. It stays separate from keyboard focus, visual selection and delegated assignment. | Placement |  |
 | Control | A patch that breaks the app on purpose to show that a Journey fails. | Verification |  |
 | Conversation | The private exchange between the user and the Administrator. It is separate from terminal agents and Vessels. | Conversation and provider |  |

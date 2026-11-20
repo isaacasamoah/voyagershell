@@ -183,7 +183,6 @@ edges:
   - {from: 'rs:voyager_app::voice_parts', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_reply', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_reply', to: 'rs:voyager_app::replies', from_owner: conversation-provider, to_owner: application-queue}
-  - {from: 'rs:voyager_app::voice_session', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_speaker', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_speaker', to: 'rs:voyager_app::replies', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}

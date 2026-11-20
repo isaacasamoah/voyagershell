@@ -1,4 +1,4 @@
-use crate::voice_host::Package;
+use crate::voice_live::Package;
 use serde_json::Value;
 use std::path::PathBuf;
 use voyager_contract::{
@@ -276,7 +276,7 @@ mod tests {
                 reason: "Text-only provider".into(),
             },
         };
-        let audio = crate::voice::Shared::new(capabilities.voice.clone());
+        let audio = crate::voice_live::lease::Shared::new(capabilities.voice.clone());
         let lease = audio.binding().unwrap();
         assert!(audio.begin(&lease).is_err());
         let mut state = voyager_contract::conversation::Snapshot {

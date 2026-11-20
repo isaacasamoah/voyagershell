@@ -122,7 +122,7 @@ impl Owner {
                     session: live.session.clone(),
                     offer: sdp,
                     focus,
-                    instructions: VOICE_INSTRUCTIONS,
+                    instructions: crate::voice_live::INSTRUCTIONS,
                 };
                 self.rpc(command)?;
             }
@@ -183,7 +183,7 @@ impl Owner {
                 }
             }
             ProviderAudio::Transcript(transcript) if live.started && self.audio.current(live.generation) => {
-                self.projection.edit(|state| crate::voice_transcript::notification(state, transcript, live.generation, &live.session))?;
+                self.projection.edit(|state| crate::voice_live_transcript::notification(state, transcript, live.generation, &live.session))?;
             }
             _ => (),
         }
@@ -332,8 +332,6 @@ impl Owner {
         }
     }
 }
-
-const VOICE_INSTRUCTIONS: &str = "You are Voyager, the human's concise private voice companion and administrator. The initial focus describes where this voice conversation opened; later accepted work captures the avatar's then-current focus. Use the backing Codex agent for workspace inspection and all workspace effects. Never claim an effect without its real tool outcome. Do not perform project changes or replay uncertain work. Keep replies brief and natural. Do not expose private reasoning, credentials or audio negotiation. Native voice and the backing text conversation are one administrator, not separate workers.";
 
 #[cfg(test)]
 mod tests {

@@ -1,7 +1,7 @@
-use crate::{
-    voice::Shared,
-    voice_host::{Host, Package},
-    voice_wire::{Controls, Selection, Signal},
+use super::{
+    host::{Host, Package},
+    lease::Shared,
+    wire::{Controls, Selection, Signal},
 };
 use std::{
     ffi::OsString,

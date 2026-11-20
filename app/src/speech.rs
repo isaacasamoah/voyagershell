@@ -1,3 +1,5 @@
+use crate::conversation_client::AudioLease;
+
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const MAX_SENTENCES: usize = 2;
 pub const MAX_WORDS: usize = 30;
@@ -143,11 +145,49 @@ pub trait Speaking: Send + Sync {
     fn speak(&self, text: &SpokenText) -> Result<Clip, Fault>;
 }
 
+pub trait Relay: Send + Sync {
+    fn start(&self) -> Result<(), String>;
+    fn stop(&self) -> Result<(), String>;
+    fn state(&self) -> Result<voyager_contract::voice::State, String>;
+}
+
 pub enum Engine {
     Pipeline {
         hearing: Box<dyn Hearing>,
         speaking: Box<dyn Speaking>,
     },
+    Relay(Box<dyn Relay>),
+}
+
+impl Relay for AudioLease {
+    fn start(&self) -> Result<(), String> {
+        AudioLease::start(self).map(|_| ())
+    }
+
+    fn stop(&self) -> Result<(), String> {
+        AudioLease::stop(self)
+    }
+
+    fn state(&self) -> Result<voyager_contract::voice::State, String> {
+        self.snapshot()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Shape {
+    Pipeline,
+    Relay,
+}
+
+pub const OFFERED: [Shape; 1] = [Shape::Pipeline];
+
+impl Engine {
+    pub fn shape(&self) -> Shape {
+        match self {
+            Engine::Pipeline { .. } => Shape::Pipeline,
+            Engine::Relay(_) => Shape::Relay,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -315,6 +355,28 @@ pub fn hearing_prompt(names: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Closed;
+
+    impl Relay for Closed {
+        fn start(&self) -> Result<(), String> {
+            Err("closed".into())
+        }
+        fn stop(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn state(&self) -> Result<voyager_contract::voice::State, String> {
+            Err("closed".into())
+        }
+    }
+
+    #[test]
+    fn a_relay_engine_is_not_an_offered_shape() {
+        let relay = Engine::Relay(Box::new(Closed));
+        assert_eq!(relay.shape(), Shape::Relay);
+        assert!(!OFFERED.contains(&relay.shape()));
+        assert_eq!(OFFERED, [Shape::Pipeline]);
+    }
 
     #[test]
     fn an_idle_voyager_gets_the_two_asking_phrases_in_turn_and_the_words_are_sent() {

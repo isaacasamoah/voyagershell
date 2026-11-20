@@ -174,11 +174,12 @@ Owns files:
 - `app/src/provider_settings.rs`
 - `app/src/codex.rs`
 - `app/src/codex_protocol.rs`
-- `app/src/voice.rs`
-- `app/src/voice_host.rs`
-- `app/src/voice_session.rs`
-- `app/src/voice_transcript.rs`
-- `app/src/voice_wire.rs`
+- `app/src/voice_live.rs`
+- `app/src/voice_live_host.rs`
+- `app/src/voice_live_lease.rs`
+- `app/src/voice_live_session.rs`
+- `app/src/voice_live_transcript.rs`
+- `app/src/voice_live_wire.rs`
 - `app/src/speech.rs`
 - `app/src/omni.rs`
 - `app/src/audio_io.rs`
@@ -194,7 +195,7 @@ Owns files:
 - `contract/src/voice.rs`
 - `contract/generated/conversation.ts`
 
-It owns the words Administrator, Conversation, Provider.
+It owns the words Administrator, Conversation, Provider, Codex Voice Live.
 
 It uses the words Context, Operation, Vessel, Placement.
 

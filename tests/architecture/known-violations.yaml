@@ -91,15 +91,7 @@ known:
   - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'
-  - id: 'agent-names-stay-in-adapters: codex in app/src/conversation_audio.rs'
-    limit: 1
-    owner: isaac
-    reason: 'S19a, Give voice its own adapter layer. The Codex voice host moves into that adapter.'
   - id: 'agent-names-stay-in-adapters: codex in app/src/provider_settings.rs'
     limit: 12
     owner: isaac
     reason: 'Avatar unit 9, retire the in-app conversation (decision D). That removes the Codex provider path and this name.'
-  - id: 'agent-names-stay-in-adapters: codex in app/src/voice_host.rs'
-    limit: 8
-    owner: isaac
-    reason: 'S19a, Give voice its own adapter layer. The Codex voice host moves into that adapter.'

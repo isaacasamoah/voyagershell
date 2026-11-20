@@ -1,4 +1,4 @@
-use crate::voice_host::Cancellation;
+use super::host::Cancellation;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},

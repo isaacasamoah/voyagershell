@@ -1,7 +1,7 @@
 #[path = "codex_protocol.rs"]
 mod protocol;
 use crate::provider::{Command as ProviderCommand, Event, Operation, Provider, ToolReply};
-use crate::voice_host::Package;
+use crate::voice_live::Package;
 #[cfg(test)]
 pub(crate) use protocol::{decode as normalize, reported_version, tool_reply as encode_tool_reply};
 use serde_json::{Value, json};

@@ -11,8 +11,8 @@ use crate::{
         Answer, Command, Event as ProviderEvent, Operation, Outcome, Provider, ToolCall, Visible,
     },
     provider_settings::Settings,
-    voice::{Binding, Shared as AudioState},
-    voice_session::{self, Event as AudioEvent},
+    voice_live::lease::{Binding, Shared as AudioState},
+    voice_live::session::{self as voice_session, Event as AudioEvent},
 };
 use audio::Realtime;
 use std::{

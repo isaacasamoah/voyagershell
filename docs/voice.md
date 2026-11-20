@@ -3,9 +3,9 @@
 The voice layer lets a person click the avatar's voice control, speak, and have
 the words reach Voyager. It runs on the local Omni model. Nothing is sent to a
 cloud service and nothing is billed per use. Voice stays separate from the agent
-runtime. It hears and speaks, and Voyager acts. The Codex realtime helper
-described in [the conversation guide](conversation.md) stays compiled and has no
-control until its own adapter step.
+runtime. It hears and speaks, and Voyager acts. Codex Voice Live, described in
+[its own guide](codex-voice-live.md), is a relay engine behind the same
+interface. It stays compiled and is not offered.
 
 This guide covers hearing a request, handing it to Voyager and reading Voyager's
 reply aloud.

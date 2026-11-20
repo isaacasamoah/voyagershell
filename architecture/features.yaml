@@ -957,23 +957,19 @@ features:
         formal: []
         journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
-    sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
+    sources: [desktop/src/speech.rs, 'app/src/voice_live*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
     code:
       - app/src/audio_io.rs
       - app/src/client_service.rs
       - app/src/http1.rs
       - app/src/omni.rs
       - app/src/speech.rs
-      - app/src/voice.rs
-      - app/src/voice_host.rs
-      - app/src/voice_layer.rs
-      - app/src/voice_parts.rs
-      - app/src/voice_reply.rs
-      - app/src/voice_session.rs
-      - app/src/voice_speaker.rs
-      - app/src/voice_transcript.rs
-      - app/src/voice_voyager.rs
-      - app/src/voice_wire.rs
+      - app/src/voice_live.rs
+      - app/src/voice_live_host.rs
+      - app/src/voice_live_lease.rs
+      - app/src/voice_live_session.rs
+      - app/src/voice_live_transcript.rs
+      - app/src/voice_live_wire.rs
       - desktop/src/speech.rs
       - docs/voice.md
   - id: layouts-home

@@ -1,4 +1,4 @@
-use crate::voice_wire::{self, Signal};
+use super::wire::{self, Signal};
 use serde::Deserialize;
 use std::{
     fs::File,
@@ -181,7 +181,7 @@ impl Host {
             .name("voice-helper-reader".into())
             .spawn(move || {
                 loop {
-                    let response = voice_wire::read(&mut output)
+                    let response = wire::read(&mut output)
                         .map_err(|_| "Native voice control frame failed".to_owned())
                         .and_then(|signal| {
                             signal.ok_or_else(|| "Native voice helper closed".into())
@@ -201,8 +201,7 @@ impl Host {
     }
 
     pub fn exchange(&mut self, signal: &Signal, timeout: Duration) -> Result<Signal, String> {
-        voice_wire::write(&mut self.input, signal)
-            .map_err(|_| "Native voice control write failed")?;
+        wire::write(&mut self.input, signal).map_err(|_| "Native voice control write failed")?;
         self.output
             .recv_timeout(timeout)
             .map_err(|_| "Native voice control acknowledgement is unconfirmed")?

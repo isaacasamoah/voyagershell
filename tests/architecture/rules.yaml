@@ -63,6 +63,8 @@ rules:
     owners:
       - app/src/codex.rs
       - app/src/codex_protocol.rs
+      - app/src/voice_live.rs
+      - app/src/voice_live_host.rs
       - app/src/focus_hook.rs
       - app/src/reply_hook.rs
     roots: ['app/src/**', 'contract/src/**', 'desktop/src/**', 'desktop/canvas/**', 'content/**']
