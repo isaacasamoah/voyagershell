@@ -42,7 +42,7 @@ test("a new edge passes once intended.yaml lists it", () => {
   assert.ok(fs.readFileSync(listed, "utf8").includes("rs:voyager_app::wire"));
   const result = run(directory, ["--intended", listed]);
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /41 violations, 41 known\n.*PASS\n$/s);
+  assert.match(result.out, /40 violations, 40 known\n.*PASS\n$/s);
 });
 
 test("the listed edges are exactly today's cross-owner edges", () => {

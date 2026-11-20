@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /41 violations, 41 known\n.*PASS\n$/s);
+  assert.match(result.out, /40 violations, 40 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -484,7 +484,7 @@ test("a recorded file that gains another Notes literal fails", () => {
   );
   expectFailure(
     run(directory),
-    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 2 literals, over its recorded limit of 1',
+    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 3 literals, over its recorded limit of 2',
   );
 });
 
