@@ -600,6 +600,22 @@ decimal strings so a JavaScript number cannot round a Rust `u64`. Core's own
 document protocol still uses its native numeric revision field. Placement,
 content and optional Core terminal identities are distinct types.
 
+`contract/src/operations.rs` is the operation catalogue. It lists every function
+and component that a script can import from a host module, with typed arguments
+and a typed result. The TypeScript declarations that `export-script-types`
+prints, and `contract/generated/operations.json`, come from it.
+`desktop/src/bridge.rs` registers each host module against its catalogue entry. It
+checks argument count, type and size from the entry before the handler runs, and
+refuses the load when a registered name is not in the catalogue, an entry has no
+registration, or the sync and async kinds differ. A unit test also reads the
+registering files and fails when their names and the catalogue differ.
+`contract/build.cjs` refuses a generated wrapper that imports a name the
+catalogue lacks. The workspace `Action` type stays the one list of workspace
+operations; a click and F2 reach the same generated `invoke`. A wrong argument
+type in a script fails `npm run typecheck`, and `desktop/typecheck.cjs` starts
+the message with the operation name: the `operation` literal for `invoke`, the
+function name for a host call.
+
 `app/src/workspace.rs` applies domain changes to a proposed layout.
 `Owner` in `app/src/client_owner.rs` owns the current layout and revision on one worker thread.
 It publishes a proposal only after Core confirms the save. Confirmed snapshots

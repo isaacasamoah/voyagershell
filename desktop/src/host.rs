@@ -14,7 +14,7 @@ use gpui::{
 };
 use gpui_base::{ColorTokens, ThemeAppearance};
 use gpui_shell::{
-    Capabilities, HostModule, HostValue, ShellRoot, ShellRuntime, Watcher,
+    Capabilities, HostValue, ShellRoot, ShellRuntime, Watcher,
     policy::{self, Policy},
 };
 use serde::Deserialize;
@@ -23,8 +23,10 @@ use voyager_app::{
     core::{Error, Viewer},
 };
 use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessRequest};
+use voyager_contract::operations;
 use voyager_contract::{Context as WorkspaceContext, Request};
 
+use crate::bridge::{Bridge, decimal};
 use crate::terminal::Viewers;
 
 thread_local! { static LOADING: Cell<bool> = const { Cell::new(false) }; }
@@ -148,15 +150,15 @@ fn load(
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
     let readable = current.clone();
-    let module = HostModule::new(crate::script_types::THEME_MODULE)
-        .declarations(crate::script_types::THEME)
+    let module = Bridge::new(&operations::THEME)
         .function("projection", move |_| {
             let value = readable.borrow();
             let value = value
                 .as_ref()
                 .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))?;
             Ok(projection(value))
-        });
+        })
+        .finish()?;
     let client = &workspace_binding.client;
     let viewers = &workspace_binding.viewers;
     let identity = client.clone();
@@ -179,12 +181,8 @@ fn load(
     let notice = workspace_binding.notice.clone();
     let placement_client = client.clone();
     let terminal_viewers = viewers.clone();
-    let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
-        .declarations(crate::script_types::WORKSPACE)
-        .async_function("launches", move |arguments| {
-            if !arguments.is_empty() {
-                return Err(gpui_shell::HostError::new("launches expects no arguments"));
-            }
+    let workspace = Bridge::new(&operations::WORKSPACE)
+        .async_function("launches", move |_| {
             let client = launches_reader.clone();
             Ok(async move {
                 let catalog = client
@@ -197,15 +195,7 @@ fn load(
             })
         })
         .async_function("processes", move |arguments| {
-            let revision = arguments.string(0)?.to_owned();
-            let version = revision.parse::<u64>().map_err(|_| {
-                gpui_shell::HostError::new("processes expects a workspace revision")
-            })?;
-            if arguments.len() != 1 || version.to_string() != revision {
-                return Err(gpui_shell::HostError::new(
-                    "processes expects one decimal revision",
-                ));
-            }
+            let version = decimal(arguments, 0)?;
             let client = process_reader.clone();
             let executor = process_executor.clone();
             Ok(async move {
@@ -264,14 +254,9 @@ fn load(
             Ok(HostValue::from(identity.request_id()))
         })
         .async_function("worktree", move |arguments| {
-            let raw = arguments.string(0)?;
-            if raw.len() > 65536 {
-                return Err(gpui_shell::HostError::new(
-                    "Worktree request exceeds 64 KiB",
-                ));
-            }
-            let request: voyager_contract::worktree::Request = serde_json::from_str(raw)
-                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            let request: voyager_contract::worktree::Request =
+                serde_json::from_str(arguments.string(0)?)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             let client = worktree_calls.clone();
             let executor = worktree_executor.clone();
             Ok(async move {
@@ -306,15 +291,7 @@ fn load(
             })
         })
         .async_function("workspace_observation", move |arguments| {
-            let raw = arguments.string(0)?;
-            let version = raw
-                .parse::<u64>()
-                .map_err(|_| gpui_shell::HostError::new("Invalid workspace revision"))?;
-            if arguments.len() != 2 || version.to_string() != raw {
-                return Err(gpui_shell::HostError::new(
-                    "Invalid workspace observation arguments",
-                ));
-            }
+            let version = decimal(arguments, 0)?;
             let active = match arguments.get(1) {
                 Some(HostValue::Null) => None,
                 _ => Some(voyager_contract::PlacementId(
@@ -342,13 +319,7 @@ fn load(
             })
         })
         .async_function("call", move |arguments| {
-            let raw = arguments.string(0)?;
-            if raw.len() > 65536 {
-                return Err(gpui_shell::HostError::new(
-                    "Workspace request exceeds 64 KiB",
-                ));
-            }
-            let request = raw.to_owned();
+            let request = arguments.string(0)?.to_owned();
             let client = calls.clone();
             Ok(async move {
                 let request: Request = serde_json::from_str(&request)
@@ -360,12 +331,9 @@ fn load(
             })
         })
         .async_function("terminal_open", move |arguments| {
-            let raw = arguments.string(0)?;
-            if raw.len() > 1024 {
-                return Err(gpui_shell::HostError::new("Terminal request too large"));
-            }
-            let request: voyager_contract::TerminalRequest = serde_json::from_str(raw)
-                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            let request: voyager_contract::TerminalRequest =
+                serde_json::from_str(arguments.string(0)?)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             if request.request_id.is_empty()
                 || request.request_id.len() > 128
                 || request.vessel_id.0.is_empty()
@@ -449,21 +417,23 @@ fn load(
                     HostValue::from(notice.revision.to_string()),
                 ),
             ]))
-        });
+        })
+        .finish()?;
     let policy = Policy::new()
         .with_capabilities(Capabilities::new().window(true))
         .with_host_module(module)?
         .with_host_module(workspace)?;
     let note_colors = current.clone();
-    let policy = policy.with_host_module(workspace_binding.notes.module(Rc::new(move || {
-        let current = note_colors.borrow();
-        current
-            .as_ref()
-            .map(projection)
-            .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))
-    })))?;
-    let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
-    let _guard = LoadGuard::enter(policy.with_host_module(workspace_binding.avatar.module())?)?;
+    let policy =
+        policy.with_host_module(workspace_binding.notes.module(Rc::new(move || {
+            let current = note_colors.borrow();
+            current
+                .as_ref()
+                .map(projection)
+                .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))
+        }))?)?;
+    let policy = policy.with_host_module(crate::conversation::module(conversation.clone())?)?;
+    let _guard = LoadGuard::enter(policy.with_host_module(workspace_binding.avatar.module()?)?)?;
     runtime.try_load(package, window, cx)
 }
 

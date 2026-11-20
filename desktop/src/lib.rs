@@ -4,6 +4,7 @@ mod avatar_motion;
 mod avatar_pack;
 mod avatar_sharp;
 mod banner;
+mod bridge;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
 mod content_budget;
@@ -22,7 +23,6 @@ mod notes_session;
 mod occluding;
 mod platform;
 mod quit;
-mod script_types;
 mod shipped;
 mod source_snapshot;
 mod speech;
@@ -222,30 +222,16 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
 
 pub fn declarations() -> Result<String> {
     let mut declarations = gpui_shell::type_declarations(&native_registry(Default::default())?);
-    for (name, body) in [
-        (script_types::THEME_MODULE, script_types::THEME),
-        (script_types::AVATAR_MODULE, script_types::AVATAR),
-        (script_types::WORKSPACE_MODULE, script_types::WORKSPACE),
-        (
-            script_types::CONTENT_VIEW_MODULE,
-            script_types::CONTENT_VIEW,
-        ),
-        (
-            script_types::CONVERSATION_MODULE,
-            script_types::CONVERSATION,
-        ),
-    ] {
-        declarations.push_str(&format!("\ndeclare module \"{name}\" {{\n{body}\n}}\n"));
+    for module in voyager_contract::operations::CANVAS_MODULES {
+        declarations.push_str(&module.declared_module());
     }
     Ok(declarations)
 }
 
 pub fn notes_declarations() -> Result<String> {
     let mut declarations = gpui_shell::type_declarations(&notes_input::registry()?);
-    declarations.push_str(&format!(
-        "\ndeclare module {:?} {{\n{}\n}}\n",
-        script_types::CONTENT_MODULE,
-        script_types::CONTENT
-    ));
+    for module in voyager_contract::operations::VESSEL_MODULES {
+        declarations.push_str(&module.declared_module());
+    }
     Ok(declarations)
 }

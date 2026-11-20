@@ -10,6 +10,16 @@ fn schema<T: JsonSchema>() -> Schema {
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--operations") {
+        match serde_json::to_string_pretty(&voyager_contract::operations::MODULES) {
+            Ok(value) => println!("{value}"),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if std::env::args().nth(1).as_deref() == Some("--avatar") {
         let schemas = json!({
             "avatarAnimationPack": schema::<voyager_contract::avatar_animation::Pack>(),

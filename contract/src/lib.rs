@@ -15,6 +15,7 @@ pub mod inspection;
 pub mod launch;
 pub mod layout_document;
 pub mod observation;
+pub mod operations;
 pub mod place;
 pub mod socket;
 pub mod voice;

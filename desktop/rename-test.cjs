@@ -163,6 +163,27 @@ test("F2 targets are tab stops and a plus name keeps its accessible name", async
   assert.ok(view.editing);
 });
 
+test("renaming a Fleet by double-click and by F2 sends the same workspace operation", async () => {
+  const { view, cx, target, calls, reply } = fixture();
+  await reply();
+  const send = async (open) => {
+    const button = view.action("Original", null, false, target);
+    open(button);
+    view.editing.state.text = "Renamed";
+    view.editing.state.events.submit(null, cx);
+    const action = calls.at(-1);
+    await reply();
+    return action;
+  };
+  const clicked = await send((button) =>
+    button.on_click({ click_count: 2 }, cx),
+  );
+  const keyed = await send((button) => button.on_key_down({ key: "f2" }, cx));
+  const expected = { operation: "rename", target, name: "Renamed" };
+  assert.equal(JSON.stringify(clicked), JSON.stringify(expected));
+  assert.equal(JSON.stringify(keyed), JSON.stringify(clicked));
+});
+
 test("navigation after a name save follows the latest selected destination", async () => {
   const { view, cx, target, calls, reply } = fixture();
   await reply();

@@ -1,24 +1,21 @@
+use crate::bridge::{Bridge, decimal};
 use gpui_shell::{HostError, HostModule, HostValue};
 use voyager_app::conversation_client::Client;
 use voyager_contract::conversation::Request;
+use voyager_contract::operations;
 
-pub fn module(client: Client) -> HostModule {
+pub fn module(client: Client) -> Result<HostModule, HostError> {
     let identity = client.clone();
     let calls = client.clone();
     let speech = client.clone();
-    HostModule::new(crate::script_types::CONVERSATION_MODULE)
-        .declarations(crate::script_types::CONVERSATION)
+    Bridge::new(&operations::CONVERSATION)
         .component("Speech", crate::speech::component(speech))
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })
         .async_function("call", move |arguments| {
-            let raw = arguments.string(0)?;
-            if raw.len() > 65536 {
-                return Err(HostError::new("Conversation request exceeds 64 KiB"));
-            }
-            let request: Request =
-                serde_json::from_str(raw).map_err(|e| HostError::new(e.to_string()))?;
+            let request: Request = serde_json::from_str(arguments.string(0)?)
+                .map_err(|e| HostError::new(e.to_string()))?;
             let client = calls.clone();
             Ok(async move {
                 let reply = client.call(request).map_err(HostError::new)?;
@@ -29,13 +26,8 @@ pub fn module(client: Client) -> HostModule {
         })
         .async_function("snapshot", move |arguments| {
             let after = match arguments.get(0) {
-                None | Some(HostValue::Null) => None,
-                _ => Some(
-                    arguments
-                        .string(0)?
-                        .parse::<u64>()
-                        .map_err(|_| HostError::new("Invalid conversation revision"))?,
-                ),
+                Some(HostValue::Null) => None,
+                _ => Some(decimal(arguments, 0)?),
             };
             let client = client.clone();
             Ok(async move {
@@ -54,4 +46,5 @@ pub fn module(client: Client) -> HostModule {
                 Ok(HostValue::from(encoded))
             })
         })
+        .finish()
 }

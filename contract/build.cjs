@@ -25,8 +25,8 @@ function writeFiles(mode, directory, files) {
   }
 }
 
-async function generate(mode, avatar) {
-  const schemas = JSON.parse(
+function exportJson(flag) {
+  return JSON.parse(
     execFileSync(
       "cargo",
       [
@@ -38,7 +38,7 @@ async function generate(mode, avatar) {
         "voyager-contract",
         "--bin",
         "export",
-        ...(avatar ? ["--", "--avatar"] : []),
+        ...(flag ? ["--", flag] : []),
       ],
       {
         cwd: path.join(__dirname, ".."),
@@ -47,6 +47,24 @@ async function generate(mode, avatar) {
       },
     ),
   );
+}
+
+function assertCatalogued(source, operations) {
+  const imports = [
+    ...source.matchAll(/import \{([^}]*)\} from "(voyager_[a-z_]+)";/g),
+  ];
+  for (const [, names, module] of imports) {
+    const entries = operations.find((item) => item.name === module)?.entries;
+    if (!entries) throw Error(`Operation catalogue lacks module ${module}`);
+    for (const name of names.split(",").map((item) => item.trim())) {
+      if (!entries.some((entry) => entry.name === name))
+        throw Error(`Operation catalogue lacks ${module}.${name}`);
+    }
+  }
+}
+
+async function generate(mode, avatar) {
+  const schemas = exportJson(avatar ? "--avatar" : null);
   const files = {};
   for (const [name, schema] of Object.entries(schemas)) {
     files[`${name}.schema.json`] = JSON.stringify(schema, null, 2) + "\n";
@@ -76,6 +94,8 @@ async function generate(mode, avatar) {
           `export function ${name}(data: unknown): data is import("./${name}").${schema.title};`,
       )
       .join("\n") + "\n";
+  const operations = exportJson("--operations");
+  files["operations.json"] = JSON.stringify(operations, null, 2) + "\n";
   files["package.json"] = '{"type":"module"}\n';
   files["workspace.ts"] =
     `import { call, request_id, terminal_open } from "voyager_workspace";
@@ -111,6 +131,7 @@ export async function openTerminal(vesselId: string, expectedVersion: string): P
     }).outputText,
     { parser: "babel" },
   );
+  assertCatalogued(files["workspace.ts"], operations);
   files["workspace.d.ts"] =
     'import type { Request } from "./request";\nimport type { Reply } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Reply>;\nexport function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
   files["conversation.ts"] =
@@ -132,6 +153,7 @@ export async function observe(after: string | null): Promise<Snapshot | null> {
   return value;
 }
 `;
+  assertCatalogued(files["conversation.ts"], operations);
   files["conversation.js"] = await prettier.format(
     ts.transpileModule(files["conversation.ts"], {
       compilerOptions: {

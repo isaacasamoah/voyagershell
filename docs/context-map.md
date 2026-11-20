@@ -78,6 +78,7 @@ Owns files:
 - `contract/src/activity.rs`
 - `contract/src/launch.rs`
 - `contract/src/observation.rs`
+- `contract/src/operations.rs`
 
 It owns the words Queue, Operation, Refusal, Uncertain effect.
 

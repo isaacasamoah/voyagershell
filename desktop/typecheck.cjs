@@ -151,6 +151,63 @@ function compile(extra = [], scope = "canvas") {
   return [];
 }
 
+function innermost(node, start) {
+  const child = ts.forEachChild(node, (item) =>
+    item.getStart() <= start && start < item.getEnd() ? item : undefined,
+  );
+  return child ? innermost(child, start) : node;
+}
+
+function calleeName(expression) {
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  return null;
+}
+
+function operationOf(call) {
+  const name = calleeName(call.expression);
+  const first = call.arguments[0];
+  if (name === "invoke" && first && ts.isObjectLiteralExpression(first)) {
+    for (const property of first.properties) {
+      if (
+        ts.isPropertyAssignment(property) &&
+        ts.isIdentifier(property.name) &&
+        property.name.text === "operation" &&
+        ts.isStringLiteralLike(property.initializer)
+      )
+        return property.initializer.text;
+    }
+  }
+  return name;
+}
+
+function operationAt(diagnostic) {
+  if (!diagnostic.file || diagnostic.start === undefined) return null;
+  let node = innermost(diagnostic.file, diagnostic.start);
+  while (node.parent) {
+    const parent = node.parent;
+    if (ts.isCallExpression(parent) && parent.arguments.includes(node))
+      return operationOf(parent);
+    node = parent;
+  }
+  return null;
+}
+
+function describeDiagnostics(diagnostics) {
+  const host = {
+    getCanonicalFileName: (name) => name,
+    getCurrentDirectory: () => root,
+    getNewLine: () => "\n",
+  };
+  return diagnostics
+    .map((diagnostic) => {
+      const operation = operationAt(diagnostic);
+      const text = ts.formatDiagnostics([diagnostic], host).trimEnd();
+      return operation ? `${operation}: ${text}` : text;
+    })
+    .join("\n");
+}
+
 async function check(mode) {
   if (!["--write", "--check"].includes(mode))
     throw Error("Expected --write or --check");
@@ -182,14 +239,7 @@ async function check(mode) {
       selected.source,
     );
     const diagnostics = compile([], scope);
-    if (diagnostics.length)
-      throw Error(
-        ts.formatDiagnostics(diagnostics, {
-          getCanonicalFileName: (name) => name,
-          getCurrentDirectory: () => root,
-          getNewLine: () => "\n",
-        }),
-      );
+    if (diagnostics.length) throw Error(describeDiagnostics(diagnostics));
     metadata[scope] = {
       rawSha256: crypto.createHash("sha256").update(raw).digest("hex"),
       modules: selected.modules,
@@ -217,7 +267,7 @@ async function check(mode) {
   }
 }
 
-module.exports = { compile };
+module.exports = { compile, describeDiagnostics };
 if (require.main === module)
   check(process.argv[2]).catch((error) => {
     console.error(error.message);
