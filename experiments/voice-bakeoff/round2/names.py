@@ -50,9 +50,9 @@ SPEC = [
 ]
 REFDESC = "The thing as the human said it: an on-screen name (voyagershell 2), an address (Voyager Shell/Main/Notes), a program (codex), or a position in the selected Fleet (top right, bottom left). Add 'in <Voyage or Fleet>' when the same name exists twice."
 
-def voice_tools():
+def voice_tools(spec=None):
     out = []
-    for name, op, desc, refs in SPEC:
+    for name, op, desc, refs in (spec or SPEC):
         v = tools.VARIANTS[op]; props, req = {}, []
         for field, (src, kinds) in refs.items(): props[field] = {"type": "string", "description": REFDESC}; req.append(field)
         for k, x in v["properties"].items():
@@ -64,12 +64,13 @@ def voice_tools():
     out.append(tools.ask_tool())
     return out
 
-def to_call(name, args):
+def to_call(name, args, spec=None):
     """Returns ('call', contract call) | ('retry', message for the model) | ('handoff', args)."""
     if name == "ask_voyager": return "handoff", args
-    spec = {n: (op, refs) for n, op, _, refs in SPEC}.get(name)
-    if not spec: return "retry", f"unknown tool {name}; use one of {[s[0] for s in SPEC]} or ask_voyager"
-    op, refs = spec; action = {"operation": op}; ids = {}
+    table = spec or SPEC
+    found = {n: (op, refs) for n, op, _, refs in table}.get(name)
+    if not found: return "retry", f"unknown tool {name}; use one of {[s[0] for s in table]} or ask_voyager"
+    op, refs = found; action = {"operation": op}; ids = {}
     for field, (src, kinds) in refs.items():
         if field not in args: return "retry", f"missing {field}"
         hits = resolve(str(args[field]), kinds)

@@ -1,0 +1,3 @@
+id	hypothesis	change	tune_before	tune_after	held_before	held_after	verdict	note
+r0	baseline	Omni realtime path, 6 voice tools + ask_voyager, tool_choice auto	-	2/32 pass, 2 unsafe	-	4/15 pass, 1 unsafe	baseline	Omni narrates ("I am docking") instead of calling; spoken claims are false; first sound median 0.22-0.29 s
+r1	Forcing the first response to be a tool call stops Omni narrating	tool_choice required for the first response, none for the spoken reply	2/32 pass, 2 unsafe	5/32 pass, 14 unsafe	4/15 pass, 1 unsafe	5/15 pass, 3 unsafe	kept (right 4->9 of 15)	more real calls, but missing verbs (hide, switch Voyage, home) get the wrong tool; first sound median 1.1 s over the 1.0 s bar
