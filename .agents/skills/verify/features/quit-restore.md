@@ -23,7 +23,7 @@ once more. Right-click Home, choose Stop session… and confirm.
 Follow the exact doctor and run commands in ../SKILL.md with
 `--journey quit-restore`. The Rust journey in
 tests/native/src/journey/quit_restore.rs owns the recipe. The app quits in
-desktop/src/quit.rs through the owner's `Lifecycle` in app/src/client.rs and
+desktop/src/quit.rs through the owner's `Lifecycle` in app/src/client_owner.rs and
 decides which terminals to keep or start again in
 app/src/families/terminal/lifecycle.rs.
 

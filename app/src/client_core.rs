@@ -1,4 +1,5 @@
-use super::{LayoutRevision, Message, save};
+use super::Message;
+use crate::layout_store::{LayoutRevision, save};
 use crate::{
     activity::{Activity, Event, Report},
     adoption::Adoptions,

@@ -145,7 +145,7 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   that makes a Fleet does so to start its own program there with a
   `voyager.place` label, and an extra idle terminal beside that program is
   clutter. The first labelled terminal is adopted into the empty split, so it
-  takes the Fleet's first slot. The application queue in `app/src/client.rs`
+  takes the Fleet's first slot. The structure family in `app/src/families/structure.rs`
   passes the calling program to `Model::apply_from` in `app/src/workspace.rs`,
   which picks the Fleet's `FirstVessel` from it. The wire `Action` is the same
   for every caller. Until a labelled terminal arrives, the Fleet looks like
@@ -253,6 +253,24 @@ cancelled instead, so it is refused and never asked about.
 
 The conversation provider cannot be asked about a request by its id, so a
 conversation turn that comes back unconfirmed stays unconfirmed.
+
+### Structure handling
+
+Split, move, rename, create and close of Vessels, Fleets, Voyages and Portal
+placements are decided in the structure family, `app/src/families/structure.rs`.
+`route` checks freshness, the caller's revision and scope, and sorts the action
+into a Voyage close step, a package change or a layout edit. `edit` applies the
+edit to a candidate layout. It reaches what the family may not name, the Voyage
+close family, Core's terminals and the content owner, only through its `Calls`
+trait. The family never saves.
+
+`Owner` in `app/src/client_owner.rs` holds the queue's state and runs one loop
+that hands each message to a method. `app/src/client_structure.rs` holds the
+workspace methods, which admit a request, track the save in flight, run the
+Notes rename and build the response. `app/src/client_worktree.rs` holds the worktree methods. Both are
+children of the owner module and add methods to `Owner`, so `client` and the
+owner module never name each other's children. `app/src/client.rs` holds the
+messages, the receipts, the front door glue and the public `Client` calls.
 
 ### A save in flight
 
@@ -567,7 +585,7 @@ document protocol still uses its native numeric revision field. Placement,
 content and optional Core terminal identities are distinct types.
 
 `app/src/workspace.rs` applies domain changes to a proposed layout.
-`app/src/client.rs` owns the current layout and revision on one worker thread.
+`Owner` in `app/src/client_owner.rs` owns the current layout and revision on one worker thread.
 It publishes a proposal only after Core confirms the save. Confirmed snapshots
 are immutable and shared by Rust responses; a new layout proposal makes one
 copy at the transaction boundary, outside rendering and input callbacks.
@@ -755,7 +773,7 @@ UX acceptance.
 
 The 5 November candidate uses the Voyage context menu for Rename, Close, New worktree, Open worktree and, for a linked checkout, Remove worktree. Fleet creation remains at its own plus control. A native centered dialog owns filtering and keyboard selection. Its list uses the SDK's retained virtual-list scroll handle so keyboard selection stays visible. Worktree Voyages appear beneath an open parent with an indent and branch icon. They remain independent open Voyages, without indentation, when that parent closes.
 
-New worktrees use the main checkout's `.worktrees/` folder, with a local Git exclude entry. Git creates and checks out the chosen branch. The removal dialog reports uncommitted changes and retains the branch. The Rust owner rechecks live program directories and uses ordinary Git removal without force. After deletion, it reads the remaining checkouts from the primary directory and closes matching target Voyages, not the request's source Voyage. Successful checkout observations suppress removed project-local worktrees from Recent voyages without deleting retained application data. The worktree family in `app/src/families/worktree.rs` holds these checks, runs Git through its private `git` module on a worker thread and plans the Voyage changes a completed operation makes. `app/src/client.rs` keeps the workspace reads and saves, the front door and the removal's Core terminal list.
+New worktrees use the main checkout's `.worktrees/` folder, with a local Git exclude entry. Git creates and checks out the chosen branch. The removal dialog reports uncommitted changes and retains the branch. The Rust owner rechecks live program directories and uses ordinary Git removal without force. After deletion, it reads the remaining checkouts from the primary directory and closes matching target Voyages, not the request's source Voyage. Successful checkout observations suppress removed project-local worktrees from Recent voyages without deleting retained application data. The worktree family in `app/src/families/worktree.rs` holds these checks, runs Git through its private `git` module on a worker thread and plans the Voyage changes a completed operation makes. `app/src/client_worktree.rs` keeps the workspace reads and saves, the front door and the removal's Core terminal list.
 
 The layout and Git operation owners remain distinct. The script cannot grant deletion or launch authority. Dialog observations keep their captured request identity/version. Async list and text changes explicitly refresh the separate native dialog. The dialog handles Escape and Cancel itself, and waits for a dispatched operation before dismissal.
 
@@ -798,7 +816,7 @@ later refusal ends the close as uncertain and says how many programs had
 stopped, because a refusal means that nothing changed. The application saves closed state only after successful acknowledgements.
 Uncertain storage marks the projection non-fresh until inspection.
 
-The Voyage close family in `app/src/families/voyage_close.rs` holds the close plan, its identity check and the stop sequence. It reaches the workspace only through the `Calls` trait that `app/src/client_reply.rs` implements for the client, takes the Notes type id and the worktree change count from the client as arguments, and owns the Notes save messages that `client` re-exports to the desktop. It never names `client`. `app/src/client.rs` keeps the queue, the close plan's projection and the final save of the closed Voyage.
+The Voyage close family in `app/src/families/voyage_close.rs` holds the close plan, its identity check and the stop sequence. It reaches the workspace only through the `Calls` trait that `app/src/client_reply.rs` implements for the client, takes the Notes type id and the worktree change count from the client as arguments, and owns the Notes save messages that `client` re-exports to the desktop. It never names `client`. `app/src/client.rs` keeps the queue, and `app/src/client_structure.rs` keeps the close plan's projection and the final save of the closed Voyage.
 
 A private snapshot checks the target Voyage and its content identities. Target
 mutations and terminal opening are refused during shutdown. Unrelated Voyages

@@ -9,7 +9,7 @@ const STUB =
 const FAMILY_FILES = {
   sample: "app/src/families/sample.rs",
   content: "app/src/families/content.rs",
-  structure: "app/src/families/structure.rs",
+  layering: "app/src/families/layering.rs",
   terminal: "app/src/families/terminal.rs",
   lifecycle: "app/src/families/terminal/lifecycle.rs",
 };
@@ -20,18 +20,18 @@ const VOCABULARY = "tests/architecture/vocabulary.yaml";
 function prepared() {
   const directory = scratch();
   const root = "app/src/families.rs";
-  for (const name of ["sample", "content", "structure"])
+  for (const name of ["sample", "content", "layering"])
     fs.writeFileSync(path.join(directory, FAMILY_FILES[name]), STUB);
   edit(
     directory,
     root,
     (text) =>
-      `${text}pub(crate) mod sample;\npub(crate) mod content;\npub(crate) mod structure;\n`,
+      `${text}pub(crate) mod sample;\npub(crate) mod content;\npub(crate) mod layering;\n`,
   );
   edit(directory, VOCABULARY, (text) =>
     text.replace(
       "owns: [app/src/workspace.rs,",
-      "owns: [app/src/families/sample.rs, app/src/families/content.rs, app/src/families/structure.rs, app/src/workspace.rs,",
+      "owns: [app/src/families/sample.rs, app/src/families/content.rs, app/src/families/layering.rs, app/src/workspace.rs,",
     ),
   );
   return { directory, root };
@@ -176,7 +176,7 @@ const CROSS = [
   ],
   [
     "two non-terminal families",
-    (p) => p.appendTo(FAMILY_FILES.content, PROBE("super::structure::probe()")),
+    (p) => p.appendTo(FAMILY_FILES.content, PROBE("super::layering::probe()")),
   ],
   [
     "terminal family using another family",
@@ -261,7 +261,7 @@ const EDGES = {
   "terminal family submodule using another family": [
     ["terminal::lifecycle", "content"],
   ],
-  "two non-terminal families": [["content", "structure"]],
+  "two non-terminal families": [["content", "layering"]],
   "terminal family using another family": [["terminal", "sample"]],
 };
 const ROOT_EDGES = [

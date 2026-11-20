@@ -66,7 +66,7 @@ produces a clean Bash prompt. Native comparison owns that remaining observation.
 
 ## Lifecycle
 
-The workspace owner in `app/src/client.rs` has two named lifecycle
+The workspace owner in `app/src/client_owner.rs` has two named lifecycle
 operations, `Lifecycle::QuitAndKeep` and `Lifecycle::StopSession`. Both arrive
 as one owner message and end the owner's session hold. Only stop-session calls
 Core's `server.stop`.
@@ -451,7 +451,7 @@ method or feature. The connection then fails with the refusal kind
 `unsupported_core` and a message naming Core's release and the minimum. Every
 later request repeats that refusal; nothing reconnects or retries.
 
-The owner queue in `app/src/client.rs` does not wait for a Core read. It begins
+The owner queue in `app/src/client_owner.rs` does not wait for a Core read. It begins
 the request, because `Core::begin` needs the request sequence, and a short
 worker thread waits for the reply and posts it back as a message. Four kinds of
 read work this way.
@@ -652,7 +652,7 @@ The 5 November feedback changes the earlier manual-restart presentation. Recogni
 
 At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
 
-`app/src/families/terminal/lifecycle.rs` holds these small layout decisions. `app/src/client.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
+`app/src/families/terminal/lifecycle.rs` holds these small layout decisions. `app/src/client_structure.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
 
 ## Terminal state words
 

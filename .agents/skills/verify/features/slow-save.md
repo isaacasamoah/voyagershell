@@ -21,7 +21,7 @@ Follow the exact doctor and run commands in ../SKILL.md with
 tests/native/src/journey/slow_save.rs owns the recipe. The journey declares
 `doc.set=1500`, so no `--core-delay` is needed. A `--core-delay` that holds
 `doc.set` for at least 1000 ms replaces it. The app admits requests in
-app/src/front_door.rs and sends the save from the owner in app/src/client.rs.
+app/src/front_door.rs and sends the save from the owner in app/src/client_structure.rs.
 
 - `inspect-answered-during-held-save` creates a Fleet from the canvas and reads
   Core directly until Core holds it. The relay still holds Core's reply, so the
