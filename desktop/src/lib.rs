@@ -86,17 +86,16 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let initial_source =
         source_snapshot::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
-    let launches_path = profile.join("launches.json");
+    let launches_path = profile.join(voyager_app::launch::FILE);
     seed(
         &launches_path,
         &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
     )?;
-    let client = Client::with_content_and_launches(
+    let client = Client::with_content_and_profile(
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
         content_owner,
-        launches_path,
-        voyager_app::voyager_binding::Binding::load(&profile),
+        profile.clone(),
     );
     let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();

@@ -93,12 +93,11 @@ struct Owner {
 }
 
 impl Client {
-    pub(super) fn start_with_launches(
+    pub(super) fn start_with_profile(
         session: String,
         cwd: String,
         content: Option<crate::content::Owner>,
-        launches: Option<PathBuf>,
-        binding: Binding,
+        profile: Option<PathBuf>,
     ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         let package_revision = Arc::new(AtomicU64::new(0));
@@ -124,8 +123,7 @@ impl Client {
                 session,
                 cwd,
                 content,
-                launches,
-                binding,
+                profile,
                 owner,
                 sender,
                 package_revision,
@@ -141,8 +139,7 @@ impl Owner {
         session: String,
         cwd: String,
         content: Option<crate::content::Owner>,
-        launches: Option<PathBuf>,
-        binding: Binding,
+        profile: Option<PathBuf>,
         client: Client,
         sender: async_channel::Sender<Message>,
         packages: Arc<AtomicU64>,
@@ -158,9 +155,12 @@ impl Owner {
         subscription.begin(&mut core, false, &sender);
         let caller = client.clone();
         let call: Call = Arc::new(move |vessel, request| caller.program_call(vessel, request));
+        let binding = profile
+            .as_deref()
+            .map_or_else(Binding::unbound, Binding::load);
         Self {
             cwd,
-            launches,
+            launches: profile.map(|profile| profile.join(crate::launch::FILE)),
             content,
             adoptions: Adoptions::new(client.placement_notice.clone()),
             sockets: Sockets::new(&session, call, binding),
