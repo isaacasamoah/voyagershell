@@ -19,7 +19,8 @@ SYSTEM = "You are Voyager's voice. The human speaks a request; act on it with a 
 
 def has(c, **kw):
     a = c.get("action", {})
-    return all(a.get(k) == v for k, v in kw.items())
+    def same(k, x, y): return x.lower() == y.lower() if k == "name" and isinstance(x, str) and isinstance(y, str) else x == y
+    return all(same(k, a.get(k), v) for k, v in kw.items())
 def tgt(c, kind, id): return c.get("action", {}).get("target") == {"kind": kind, "id": id}
 H = "handoff"
 # (label, spoken, grader for real surface, grader for voice surface); H means the right answer is ask_voyager
