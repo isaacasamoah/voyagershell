@@ -23,6 +23,7 @@ edges:
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::client::core_calls', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::content', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::content::rename', from_owner: application-queue, to_owner: content}
+  - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::content::requests', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_app::layout_parts', from_owner: application-queue, to_owner: placement}
@@ -37,7 +38,7 @@ edges:
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::voyage_close', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client', to: 'rs:voyager_contract::worktree', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::content', from_owner: application-queue, to_owner: content}
-  - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::content::rename', from_owner: application-queue, to_owner: content}
+  - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::content::requests', from_owner: application-queue, to_owner: content}
   - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_app::layout_parts', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::client::content_calls', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
@@ -61,7 +62,9 @@ edges:
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_app::scope', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content::rename', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
+  - {from: 'rs:voyager_app::content::requests', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::content', from_owner: placement, to_owner: content}
+  - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::content::requests', from_owner: placement, to_owner: content}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::core', from_owner: placement, to_owner: core-adapter}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::vessel_type', from_owner: placement, to_owner: content}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_contract::content', from_owner: placement, to_owner: content}

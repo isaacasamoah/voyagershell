@@ -3,6 +3,7 @@ mod manifest;
 mod markdown;
 mod package;
 pub(crate) mod rename;
+pub(crate) mod requests;
 mod view;
 pub use description::{NOTES_TYPE, describe, discover, require_action};
 pub use description::{discover_all, open_registry};
@@ -20,9 +21,7 @@ use std::{
 };
 use voyager_contract::{
     VesselId,
-    content::{
-        ConfigurationSnapshot, Notes, NotesConfiguration, Request, Response, Snapshot, Version,
-    },
+    content::{Notes, Request, Response, Snapshot, Version},
 };
 
 pub const LIMIT: usize = 1024 * 1024;
@@ -248,39 +247,6 @@ pub fn reject(request: &Request, message: String) -> Response {
     }
 }
 
-pub(crate) fn bounded_response(request: &Request, response: Response) -> Response {
-    if serde_json::to_vec(&response)
-        .expect("Content response serializes")
-        .len()
-        <= ENVELOPE_LIMIT
-    {
-        return response;
-    }
-    if matches!(
-        response,
-        Response::Applied { .. }
-            | Response::Configured { .. }
-            | Response::NoteOpened { .. }
-            | Response::Uncertain { .. }
-    ) {
-        let (id, request_id, expected) = identity(request);
-        Response::Uncertain {
-            version: Version::V1, request_id: request_id.into(), vessel_id: id.clone(), expected_revision: expected.unwrap_or_default().into(),
-            message: "The dispatched write's complete confirmation exceeds the content envelope limit. Inspect it; do not repeat the update.".into(),
-        }
-    } else {
-        let (id, request_id, _) = identity(request);
-        let (revision, warning_present) = match &response {
-            Response::Snapshot { snapshot, .. } => {
-                (Some(snapshot.revision.clone()), snapshot.warning.is_some())
-            }
-            Response::Rejected { .. } => (None, true),
-            _ => (None, false),
-        };
-        Response::Limited { version: Version::V1, request_id: request_id.into(), vessel_id: id.clone(), revision, warning_present, message: "The complete read or refusal, including any warning details, exceeds the content envelope limit. No complete snapshot is supplied.".into() }
-    }
-}
-
 pub(crate) fn member(
     layout: &std::sync::Arc<voyager_contract::Layout>,
     scope: Option<&voyager_contract::Context>,
@@ -302,234 +268,6 @@ pub(crate) fn member(
         return Err("That Notes instance is outside the captured workspace scope".into());
     }
     Ok(())
-}
-
-pub(crate) fn notes_directory(
-    layout: &voyager_contract::Layout,
-    id: &VesselId,
-) -> Result<PathBuf, String> {
-    let content = layout
-        .vessels
-        .iter()
-        .find(|content| content.id == *id)
-        .ok_or("Content is unavailable")?;
-    let owners: Vec<_> = layout
-        .containers()
-        .filter(|voyage| {
-            voyage
-                .portals
-                .iter()
-                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
-                .any(|placement| placement.vessel == *id)
-        })
-        .collect();
-    let [owner] = owners.as_slice() else {
-        return Err("Notes requires one identified owning Voyage".into());
-    };
-    let home = layout.home.as_ref().is_some_and(|home| home.id == owner.id);
-    let cwd = if home {
-        Some(content.cwd.as_str())
-    } else {
-        owner.cwd.as_deref()
-    }
-    .filter(|cwd| !cwd.is_empty())
-    .ok_or("The owning Voyage has no directory")?;
-    let directory = Path::new(cwd);
-    if !directory.is_absolute() {
-        return Err("The owning directory must be absolute".into());
-    }
-    Ok(directory.join("notes"))
-}
-
-pub(crate) fn register_content(
-    owner: &mut Owner,
-    layout: &voyager_contract::Layout,
-    id: &VesselId,
-) -> Result<Binding, String> {
-    let content = layout
-        .vessels
-        .iter()
-        .find(|content| content.id == *id)
-        .ok_or("Content is unavailable")?;
-    let configuration = content
-        .configuration
-        .as_ref()
-        .map(|configuration| {
-            serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
-                configuration.clone(),
-            ))
-        })
-        .transpose()
-        .map_err(|error| error.to_string())?
-        .unwrap_or_default();
-    if let Some(file) = configuration.notes_file {
-        owner.register_file(id, file)
-    } else {
-        owner
-            .register_existing(id)
-            .map_err(|error| error.to_string())
-    }
-}
-
-pub(crate) fn run(
-    owner: &mut Owner,
-    layout: &std::sync::Arc<voyager_contract::Layout>,
-    version: u64,
-    access: &Access,
-    request: Request,
-) -> Response {
-    let binding = match admit(owner, layout, version, access, &request) {
-        Ok(binding) => binding,
-        Err(message) => return reject(&request, message),
-    };
-    let metadata = match configuration(owner, layout, identity(&request).0, version) {
-        Ok(metadata) => metadata,
-        Err(error) => return reject(&request, error),
-    };
-    if matches!(&request, Request::ListNotes { .. }) {
-        let (id, request_id, _) = identity(&request);
-        return match notes_directory(layout, id).and_then(|directory| markdown::list(&directory)) {
-            Ok(filenames) => Response::NotesList {
-                version: Version::V1,
-                request_id: request_id.into(),
-                vessel_id: id.clone(),
-                filenames,
-            },
-            Err(error) => reject(&request, error),
-        };
-    }
-    let mut response = owner.call(&binding, request);
-    if let Response::Snapshot { configuration, .. } = &mut response {
-        *configuration = metadata;
-    }
-    response
-}
-
-pub(crate) fn admit(
-    owner: &mut Owner,
-    layout: &std::sync::Arc<voyager_contract::Layout>,
-    version: u64,
-    access: &Access,
-    request: &Request,
-) -> Result<Binding, String> {
-    let (id, _, _) = identity(request);
-    let scope = match access {
-        Access::View(binding) => {
-            if binding.id() != id {
-                return Err("That content is outside this view".into());
-            }
-            None
-        }
-        Access::Agent {
-            scope,
-            expected_version,
-        } => {
-            if *expected_version != version {
-                return Err("Workspace revision changed; inspect before content dispatch".into());
-            }
-            Some(scope)
-        }
-    };
-    member(layout, scope, id)?;
-    register_content(owner, layout, id)
-}
-
-pub(crate) fn configuration(
-    owner: &Owner,
-    layout: &voyager_contract::Layout,
-    id: &VesselId,
-    version: u64,
-) -> Result<Option<ConfigurationSnapshot>, String> {
-    let packages = owner.root.with_file_name("vessels");
-    if description::configuration(&packages)?.is_none() {
-        return Ok(None);
-    }
-    let content = layout
-        .vessels
-        .iter()
-        .find(|content| content.id == *id)
-        .ok_or("Content is unavailable")?;
-    let configuration = content
-        .configuration
-        .as_ref()
-        .map(|configuration| {
-            serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
-                configuration.clone(),
-            ))
-        })
-        .transpose()
-        .map_err(|error| format!("Stored Notes configuration is invalid: {error}"))?
-        .unwrap_or_default();
-    Ok(Some(ConfigurationSnapshot {
-        configuration,
-        workspace_version: version,
-    }))
-}
-
-pub(crate) fn initialize_created(
-    owner: &mut Owner,
-    previous: &voyager_contract::Layout,
-    current: &mut voyager_contract::Layout,
-) -> Result<bool, String> {
-    let ids: Vec<_> = current
-        .vessels
-        .iter()
-        .filter(|item| {
-            item.type_id == NOTES_TYPE && !previous.vessels.iter().any(|old| old.id == item.id)
-        })
-        .map(|content| content.id.clone())
-        .collect();
-    for id in &ids {
-        let directory = notes_directory(current, id)?;
-        let filename = owner.create_file(&directory, "Title")?;
-        let file = voyager_contract::content::NotesFile {
-            directory: directory.to_string_lossy().into_owned(),
-            filename,
-        };
-        let content = current
-            .vessels
-            .iter_mut()
-            .find(|content| content.id == *id)
-            .ok_or("Content is unavailable")?;
-        let mut configuration = content
-            .configuration
-            .as_ref()
-            .map(|value| {
-                serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
-                    value.clone(),
-                ))
-            })
-            .transpose()
-            .map_err(|error| error.to_string())?
-            .unwrap_or_default();
-        configuration.notes_file = Some(file.clone());
-        content.configuration = Some(
-            serde_json::to_value(configuration)
-                .map_err(|error| error.to_string())?
-                .as_object()
-                .ok_or("Invalid Notes configuration")?
-                .clone(),
-        );
-        let snapshot = owner.select_file(id, file.clone()).map_err(|error| {
-            format!(
-                "Note creation is unconfirmed at {}: {error}",
-                Path::new(&file.directory).join(&file.filename).display()
-            )
-        })?;
-        rename::label(current, id, &file.filename);
-        if snapshot.data
-            != (Notes {
-                title: "Title".into(),
-                text: String::new(),
-            })
-        {
-            return Err(format!(
-                "Note creation is unconfirmed at {}: readback differs",
-                Path::new(&file.directory).join(&file.filename).display()
-            ));
-        }
-    }
-    Ok(!ids.is_empty())
 }
 
 pub struct Owner {
@@ -1005,7 +743,9 @@ impl Owner {
 
 #[cfg(test)]
 mod tests {
+    use super::requests::{configuration, initialize_created, register_content, run};
     use super::*;
+    use voyager_contract::content::NotesConfiguration;
 
     #[test]
     fn notes_versions_keep_file_metadata_and_only_legacy_configuration_writes() {

@@ -14,9 +14,6 @@ known:
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::markdown'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::rename'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::view'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
@@ -48,9 +45,13 @@ known:
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'notes-type-has-one-home: "notes" in app/src/content.rs'
-    limit: 2
+    limit: 1
     owner: isaac
     reason: 'The package directory name repeats the Notes type id. Reading it from NOTES_TYPE clears it.'
+  - id: 'notes-type-has-one-home: "notes" in app/src/content/requests.rs'
+    limit: 1
+    owner: isaac
+    reason: 'The Notes folder name repeats the Notes type id. It moved here from content.rs with the folder lookup. Reading it from NOTES_TYPE clears it.'
   - id: 'notes-type-has-one-home: "notes" in app/src/content/description.rs'
     limit: 3
     owner: isaac
@@ -68,11 +69,11 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
-    limit: 3559
+    limit: 3511
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/content.rs'
-    limit: 1520
+    limit: 1260
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/conversation_client.rs'

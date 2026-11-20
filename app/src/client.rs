@@ -1,3 +1,4 @@
+use crate::content::requests;
 pub use crate::core::CallError;
 pub use crate::families::terminal::Lifecycle;
 use crate::families::voyage_close::{Closing, Observed, RenameRelease, RenamedNotes};
@@ -800,7 +801,7 @@ impl Client {
                             fresh = true;
                             crate::content::member(&layout, None, &id)?;
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
-                            let binding = crate::content::register_content(owner, &layout, &id)?;
+                            let binding = requests::register_content(owner, &layout, &id)?;
                             Ok(binding)
                         })();
                         let _ = reply.try_send(result);
@@ -849,71 +850,44 @@ impl Client {
                         let result = (|| {
                             if renaming.as_ref().is_some_and(|(ticket, plan, _)| {
                                 plan.vessels.contains(crate::content::identity(&request).0)
-                                    && !matches!(
-                                        request,
-                                        voyager_contract::content::Request::Inspect { .. }
-                                            | voyager_contract::content::Request::Describe { .. }
-                                            | voyager_contract::content::Request::ListNotes { .. }
-                                    )
+                                    && requests::is_write(&request)
                                     && !(native_save && close_ticket.as_ref() == Some(ticket))
                             }) {
                                 return Err(
                                     "This Note is being renamed; wait for the saved result".into(),
                                 );
                             }
-                            if matches!(
-                                request,
-                                voyager_contract::content::Request::Update { .. }
-                                    | voyager_contract::content::Request::Configure { .. }
-                                    | voyager_contract::content::Request::MigrateNote { .. }
-                                    | voyager_contract::content::Request::NewNote { .. }
-                                    | voyager_contract::content::Request::OpenNote { .. }
-                            ) && closing.blocks_content(
-                                crate::content::identity(&request).0,
-                                close_ticket.as_ref(),
-                                native_save,
-                            ) {
+                            if requests::is_write(&request)
+                                && closing.blocks_content(
+                                    crate::content::identity(&request).0,
+                                    close_ticket.as_ref(),
+                                    native_save,
+                                )
+                            {
                                 return Err(
                                     "This Voyage is closing; its Notes are temporarily read-only"
                                         .into(),
                                 );
                             }
-                            if serde_json::to_vec(&request)
-                                .map_err(|error| error.to_string())?
-                                .len()
-                                > crate::content::ENVELOPE_LIMIT
-                            {
-                                return Err("Content request exceeds the envelope limit".into());
-                            }
+                            requests::check_envelope(&request)?;
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
                             let (current, revision, _) = load(core, &cwd, &layout, version)
                                 .map_err(|error| format!("{error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
-                            let target = crate::content::identity(&request).0;
-                            let access = match &access {
-                                crate::content::Access::Agent {
-                                    scope,
-                                    expected_version,
-                                } if seen.current(*expected_version, version, &layout, || {
-                                    Some(vec![Part::Vessel(target.clone())])
-                                }) =>
-                                {
-                                    crate::content::Access::Agent {
-                                        scope: scope.clone(),
-                                        expected_version: version.structure,
-                                    }
-                                }
-                                other => other.clone(),
-                            };
+                            let access = requests::current_access(
+                                &access,
+                                version.structure,
+                                crate::content::identity(&request).0,
+                                |expected, id| {
+                                    seen.current(expected, version, &layout, || {
+                                        Some(vec![Part::Vessel(id.clone())])
+                                    })
+                                },
+                            );
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
-                            if matches!(
-                                request,
-                                voyager_contract::content::Request::MigrateNote { .. }
-                                    | voyager_contract::content::Request::NewNote { .. }
-                                    | voyager_contract::content::Request::OpenNote { .. }
-                            ) {
+                            if requests::is_selection(&request) {
                                 return Ok(select_note(
                                     core,
                                     (&mut layout, &mut version, &mut fresh),
@@ -936,7 +910,7 @@ impl Client {
                                     &request,
                                 ));
                             }
-                            Ok(crate::content::run(
+                            Ok(requests::run(
                                 owner,
                                 &layout,
                                 version.structure,
@@ -946,22 +920,9 @@ impl Client {
                         })();
                         let response = result
                             .unwrap_or_else(|message| crate::content::reject(&request, message));
-                        let response =
-                            Arc::new(crate::content::bounded_response(&request, response));
-                        if (matches!(
-                            &*response,
-                            voyager_contract::content::Response::Configured { .. }
-                                | voyager_contract::content::Response::NoteOpened { .. }
-                        ) || (matches!(
-                            request,
-                            voyager_contract::content::Request::Configure { .. }
-                                | voyager_contract::content::Request::NewNote { .. }
-                                | voyager_contract::content::Request::OpenNote { .. }
-                                | voyager_contract::content::Request::MigrateNote { .. }
-                        ) && matches!(
-                            &*response,
-                            voyager_contract::content::Response::Uncertain { .. }
-                        ))) && let Some(owner) = content.as_mut()
+                        let response = Arc::new(requests::bounded_response(&request, response));
+                        if requests::notifies(&request, &response)
+                            && let Some(owner) = content.as_mut()
                         {
                             owner.notify(&response);
                         }
@@ -1784,10 +1745,8 @@ impl Client {
                                         version = saved;
                                         if let Some(owner) = content.as_mut() {
                                             for id in &plan.vessels {
-                                                crate::content::register_content(
-                                                    owner, &layout, id,
-                                                )
-                                                .map_err(Error::Uncertain)?;
+                                                requests::register_content(owner, &layout, id)
+                                                    .map_err(Error::Uncertain)?;
                                             }
                                         }
                                         rename_rebind = Some(RenamedNotes {
@@ -1964,7 +1923,7 @@ impl Client {
                                                 require_live(&observed, backend)?;
                                             }
                                         let created_notes = if let Some(owner) = content.as_mut() {
-                                            crate::content::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
+                                            requests::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
                                         } else if candidate.layout.vessels.iter().any(|item| item.type_id == crate::vessel_type::NOTES_TYPE && !layout.vessels.iter().any(|old| old.id == item.id)) {
                                             return Err(rejected("Content owner unavailable; Notes was not created".into()));
                                         } else { false };
@@ -2281,14 +2240,7 @@ impl Client {
         request: voyager_contract::content::Request,
         view: Option<&crate::content::ViewBinding>,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        if matches!(
-            &request,
-            voyager_contract::content::Request::Update { .. }
-                | voyager_contract::content::Request::Configure { .. }
-                | voyager_contract::content::Request::MigrateNote { .. }
-                | voyager_contract::content::Request::NewNote { .. }
-                | voyager_contract::content::Request::OpenNote { .. }
-        ) {
+        if requests::is_write(&request) {
             return Err(CallError::Rejected(
                 "Content effects cannot use read-only admission".into(),
             ));
