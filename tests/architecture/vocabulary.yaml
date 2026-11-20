@@ -623,7 +623,7 @@ rules:
     group: theme-module
     old: '\bHEADER\b'
     new: 'THEME'
-    files: ['desktop/src/host.rs', 'desktop/src/lib.rs']
+    files: ['contract/src/operations.rs', 'desktop/src/bridge.rs', 'desktop/src/host.rs', 'desktop/src/lib.rs']
     code: true
   - id: vessel-struct-definition
     stage: 3
