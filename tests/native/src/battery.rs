@@ -1020,6 +1020,7 @@ mod tests {
         let seeded = [
             Journey::Profile,
             Journey::ProfileUpdates,
+            Journey::ManifestVessel,
             Journey::LayoutCompat,
             Journey::LayoutRefused,
             Journey::LayoutCorrupt,
@@ -1042,6 +1043,21 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
         let reason =
             journey_inputs(Journey::ProfileUpdates, &base, Path::new("/nowhere")).unwrap_err();
+        assert!(reason.contains("fixture is missing"));
+    }
+
+    #[test]
+    fn manifest_vessel_takes_its_fixture_and_is_not_run_without_it() {
+        let base = build(Side::Base, "base");
+        let root =
+            std::env::temp_dir().join(format!("voyager-battery-manifest-{}", std::process::id()));
+        fs::create_dir_all(root.join("manifest-vessel")).unwrap();
+        let args = journey_inputs(Journey::ManifestVessel, &base, &root).unwrap();
+        assert_eq!(args[0], "--profile-fixture");
+        assert!(Path::new(&args[1]).ends_with("manifest-vessel"));
+        fs::remove_dir_all(root).unwrap();
+        let reason =
+            journey_inputs(Journey::ManifestVessel, &base, Path::new("/nowhere")).unwrap_err();
         assert!(reason.contains("fixture is missing"));
     }
 
