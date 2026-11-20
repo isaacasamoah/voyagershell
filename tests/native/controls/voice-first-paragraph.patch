@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+index 37eb6719..8979d16e 100644
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -240,6 +240,7 @@ fn speakable_lines(reply: &str) -> Vec<(String, bool)> {
+         }
+         lines.push((trimmed.to_owned(), is_item(trimmed)));
+     }
++    lines.truncate(1);
+     if let Some(last) = lines.last_mut() {
+         last.1 = true;
+     }
