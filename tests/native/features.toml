@@ -272,6 +272,19 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
+id = "manifest-vessels"
+name = "Manifest Vessels"
+path = "Pick a Vessel type that only a manifest declares, open it, run its declared action and see the state change. A broken manifest edit leaves the last good type listed."
+sources = ["app/src/content/manifest.rs", "app/src/content/manifest/check.rs", "app/src/content/manifest/effect.rs", "app/src/content/manifest/eval.rs", "app/src/content/manifest/expression.rs", "app/src/content/manifest/instance.rs", "app/src/content/manifest/invoke.rs", "app/src/content/manifest/operations.rs", "app/src/content/manifest/problem.rs", "app/src/content/manifest/read.rs", "app/src/content/manifest/registry.rs", "desktop/src/manifest_view.rs", "desktop/canvas/creation.ts"]
+journeys = ["manifest-vessel"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "none"
+
+[[feature]]
 id = "scripts-live-edit"
 name = "Scripts live edit"
 path = "Edit a canvas script and see the change appear live."

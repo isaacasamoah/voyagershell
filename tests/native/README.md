@@ -474,6 +474,28 @@ Limits.
 - A deterministic failure costs a second run before it is called red.
 - Linux X11 only.
 
+### Manifest Vessels
+
+The `manifest-vessel` journey starts the build on a profile that holds a Vessel type
+declared only by a manifest. Give it the checked-in
+`tests/native/fixtures/manifest-vessel`, which holds `vessels/flag/manifest.json`
+and its `view.vx`. The type has one boolean, `raised`, and one action, `flip`.
+
+```sh
+tests/native/target/debug/voyager-verification run --journey manifest-vessel --binary "$candidate" --sha256 "$expected" --profile-fixture tests/native/fixtures/manifest-vessel --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/manifest-vessel"
+```
+
+`the-declared-type-is-listed-in-the-picker` opens the creation menu and reads its
+`create-manifest` entry. `the-declared-type-opens-and-shows-its-state` creates the
+Vessel and reads its `manifest-state` label, which must show revision 0 and the
+declared initial state. `a-declared-action-changes-the-shown-state` presses the
+`manifest-action` button and reads revision 1 and the flipped state. These three are
+setup cases for the last one, because no declared invariant names them yet.
+`a-broken-manifest-keeps-the-last-good-type-listed` overwrites the manifest with an
+invalid file and opens the menu again. The type must still be listed. Its control
+patch, `tests/native/controls/manifest-vessel.patch`, makes the registry drop the last
+good manifest on a broken edit.
+
 ### Profile updates
 
 The `profile-updates` journey starts the build on a profile that an older build

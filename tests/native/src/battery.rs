@@ -498,6 +498,16 @@ fn journey_inputs(
             }
             Ok(vec!["--profile-fixture".into(), updates.into()])
         }
+        Journey::ManifestVessel => {
+            let seeded = fixtures.join("manifest-vessel");
+            if !seeded.is_dir() {
+                return Err(format!(
+                    "the committed profile fixture is missing under {}",
+                    fixtures.display()
+                ));
+            }
+            Ok(vec!["--profile-fixture".into(), seeded.into()])
+        }
         Journey::LayoutCompat => layout_seed(fixtures, "newer-additions.json"),
         Journey::LayoutRefused => layout_seed(fixtures, "newer-min-reader.json"),
         Journey::LayoutCorrupt => layout_seed(fixtures, "corrupt.json"),

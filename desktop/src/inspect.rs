@@ -290,6 +290,17 @@ pub fn control(role: Role, key: String) -> impl IntoElement {
     }
 }
 
+pub fn labelled(role: Role, key: String, text: String) -> impl IntoElement {
+    Marker {
+        id: ElementId::Name(format!("inspect-{role:?}-{key}").into()),
+        mark: Mark::Control {
+            role,
+            key,
+            shown: Shown::Text(text),
+        },
+    }
+}
+
 pub fn stage(dock: &Context, dock_focus: Option<Context>, window: &Window, cx: &App) {
     let Some(inspection) = cx.try_global::<Inspection>() else {
         return;

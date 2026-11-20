@@ -12,6 +12,7 @@ mod diagnostics;
 mod host;
 mod inspect;
 mod lifecycle;
+mod manifest_view;
 mod measure;
 mod notes;
 mod notes_draft;

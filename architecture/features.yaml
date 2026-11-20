@@ -748,9 +748,9 @@ features:
         says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
         owner: content
         guards: []
-        checks: ['journey:profile/live-edit-recolours']
+        checks: ['journey:profile/live-edit-recolours', 'journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed']
         formal: []
-        journeys: [profile]
+        journeys: [manifest-vessel, profile]
     docs: [docs/terminal.md]
     sources: [desktop/src/notes.rs, 'desktop/src/notes_*.rs']
     code: [desktop/src/notes.rs, desktop/src/notes_draft.rs, desktop/src/notes_input.rs, desktop/src/notes_scope.rs, desktop/src/notes_session.rs]
@@ -1135,9 +1135,9 @@ features:
         says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
         owner: content
         guards: []
-        checks: ['journey:profile/live-edit-recolours']
+        checks: ['journey:profile/live-edit-recolours', 'journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed']
         formal: []
-        journeys: [profile]
+        journeys: [manifest-vessel, profile]
       - id: pass-means-observed
         kind: developer
         says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
@@ -1194,6 +1194,48 @@ features:
     docs: [docs/content.md, docs/terminal.md]
     sources: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/shipped.rs, desktop/src/lib.rs, desktop/src/host.rs]
     code: [app/src/content/install.rs, app/src/content/install/diff.rs, app/src/content/pre-record-history.tsv, desktop/src/host.rs, desktop/src/lib.rs, desktop/src/shipped.rs]
+  - id: manifest-vessels
+    name: 'Manifest Vessels'
+    summary: 'Pick a Vessel type that only a manifest declares, open it, run its declared action and see the state change. A broken manifest edit leaves the last good type listed.'
+    group: content-model
+    owner: content
+    shared_with: [desktop-presentation]
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: none}
+    platforms: [linux]
+    checks: []
+    native_journeys: [manifest-vessel]
+    python_journeys: []
+    invariants: []
+    docs: [docs/content.md, docs/terminal.md]
+    sources:
+      - app/src/content/manifest.rs
+      - app/src/content/manifest/check.rs
+      - app/src/content/manifest/effect.rs
+      - app/src/content/manifest/eval.rs
+      - app/src/content/manifest/expression.rs
+      - app/src/content/manifest/instance.rs
+      - app/src/content/manifest/invoke.rs
+      - app/src/content/manifest/operations.rs
+      - app/src/content/manifest/problem.rs
+      - app/src/content/manifest/read.rs
+      - app/src/content/manifest/registry.rs
+      - desktop/src/manifest_view.rs
+      - desktop/canvas/creation.ts
+    code:
+      - app/src/content/manifest.rs
+      - app/src/content/manifest/check.rs
+      - app/src/content/manifest/effect.rs
+      - app/src/content/manifest/eval.rs
+      - app/src/content/manifest/expression.rs
+      - app/src/content/manifest/instance.rs
+      - app/src/content/manifest/invoke.rs
+      - app/src/content/manifest/operations.rs
+      - app/src/content/manifest/problem.rs
+      - app/src/content/manifest/read.rs
+      - app/src/content/manifest/registry.rs
+      - desktop/canvas/creation.ts
+      - desktop/src/manifest_view.rs
   - id: scripts-live-edit
     name: 'Scripts live edit'
     summary: 'Edit a canvas script and see the change appear live.'
@@ -1219,9 +1261,9 @@ features:
         says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
         owner: content
         guards: []
-        checks: ['journey:profile/live-edit-recolours']
+        checks: ['journey:profile/live-edit-recolours', 'journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed']
         formal: []
-        journeys: [profile]
+        journeys: [manifest-vessel, profile]
     docs: [docs/terminal.md]
     sources: [desktop/canvas/main.ts, desktop/src/script_types.rs, desktop/script-types.json]
     code: [desktop/canvas/main.ts, desktop/script-types.json, desktop/src/script_types.rs]
@@ -1503,6 +1545,7 @@ features:
       - tests/native/src/journey/layout_compat.rs
       - tests/native/src/journey/layout_corrupt.rs
       - tests/native/src/journey/layout_refused.rs
+      - tests/native/src/journey/manifest_vessel.rs
       - tests/native/src/journey/outcomes.rs
       - tests/native/src/journey/portals.rs
       - tests/native/src/journey/profile.rs

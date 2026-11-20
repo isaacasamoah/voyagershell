@@ -1,0 +1,16 @@
+diff --git a/app/src/content/manifest/registry.rs b/app/src/content/manifest/registry.rs
+index d38f74bd..854a6755 100644
+--- a/app/src/content/manifest/registry.rs
++++ b/app/src/content/manifest/registry.rs
+@@ -123,7 +123,10 @@ impl Registry {
+                     package.good = Some(manifest);
+                     package.problems.clear();
+                 }
+-                Err(problems) => package.problems = problems,
++                Err(problems) => {
++                    package.problems = problems;
++                    package.good = None;
++                }
+             }
+         }
+         let mut owners: BTreeMap<String, String> = BTreeMap::new();

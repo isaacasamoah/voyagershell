@@ -18,7 +18,7 @@ groups:
   - id: content-model
     name: Content model
     plain: 'What content is in general: Vessel types, packages, adoption of existing Core programs and seeding the profile.'
-    features: [profile-updates, adopted-vessels]
+    features: [profile-updates, adopted-vessels, manifest-vessels]
   - id: assistant
     name: Private assistant
     plain: 'The avatar conversation, the Voyager tools it may call and the conversation client.'

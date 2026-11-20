@@ -2,7 +2,7 @@ import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
-import { Notes } from "voyager_content_view";
+import { Notes, Vessel } from "voyager_content_view";
 import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
@@ -291,26 +291,33 @@ export function renderPanel(workspace, placement, scope, group) {
                   )
                 : content.typeId === "notes"
                   ? Notes.new(content.id, { vesselId: content.id })
-                  : terminal
-                    ? Terminal.new(terminal).size_full()
-                    : div()
-                        .p(20)
-                        .text_size(12)
-                        .text_color(colors.muted)
-                        .child(workspace.terminalStatus(content))
-                        .children(
-                          startShell
-                            ? [
-                                Button.new(`start-shell-${placement.id}`)
-                                  .accessibility_label("Start new shell")
-                                  .disabled(workspace.busy || !workspace.fresh)
-                                  .child("Start new shell")
-                                  .on_click((_event, cx) =>
-                                    workspace.run(startShell, cx),
-                                  ),
-                              ]
-                            : [],
-                        ),
+                  : content.typeId !== "terminal"
+                    ? Vessel.new(content.id, {
+                        vesselId: content.id,
+                        typeId: content.typeId,
+                      })
+                    : terminal
+                      ? Terminal.new(terminal).size_full()
+                      : div()
+                          .p(20)
+                          .text_size(12)
+                          .text_color(colors.muted)
+                          .child(workspace.terminalStatus(content))
+                          .children(
+                            startShell
+                              ? [
+                                  Button.new(`start-shell-${placement.id}`)
+                                    .accessibility_label("Start new shell")
+                                    .disabled(
+                                      workspace.busy || !workspace.fresh,
+                                    )
+                                    .child("Start new shell")
+                                    .on_click((_event, cx) =>
+                                      workspace.run(startShell, cx),
+                                    ),
+                                ]
+                              : [],
+                          ),
             ),
         )
         .children(workspace.splitPreview(placement))
