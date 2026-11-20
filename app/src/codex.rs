@@ -7,6 +7,8 @@ pub(crate) use protocol::{decode as normalize, reported_version, tool_reply as e
 use serde_json::{Value, json};
 use std::{
     env,
+    ffi::OsString,
+    fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -17,7 +19,51 @@ use std::{
 
 pub(crate) const DEFAULT_MODEL: &str = "gpt-6.1-sol";
 pub(crate) const DEFAULT_EFFORT: &str = "high";
+const API_KEY_VARIABLES: [&str; 2] = ["OPENAI_API_KEY", "CODEX_API_KEY"];
 const CONTENT_FRAME_LIMIT: usize = 2 * crate::content::ENVELOPE_LIMIT + 4096;
+
+fn without_api_keys(command: &mut Command) -> &mut Command {
+    for variable in API_KEY_VARIABLES {
+        command.env_remove(variable);
+    }
+    command
+}
+
+fn codex_dotenv(codex_home: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
+    match codex_home.filter(|value| !value.is_empty()) {
+        Some(directory) => Some(PathBuf::from(directory).join(".env")),
+        None => home.map(|home| PathBuf::from(home).join(".codex/.env")),
+    }
+}
+
+fn api_key_name(line: &str) -> Option<&'static str> {
+    let line = line.trim_start();
+    let line = line
+        .strip_prefix("export")
+        .filter(|rest| rest.starts_with(char::is_whitespace))
+        .map_or(line, str::trim_start);
+    let (name, _) = line.split_once('=')?;
+    let name = name.trim_end();
+    API_KEY_VARIABLES
+        .into_iter()
+        .find(|variable| name.eq_ignore_ascii_case(variable))
+}
+
+fn refuse_dotenv_api_key(dotenv: &Path) -> Result<(), String> {
+    let Ok(bytes) = fs::read(dotenv) else {
+        return Ok(());
+    };
+    match String::from_utf8_lossy(&bytes)
+        .lines()
+        .find_map(api_key_name)
+    {
+        Some(name) => Err(format!(
+            "{} sets {name}. Codex reads that file itself and would bill per use, so the private Codex runtime did not start. Remove the line to use it.",
+            dotenv.display()
+        )),
+        None => Ok(()),
+    }
+}
 
 fn decode(bytes: &[u8]) -> Result<Value, String> {
     if bytes.is_empty() || bytes.len() > CONTENT_FRAME_LIMIT {
@@ -73,8 +119,24 @@ impl Codex {
         cwd: &Path,
         events: SyncSender<Result<Event, String>>,
     ) -> Result<Self, String> {
-        let executable = Self::executable()?;
-        let mut child = Command::new(&executable)
+        let dotenv = codex_dotenv(
+            env::var_os("CODEX_HOME"),
+            env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")),
+        );
+        Self::start(Self::executable()?, dotenv, cwd, events)
+    }
+
+    fn start(
+        executable: PathBuf,
+        dotenv: Option<PathBuf>,
+        cwd: &Path,
+        events: SyncSender<Result<Event, String>>,
+    ) -> Result<Self, String> {
+        if let Some(dotenv) = dotenv {
+            refuse_dotenv_api_key(&dotenv)?;
+        }
+        let mut command = Command::new(&executable);
+        command
             .args([
                 "app-server",
                 "--listen",
@@ -89,7 +151,8 @@ impl Codex {
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = without_api_keys(&mut command)
             .spawn()
             .map_err(|e| format!("Starting the private Codex runtime: {e}"))?;
         let input = child.stdin.take().ok_or("Codex input unavailable")?;
@@ -229,6 +292,108 @@ mod tests {
         other.kill().unwrap();
         other.wait().unwrap();
         assert!(result.is_ok() && exited && survived);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn api_keys_never_reach_the_codex_child() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .args([
+                "-c",
+                "printf '%s|%s|%s' \"$OPENAI_API_KEY\" \"$CODEX_API_KEY\" \"$KEPT\"",
+            ])
+            .env("OPENAI_API_KEY", "sk-openai")
+            .env("CODEX_API_KEY", "sk-codex")
+            .env("KEPT", "kept");
+        let output = without_api_keys(&mut command).output().unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "||kept");
+    }
+
+    #[cfg(unix)]
+    fn stand_in_codex(name: &str, dotenv: &str) -> (PathBuf, PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("voyager-codex-{name}-{}", std::process::id()));
+        let home = root.join("codex-home");
+        let cwd = root.join("cwd");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&cwd).unwrap();
+        let executable = root.join("codex");
+        fs::write(&executable, "#!/bin/sh\ntouch started\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(home.join(".env"), dotenv).unwrap();
+        (root, executable, home)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_dotenv_naming_an_api_key_stops_the_codex_runtime_from_starting() {
+        let planted = "# note\nOTHER=1\nexport OPENAI_API_KEY=\"sk-planted-value\"\n";
+        let (root, executable, home) = stand_in_codex("refuse", planted);
+        let (events, _received) = std::sync::mpsc::sync_channel(1);
+        let outcome = Codex::start(
+            executable,
+            codex_dotenv(Some(home.clone().into()), None),
+            &root.join("cwd"),
+            events,
+        );
+        thread::sleep(Duration::from_millis(500));
+        let launched = root.join("cwd/started").exists();
+        let message = outcome.err().expect("a key in the dotenv refuses to start");
+        fs::remove_dir_all(&root).unwrap();
+        assert!(!launched, "the stand-in Codex process was started");
+        assert!(
+            message.contains(&home.join(".env").display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("OPENAI_API_KEY"), "{message}");
+        assert!(message.contains("per use"), "{message}");
+        assert!(!message.contains("sk-planted-value"), "{message}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_dotenv_without_an_api_key_lets_the_codex_runtime_start() {
+        let unrelated = "OPENAI_BASE_URL=https://example.invalid\n# OPENAI_API_KEY=sk-commented\nMY_OPENAI_API_KEY=x\n";
+        let (root, executable, home) = stand_in_codex("start", unrelated);
+        let started = |executable: &PathBuf, home: &Path| {
+            let (events, _received) = std::sync::mpsc::sync_channel(1);
+            Codex::start(
+                executable.clone(),
+                codex_dotenv(Some(home.into()), None),
+                &root.join("cwd"),
+                events,
+            )
+        };
+        let with_file = started(&executable, &home);
+        fs::remove_file(home.join(".env")).unwrap();
+        let without_file = started(&executable, &home);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !root.join("cwd/started").exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        let launched = root.join("cwd/started").exists();
+        for mut codex in [with_file, without_file].into_iter().flatten() {
+            codex.shutdown().unwrap();
+        }
+        fs::remove_dir_all(&root).unwrap();
+        assert!(launched, "the stand-in Codex process never ran");
+    }
+
+    #[test]
+    fn codex_dotenv_follows_codex_home_then_the_home_directory() {
+        let some = |value: &str| Some(OsString::from(value));
+        assert_eq!(codex_dotenv(some("/c"), some("/h")), Some("/c/.env".into()));
+        assert_eq!(
+            codex_dotenv(some(""), some("/h")),
+            Some("/h/.codex/.env".into())
+        );
+        assert_eq!(
+            codex_dotenv(None, some("/h")),
+            Some("/h/.codex/.env".into())
+        );
+        assert_eq!(codex_dotenv(None, None), None);
     }
 
     #[test]
