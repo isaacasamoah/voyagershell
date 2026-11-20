@@ -36,14 +36,21 @@ fn focused(seen: &Seen) -> Option<PlacementId> {
 }
 
 fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
-    let (version, _) = native.document()?.context("Missing saved layout")?;
+    let caller = format!("HC_TERMINAL_ID={voyager}");
+    let status: Value = serde_json::from_str(&native.system.execute(
+        "env",
+        &[&caller, COMMAND, "status"],
+        None,
+    )?)?;
+    let version = status["status"]["version"]
+        .as_str()
+        .context("voyager status names no version")?;
     let request = json!({
         "requestId": id,
-        "expectedVersion": version.to_string(),
+        "expectedVersion": version,
         "action": action,
     })
     .to_string();
-    let caller = format!("HC_TERMINAL_ID={voyager}");
     Ok(serde_json::from_str(&native.system.execute(
         "env",
         &[&caller, COMMAND, "do", "workspace", &request],

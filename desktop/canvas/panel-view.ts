@@ -47,22 +47,25 @@ export function acceptDock(workspace: Canvas, cx: UIContext) {
   if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")
     return;
   workspace.dockReceipt = result.requestId;
-  seenDocks.set(workspace, JSON.stringify(result.layout.context));
-  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
-    followDock(workspace, task),
-  );
+  followDock(workspace, result.layout.context, cx);
 }
 
 function followSnapshotDock(workspace: Canvas, cx: UIContext) {
   if (workspace.busy || !workspace.layout) return;
-  const dock = JSON.stringify(workspace.layout.context);
+  const dock = workspace.layout.context;
   const seen = seenDocks.get(workspace);
-  seenDocks.set(workspace, dock);
-  if (seen !== undefined && seen !== dock)
-    cx.spawn(async (task) => followDock(workspace, task));
+  if (seen === undefined) seenDocks.set(workspace, JSON.stringify(dock));
+  else if (seen !== JSON.stringify(dock)) followDock(workspace, dock, cx);
 }
 
-function followDock(workspace: Canvas, cx: AsyncContext) {
+function followDock(workspace: Canvas, dock: Context, cx: UIContext) {
+  seenDocks.set(workspace, JSON.stringify(dock));
+  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
+    focusDocked(workspace, task),
+  );
+}
+
+function focusDocked(workspace: Canvas, cx: AsyncContext) {
   moveFocus(workspace, "opening", cx);
   if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
     return;

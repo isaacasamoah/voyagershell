@@ -898,8 +898,10 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     focus_handle: () => ({}),
   };
   let next = null;
+  let inspects = 0;
   view.run = (action, task, done) => {
     assert.equal(action.operation, "inspect");
+    inspects += 1;
     view.acceptSnapshot(next, task);
     done?.(next, task);
   };
@@ -912,8 +914,10 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
   render();
   render();
   assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
+  assert.equal(inspects, 1, "the avatar's dock runs only its own inspect");
   focused.length = 0;
-  view.acceptSnapshot(reply("placement-3"), cx);
+  next = reply("placement-3");
+  view.acceptSnapshot(next, cx);
   view.busy = true;
   render();
   assert.deepEqual(focused, [], "a dock waits while a request prepares");
@@ -925,6 +929,12 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     ["content-2"],
     "a dock read from a snapshot follows once",
   );
+  assert.equal(inspects, 2, "a snapshot dock runs one inspect");
+  focused.length = 0;
+  view.acceptSnapshot(reply("placement-3"), cx);
+  render();
+  assert.deepEqual(focused, [], "a re-read with the same dock does not follow");
+  assert.equal(inspects, 2, "a re-read with the same dock runs no inspect");
 });
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
