@@ -1,4 +1,4 @@
-use super::{INITIAL_NOTES, manifest, state_schema};
+use super::{INITIAL_NOTES, manifest, manifest::Registry, state_schema};
 pub use crate::vessel_type::NOTES_TYPE;
 use std::path::Path;
 use voyager_contract::content::{
@@ -73,8 +73,32 @@ fn implementation(type_id: &str) -> Result<&'static Implementation, String> {
         .ok_or_else(|| "Unsupported Vessel type".into())
 }
 
-pub(crate) fn supports_type(type_id: &str) -> bool {
+fn is_builtin(type_id: &str) -> bool {
     implementation(type_id).is_ok()
+}
+
+pub fn open_registry(dir: std::path::PathBuf) -> Registry {
+    Registry::new(dir, super::ENVELOPE_LIMIT, is_builtin)
+}
+
+pub fn require_available(
+    packages: &Path,
+    registry: &Registry,
+    type_id: &str,
+) -> Result<(), String> {
+    if let Some(found) = registry.describe(type_id) {
+        return require_ready(&found);
+    }
+    if package_name(type_id)?.is_none() {
+        return require_ready(&describe(packages, type_id)?);
+    }
+    let catalog = discover(packages)?;
+    let kind = catalog
+        .types
+        .iter()
+        .find(|kind| kind.type_id == type_id)
+        .ok_or("Unsupported Vessel type")?;
+    require_ready(kind)
 }
 
 pub(crate) fn package_name(type_id: &str) -> Result<Option<&'static str>, String> {
@@ -229,16 +253,26 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
         state,
         actions,
         backend: kind.backend,
+        problems: Vec::new(),
     })
 }
 
 pub fn discover(packages: &Path) -> Result<Catalog, String> {
-    let mut catalog = Catalog {
+    bound(Catalog {
         types: IMPLEMENTATIONS
             .iter()
             .map(|kind| describe(packages, kind.type_id))
             .collect::<Result<_, _>>()?,
-    };
+    })
+}
+
+pub fn discover_all(packages: &Path, registry: &Registry) -> Result<Catalog, String> {
+    let mut catalog = discover(packages)?;
+    catalog.types.extend(registry.descriptions());
+    bound(catalog)
+}
+
+fn bound(mut catalog: Catalog) -> Result<Catalog, String> {
     if serde_json::to_vec(&catalog)
         .map_err(|error| error.to_string())?
         .len()

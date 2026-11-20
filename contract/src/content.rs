@@ -1,6 +1,7 @@
 use crate::VesselId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -21,6 +22,8 @@ pub struct Description {
     pub state: Option<DataDescription>,
     pub actions: Option<Actions>,
     pub backend: Option<Backend>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub problems: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -371,6 +374,279 @@ pub enum Response {
         expected_revision: String,
         message: String,
     },
+}
+
+fn plain_integer(schema: &mut schemars::Schema) {
+    schema.remove("format");
+    if schema.get("maximum").is_none() {
+        schema.insert("maximum".into(), serde_json::json!(u32::MAX));
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Manifest {
+    #[schemars(transform = plain_integer)]
+    pub contract: u32,
+    pub id: String,
+    pub name: String,
+    #[schemars(transform = plain_integer)]
+    pub version: u32,
+    pub state: StateDecl,
+    #[serde(default)]
+    pub local: Option<StateDecl>,
+    #[serde(default)]
+    pub concurrency: Concurrency,
+    pub actions: BTreeMap<String, ActionDecl>,
+    pub view: ViewDecl,
+    #[serde(default)]
+    pub lifecycle: Lifecycle,
+    #[serde(default)]
+    pub presence: Presence,
+    #[serde(default)]
+    pub orbit: Vec<OrbitEntry>,
+    #[serde(default)]
+    pub dock: Vec<DockEntry>,
+    #[serde(default)]
+    pub backend: Option<BackendDecl>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StateDecl {
+    pub schema: serde_json::Value,
+    pub initial: serde_json::Value,
+    #[serde(default)]
+    pub migrations: Vec<Migration>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Migration {
+    #[schemars(transform = plain_integer)]
+    pub from: u32,
+    pub set: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Concurrency {
+    #[serde(default)]
+    pub default: ConcurrencyMode,
+    #[serde(default)]
+    pub merge: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConcurrencyMode {
+    #[default]
+    Turns,
+    Merge,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ActionDecl {
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
+    pub rebase: Rebase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<Risk>,
+    pub effect: Vec<Effect>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Rebase {
+    ByKey,
+    Always,
+    Refuse,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Risk {
+    Confirm,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Effect {
+    Set {
+        path: String,
+        value: serde_json::Value,
+    },
+    Push {
+        path: String,
+        value: serde_json::Value,
+    },
+    Remove {
+        path: String,
+    },
+    Move {
+        path: String,
+        to: String,
+        index: String,
+    },
+    Backend,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ViewDecl {
+    pub source: String,
+    #[serde(default)]
+    pub islands: BTreeMap<String, Island>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Island {
+    pub script: String,
+    #[serde(default)]
+    pub props: BTreeMap<String, String>,
+    #[serde(default)]
+    pub actions: Vec<String>,
+    pub budget: Budget,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Budget {
+    #[schemars(transform = plain_integer)]
+    pub ms: u32,
+    #[schemars(transform = plain_integer)]
+    pub mb: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Lifecycle {
+    #[serde(default)]
+    pub open: OpenMode,
+    #[serde(default)]
+    pub close: CloseMode,
+    #[serde(default)]
+    pub retire: RetireMode,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OpenMode {
+    #[default]
+    Render,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloseMode {
+    #[default]
+    KeepState,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RetireMode {
+    #[default]
+    RefuseNewActions,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Presence {
+    #[serde(default)]
+    pub attribution: Attribution,
+    #[serde(default)]
+    pub show: Vec<PresenceShow>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Attribution {
+    #[default]
+    None,
+    PerEntity,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PresenceShow {
+    Avatars,
+    LastActor,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrbitEntry {
+    pub id: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short: Option<String>,
+    pub icon: String,
+    pub group: OrbitGroup,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
+    pub run: Run,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OrbitGroup {
+    Act,
+    Ask,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Run {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub args: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub ask: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DockEntry {
+    pub id: String,
+    pub label: String,
+    pub trigger: DockTrigger,
+    pub default: Toggle,
+    pub read: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DockTrigger {
+    OnDock,
+    WhileDocked,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Toggle {
+    On,
+    Off,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BackendDecl {
+    pub kind: BackendKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BackendKind {
+    CoreDocument,
+    CoreTerminal,
 }
 
 #[cfg(test)]

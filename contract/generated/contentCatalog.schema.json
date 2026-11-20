@@ -137,6 +137,12 @@
           },
           "type": "array"
         },
+        "problems": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "state": {
           "anyOf": [
             {

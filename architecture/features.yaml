@@ -490,6 +490,13 @@ features:
       - app/src/content/install.rs
       - app/src/content/install/diff.rs
       - app/src/content/install/tests.rs
+      - app/src/content/manifest.rs
+      - app/src/content/manifest/check.rs
+      - app/src/content/manifest/expression.rs
+      - app/src/content/manifest/problem.rs
+      - app/src/content/manifest/read.rs
+      - app/src/content/manifest/registry.rs
+      - app/src/content/manifest/tests.rs
       - app/src/content/markdown.rs
       - app/src/content/package.rs
       - app/src/content/rename.rs

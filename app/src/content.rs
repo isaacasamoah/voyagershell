@@ -1,10 +1,12 @@
 mod description;
+mod manifest;
 mod markdown;
 mod package;
 pub(crate) mod rename;
 mod view;
-pub(crate) use description::supports_type;
 pub use description::{NOTES_TYPE, describe, discover, require_action};
+pub use description::{discover_all, open_registry};
+pub(crate) use manifest::valid_type_id;
 pub mod install;
 pub(crate) use view::Phase as ViewPhase;
 pub use view::ViewBinding;
@@ -537,6 +539,7 @@ pub struct Owner {
     changes: HashMap<String, (u64, Option<async_channel::Sender<u64>>)>,
     views: Vec<std::sync::Weak<view::Gate>>,
     files: HashMap<String, voyager_contract::content::NotesFile>,
+    registry: std::sync::Arc<manifest::Registry>,
 }
 
 impl Owner {
@@ -550,12 +553,18 @@ impl Owner {
             changes: HashMap::new(),
             views: Vec::new(),
             files: HashMap::new(),
+            registry: std::sync::Arc::new(description::open_registry(profile.join("vessels"))),
         })
     }
 
     fn package_path(&self, type_id: &str) -> Result<PathBuf, String> {
-        let name = description::package_name(type_id)?
-            .ok_or("This Vessel type has no removable package")?;
+        let name = match description::package_name(type_id) {
+            Ok(Some(name)) => name.to_owned(),
+            _ => self
+                .registry
+                .folder(type_id)
+                .ok_or("This Vessel type has no removable package")?,
+        };
         Ok(self
             .root
             .parent()
@@ -571,16 +580,7 @@ impl Owner {
 
     pub fn require_available(&self, type_id: &str) -> Result<(), String> {
         let packages = self.root.with_file_name("vessels");
-        if description::package_name(type_id)?.is_none() {
-            return description::require_ready(&describe(&packages, type_id)?);
-        }
-        let catalog = discover(&packages)?;
-        let kind = catalog
-            .types
-            .iter()
-            .find(|kind| kind.type_id == type_id)
-            .ok_or("Unsupported Vessel type")?;
-        description::require_ready(kind)
+        description::require_available(&packages, &self.registry, type_id)
     }
 
     pub fn remove_package(&mut self, type_id: &str) -> Result<(), String> {
@@ -1144,7 +1144,7 @@ mod tests {
             model
                 .apply(voyager_contract::Action::CreateVessel {
                     launch: None,
-                    type_id: "unknown".into(),
+                    type_id: "Not Valid".into(),
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
                             voyage: before_layout.voyages[0].id.clone()
