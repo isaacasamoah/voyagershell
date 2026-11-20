@@ -22,16 +22,20 @@ mod core_calls;
 mod owner;
 #[path = "client_reply.rs"]
 mod reply;
+#[path = "client_service.rs"]
+mod service;
 #[path = "client_terminal.rs"]
 mod terminal_start;
 use crate::activity::Activity;
 use crate::front_door::{Claim, Envelope, WAITING};
 use crate::layout_store::rejected;
 pub use core_calls::WorkspaceNotice;
+pub use service::{ProgramError, ProgramReply, ProgramRequest, ProgramSpec};
 
 pub use crate::layout_store::CHANGED;
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
 const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
+const _: () = assert!(service::WAIT.as_secs() < WORKSPACE_WAIT.as_secs());
 
 enum Message {
     PrepareContext {
@@ -58,6 +62,10 @@ enum Message {
     },
     Launches {
         reply: async_channel::Sender<Result<voyager_contract::launch::Catalog, String>>,
+    },
+    Service {
+        request: ProgramRequest,
+        reply: SyncSender<Result<ProgramReply, Error>>,
     },
     RefreshContentViews,
     RegisterView {
@@ -255,7 +263,7 @@ impl Message {
                 access, request, ..
             } => Envelope::content(access, request).effect,
             Self::Process { scope, request, .. } => Envelope::process(scope, request).effect,
-            Self::Worktree { .. } | Self::Terminal { .. } => true,
+            Self::Worktree { .. } | Self::Terminal { .. } | Self::Service { .. } => true,
             Self::CloseDone { .. }
             | Self::Quit { .. }
             | Self::Listed { .. }
@@ -319,6 +327,7 @@ pub struct Client {
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
     placement_notice: Arc<Mutex<Option<String>>>,
+    workspace_words: Arc<Mutex<Vec<String>>>,
     replies: crate::replies::Replies,
 }
 
@@ -335,6 +344,16 @@ impl Client {
                 .and_then(|prepared| prepared.preview(&focus))
         });
         Ok(focus)
+    }
+
+    pub fn service(&self, request: ProgramRequest) -> Result<ProgramReply, Error> {
+        let (reply, receive) = mpsc::sync_channel(1);
+        self.sender
+            .send_blocking(Message::Service { request, reply })
+            .map_err(|_| Error::Uncertain("The workspace owner is unavailable".into()))?;
+        receive.recv_timeout(service::WAIT).map_err(|_| {
+            Error::Uncertain("The workspace owner did not answer the program request".into())
+        })?
     }
 
     pub fn reported_activity(&self) -> voyager_contract::activity::Projection {
@@ -1035,36 +1054,6 @@ mod voice_scope_tests {
             .apply(Action::RemovePlacement { id: note.id })
             .unwrap();
         assert!(note_exit_target(&model.layout, &note.vessel).is_err());
-    }
-
-    #[test]
-    fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
-        let (sender, receive) = async_channel::bounded(8);
-        let client = content_admission_tests::detached(sender, "voice-scope-test");
-        let _inspection = client.queue_inspection().unwrap();
-        let _later = client
-            .queue_workspace(
-                None,
-                None,
-                Request {
-                    request_id: "later-navigation".into(),
-                    expected_version: 0,
-                    action: Action::Dock {
-                        context: Context::Workspace,
-                    },
-                },
-            )
-            .unwrap();
-        let Message::Workspace { request, scope, .. } = receive.try_recv().unwrap() else {
-            panic!("Expected the voice inspection");
-        };
-        assert!(matches!(request.action, Action::Inspect));
-        assert_eq!(request.expected_version, 0);
-        assert!(scope.is_none());
-        let Message::Workspace { request, .. } = receive.try_recv().unwrap() else {
-            panic!("Expected later navigation");
-        };
-        assert_eq!(request.request_id, "later-navigation");
     }
 }
 

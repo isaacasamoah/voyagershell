@@ -5,6 +5,7 @@ use voyager_app::{
     client::{Client, Lifecycle},
     conversation_client,
     core::Error,
+    voice_layer::Layer,
 };
 
 enum State {
@@ -18,6 +19,7 @@ struct Ending {
     canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
+    voice: Layer,
     state: Rc<RefCell<State>>,
 }
 
@@ -25,6 +27,7 @@ pub fn register(
     canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
+    voice: Layer,
     requests: async_channel::Receiver<Lifecycle>,
     cx: &mut App,
 ) {
@@ -32,6 +35,7 @@ pub fn register(
         canvas,
         workspace,
         conversation,
+        voice,
         state: Rc::new(RefCell::new(State::Ready)),
     };
     let quit = ending.clone();
@@ -73,6 +77,10 @@ impl Ending {
             let workspace = ending.workspace.clone();
             let executor = cx.background_executor().clone();
             let private = executor.spawn(async move { conversation.quit().await });
+            let voice = ending.voice.clone();
+            executor
+                .spawn(async move { voice.shutdown(std::time::Duration::from_secs(10)) })
+                .await;
             let owner = executor.spawn(async move { workspace.end(operation).await });
             let (private, owner) = (private.await, owner.await);
             let mut errors = Vec::new();

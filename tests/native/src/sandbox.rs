@@ -48,6 +48,7 @@ pub struct Sandbox<'a> {
     pub second: Option<&'a Path>,
     pub assets: Option<&'a Path>,
     pub second_assets: Option<&'a Path>,
+    pub voice: Option<&'a Path>,
     pub evidence: Option<&'a Path>,
 }
 
@@ -80,6 +81,7 @@ impl Sandbox<'_> {
             self.second,
             self.assets,
             self.second_assets.filter(|path| Some(*path) != self.assets),
+            self.voice,
         ]
         .into_iter()
         .flatten()
@@ -362,6 +364,7 @@ mod tests {
                 second: None,
                 assets: exposed,
                 second_assets: None,
+                voice: None,
                 evidence,
             }
             .command(inner)

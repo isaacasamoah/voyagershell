@@ -6,9 +6,9 @@ mod terminal;
 pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use settle::{
-    AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, Elapsed, FLOAT_SPACING, Owed,
-    PAST_CORE_DEADLINE, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold,
-    now_millis,
+    AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed, FLOAT_SPACING,
+    Owed, PAST_CORE_DEADLINE, QUIET_MIC, SEND_WAIT, Stopwatch, VESSEL_CLOSED, after_entry, clock,
+    epoch_millis, hold, now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -219,6 +219,7 @@ pub struct Native {
     pub probe_frames: bool,
     pub audio_requested: bool,
     pub audio: Option<Stack>,
+    pub voice_engine: Option<PathBuf>,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -274,6 +275,7 @@ impl Native {
             probe_frames: false,
             audio_requested: false,
             audio: None,
+            voice_engine: None,
             surface,
             display: None,
             x11: None,
@@ -619,6 +621,16 @@ impl Native {
                 stop.to_str().context("Invalid frame stop path")?,
             ));
         }
+        let engine = self
+            .voice_engine
+            .as_ref()
+            .map(|folder| folder.to_string_lossy().into_owned());
+        let trace = self.voice_trace();
+        let trace = trace.to_string_lossy().into_owned();
+        if let Some(engine) = &engine {
+            extra_env.push(("VOYAGER_OMNI_DIR", engine));
+            extra_env.push(("VOYAGER_VOICE_TRACE", &trace));
+        }
         let viewer = self.system.spawn(
             &self.candidate.path,
             &[
@@ -668,6 +680,10 @@ impl Native {
             .act(json!({"input":"focus","window":self.window}), || {
                 x11.focus(self.window)
             })
+    }
+
+    pub fn voice_trace(&self) -> PathBuf {
+        self.system.evidence.join("voice-trace.jsonl")
     }
 
     pub fn inspection(&self) -> PathBuf {

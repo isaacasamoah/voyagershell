@@ -236,12 +236,12 @@ confidence = "stated"
 id = "voice-is-click-to-talk"
 says = "Voice listens only after the user clicks, and it never adds per-use API charges."
 kind = "user"
+owner = "conversation-provider"
 source = "Isaac, 17 Nov 2026; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
 features = ["voice"]
 guard = []
-type_gap = "voice::Phase::Active records no click, so a session can be Active that no click started. S19a gives voice its own layer and may type the start."
-check = []
-gap = "Future. The voice unit adds its case. Section 3c named no owner, so a later unit sets it."
+type_gap = "The microphone is opened by one exchange that the voice layer starts only on a click command. Nothing in the types stops another caller from opening a capture."
+check = ["journey:voice/no-capture-without-click", "journey:voice/rename-is-heard-and-acknowledged", "journey:voice/words-reach-voyager", "journey:voice/acknowledgement-is-prompt", "test:app/src/voice_layer.rs#nothing_is_captured_until_a_click_asks_for_it"]
 confidence = "stated"
 
 [[invariant]]

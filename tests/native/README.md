@@ -847,8 +847,8 @@ a refusal to read in the ledger and not a verifier error.
 `voyager-verification audio-selftest --evidence NEW_ABSOLUTE_PATH` proves that the
 environment can put speech into a program's microphone path and capture the speech that
 the program plays. It needs no candidate build and starts no app. `run --audio on` starts
-the same audio server before the app launches, so a journey runs with it. No journey reads
-the server yet. The voice layer's first journey is its first reader.
+the same audio server before the app launches, so a journey runs with it. The `voice`
+journey is the first reader. See The voice journey below.
 
 The proof is captured samples at the monitor of a null sink in a private audio server. It
 is not a physical speaker, a microphone or an ear, and it does not show that anyone can
@@ -981,7 +981,48 @@ the daemons' logs, the fed speech, each recording and capture as `.s16` raw samp
 Limits. The proof is of PipeWire 1.4.10 and WirePlumber 0.5.13 on one machine. The program
 under test is a Pulse or ALSA client, so a program that opens the device another way is not
 shown to work. A program that lists input devices and skips a source with no hardware has
-not been tried. Latency is not measured. No journey reads the stack yet.
+not been tried. The `voice` journey reads the stack and measures one latency, from the
+click that ends an utterance to the first sound of the acknowledgement at the speaker.
+
+### The voice journey
+
+`voice` needs `--audio on` and `--voice-engine DIR`. The folder holds a llama.cpp
+`llama-server` with its libraries, the Omni model and its audio projector, and the
+verifier binds it read-only into the sandbox and gives the app its path. The sandbox
+has no graphics device, so the engine runs on the CPU. The journey drives the real
+voice control with the click an X11 user makes, feeds the committed synthetic speech
+to the microphone and records the speaker.
+
+| Case | What it shows |
+| --- | --- |
+| `engine-ready` (setup) | The control reads Start voice once the engine has loaded and the acknowledgement clips are kept. |
+| `no-capture-without-click` | The audio server lists no recorder on the microphone while nobody clicks. This is the control case. |
+| `voyager-stands-in` (setup) | A program that echoes what it is sent runs under Core, and the app's own binding file names it, as Voyager's start will. |
+| `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement clip for a running Voyager reaches the speaker and matches the kept clip, it starts before hearing ends, and the microphone closes. |
+| `words-reach-voyager` | The stand-in receives `[spoken] Dock on this fleet.` exactly, through the app's real send. No log, trace or terminal scrollback of the engine holds an audio payload. |
+| `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
+
+The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
+`VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech
+only, the words heard. The first sound is the speaker capture's first loud 20 ms window, counted from the
+moment the recorder delivered its first samples, against the app's own mark for the end
+of capture. The recorder asks for 10 ms buffers.
+
+The speech was made with Edge text to speech, because the engine must hear it exactly.
+The two phrases and the commands that made them:
+
+```sh
+edge-tts --voice en-GB-SoniaNeural --text "Rename this fleet to Harbor." --write-media a.mp3
+ffmpeg -i a.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact rename-this-fleet-to-harbor.wav
+edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.mp3
+ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
+```
+
+A second control, `tests/native/controls/voice-handoff.patch`, sends the words without the
+spoken marker. Built into a candidate, it must fail `words-reach-voyager`.
+
+The journey does not cover the spoken result or a stalled engine. The first waits on the
+reply reader. The battery does not run `voice`, because it has no engine folder to give it.
 
 ### Negative controls
 
@@ -1126,7 +1167,8 @@ For a retained candidate, take the expected hash from its reviewed build receipt
 Take the `hc` hash from the Core release you intend to test. Computing a hash
 from an arbitrary file alone does not establish build provenance. Doctor checks
 both hashes, the installed tool paths and the sandbox canary without launching
-an app. Actual readiness additionally requires the owned display, exact window
+an app. The tool paths include `parec` and `paplay` from `pulseaudio-utils`, which
+the avatar's voice layer needs on the host. Actual readiness additionally requires the owned display, exact window
 title and PID, measured viewport, Core identity and bound shell established by
 the run.
 

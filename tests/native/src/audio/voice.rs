@@ -1,0 +1,336 @@
+use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
+use crate::inspection::Target;
+use crate::native::{Native, Owed, SEND_WAIT};
+use crate::system::{PATIENCE, poll, settle, until};
+use anyhow::{Context, Result, bail, ensure};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::fs;
+use std::path::Path;
+
+pub const APP_CLIENT: &str = "voyager-voice";
+pub const READY: &str = "Start voice";
+pub const LISTENING: &str = "Stop listening";
+const CLIP_RATE: u32 = 24_000;
+const HEADER: usize = 44;
+const ONSET_LEVEL: f64 = 300.0;
+const ONSET_WINDOW: usize = 960;
+const SIGNATURES: [&str; 3] = ["UklGR", "input_audio", "RIFF"];
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Mark {
+    pub event: String,
+    pub at_ms: u64,
+    #[serde(default)]
+    pub words: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Conversation {
+    pub heard: Option<String>,
+    pub acknowledgement: Option<String>,
+    pub spoken: Score,
+    pub first_sound_after_capture_ms: i64,
+    pub started_before_heard: bool,
+    pub sent: bool,
+    pub microphone_closed: bool,
+    pub marks: Vec<Mark>,
+}
+
+pub fn marks(path: &Path) -> Result<Vec<Mark>> {
+    match fs::read_to_string(path) {
+        Ok(text) => text
+            .lines()
+            .map(|line| serde_json::from_str(line).context("A voice trace line is not JSON"))
+            .collect(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub fn words_match(heard: &str, wanted: &str) -> bool {
+    let plain = |text: &str| {
+        text.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    plain(heard) == plain(wanted)
+}
+
+fn clip(home: &Path, key: &str) -> Result<Samples> {
+    let clips = home.join(".cache/voyager/voice/clips");
+    let folder = fs::read_dir(&clips)
+        .with_context(|| format!("The app kept no clips under {}", clips.display()))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join(format!("{key}.wav")))
+        .find(|path| path.is_file())
+        .with_context(|| format!("The app kept no {key} clip"))?;
+    let bytes = fs::read(&folder)?;
+    ensure!(
+        bytes.len() > HEADER
+            && &bytes[..4] == b"RIFF"
+            && u32::from_le_bytes(bytes[24..28].try_into()?) == CLIP_RATE,
+        "The kept clip {key} is not 24 kHz mono audio"
+    );
+    let narrow = Samples::raw(&bytes[HEADER..]).0;
+    let mut wide = Vec::with_capacity(narrow.len() * 2);
+    for (index, sample) in narrow.iter().enumerate() {
+        let next = narrow.get(index + 1).copied().unwrap_or(*sample);
+        wide.push(*sample);
+        wide.push(((i32::from(*sample) + i32::from(next)) / 2) as i16);
+    }
+    Ok(Samples(wide))
+}
+
+fn onset_ms(samples: &Samples) -> Option<i64> {
+    samples
+        .0
+        .chunks(ONSET_WINDOW)
+        .position(|window| {
+            let sum: f64 = window.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (sum / window.len() as f64).sqrt() > ONSET_LEVEL
+        })
+        .map(|index| (index * ONSET_WINDOW * 1000 / super::speech::RATE as usize) as i64)
+}
+
+#[derive(Debug, Serialize)]
+pub struct Memory {
+    pub engine_mb: Option<u64>,
+    pub app_mb: Option<u64>,
+}
+
+fn resident_mb(program: &str) -> Option<u64> {
+    fs::read_dir("/proc")
+        .ok()?
+        .filter_map(Result::ok)
+        .find_map(|entry| {
+            let command = fs::read(entry.path().join("cmdline")).ok()?;
+            let name = command.split(|byte| *byte == 0).next()?;
+            let matches = Path::new(std::str::from_utf8(name).ok()?)
+                .file_name()
+                .is_some_and(|file| file == program);
+            let status = fs::read_to_string(entry.path().join("status")).ok()?;
+            let kilobytes: u64 = status
+                .lines()
+                .find_map(|line| line.strip_prefix("VmRSS:"))?
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()?;
+            matches.then_some(kilobytes / 1024)
+        })
+}
+
+pub fn memory() -> Memory {
+    Memory {
+        engine_mb: resident_mb("llama-server"),
+        app_mb: resident_mb("voyager-shell"),
+    }
+}
+
+pub fn recorders(native: &Native) -> Result<Vec<String>> {
+    let stack = stack(native)?;
+    stack.recorders(&native.system)
+}
+
+fn stack(native: &Native) -> Result<&Stack> {
+    native
+        .audio
+        .as_ref()
+        .context("The voice journey needs --audio on")
+}
+
+pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>> {
+    let mut seen = Vec::new();
+    poll(during.within(), LOOK, true, || {
+        seen.push(recorders(native)?);
+        Ok(None::<()>)
+    })?;
+    Ok(seen)
+}
+
+fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
+    marks.iter().find(|mark| mark.event == event)
+}
+
+pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+    let stack = stack(native)?;
+    let system = &native.system;
+    let speaker = format!("{SPEAKER}.monitor");
+    let mut capture = stack.capture(system, &speaker, name)?;
+    let began = capture.began()?;
+    let trace = native.voice_trace();
+    let before = marks(&trace)?.len();
+    native.click(&Target::VOICE_CONTROL)?;
+    until("the app to open the microphone", || {
+        Ok(recorders(native)?
+            .iter()
+            .any(|who| who == APP_CLIENT)
+            .then_some(()))
+    })?;
+    stack.feed(system, speech)?;
+    native.click(&Target::VOICE_CONTROL)?;
+    let started = until("the acknowledgement to start", || {
+        let now = marks(&trace)?;
+        Ok(now
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "acknowledgement-started"))
+            .and_then(|mark| mark.words.clone()))
+    })?;
+    let reference = clip(&system.evidence.join("home"), &started)?;
+    let score = settle(
+        PATIENCE,
+        LOOK,
+        || Ok(Some(judge::score(&reference, &capture.samples()?))),
+        Score::matches,
+    )?
+    .context("The speaker capture never held still")?;
+    let samples = capture.samples()?;
+    let onset = onset_ms(&samples).context("No sound reached the speaker")?;
+    until("the words to be heard", || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "heard"))
+            .map(|_| ()))
+    })?;
+    let sent = poll(SEND_WAIT.within(), LOOK, true, || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "sent"))
+            .map(|_| ()))
+    })?
+    .is_some();
+    let microphone_closed = until("the microphone to close", || {
+        Ok(recorders(native)?.is_empty().then_some(()))
+    })
+    .is_ok();
+    capture.finish(stack.folder(), name)?;
+    let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    let ended = mark_of(&marks, "utterance-ended")
+        .map(|mark| mark.at_ms)
+        .context("The app marked no end of capture")?;
+    let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
+    let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
+    let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
+    Ok(Conversation {
+        heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
+        acknowledgement: Some(started),
+        spoken: score,
+        first_sound_after_capture_ms: first_sound,
+        started_before_heard: acknowledged
+            .zip(heard_at)
+            .is_some_and(|(started, heard)| started <= heard),
+        sent,
+        microphone_closed,
+        marks,
+    })
+}
+
+pub fn terminal_text(native: &Native, address: &str) -> Result<String> {
+    let read = native
+        .system
+        .watch("terminal.read", json!({"terminal":address,"lines":400}))?;
+    Ok(read["text"].as_str().unwrap_or_default().to_owned())
+}
+
+pub fn median(values: &[i64]) -> Option<i64> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    let middle = sorted.len() / 2;
+    match sorted.len() {
+        0 => None,
+        count if count % 2 == 1 => sorted.get(middle).copied(),
+        _ => Some((sorted[middle - 1] + sorted[middle]) / 2),
+    }
+}
+
+pub fn audio_in_text(native: &Native) -> Result<Value> {
+    let mut found = Vec::new();
+    let mut scanned = Vec::new();
+    for entry in fs::read_dir(&native.system.evidence)? {
+        let path = entry?.path();
+        let text = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| matches!(extension, "log" | "jsonl"));
+        if !text {
+            continue;
+        }
+        let body = fs::read(&path)?;
+        scanned.push(
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned()),
+        );
+        let body = String::from_utf8_lossy(&body);
+        if let Some(signature) = SIGNATURES
+            .iter()
+            .find(|signature| body.contains(**signature))
+        {
+            found.push(json!({"file":path.file_name().map(|n| n.to_string_lossy().into_owned()),"signature":signature}));
+        }
+    }
+    let engine = engine_screen(native)?;
+    if let Some(signature) = SIGNATURES
+        .iter()
+        .find(|signature| engine.contains(**signature))
+    {
+        found.push(json!({"file":"the engine's Core terminal","signature":signature}));
+    }
+    Ok(json!({"scanned":scanned,"engineLines":engine.lines().count(),"found":found}))
+}
+
+fn engine_screen(native: &Native) -> Result<String> {
+    let listed = native.system.watch("terminal.list", json!({}))?;
+    let terminals = listed["terminals"]
+        .as_array()
+        .context("Core listed no terminals array")?;
+    let Some(engine) = terminals
+        .iter()
+        .find(|terminal| terminal["labels"]["voyager.service"].as_str() == Some("voice-engine"))
+    else {
+        bail!("Core lists no voice engine program");
+    };
+    let address = engine["address"]
+        .as_str()
+        .context("The engine terminal has no address")?;
+    let read = native
+        .system
+        .watch("terminal.read", json!({"terminal":address,"lines":4000}))?;
+    Ok(read["text"].as_str().unwrap_or_default().to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_median_of_an_even_count_is_the_mean_of_the_middle_pair() {
+        assert_eq!(median(&[5, 1, 4, 2]), Some(3));
+        assert_eq!(median(&[9, 1, 5]), Some(5));
+        assert_eq!(median(&[]), None);
+    }
+
+    #[test]
+    fn heard_words_match_ignoring_case_and_punctuation_but_not_words() {
+        assert!(words_match("Dock on this fleet.", "dock on this fleet"));
+        assert!(!words_match("Doc on this fleet.", "Dock on this fleet."));
+        assert!(!words_match(
+            "Dock on this fleet",
+            "[spoken] Dock on this fleet"
+        ));
+    }
+
+    #[test]
+    fn a_trace_line_reads_back_with_and_without_words() {
+        let with: Mark =
+            serde_json::from_str(r#"{"event":"heard","atMs":5,"words":"Dock."}"#).unwrap();
+        let without: Mark = serde_json::from_str(r#"{"event":"click","atMs":4}"#).unwrap();
+        assert_eq!(with.words.as_deref(), Some("Dock."));
+        assert_eq!(without.words, None);
+    }
+}

@@ -1,0 +1,12 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+index 042c5995..e892f41a 100644
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -390,6 +390,7 @@ pub fn start(
+             }
+         };
+         owner.set(Phase::Ready, None);
++        let _open = audio.microphone();
+         let mut turn = 0u64;
+         while let Ok(Command::Click) = receiver.recv() {
+             let outcome = Exchange {

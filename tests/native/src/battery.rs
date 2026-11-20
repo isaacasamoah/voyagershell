@@ -511,6 +511,10 @@ fn journey_inputs(
         Journey::LayoutCompat => layout_seed(fixtures, "newer-additions.json"),
         Journey::LayoutRefused => layout_seed(fixtures, "newer-min-reader.json"),
         Journey::LayoutCorrupt => layout_seed(fixtures, "corrupt.json"),
+        Journey::Voice => Err(
+            "it needs --audio on and a --voice-engine folder, which the battery does not supply"
+                .into(),
+        ),
         _ => Ok(Vec::new()),
     }
 }
@@ -1024,11 +1028,19 @@ mod tests {
             Journey::LayoutCompat,
             Journey::LayoutRefused,
             Journey::LayoutCorrupt,
+            Journey::Voice,
         ];
         for journey in Journey::ALL.iter().filter(|j| !seeded.contains(j)) {
             let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();
             assert!(args.is_empty());
         }
+    }
+
+    #[test]
+    fn the_voice_journey_is_not_run_because_the_battery_has_no_engine_to_give_it() {
+        let base = build(Side::Base, "base");
+        let reason = journey_inputs(Journey::Voice, &base, Path::new("/nowhere")).unwrap_err();
+        assert!(reason.contains("--voice-engine"), "{reason}");
     }
 
     #[test]

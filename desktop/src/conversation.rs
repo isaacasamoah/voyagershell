@@ -7,9 +7,8 @@ use voyager_contract::operations;
 pub fn module(client: Client) -> Result<HostModule, HostError> {
     let identity = client.clone();
     let calls = client.clone();
-    let speech = client.clone();
     Bridge::new(&operations::CONVERSATION)
-        .component("Speech", crate::speech::component(speech))
+        .component("Speech", crate::speech::component())
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })

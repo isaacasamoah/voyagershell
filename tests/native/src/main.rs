@@ -58,7 +58,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, audio-selftest, probe, features, lint, journeys, manifest\naudio-selftest --evidence NEW_ABSOLUTE_PATH starts a private audio server in the sandbox, feeds synthetic speech to a program's microphone path, captures what the program plays and judges both, then runs two controls that must fail. It needs no candidate and runs no app.\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nlint [--root DIR] fails with rule check-loosened on a Duration constructor, a sleep or a wall-clock reading in a journey file outside src/native/settle.rs, and names the fix.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant] [--audio on]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, audio-selftest, probe, features, lint, journeys, manifest\naudio-selftest --evidence NEW_ABSOLUTE_PATH starts a private audio server in the sandbox, feeds synthetic speech to a program's microphone path, captures what the program plays and judges both, then runs two controls that must fail. It needs no candidate and runs no app.\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nlint [--root DIR] fails with rule check-loosened on a Duration constructor, a sleep or a wall-clock reading in a journey file outside src/native/settle.rs, and names the fix.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant] [--audio on] [--voice-engine DIR]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -143,6 +143,7 @@ fn entry() -> Result<i32> {
         "--role",
         "--probe",
         "--audio",
+        "--voice-engine",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -199,6 +200,17 @@ fn entry() -> Result<i32> {
         Ok(path) => Some(std::fs::canonicalize(path).context("Second candidate assets")?),
         Err(_) => None,
     };
+    let voice_engine = match get("--voice-engine") {
+        Ok(path) => {
+            let folder = std::fs::canonicalize(&path).context("Voice engine folder")?;
+            ensure!(
+                folder.join("llama-server").is_file(),
+                "The voice engine folder {path} holds no llama-server"
+            );
+            Some(folder)
+        }
+        Err(_) => None,
+    };
     if let Some(second) = &second {
         ensure!(
             second.path != candidate.path,
@@ -243,6 +255,7 @@ fn entry() -> Result<i32> {
             second: second.as_ref().map(|pinned| pinned.path.as_path()),
             assets: assets.as_deref(),
             second_assets: second_assets.as_deref(),
+            voice: voice_engine.as_deref(),
             evidence,
         }
         .command(inner)
@@ -302,7 +315,7 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"audio":audio,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"audio":audio,"voiceEngine":voice_engine,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -356,6 +369,8 @@ struct Plan {
     #[serde(rename = "probeFrames")]
     probe_frames: bool,
     audio: bool,
+    #[serde(rename = "voiceEngine")]
+    voice_engine: Option<PathBuf>,
 }
 
 fn journey(
@@ -420,6 +435,7 @@ fn drive(plan: Plan) -> Result<i32> {
     native.script = plan.provider_script;
     native.probe_frames = plan.probe_frames;
     native.audio_requested = plan.audio;
+    native.voice_engine = plan.voice_engine;
     native.seed_documents(plan.documents);
     let mut gate = Run::default();
     let result = journey(
@@ -543,6 +559,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/audio/judge.rs", include_bytes!("audio/judge.rs")),
     ("src/audio/selftest.rs", include_bytes!("audio/selftest.rs")),
     ("src/audio/speech.rs", include_bytes!("audio/speech.rs")),
+    ("src/audio/voice.rs", include_bytes!("audio/voice.rs")),
     ("src/battery.rs", include_bytes!("battery.rs")),
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
@@ -617,6 +634,7 @@ const SOURCES: &[(&str, &[u8])] = &[
         "src/journey/slow_save.rs",
         include_bytes!("journey/slow_save.rs"),
     ),
+    ("src/journey/voice.rs", include_bytes!("journey/voice.rs")),
     (
         "src/journey/voyage_close.rs",
         include_bytes!("journey/voyage_close.rs"),

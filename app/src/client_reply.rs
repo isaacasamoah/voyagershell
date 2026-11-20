@@ -17,6 +17,13 @@ impl Client {
         })
     }
 
+    pub fn workspace_words(&self) -> Vec<String> {
+        self.workspace_words
+            .lock()
+            .map(|words| words.clone())
+            .unwrap_or_default()
+    }
+
     pub fn take_placement_notice(&self) -> Option<String> {
         self.placement_notice
             .lock()
@@ -94,10 +101,40 @@ mod tests {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
+            workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         (client, queue)
+    }
+
+    #[test]
+    fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
+        let (client, receive) = detached();
+        let _inspection = client.queue_inspection().unwrap();
+        let _later = client
+            .queue_workspace(
+                None,
+                None,
+                Request {
+                    request_id: "later-navigation".into(),
+                    expected_version: 0,
+                    action: Action::Dock {
+                        context: Context::Workspace,
+                    },
+                },
+            )
+            .unwrap();
+        let Message::Workspace { request, scope, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected the voice inspection");
+        };
+        assert!(matches!(request.action, Action::Inspect));
+        assert_eq!(request.expected_version, 0);
+        assert!(scope.is_none());
+        let Message::Workspace { request, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected later navigation");
+        };
+        assert_eq!(request.request_id, "later-navigation");
     }
 
     fn inspect(id: &str) -> Request {

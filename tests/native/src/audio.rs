@@ -2,9 +2,10 @@ pub mod exchange;
 pub mod judge;
 pub mod selftest;
 pub mod speech;
+pub mod voice;
 
 use crate::sandbox;
-use crate::system::{Owned, PATIENCE, Stopped, System, settle, until, until_cleanup};
+use crate::system::{Owned, PATIENCE, Stopped, System, poll, settle, until, until_cleanup};
 use anyhow::{Context, Result, bail, ensure};
 use judge::Score;
 use serde::{Deserialize, Serialize};
@@ -118,6 +119,15 @@ impl Recording {
 
     pub fn alive(&mut self) -> Result<bool> {
         Ok(self.owned.child.try_wait()?.is_none())
+    }
+
+    pub fn began(&self) -> Result<u64> {
+        poll(PATIENCE, Duration::from_millis(5), true, || {
+            Ok(fs::metadata(&self.path)
+                .is_ok_and(|file| file.len() > 0)
+                .then(crate::native::now_millis))
+        })?
+        .context("The recorder delivered no samples")
     }
 
     pub fn heard(&self, wanted: &Speech) -> Result<Score> {
@@ -329,6 +339,7 @@ impl Stack {
                 "--format=s16le",
                 "--rate=48000",
                 "--channels=1",
+                "--latency-msec=10",
                 &sandbox::text(&path)?,
             ],
             &[],

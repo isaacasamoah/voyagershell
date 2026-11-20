@@ -48,6 +48,7 @@ Owns files:
 - `app/src/client_structure.rs`
 - `app/src/client_worktree.rs`
 - `app/src/client_reply.rs`
+- `app/src/client_service.rs`
 - `app/src/client_terminal.rs`
 - `app/src/client_admission_tests.rs`
 - `app/src/adoption.rs`
@@ -177,6 +178,13 @@ Owns files:
 - `app/src/voice_session.rs`
 - `app/src/voice_transcript.rs`
 - `app/src/voice_wire.rs`
+- `app/src/speech.rs`
+- `app/src/omni.rs`
+- `app/src/audio_io.rs`
+- `app/src/http1.rs`
+- `app/src/voice_layer.rs`
+- `app/src/voice_voyager.rs`
+- `app/tests/voice_engine.rs`
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`
 - `contract/src/voice.rs`
