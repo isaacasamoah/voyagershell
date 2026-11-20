@@ -81,12 +81,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .filter(|label| label.contains("\"raised\":true"))
                 .map(str::to_owned)
         })?;
-        Ok(Verdict::new()
+        Verdict::new()
             .expect(
                 "the shown revision advanced to 1",
                 shown.contains("revision 1"),
             )
-            .observed("state label", shown)?)
+            .observed("state label", shown)
     })?;
     cases.check(native, Case::LastGood, |native| {
         fs::write(native.profile_path(MANIFEST), "{\"contract\": 1}")?;
