@@ -24,11 +24,14 @@ From the repository root, with Java 17 or later and network access on the first 
 sh tests/formal/core-viewers/check.sh
 ```
 
-It downloads `tla2tools.jar` 1.8.0 once into `target/tla/`, checks its SHA-256,
+It downloads `tla2tools.jar` 1.7.4 once into `target/tla/`, checks its SHA-256,
 runs the configuration below in about a minute on a laptop and compares the
-outcome with this table. Exit 0 means the outcome matched and the covered code
-has not changed since the sync commit. Exit 1 means the outcome changed or the
-model failed to run. Exit 2 means the covered code changed and needs review first.
+outcome with this table. Release 1.7.4 is pinned because it is immutable and
+gives the same result on this model (27461798 distinct states) as the jar that
+GitHub's rolling `v1.8.0` tag served before 19 Nov, whose contents changed. Exit 0
+means the outcome matched and the covered code has not changed since the sync
+commit. Exit 1 means the outcome changed or the model failed to run. Exit 2 means
+the covered code changed and needs review first.
 
 | Configuration | Expected | What it checks |
 |---|---|---|
@@ -71,10 +74,11 @@ path back fails the check.
 | `app/src/core_reader.rs` | `Reader::receive`, `Reader::reply`, `Reader::output`, `Reader::ended` | `Read`, `ReadReply`, `ReadData`, `ReadEnd` |
 | `app/src/core_pending.rs` | `Pending::wait` timeout and its recheck under the replies lock, `Drop for Pending` | `TimeOut`, the `waiting` check in `ReadReply` |
 | `app/src/client.rs` | `Receipt::Terminal`, the terminal answer of `WeakViewer` that the front door ledger keeps | `InstallFails` frees the slot because no other strong `Viewer` exists |
+| `app/src/client_terminal.rs` | `open_terminal`, which calls `Core::terminal_attach` and then `Core::viewer` | `Attach`, `Install` |
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
-Sync commit is `749314a2a81b2b74dfc33b59519c4b2dfe180fdf`.
+Sync commit is `aec064b9190875ea2bb5c32ce673b33856e1995e`.
 
 `check.sh` reads the file column and the sync commit from this file. Move the sync
 commit forward only after you have read every diff in those files since the

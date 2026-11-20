@@ -4,8 +4,8 @@ set -eu
 root=$(git rev-parse --show-toplevel)
 here="$root/tests/formal/core-viewers"
 skill="$root/.agents/skills/core-viewers/SKILL.md"
-version=1.8.0
-digest=e1f11b75c4b5bc4478ba0ac5cb6ae28e40a01b0016bc33e0aa97da22dfdbcd7f
+version=1.7.4
+digest=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 cache="${CARGO_TARGET_DIR:-$root/target}/tla"
 jar="$cache/tla2tools-$version.jar"
 
@@ -16,7 +16,11 @@ if [ ! -f "$jar" ]; then
 fi
 echo "$digest  $jar" | sha256sum -c --quiet
 
-sync=$(sed -n 's/^Sync commit: `\([0-9a-f]\{40\}\)`$/\1/p' "$skill")
+sync=$(sed -n 's/^Sync commit is `\([0-9a-f]\{40\}\)`\.$/\1/p' "$skill")
+if [ -z "$sync" ]; then
+    echo "$skill has no line like: Sync commit is \`<40 hex digits>\`."
+    exit 1
+fi
 covered=$(sed -n 's/^| `\([^`]*\)` |.*/\1/p' "$skill" | sort -u)
 drift=0
 if ! git -C "$root" diff --quiet "$sync" -- $covered; then
