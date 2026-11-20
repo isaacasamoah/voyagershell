@@ -4,14 +4,14 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { dirname, join } from "node:path";
 
 const NOTICE = [
-  "codex-voice-check: UNRUN. It talks to OpenAI's servers under a ChatGPT subscription login.",
+  "codex-voice-live-check: UNRUN. It talks to OpenAI's servers under a ChatGPT subscription login.",
   "Run it only with a live Codex subscription and the admiral's explicit go, passed as --admiral-go.",
   "It refuses to start when any API key is set, when the login is not the ChatGPT subscription,",
   "or when a required environment variable is missing. It uses synthetic speech only.",
 ];
 
 const FORBIDDEN_ENV = /(^|_)API_KEY$|^OPENAI_|^CODEX_API|^CODEX_ACCESS|^CHATGPT_/i;
-const REQUIRED_ENV = ["CODEX_VOICE_CHECK_WORK", "CODEX_VOICE_CHECK_SINK", "CODEX_VOICE_CHECK_MIC"];
+const REQUIRED_ENV = ["CODEX_VOICE_LIVE_CHECK_WORK", "CODEX_VOICE_LIVE_CHECK_SINK", "CODEX_VOICE_LIVE_CHECK_MIC"];
 const SPEECH_PEAK = 400;
 const POLL_MS = 50;
 
@@ -41,7 +41,7 @@ function preflight() {
   const keys = Object.keys(process.env).filter((name) => FORBIDDEN_ENV.test(name));
   if (keys.length) refuse(`these variables must be unset: ${keys.join(", ")}`);
   for (const name of REQUIRED_ENV) if (!process.env[name]) refuse(`${name} is required`);
-  const work = process.env.CODEX_VOICE_CHECK_WORK;
+  const work = process.env.CODEX_VOICE_LIVE_CHECK_WORK;
   mkdirSync(work, { recursive: true });
   for (const tool of ["espeak-ng", "paplay", "codex"]) {
     try {
@@ -177,7 +177,7 @@ function speakSynthetic(work, utterance) {
   const wav = join(work, `${utterance.id}.wav`);
   execFileSync("espeak-ng", ["-w", wav, utterance.text]);
   const started = now();
-  const player = spawn("paplay", [`--device=${process.env.CODEX_VOICE_CHECK_SINK}`, wav], { stdio: "ignore" });
+  const player = spawn("paplay", [`--device=${process.env.CODEX_VOICE_LIVE_CHECK_SINK}`, wav], { stdio: "ignore" });
   const finished = new Promise((resolve) => player.on("exit", () => resolve(now())));
   return { started, finished };
 }
@@ -205,7 +205,7 @@ async function main() {
   const helper = new Helper(helperInfo);
   try {
     const init = await server.send("initialize", {
-      clientInfo: { name: "codex_voice_check", version: "0.0.0" },
+      clientInfo: { name: "codex_voice_live_check", version: "0.0.0" },
       capabilities: { experimentalApi: true },
     });
     server.notify("initialized", {});
@@ -279,7 +279,7 @@ async function main() {
     result.questions.q1_webrtc_subscription = answer ? { ok: true } : { ok: false, error: "no answer description" };
     if (!answer) return finish(result, server, helper, threadId, work);
     await helper.exchange({ type: "applyAnswer", sdp: answer.message.params.sdp }, 25000);
-    await helper.exchange({ type: "openDevices", selection: { microphone: process.env.CODEX_VOICE_CHECK_MIC } });
+    await helper.exchange({ type: "openDevices", selection: { microphone: process.env.CODEX_VOICE_LIVE_CHECK_MIC } });
     await helper.exchange({ type: "setAudioControls", controls: { microphoneMuted: false, speakerSuppressed: false } });
 
     const watch = { stop: false, samples: [], sound: [] };

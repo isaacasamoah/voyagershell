@@ -1,6 +1,6 @@
-# codex-voice-check
+# codex-voice-live-check
 
-Unrun check for one question: can Codex's live voice be the avatar's ears and voice only, under the ChatGPT subscription login, while Voyager does all the reasoning?
+Unrun check for one question: can Codex Voice Live (Codex's name for ChatGPT Voice with the GPT-Live model) be the avatar's ears and voice only, under the ChatGPT subscription login, while Voyager does all the reasoning?
 
 **Run it only with a live Codex subscription and the admiral's go.** It contacts OpenAI's servers. It is untested: it was syntax-checked with `node --check` and never executed, because the subscription it needs has ended.
 
@@ -22,8 +22,8 @@ The script refuses to start unless `--admiral-go` is passed, no variable named l
 
 - `codex` on `PATH`, with the native voice package installed beside it.
 - `espeak-ng` and `paplay`.
-- A virtual audio sink and its monitor source, so no real microphone or recording is used. With PulseAudio or PipeWire: `pactl load-module module-null-sink sink_name=codex_voice_check`.
-- `CODEX_VOICE_CHECK_SINK` set to the sink name, `CODEX_VOICE_CHECK_MIC` set to the monitor source name as the helper lists it (adjust if the helper expects an ALSA name), and `CODEX_VOICE_CHECK_WORK` set to an empty working folder outside the repository.
+- A virtual audio sink and its monitor source, so no real microphone or recording is used. With PulseAudio or PipeWire: `pactl load-module module-null-sink sink_name=codex_voice_live_check`.
+- `CODEX_VOICE_LIVE_CHECK_SINK` set to the sink name, `CODEX_VOICE_LIVE_CHECK_MIC` set to the monitor source name as the helper lists it (adjust if the helper expects an ALSA name), and `CODEX_VOICE_LIVE_CHECK_WORK` set to an empty working folder outside the repository.
 
 ```
 node check.mjs --admiral-go
