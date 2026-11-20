@@ -20,6 +20,7 @@ mod panels;
 mod scope;
 pub mod vessel_socket;
 pub mod vessel_type;
+pub mod voyager_binding;
 pub mod workspace;
 
 #[cfg(test)]

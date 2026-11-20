@@ -137,7 +137,9 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
 - `workspace` carries a workspace `Request`. The socket offers `inspect`,
   `create-fleet`, `rename`, `move-voyage`, `move-fleet`, `move-placement`,
   `remove-placement`, `select-voyage` and `select-fleet`, and refuses any
-  other operation before queueing it. An offered request passes the front
+  other operation before queueing it. It also offers `dock`, but only on the
+  socket of the terminal that `voyager.json` names (see
+  [Voyager's binding](#voyagers-binding)). An offered request passes the front
   door like the canvas's, with no scope, so the program acts with the
   person's authority.
 - A `create-fleet` from the socket makes a Fleet with no Vessel. The canvas
@@ -158,6 +160,35 @@ identity is advisory, and nothing is enforced. Any process of the same user can
 connect to any Vessel's socket, and the directory's 0700 mode only keeps other
 users out. Linux is the verified platform. Windows has no socket yet, so the
 owner opens none there and the command refuses.
+
+### Voyager's binding
+
+`voyager.json` in the profile holds one field, `terminal`, the Core terminal id
+of Voyager's terminal. `app/src/voyager_binding.rs` is its only writer, and it
+writes by temporary file and rename. The app writes it when it starts Voyager.
+It is not a Core label or a Core document, because a Vessel program can write
+both, and it is not part of the layout, so the layout and its wire do not
+change.
+
+A Vessel socket offers `dock` only when its own terminal equals that field. Any
+other socket refuses `dock` with "dock is offered only to Voyager; nothing was
+queued" and queues nothing. The field stands in for the rank record that
+Release 0.2 adds.
+
+The app reads the file once, when it starts. After that it holds the value in
+memory, and only its own write changes it, so an edit to the file while the app
+runs has no effect. A hand-edited file takes effect at the next app start,
+when the app loads it, and stays in force until the app writes a new binding.
+The app writes a new binding when it starts Voyager, so the edit can survive
+only if a later start finds an existing Voyager and binds to it instead of
+starting one. A file that is missing, damaged, larger than 1 KiB or names no
+terminal binds nobody. Any program of the same user can write the file, so this
+is advisory, like the socket's caller identity. Stored ranks in 0.2 give the
+stronger protection.
+
+A bound terminal that no longer exists has no placed Vessel and so no socket,
+and nobody can dock. Whether Core can give a later terminal the same id after
+a restart is unproved, and the next binding write replaces the old one.
 
 ### What the caller is told
 

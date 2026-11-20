@@ -1,3 +1,4 @@
+use crate::voyager_binding::Binding;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use voyager_contract::{
     Action, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response, Unanswered, VesselId,
@@ -35,15 +36,17 @@ pub fn path(session: &str, terminal: &str) -> Option<PathBuf> {
 pub(crate) struct Sockets {
     session: String,
     call: Call,
+    binding: Binding,
     synced: Option<Arc<Layout>>,
     open: HashMap<String, Listener>,
 }
 
 impl Sockets {
-    pub(crate) fn new(session: &str, call: Call) -> Self {
+    pub(crate) fn new(session: &str, call: Call, binding: Binding) -> Self {
         Self {
             session: session.into(),
             call,
+            binding,
             synced: None,
             open: HashMap::new(),
         }
@@ -66,6 +69,7 @@ impl Sockets {
                 && let Some(listener) = Listener::bind(
                     &self.session,
                     &self.call,
+                    &self.binding,
                     &CoreTerminalId(terminal.clone()),
                     vessel,
                 )
@@ -136,7 +140,7 @@ fn owners(
     result
 }
 
-fn offered(action: &Action) -> bool {
+fn offered(action: &Action, bound: bool) -> bool {
     match action {
         Action::Inspect
         | Action::CreateFleet { .. }
@@ -147,6 +151,7 @@ fn offered(action: &Action) -> bool {
         | Action::RemovePlacement { .. }
         | Action::SelectVoyage { .. }
         | Action::SelectFleet { .. } => true,
+        Action::Dock { .. } => bound,
         Action::Home
         | Action::UpdateCanvas { .. }
         | Action::SetSidebar { .. }
@@ -168,7 +173,6 @@ fn offered(action: &Action) -> bool {
         | Action::ReopenFleet { .. }
         | Action::RevealPlacement { .. }
         | Action::ReopenPlacement { .. }
-        | Action::Dock { .. }
         | Action::SetPlacementMaximized { .. }
         | Action::SetPlacementHidden { .. }
         | Action::RemoveArrangement { .. }
@@ -178,6 +182,18 @@ fn offered(action: &Action) -> bool {
 }
 
 const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet, rename, move-voyage, move-fleet, move-placement, remove-placement, select-voyage and select-fleet; nothing was queued";
+
+const DOCK_NOT_OFFERED: &str = "dock is offered only to Voyager; nothing was queued";
+
+fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
+    if offered(action, bound) {
+        None
+    } else if matches!(action, Action::Dock { .. }) {
+        Some(DOCK_NOT_OFFERED)
+    } else {
+        Some(NOT_OFFERED)
+    }
+}
 
 fn status(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId) -> SocketReply {
     let inspected = call(
@@ -244,21 +260,29 @@ fn focus(call: &Call, vessel: &VesselId) -> SocketReply {
     }
 }
 
-fn answer(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId, line: &str) -> SocketReply {
+fn answer(
+    call: &Call,
+    binding: &Binding,
+    vessel: &VesselId,
+    terminal: &CoreTerminalId,
+    line: &str,
+) -> SocketReply {
     match serde_json::from_str::<SocketRequest>(line) {
         Err(error) => SocketReply::Refused {
             message: format!("Invalid voyager request: {error}; nothing was queued"),
         },
         Ok(SocketRequest::Status) => status(call, vessel, terminal),
         Ok(SocketRequest::Focus) => focus(call, vessel),
-        Ok(SocketRequest::Workspace { request }) if !offered(&request.action) => {
-            SocketReply::Refused {
-                message: NOT_OFFERED.into(),
+        Ok(SocketRequest::Workspace { request }) => {
+            match refusal(&request.action, binding.names(terminal)) {
+                Some(message) => SocketReply::Refused {
+                    message: message.into(),
+                },
+                None => SocketReply::Workspace {
+                    reply: call(vessel.clone(), *request).into(),
+                },
             }
         }
-        Ok(SocketRequest::Workspace { request }) => SocketReply::Workspace {
-            reply: call(vessel.clone(), *request).into(),
-        },
     }
 }
 
@@ -274,6 +298,7 @@ impl Listener {
     fn bind(
         session: &str,
         call: &Call,
+        binding: &Binding,
         terminal: &CoreTerminalId,
         vessel: VesselId,
     ) -> Option<Self> {
@@ -301,7 +326,7 @@ impl Listener {
         };
         let closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stopped = closed.clone();
-        let call = call.clone();
+        let (call, binding) = (call.clone(), binding.clone());
         let (owner, address) = (vessel.clone(), terminal.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
@@ -311,13 +336,14 @@ impl Listener {
                 let Ok(mut stream) = stream else {
                     continue;
                 };
-                let (call, owner, address) = (call.clone(), owner.clone(), address.clone());
+                let (call, binding) = (call.clone(), binding.clone());
+                let (owner, address) = (owner.clone(), address.clone());
                 std::thread::spawn(move || {
                     let mut line = String::new();
                     let limit = u64::try_from(crate::activity::LINE_LIMIT).unwrap_or(u64::MAX);
                     let reply =
                         match std::io::BufReader::new((&stream).take(limit)).read_line(&mut line) {
-                            Ok(_) => answer(&call, &owner, &address, &line),
+                            Ok(_) => answer(&call, &binding, &owner, &address, &line),
                             Err(error) => SocketReply::Refused {
                                 message: format!(
                                     "Unreadable voyager request: {error}; nothing was queued"
@@ -355,7 +381,7 @@ struct Listener {
 
 #[cfg(not(unix))]
 impl Listener {
-    fn bind(_: &str, _: &Call, _: &CoreTerminalId, _: VesselId) -> Option<Self> {
+    fn bind(_: &str, _: &Call, _: &Binding, _: &CoreTerminalId, _: VesselId) -> Option<Self> {
         None
     }
 }
@@ -381,18 +407,144 @@ mod tests {
     #[test]
     fn the_command_offers_only_workspace_arrangement_removal_and_focus() {
         let fleet = voyager_contract::FleetId("fleet-2".into());
-        assert!(offered(&Action::CreateFleet {
-            voyage: voyager_contract::VoyageId("voyage-1".into()),
-            name: "Crew".into(),
-        }));
-        assert!(offered(&Action::SelectFleet { id: fleet.clone() }));
-        assert!(!offered(&Action::CloseFleet { id: fleet }));
-        assert!(offered(&Action::RemovePlacement {
-            id: voyager_contract::PlacementId("placement-3".into()),
-        }));
-        assert!(!offered(&Action::SetPlacementHidden {
-            id: voyager_contract::PlacementId("placement-3".into()),
-            hidden: true,
-        }));
+        assert!(offered(
+            &Action::CreateFleet {
+                voyage: voyager_contract::VoyageId("voyage-1".into()),
+                name: "Crew".into(),
+            },
+            false
+        ));
+        assert!(offered(&Action::SelectFleet { id: fleet.clone() }, false));
+        assert!(!offered(&Action::CloseFleet { id: fleet }, false));
+        assert!(offered(
+            &Action::RemovePlacement {
+                id: voyager_contract::PlacementId("placement-3".into()),
+            },
+            false
+        ));
+        assert!(!offered(
+            &Action::SetPlacementHidden {
+                id: voyager_contract::PlacementId("placement-3".into()),
+                hidden: true,
+            },
+            false
+        ));
+    }
+
+    fn recorded() -> (Call, Arc<std::sync::Mutex<Vec<Action>>>) {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let call: Call = Arc::new(move |_, request: Request| {
+            log.lock().unwrap().push(request.action.clone());
+            Ok(Response {
+                request_id: request.request_id,
+                status: voyager_contract::Outcome::Applied,
+                version: 2,
+                layout: Arc::new(Layout::default()),
+                fresh: false,
+                created_workspace: false,
+                created_vessels: Vec::new(),
+                message: None,
+                close_plan: None,
+            })
+        });
+        (call, seen)
+    }
+
+    fn dock_line() -> String {
+        serde_json::to_string(&SocketRequest::Workspace {
+            request: Box::new(Request {
+                request_id: "dock-1".into(),
+                expected_version: 1,
+                action: Action::Dock {
+                    context: voyager_contract::Context::Workspace,
+                },
+            }),
+        })
+        .unwrap()
+    }
+
+    fn terminal(id: &str) -> CoreTerminalId {
+        CoreTerminalId(id.into())
+    }
+
+    #[test]
+    fn dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other() {
+        let (call, seen) = recorded();
+        let binding = Binding::unbound();
+        binding.bind(terminal("t8")).unwrap();
+        let vessel = VesselId("vessel-1".into());
+
+        let refused = answer(&call, &binding, &vessel, &terminal("t9"), &dock_line());
+        assert_eq!(
+            refused,
+            SocketReply::Refused {
+                message: DOCK_NOT_OFFERED.into()
+            }
+        );
+        assert!(seen.lock().unwrap().is_empty());
+
+        let accepted = answer(&call, &binding, &vessel, &terminal("t8"), &dock_line());
+        assert!(matches!(
+            accepted,
+            SocketReply::Workspace {
+                reply: Reply::Answered(_)
+            }
+        ));
+        assert!(matches!(
+            seen.lock().unwrap().as_slice(),
+            [Action::Dock { .. }]
+        ));
+    }
+
+    #[test]
+    fn dock_is_refused_from_every_terminal_while_nothing_is_bound() {
+        let (call, seen) = recorded();
+        let binding = Binding::unbound();
+        let vessel = VesselId("vessel-1".into());
+        for id in ["t8", "t9"] {
+            let reply = answer(&call, &binding, &vessel, &terminal(id), &dock_line());
+            assert!(matches!(reply, SocketReply::Refused { .. }), "{id}");
+        }
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rebinding_withdraws_the_dock_from_the_previous_terminal() {
+        let (call, seen) = recorded();
+        let binding = Binding::unbound();
+        binding.bind(terminal("t8")).unwrap();
+        binding.bind(terminal("t12")).unwrap();
+        let reply = answer(
+            &call,
+            &binding,
+            &VesselId("vessel-1".into()),
+            &terminal("t8"),
+            &dock_line(),
+        );
+        assert!(matches!(reply, SocketReply::Refused { .. }));
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_other_offered_operations_do_not_depend_on_the_binding() {
+        let (call, seen) = recorded();
+        let line = serde_json::to_string(&SocketRequest::Workspace {
+            request: Box::new(Request {
+                request_id: "inspect-1".into(),
+                expected_version: 0,
+                action: Action::Inspect,
+            }),
+        })
+        .unwrap();
+        let reply = answer(
+            &call,
+            &Binding::unbound(),
+            &VesselId("vessel-1".into()),
+            &terminal("t9"),
+            &line,
+        );
+        assert!(matches!(reply, SocketReply::Workspace { .. }));
+        assert_eq!(seen.lock().unwrap().len(), 1);
     }
 }

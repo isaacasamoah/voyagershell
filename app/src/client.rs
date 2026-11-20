@@ -365,17 +365,17 @@ impl Client {
         Self::start(session, cwd, Some(owner))
     }
 
-    pub fn with_content_and_launches(
+    pub fn with_content_and_profile(
         session: String,
         cwd: String,
         owner: crate::content::Owner,
-        launches: std::path::PathBuf,
+        profile: std::path::PathBuf,
     ) -> Self {
-        Self::start_with_launches(session, cwd, Some(owner), Some(launches))
+        Self::start_with_profile(session, cwd, Some(owner), Some(profile))
     }
 
     fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {
-        Self::start_with_launches(session, cwd, content, None)
+        Self::start_with_profile(session, cwd, content, None)
     }
 
     pub async fn bind_content(&self, id: VesselId) -> Result<crate::content::Binding, String> {

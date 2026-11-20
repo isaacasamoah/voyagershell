@@ -240,7 +240,8 @@ tools join it at item 4, through `Client::scoped_call`, which
 `app/src/administrator.rs` calls. The data lives in three places:
 
 - Core holds the workspace document and the running programs.
-- The profile holds interface scripts, the theme, `launches.json`, avatar
+- The profile holds interface scripts, the theme, `launches.json`,
+  `voyager.json` (the app-written binding that names Voyager's terminal), avatar
   artwork and older Notes data.
 - Each Voyage's directory holds its Notes as Markdown files in `notes/`.
 

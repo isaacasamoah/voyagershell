@@ -91,11 +91,11 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         &launches_path,
         &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
     )?;
-    let client = Client::with_content_and_launches(
+    let client = Client::with_content_and_profile(
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
         content_owner,
-        launches_path,
+        profile.clone(),
     );
     let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();
