@@ -23,6 +23,7 @@ export interface Description {
   host: NativeHost;
   name: string;
   placements: Placement[];
+  problems?: string[];
   state?: DataDescription | null;
   typeId: string;
   view: NativeView;

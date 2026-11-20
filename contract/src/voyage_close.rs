@@ -9,7 +9,7 @@ pub struct Entry {
     pub name: String,
     pub type_id: String,
     pub terminal: Option<CoreTerminalId>,
-    #[schemars(transform = crate::administrator::standard_integer)]
+    #[schemars(transform = crate::standard_integer)]
     pub pid: Option<u32>,
 }
 
@@ -34,7 +34,7 @@ pub struct Plan {
     pub phase: Phase,
     pub entries: Vec<Entry>,
     #[serde(default)]
-    #[schemars(transform = crate::administrator::standard_integer)]
+    #[schemars(transform = crate::standard_integer)]
     pub uncommitted_changes: Option<u32>,
     pub message: Option<String>,
 }

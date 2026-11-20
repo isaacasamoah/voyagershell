@@ -1,0 +1,626 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ActionDecl": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "items": {
+            "$ref": "#/definitions/Effect"
+          },
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "rebase": {
+          "$ref": "#/definitions/Rebase"
+        },
+        "risk": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Risk"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "rebase",
+        "effect"
+      ],
+      "type": "object"
+    },
+    "Attribution": {
+      "enum": [
+        "none",
+        "per-entity"
+      ],
+      "type": "string"
+    },
+    "BackendDecl": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/BackendKind"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "BackendKind": {
+      "enum": [
+        "core-document",
+        "core-terminal"
+      ],
+      "type": "string"
+    },
+    "Budget": {
+      "additionalProperties": false,
+      "properties": {
+        "mb": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ms": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms",
+        "mb"
+      ],
+      "type": "object"
+    },
+    "CloseMode": {
+      "enum": [
+        "keep-state"
+      ],
+      "type": "string"
+    },
+    "Concurrency": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConcurrencyMode"
+            }
+          ],
+          "default": "turns"
+        },
+        "merge": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ConcurrencyMode": {
+      "enum": [
+        "turns",
+        "merge"
+      ],
+      "type": "string"
+    },
+    "DockEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/definitions/Toggle"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "read": {
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/definitions/DockTrigger"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "trigger",
+        "default",
+        "read"
+      ],
+      "type": "object"
+    },
+    "DockTrigger": {
+      "enum": [
+        "on-dock",
+        "while-docked"
+      ],
+      "type": "string"
+    },
+    "Effect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "set",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "op",
+            "path",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "push",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "op",
+            "path",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "remove",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "type": "string"
+            },
+            "op": {
+              "const": "move",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path",
+            "to",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "backend",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Island": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "budget": {
+          "$ref": "#/definitions/Budget"
+        },
+        "props": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "script": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "script",
+        "budget"
+      ],
+      "type": "object"
+    },
+    "Lifecycle": {
+      "additionalProperties": false,
+      "properties": {
+        "close": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CloseMode"
+            }
+          ],
+          "default": "keep-state"
+        },
+        "open": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/OpenMode"
+            }
+          ],
+          "default": "render"
+        },
+        "retire": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RetireMode"
+            }
+          ],
+          "default": "refuse-new-actions"
+        }
+      },
+      "type": "object"
+    },
+    "Migration": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "set": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "from",
+        "set"
+      ],
+      "type": "object"
+    },
+    "OpenMode": {
+      "enum": [
+        "render"
+      ],
+      "type": "string"
+    },
+    "OrbitEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "$ref": "#/definitions/OrbitGroup"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "run": {
+          "$ref": "#/definitions/Run"
+        },
+        "short": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "icon",
+        "group",
+        "run"
+      ],
+      "type": "object"
+    },
+    "OrbitGroup": {
+      "enum": [
+        "act",
+        "ask"
+      ],
+      "type": "string"
+    },
+    "Presence": {
+      "additionalProperties": false,
+      "properties": {
+        "attribution": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Attribution"
+            }
+          ],
+          "default": "none"
+        },
+        "show": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/PresenceShow"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "PresenceShow": {
+      "enum": [
+        "avatars",
+        "last-actor"
+      ],
+      "type": "string"
+    },
+    "Rebase": {
+      "enum": [
+        "by-key",
+        "always",
+        "refuse"
+      ],
+      "type": "string"
+    },
+    "RetireMode": {
+      "enum": [
+        "refuse-new-actions"
+      ],
+      "type": "string"
+    },
+    "Risk": {
+      "enum": [
+        "confirm"
+      ],
+      "type": "string"
+    },
+    "Run": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "args": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "ask": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "read": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "StateDecl": {
+      "additionalProperties": false,
+      "properties": {
+        "initial": true,
+        "migrations": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/Migration"
+          },
+          "type": "array"
+        },
+        "schema": true
+      },
+      "required": [
+        "schema",
+        "initial"
+      ],
+      "type": "object"
+    },
+    "Toggle": {
+      "enum": [
+        "on",
+        "off"
+      ],
+      "type": "string"
+    },
+    "ViewDecl": {
+      "additionalProperties": false,
+      "properties": {
+        "islands": {
+          "additionalProperties": {
+            "$ref": "#/definitions/Island"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "actions": {
+      "additionalProperties": {
+        "$ref": "#/definitions/ActionDecl"
+      },
+      "type": "object"
+    },
+    "backend": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BackendDecl"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "concurrency": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Concurrency"
+        }
+      ],
+      "default": {
+        "default": "turns",
+        "merge": []
+      }
+    },
+    "contract": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "dock": {
+      "default": [],
+      "items": {
+        "$ref": "#/definitions/DockEntry"
+      },
+      "type": "array"
+    },
+    "id": {
+      "type": "string"
+    },
+    "lifecycle": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Lifecycle"
+        }
+      ],
+      "default": {
+        "close": "keep-state",
+        "open": "render",
+        "retire": "refuse-new-actions"
+      }
+    },
+    "local": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/StateDecl"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "name": {
+      "type": "string"
+    },
+    "orbit": {
+      "default": [],
+      "items": {
+        "$ref": "#/definitions/OrbitEntry"
+      },
+      "type": "array"
+    },
+    "presence": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Presence"
+        }
+      ],
+      "default": {
+        "attribution": "none",
+        "show": []
+      }
+    },
+    "state": {
+      "$ref": "#/definitions/StateDecl"
+    },
+    "version": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "view": {
+      "$ref": "#/definitions/ViewDecl"
+    }
+  },
+  "required": [
+    "contract",
+    "id",
+    "name",
+    "version",
+    "state",
+    "actions",
+    "view"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

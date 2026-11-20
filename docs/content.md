@@ -14,7 +14,7 @@ The existing generator exports their validators beside the workspace and
 conversation contract. `app/src/content.rs` owns persisted data, revisions and
 schema checks. `create-vessel` uses the shared panel owner and an explicit
 empty or beside-placement insertion with a left/right/top/bottom side and
-an explicit type ID. The supported type IDs are `terminal` and `notes`. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
+an explicit type ID. The built-in type IDs are `terminal`, `agents` and `notes`. A package that carries a manifest declares one more type ID, as the next section describes. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
 Changing a placement does not change its Vessel ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
@@ -527,3 +527,82 @@ A selected, loaded or dirty Session still requires all original file and active
 view checks. Confirmed-exited Sessions are removed before preparation. The
 ordinary reply rebinds clean caches through the same saved snapshot; it does
 not activate a view or recreate a placement.
+
+## Vessel type manifests
+
+A Vessel type is data. A package folder `vessels/<folder>/manifest.json` in the
+profile declares one type with no new application code. The folder name is not
+the type ID. The manifest's `id` is, and it appears in the Vessel catalogue
+beside the built-in types. `contract/src/content.rs` owns the `Manifest` types,
+and `contract/generated/contentManifest.schema.json` is their generated schema.
+The manifest format here replaces the field list of the planned `content-manifest`
+interface, which no atlas holds.
+
+| Section | Meaning |
+| --- | --- |
+| `contract`, `id`, `name`, `version` | Manifest format version (1), the type ID, its display name and the type's own version. |
+| `state` | `schema` (JSON Schema for the instance data), `initial` data and `migrations`. |
+| `local` | Optional view-local state with its own `schema` and `initial`. It is never revisioned. |
+| `concurrency` | `default` is `turns` or `merge`, and `merge` lists the top-level state fields that merge. |
+| `actions` | Named actions. Each has typed `params`, a `rebase` policy (`by-key`, `always` or `refuse`), an optional `risk` and a list of `effect` steps. |
+| `view` | `source` file in the package and optional script `islands` with declared props, actions and budget. |
+| `lifecycle`, `presence` | Open, close and retire behaviour and attribution display. |
+| `orbit`, `dock` | Orbit entries that run a declared action or hand an agent a `read`, and dock behaviours with a trigger, a default and a `read`. |
+| `backend` | Optional `core-document` or `core-terminal` backend that `backend` effects target. |
+
+An effect step is one of `set`, `push`, `remove`, `move` or `backend`. Paths start
+at a state field and may use `.field`, `[0]`, `[*]` and a selector such as
+`[id=$id]`.
+
+### Expressions
+
+Every expression is a string in one grammar. It has paths, the literals `true`,
+`false`, `null`, numbers and single-quoted text, `!`, `==`, `!=`, `&&`, `||`,
+parentheses and four functions, `count`, `first`, `filter` and `match`. A bare name
+is a field of the state. `local.x` is local state, `$name` is an action parameter
+and `$uuid` is a fresh identifier. `count(items, done: false)` keeps the items
+whose fields equal the given values. A string inside an effect `value` is an
+expression, and text is quoted.
+
+### The checker
+
+One checker in `app/src/content/manifest/check.rs` runs once when a manifest is
+loaded. Loading has two phases. The structural phase reads each section, each
+action and each orbit and dock entry on its own, so every malformed part is listed
+at once. If any structural problem exists, only those are reported, because typed
+checks need parsed parts. The semantic phase then lists every problem it finds. It
+checks that:
+
+- the format version is 1, the type ID is well formed and does not name a built-in type, and the name and version are set;
+- the state schema is valid JSON Schema, describes an object, and the initial data fits it;
+- migrations start below the manifest version and name real fields, and `merge` names real state fields;
+- action and parameter names are plain identifiers, parameter types are known, and every effect path exists and is assigned a value of the right type;
+- `backend` effects have a declared backend;
+- the view source and script files exist inside the package, island props type-check and island actions are declared;
+- every orbit and dock entry has a unique ID, runs exactly one of an action or an agent read, names a declared action, gives or asks every parameter, and reads fields that exist.
+
+A problem names its place and the fix, for example
+`dock.open: state has no field "itemz" (fields: items, title)`.
+
+### Last good manifest
+
+The registry keeps the last manifest that passed for each package. A broken edit
+is refused, the previous version keeps working and the catalogue entry lists every
+problem in its `problems` field. A package that never passed is listed as
+unavailable with the same list in its reason. Two packages that declare one type ID
+are refused, and the later folder name loses.
+
+The registry reads a manifest again only when the file's modification time or
+length changes. A catalogue read otherwise costs one directory listing and one
+file stat for each package, with no parse.
+
+### Admission and removal
+
+`Owner::require_available` is the one place that admits a type for a new Vessel.
+The workspace owner checks only that a type ID is well formed. Removing a
+manifest package moves its folder to `.<folder>.removed` as for Notes, and
+restoring moves it back. Instance data stays in `data/` through both.
+
+The checker and the registry decide what a manifest declares. They run no action
+and draw no view. Notes, the terminal and the agents are not manifests, and the
+view markup language is not parsed.

@@ -1,13 +1,6 @@
-use crate::{Action, CoreTerminalId, Status, VesselId};
+use crate::{Action, CoreTerminalId, Status, VesselId, standard_integer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
-pub(crate) fn standard_integer(schema: &mut schemars::Schema) {
-    schema.remove("format");
-    if schema.get("maximum").is_none() {
-        schema.insert("maximum".into(), serde_json::json!(u32::MAX));
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

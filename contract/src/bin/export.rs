@@ -36,6 +36,7 @@ fn main() {
             "contentRequest":schema::<voyager_contract::content::Request>(),
             "contentResponse":schema::<voyager_contract::content::Response>(),
             "contentCatalog":schema::<voyager_contract::content::Catalog>(),
+            "contentManifest":schema::<voyager_contract::content::Manifest>(),
             "canvas":schema::<voyager_contract::canvas::Canvas>(),
             "contextFacts":schema::<voyager_contract::context::Facts>(),
             "workspaceObservation":schema::<voyager_contract::observation::WorkspaceObservation>(),

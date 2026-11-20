@@ -408,7 +408,7 @@ impl Model {
                 {
                     return Err("Selected Voyage changed; reopen the choice".into());
                 }
-                if name.trim().is_empty() || !crate::content::supports_type(&type_id) {
+                if name.trim().is_empty() || !crate::content::valid_type_id(&type_id) {
                     return Err("Fleet name or Vessel type is invalid".into());
                 }
                 if let Some(launch) = &launch {
@@ -559,7 +559,7 @@ impl Model {
                 destination: ContentDestination::Placement { owner, insertion },
                 launch,
             } => {
-                if !crate::content::supports_type(&type_id) {
+                if !crate::content::valid_type_id(&type_id) {
                     return Err("Unsupported Vessel type".into());
                 }
                 if let Some(launch) = &launch {

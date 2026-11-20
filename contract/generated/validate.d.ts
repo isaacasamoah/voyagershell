@@ -1,5 +1,6 @@
 export function canvas(data: unknown): data is import("./canvas").Canvas;
 export function contentCatalog(data: unknown): data is import("./contentCatalog").Catalog;
+export function contentManifest(data: unknown): data is import("./contentManifest").Manifest;
 export function contentRequest(data: unknown): data is import("./contentRequest").Request;
 export function contentResponse(data: unknown): data is import("./contentResponse").Response;
 export function contentTool(data: unknown): data is import("./contentTool").Input;
