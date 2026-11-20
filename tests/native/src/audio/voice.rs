@@ -220,6 +220,12 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
             .get(before..)
             .and_then(|fresh| mark_of(fresh, "speech-ended"))
             .map(|_| ()))
+    })
+    .with_context(|| {
+        let screen = bound_terminal(native)
+            .and_then(|terminal| terminal_text(native, &terminal))
+            .unwrap_or_else(|error| format!("unreadable: {error:#}"));
+        format!("Voyager's terminal showed: {}", screen.trim())
     })?;
     let microphone_closed = until("the microphone to close", || {
         Ok(recorders(native)?.is_empty().then_some(()))
@@ -330,6 +336,14 @@ pub fn judge_reply(native: &Native, name: &str, wanted: &str, other: &str) -> Re
         wanted: judge::score(&render(native, wanted)?, &heard),
         other: judge::score(&render(native, other)?, &heard),
     })
+}
+
+pub fn bound_terminal(native: &Native) -> Result<String> {
+    let stored = fs::read_to_string(native.profile_path("voyager.json"))?;
+    serde_json::from_str::<Value>(&stored)?["terminal"]
+        .as_str()
+        .map(str::to_owned)
+        .context("voyager.json names no terminal")
 }
 
 pub fn terminal_text(native: &Native, address: &str) -> Result<String> {

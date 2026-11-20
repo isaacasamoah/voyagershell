@@ -33,6 +33,7 @@ fn feed(command: &str, input: &serde_json::Value) -> Option<std::process::Output
         .args(["-c", command])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .ok()?;
     child
@@ -66,7 +67,17 @@ fn turn(settings: &str, prompt_id: &str, prompt: &str, text: &str) {
             input["prompt"] = serde_json::json!(prompt);
         }
         for command in commands_for(settings, event) {
-            let _ = feed(&command, &input);
+            let status = feed(&command, &input).map_or_else(
+                || "did not run".to_owned(),
+                |output| {
+                    format!(
+                        "exit {:?} {}",
+                        output.status.code(),
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )
+                },
+            );
+            println!("Stand-in {AGENT_NAME} ran the {event} hook for {prompt_id}: {status}");
         }
     }
 }
