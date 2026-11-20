@@ -152,6 +152,8 @@ Its guide is [docs/conversation.md](conversation.md).
 Owns files:
 
 - `app/src/administrator.rs`
+- `app/src/administrator/inputs.rs`
+- `app/src/administrator/peek_tests.rs`
 - `app/src/conversation.rs`
 - `app/src/conversation_client.rs`
 - `app/src/conversation_audio.rs`

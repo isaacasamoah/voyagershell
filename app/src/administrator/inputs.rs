@@ -1,10 +1,28 @@
-use super::Dispatch;
 use crate::provider::ToolDefinition;
 use serde_json::Value;
 use voyager_contract::{
     Action, Context,
-    administrator::{PeekInput, ProcessInput, WorkspaceInput},
+    administrator::{PeekInput, ProcessAction, ProcessInput, ToolAction, WorkspaceInput},
 };
+
+#[derive(Clone)]
+pub(super) enum Dispatch {
+    Workspace(Action),
+    Process(ProcessAction),
+    Worktree(voyager_contract::worktree::Input),
+    Content(voyager_contract::content::Action),
+}
+
+impl Dispatch {
+    pub(super) fn receipt(&self) -> ToolAction {
+        match self {
+            Self::Workspace(action) => ToolAction::Workspace(action.clone()),
+            Self::Process(action) => ToolAction::Process(action.clone()),
+            Self::Worktree(input) => ToolAction::Worktree(input.clone()),
+            Self::Content(action) => ToolAction::Content(action.receipt()),
+        }
+    }
+}
 
 type Parsed = Result<(u64, Dispatch, Option<Context>), serde_json::Error>;
 
@@ -43,23 +61,23 @@ pub(super) fn parse(tool: &str, arguments: &Value) -> Parsed {
 
 pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
     let schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/workspaceTool.schema.json"
+        "../../../contract/generated/workspaceTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
     let process_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/processTool.schema.json"
+        "../../../contract/generated/processTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
     let peek_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/peekTool.schema.json"
+        "../../../contract/generated/peekTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
     let content_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/contentTool.schema.json"
+        "../../../contract/generated/contentTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
     let worktree_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/worktreeTool.schema.json"
+        "../../../contract/generated/worktreeTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
     Ok(vec![

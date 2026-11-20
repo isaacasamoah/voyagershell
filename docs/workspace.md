@@ -1053,7 +1053,7 @@ user to the target, in one navigation save:
 
 A closed Voyage or Fleet refuses the dock with its name and leaves everything
 as it was. A hidden Vessel or Portal, and a Portal column that is not shown, is
-not revealed: the dock lands on the Fleet and records nothing. A dock runs no
+not revealed. The dock lands on the Fleet and records nothing. A dock runs no
 Vessel type actions and starts no model turn, because the Vessel types declare
 no dock behaviour yet. The canvas follows a dock from the avatar with one
 inspect that also prepares the newly shown terminals, then moves its focused

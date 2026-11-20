@@ -12,26 +12,8 @@ mod inputs;
 #[cfg(test)]
 mod peek_tests;
 
+use inputs::Dispatch;
 pub(crate) use inputs::catalog;
-
-#[derive(Clone)]
-enum Dispatch {
-    Workspace(Action),
-    Process(ProcessAction),
-    Worktree(voyager_contract::worktree::Input),
-    Content(voyager_contract::content::Action),
-}
-
-impl Dispatch {
-    fn receipt(&self) -> ToolAction {
-        match self {
-            Self::Workspace(action) => ToolAction::Workspace(action.clone()),
-            Self::Process(action) => ToolAction::Process(action.clone()),
-            Self::Worktree(input) => ToolAction::Worktree(input.clone()),
-            Self::Content(action) => ToolAction::Content(action.receipt()),
-        }
-    }
-}
 
 struct Receipt {
     tool: String,
