@@ -18,8 +18,9 @@ an explicit type ID. The built-in type IDs are `terminal`, `agent`, `agents` and
 Changing a placement does not change its Vessel ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
-`app/src/content/description.rs` describes the two supported Vessel types through
-the generated `contentCatalog` contract. Each description names its current
+`app/src/content/description.rs` describes the built-in Vessel types (terminal, agent,
+Agents view and Notes), and the registry describes each manifest type and its declared
+actions, through the generated `contentCatalog` contract. Each description names its current
 GPUI Shell host version, registered native view, supported placement scopes,
 generated action input and owner-result schemas, and optional Core terminal
 backend. Notes state uses the same bounded package schema lookup as a bound
