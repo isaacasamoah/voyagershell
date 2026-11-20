@@ -612,9 +612,9 @@ registering files and fails when their names and the catalogue differ.
 `contract/build.cjs` refuses a generated wrapper that imports a name the
 catalogue lacks. The workspace `Action` type stays the one list of workspace
 operations; a click and F2 reach the same generated `invoke`. A wrong argument
-type in a script fails `npm run typecheck`, and `desktop/typecheck.cjs` starts
-the message with the operation name: the `operation` literal for `invoke`, the
-function name for a host call.
+type in a script fails `npm run typecheck`. `desktop/typecheck.cjs` starts the
+message with the operation name, which is the `operation` literal for `invoke`
+and the function name for a host call.
 
 `app/src/workspace.rs` applies domain changes to a proposed layout.
 `Owner` in `app/src/client_owner.rs` owns the current layout and revision on one worker thread.
