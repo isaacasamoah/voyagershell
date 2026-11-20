@@ -51,9 +51,9 @@ Vessel stay silent.
 
 A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
 candidate when its final `Stop` is recorded and Core answers that Voyager is not
-working. Only an answered "idle", "done" or "error", or an answer that carries no state
-for a live program, counts. A failed read of Core and a state word the app cannot read
-are unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
+working. Only an answered "idle", "done" or "error" counts. A failed read of Core, an
+answer for a live program that carries no state word and a state word the app cannot
+read are all unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
 first paragraph of the final message, drops paths, code, hex runs of seven or more
 characters with a digit and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25`
 and `terminal-34`, cuts what is left to two sentences or 30 words, and adds "The rest

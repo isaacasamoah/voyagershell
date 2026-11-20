@@ -13,6 +13,11 @@ pub fn invoked_as_agent() -> bool {
         .unwrap_or(false)
 }
 
+fn report(state: &str) {
+    print!("\x1b]7501;state={state}:app=stand-in\x1b\\");
+    let _ = std::io::stdout().flush();
+}
+
 fn hook_commands(settings: &str) -> Vec<String> {
     commands_for(settings, "UserPromptSubmit")
 }
@@ -103,12 +108,14 @@ pub fn run() -> i32 {
         task.drain(at..=at + 1);
     }
     println!("Stand-in {AGENT_NAME} took the task: {}", task.join(" "));
+    report("idle");
     let mut turns = 0u32;
     for line in std::io::stdin().lock().lines() {
         match line {
             Ok(line) => {
                 let number = turns + 1;
                 turns = number;
+                report("working");
                 if line.trim_start().starts_with("[spoken]") {
                     turn(
                         &settings,
@@ -118,6 +125,7 @@ pub fn run() -> i32 {
                     );
                     turn(&settings, &format!("spoken-{number}"), &line, SPOKEN_REPLY);
                     println!("Stand-in {AGENT_NAME} heard: {line}");
+                    report("idle");
                     continue;
                 }
                 for hook in &hooks {
@@ -132,6 +140,7 @@ pub fn run() -> i32 {
                     }
                 }
                 println!("Stand-in {AGENT_NAME} heard: {line}");
+                report("idle");
             }
             Err(_) => return 1,
         }

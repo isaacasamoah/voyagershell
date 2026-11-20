@@ -310,6 +310,18 @@ mod tests {
     }
 
     #[test]
+    fn a_stateless_answer_from_core_never_speaks() {
+        let rig = Rig::start(crate::voice_voyager::standing_of(true, None));
+        assert_eq!(
+            crate::voice_voyager::standing_of(true, None),
+            Standing::Unknown
+        );
+        rig.say("p1", true, "Done.");
+        thread::sleep(Duration::from_millis(700));
+        assert!(rig.played.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn a_flicker_that_speaks_the_first_stop_then_reopening_speaks_nothing_more() {
         let rig = Rig::start(Standing::Idle);
         rig.say("p1", true, "Part one.");
