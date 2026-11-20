@@ -184,4 +184,5 @@ def main():
         if mode == "native": last_out = chat_turn(model, proc, codec, dev, conv, w)
         else:
             last_out, tt = aloud_turn(model, proc, codec, dev, conv, w, voice); print(f"  [reply text took {tt:.2f} s]")
-main()
+if __name__ == "__main__":
+    main()
