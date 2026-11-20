@@ -950,7 +950,8 @@ features:
         checks:
           - 'journey:voice/no-capture-without-click'
           - 'journey:voice/rename-is-heard-and-acknowledged'
-          - 'journey:voice/dock-is-heard-as-written'
+          - 'journey:voice/words-reach-voyager'
+          - 'journey:voice/acknowledgement-is-prompt'
           - 'test:app/src/voice_layer.rs#nothing_is_captured_until_a_click_asks_for_it'
         formal: []
         journeys: [voice]
@@ -967,6 +968,7 @@ features:
       - app/src/voice_layer.rs
       - app/src/voice_session.rs
       - app/src/voice_transcript.rs
+      - app/src/voice_voyager.rs
       - app/src/voice_wire.rs
       - desktop/src/speech.rs
       - docs/voice.md

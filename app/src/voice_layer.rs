@@ -2,7 +2,10 @@ use crate::{
     audio_io::{Capture, End, Gate, Playing},
     client::Client,
     omni::{self, Clips, Omni, Running, Settings},
-    speech::{Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge},
+    speech::{
+        Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
+        heard_nothing,
+    },
 };
 use std::{
     collections::HashMap,
@@ -22,18 +25,6 @@ pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
 pub trait Voyager: Send + Sync {
     fn standing(&self) -> Standing;
     fn say(&self, text: &str) -> Result<(), String>;
-}
-
-pub struct Unbound;
-
-impl Voyager for Unbound {
-    fn standing(&self) -> Standing {
-        Standing::NotRunning
-    }
-
-    fn say(&self, _: &str) -> Result<(), String> {
-        Err("Voyager is not bound to the avatar yet".into())
-    }
 }
 
 pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
@@ -280,36 +271,48 @@ impl Exchange<'_> {
     fn run(&self, turn: u64, commands: &Receiver<Command>) -> Outcome {
         self.trace.mark("click");
         self.shared.set(Phase::Listening, None);
+        let standing = self.voyager.standing();
         let (utterance, speaker) = match self.listen(commands) {
             Ok(heard) => heard,
             Err(outcome) => return outcome,
         };
         self.trace.mark("utterance-ended");
-        self.shared.set(Phase::Hearing, None);
-        let heard = match utterance {
-            None => String::new(),
-            Some(utterance) => match self.hearing.hear(&utterance, &(self.vocabulary)()) {
-                Ok(heard) => heard,
-                Err(fault) => {
-                    self.shared.set(Phase::Ready, Some(fault.to_string()));
-                    return Outcome::Done;
-                }
+        let Acknowledgement { phrase, send } = match utterance {
+            Some(_) => acknowledge(standing, turn),
+            None => Acknowledgement {
+                phrase: Phrase::Missed,
+                send: false,
             },
         };
-        self.trace.mark_words("heard", &heard);
-        let Acknowledgement { phrase, send } = acknowledge(&heard, self.voyager.standing(), turn);
-        let finish = self.play(phrase, speaker);
-        self.trace.mark("acknowledgement-started");
-        self.shared.set(Phase::Acknowledging, None);
+        let mut finish = self.play(phrase, speaker);
+        self.trace
+            .mark_words("acknowledgement-started", phrase.key());
+        self.shared.set(Phase::Hearing, None);
         let mut notice = None;
-        if send {
-            match self.voyager.say(&crate::spoken::prompt(&heard)) {
-                Ok(()) => self.trace.mark("sent"),
-                Err(reason) => notice = Some(format!("Not sent. {reason}")),
+        if let Some(utterance) = utterance {
+            match self.hearing.hear(&utterance, &(self.vocabulary)()) {
+                Ok(heard) => {
+                    self.trace.mark_words("heard", &heard);
+                    if heard_nothing(&heard) {
+                        if let Some(done) = finish.take() {
+                            done();
+                        }
+                        finish = self.play(Phrase::Missed, None);
+                        self.trace
+                            .mark_words("acknowledgement-started", Phrase::Missed.key());
+                    } else if send {
+                        match self.voyager.say(&crate::spoken::prompt(&heard)) {
+                            Ok(()) => self.trace.mark("sent"),
+                            Err(reason) => notice = Some(reason),
+                        }
+                    }
+                }
+                Err(fault) => notice = Some(fault.to_string()),
             }
         }
-        if let Some(finish) = finish {
-            finish();
+        self.shared.set(Phase::Acknowledging, None);
+        if let Some(done) = finish {
+            done();
         }
         self.shared.set(Phase::Ready, notice);
         Outcome::Done
@@ -337,21 +340,37 @@ struct Engine {
 fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
     let files = omni::locate(settings)?;
     let running = omni::launch(client, &files, settings).map_err(|fault| fault.to_string())?;
+    match prepare(&running, settings, &files) {
+        Ok((omni, clips)) => Ok(Engine {
+            client: client.clone(),
+            running,
+            files,
+            omni,
+            clips,
+        }),
+        Err(reason) => {
+            if let Err(error) = omni::stop(client, &running, &files) {
+                eprintln!("Voice engine stop was not confirmed: {error}");
+            }
+            Err(reason)
+        }
+    }
+}
+
+fn prepare(
+    running: &Running,
+    settings: &Settings,
+    files: &omni::Files,
+) -> Result<(Arc<Omni>, HashMap<Phrase, Clip>), String> {
     let engine = Arc::new(Omni::new(running.port));
     engine.warm().map_err(|fault: Fault| fault.to_string())?;
-    let kept = Clips::new(settings, &files);
+    let kept = Clips::new(settings, files);
     omni::prepare_clips(engine.as_ref(), &kept).map_err(|fault| fault.to_string())?;
     let clips = Phrase::ALL
         .into_iter()
         .filter_map(|phrase| kept.load(phrase).map(|clip| (phrase, clip)))
         .collect();
-    Ok(Engine {
-        client: client.clone(),
-        running,
-        files,
-        omni: engine,
-        clips,
-    })
+    Ok((engine, clips))
 }
 
 pub fn start(
@@ -479,7 +498,7 @@ mod tests {
         }
         fn say(&self, text: &str) -> Result<(), String> {
             if self.refuse {
-                return Err("Voyager needs you on Home".into());
+                return Err("Not sent. Voyager needs you on Home".into());
             }
             self.said.lock().unwrap().push(text.into());
             Ok(())
@@ -555,10 +574,13 @@ mod tests {
         }
 
         fn run(&self, heard: &'static str, commands: &Receiver<Command>) -> Outcome {
+            self.run_with(&Heard(heard), commands)
+        }
+
+        fn run_with(&self, hearing: &dyn Hearing, commands: &Receiver<Command>) -> Outcome {
             let vocabulary: Vocabulary = Arc::new(|| vec!["Harbor".into()]);
-            let hearing = Heard(heard);
             Exchange {
-                hearing: &hearing,
+                hearing,
                 clips: &self.clips,
                 audio: &self.audio,
                 voyager: &self.voyager,
@@ -629,7 +651,7 @@ mod tests {
         let (_keep, commands) = mpsc::channel();
         rig.run("open the roadmap", &commands);
         let notice = rig.snapshot().notice.unwrap();
-        assert!(notice.starts_with("Not sent."), "{notice}");
+        assert_eq!(notice, "Not sent. Voyager needs you on Home");
         assert!(rig.said().is_empty());
     }
 
@@ -648,7 +670,10 @@ mod tests {
         let (_keep, commands) = mpsc::channel();
         rig.run("  ", &commands);
         assert!(rig.said().is_empty());
-        assert_eq!(rig.played(), vec![mark(Phrase::Missed)]);
+        assert_eq!(
+            rig.played(),
+            vec![mark(Phrase::Asking), mark(Phrase::Missed)]
+        );
     }
 
     #[test]
@@ -669,6 +694,53 @@ mod tests {
         assert!(matches!(commands.try_recv(), Err(TryRecvError::Empty)));
         command.send(Command::Shutdown).unwrap();
         assert!(drain(&commands));
+    }
+
+    struct Watching {
+        played: Arc<Mutex<Vec<usize>>>,
+        before_hearing: Mutex<Option<Vec<usize>>>,
+    }
+
+    impl Hearing for Watching {
+        fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+            *self.before_hearing.lock().unwrap() = Some(self.played.lock().unwrap().clone());
+            Ok("open the roadmap".into())
+        }
+    }
+
+    #[test]
+    fn the_acknowledgement_has_started_before_hearing_begins() {
+        let rig = Rig::new(speech_then_pause(), Standing::Idle, false);
+        let (_keep, commands) = mpsc::channel();
+        let hearing = Watching {
+            played: rig.audio.played.clone(),
+            before_hearing: Mutex::default(),
+        };
+        rig.run_with(&hearing, &commands);
+        assert_eq!(
+            hearing.before_hearing.lock().unwrap().clone(),
+            Some(vec![mark(Phrase::Asking)])
+        );
+        assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    }
+
+    #[test]
+    fn a_hearing_that_fails_after_the_acknowledgement_sends_nothing_and_says_why() {
+        struct Down;
+        impl Hearing for Down {
+            fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+                Err(Fault::Failed("The voice engine did not answer".into()))
+            }
+        }
+        let rig = Rig::new(speech_then_pause(), Standing::Idle, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run_with(&Down, &commands);
+        assert!(rig.said().is_empty());
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+        assert_eq!(
+            rig.snapshot().notice.as_deref(),
+            Some("The voice engine did not answer")
+        );
     }
 
     #[test]

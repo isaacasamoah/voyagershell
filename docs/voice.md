@@ -19,11 +19,13 @@ prepares that text is already in place.
    noise floor. Speech followed by 0.6 s of quiet ends it, an utterance ends at
    30 s, and a room with no speech gives up after 8 s. These are targets to
    measure on real microphones.
-3. Omni turns the samples into words. The prompt names the product words and the
-   user's own Voyage and Fleet names, read from the workspace state the owner
-   already holds, so hearing adds no inspection call.
-4. A cached clip answers at once. It says only that the words were heard and
-   passed on. It never names an action or claims a result.
+3. A cached clip answers the moment capture ends, before hearing finishes. It is
+   chosen from Voyager's standing, so it needs no words. It says only that the words
+   were heard and passed on. It never names an action or claims a result.
+4. Omni turns the samples into words while the clip plays. The prompt names the
+   product words and the user's own Voyage and Fleet names, read from the workspace
+   state the owner already holds, so hearing adds no inspection call. If hearing
+   finds nothing, "I didn't catch that." follows and nothing is sent.
 5. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
@@ -50,14 +52,18 @@ anything.
 
 `app/src/voice_layer.rs` owns the exchange. One thread takes clicks one at a
 time, so two utterances never overlap. It reaches Voyager through the `Voyager`
-trait, which reports its standing and takes the words. Until Voyager is bound to
-the avatar, `Unbound` answers "not running" and nothing is sent. Audio goes
+trait, which reports its standing and takes the words. `app/src/voice_voyager.rs`
+implements it over the application queue. It reads the terminal that the app wrote
+in its own binding file, asks Core for that terminal's reported status, and sends the
+words with Core's own send, which refuses a blocked program and never forces. With no
+binding, or a program that is gone, Voyager counts as not running and nothing is sent.
+An unconfirmed send is reported and never repeated. Audio goes
 through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
 PulseAudio command line tools, which PipeWire also serves. Linux is the only
 verified platform.
 
-A stalled engine never delays the canvas. The layer runs on its own thread with
-its own Core connection, and the canvas only reads a small snapshot.
+A stalled engine never delays the canvas. The layer runs on its own thread, reaches
+Core only through the application queue, and the canvas only reads a small snapshot.
 
 ## The Omni engine
 

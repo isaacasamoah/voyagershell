@@ -60,13 +60,7 @@ pub struct Acknowledgement {
     pub send: bool,
 }
 
-pub fn acknowledge(heard: &str, standing: Standing, turn: u64) -> Acknowledgement {
-    if !heard.chars().any(char::is_alphanumeric) {
-        return Acknowledgement {
-            phrase: Phrase::Missed,
-            send: false,
-        };
-    }
+pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
     match standing {
         Standing::Idle => Acknowledgement {
             phrase: if turn.is_multiple_of(2) {
@@ -89,6 +83,10 @@ pub fn acknowledge(heard: &str, standing: Standing, turn: u64) -> Acknowledgemen
             send: false,
         },
     }
+}
+
+pub fn heard_nothing(heard: &str) -> bool {
+    !heard.chars().any(char::is_alphanumeric)
 }
 
 pub fn clean_heard(raw: &str) -> String {
@@ -281,8 +279,8 @@ mod tests {
 
     #[test]
     fn an_idle_voyager_gets_the_two_asking_phrases_in_turn_and_the_words_are_sent() {
-        let first = acknowledge("open the roadmap", Standing::Idle, 0);
-        let second = acknowledge("open the roadmap", Standing::Idle, 1);
+        let first = acknowledge(Standing::Idle, 0);
+        let second = acknowledge(Standing::Idle, 1);
         assert_eq!(first.phrase, Phrase::Asking);
         assert_eq!(second.phrase, Phrase::OkayAsking);
         assert!(first.send && second.send);
@@ -290,7 +288,7 @@ mod tests {
 
     #[test]
     fn a_working_voyager_queues_the_words() {
-        let queued = acknowledge("rename it", Standing::Working, 0);
+        let queued = acknowledge(Standing::Working, 0);
         assert_eq!((queued.phrase, queued.send), (Phrase::Queued, true));
     }
 
@@ -300,17 +298,17 @@ mod tests {
             (Standing::Blocked, Phrase::NeedsYou),
             (Standing::NotRunning, Phrase::NotRunning),
         ] {
-            let held = acknowledge("rename it", standing, 0);
+            let held = acknowledge(standing, 0);
             assert_eq!((held.phrase, held.send), (phrase, false));
         }
     }
 
     #[test]
-    fn nothing_heard_says_so_whatever_voyager_is_doing() {
-        for standing in [Standing::Idle, Standing::Working, Standing::Blocked] {
-            let missed = acknowledge(" ... ", standing, 0);
-            assert_eq!((missed.phrase, missed.send), (Phrase::Missed, false));
+    fn text_with_no_letter_or_digit_is_nothing_heard() {
+        for heard in ["", " ... ", "-- !"] {
+            assert!(heard_nothing(heard), "{heard:?}");
         }
+        assert!(!heard_nothing("Rename it"));
     }
 
     #[test]

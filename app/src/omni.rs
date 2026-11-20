@@ -185,30 +185,29 @@ pub fn launch(client: &Client, files: &Files, settings: &Settings) -> Result<Run
             "The voice engine start was not confirmed".into(),
         ));
     };
+    let running = Running { terminal, port };
     let until = Instant::now() + READY_WITHIN;
     let mut checked = Instant::now();
     while !healthy(port) {
-        if Instant::now() >= until {
-            return Err(Fault::Failed(
-                "The voice engine did not become ready".into(),
-            ));
-        }
-        if checked.elapsed() >= LIVENESS_EVERY {
+        let failure = if Instant::now() >= until {
+            Some("The voice engine did not become ready")
+        } else if checked.elapsed() >= LIVENESS_EVERY {
             checked = Instant::now();
-            if !matches!(
-                client.service(ProgramRequest::Live {
-                    terminal: terminal.clone()
-                }),
-                Ok(ProgramReply::Live(true))
-            ) {
-                return Err(Fault::Failed(
-                    "The voice engine stopped while loading".into(),
-                ));
-            }
+            let live = client.service(ProgramRequest::Live {
+                terminal: running.terminal.clone(),
+            });
+            (!matches!(live, Ok(ProgramReply::Live(true))))
+                .then_some("The voice engine stopped while loading")
+        } else {
+            None
+        };
+        if let Some(reason) = failure {
+            let _ = stop(client, &running, files);
+            return Err(Fault::Failed(reason.into()));
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Ok(Running { terminal, port })
+    Ok(running)
 }
 
 pub fn stop(client: &Client, running: &Running, files: &Files) -> Result<(), String> {

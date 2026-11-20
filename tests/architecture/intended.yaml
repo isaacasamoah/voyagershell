@@ -180,6 +180,9 @@ edges:
   - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_layer', to: 'rs:voyager_app::spoken', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voice_session', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::voice_voyager', to: 'rs:voyager_app::voyager_binding', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::voyager_binding', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::voyager_start', to: 'rs:voyager_app::core', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::workspace', to: 'rs:voyager_app::content', from_owner: placement, to_owner: content}
@@ -206,6 +209,7 @@ edges:
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::conversation_client', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::omni', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_layer', from_owner: desktop-presentation, to_owner: conversation-provider}
+  - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_voyager', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_contract::launch', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_contract::operations', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop::avatar', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}

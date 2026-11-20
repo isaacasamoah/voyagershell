@@ -107,7 +107,10 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let voice = voyager_app::voice_layer::start(
         client.clone(),
         voyager_app::omni::Settings::from_environment(),
-        std::sync::Arc::new(voyager_app::voice_layer::Unbound),
+        std::sync::Arc::new(voyager_app::voice_voyager::Bound::new(
+            client.clone(),
+            profile.clone(),
+        )),
         {
             let client = client.clone();
             std::sync::Arc::new(move || client.workspace_words())

@@ -30,7 +30,7 @@ use crate::activity::Activity;
 use crate::front_door::{Claim, Envelope, WAITING};
 use crate::layout_store::rejected;
 pub use core_calls::WorkspaceNotice;
-pub use service::{ProgramReply, ProgramRequest, ProgramSpec};
+pub use service::{ProgramError, ProgramReply, ProgramRequest, ProgramSpec};
 
 pub use crate::layout_store::CHANGED;
 pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);

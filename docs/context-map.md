@@ -183,6 +183,8 @@ Owns files:
 - `app/src/audio_io.rs`
 - `app/src/http1.rs`
 - `app/src/voice_layer.rs`
+- `app/src/voice_voyager.rs`
+- `app/tests/voice_engine.rs`
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`
 - `contract/src/voice.rs`

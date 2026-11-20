@@ -43,6 +43,10 @@ impl Binding {
         }
     }
 
+    pub fn terminal(&self) -> Option<CoreTerminalId> {
+        self.terminal.lock().ok().and_then(|bound| bound.clone())
+    }
+
     pub fn names(&self, terminal: &CoreTerminalId) -> bool {
         self.terminal
             .lock()

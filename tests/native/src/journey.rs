@@ -480,7 +480,10 @@ mod tests {
         let patches = Journey::ALL
             .iter()
             .map(|journey| journey.control_patch())
-            .chain(["tests/native/controls/frame-stall.patch".to_owned()]);
+            .chain([
+                "tests/native/controls/frame-stall.patch".to_owned(),
+                "tests/native/controls/voice-handoff.patch".to_owned(),
+            ]);
         for patch in patches {
             let check = Command::new("git")
                 .arg("-C")

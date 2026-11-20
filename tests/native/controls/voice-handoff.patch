@@ -1,0 +1,12 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -301,7 +301,7 @@
+                         self.trace
+                             .mark_words("acknowledgement-started", Phrase::Missed.key());
+                     } else if send {
+-                        match self.voyager.say(&crate::spoken::prompt(&heard)) {
++                        match self.voyager.say(&heard) {
+                             Ok(()) => self.trace.mark("sent"),
+                             Err(reason) => notice = Some(reason),
+                         }

@@ -1,6 +1,7 @@
+pub use crate::core::Error as ProgramError;
 use crate::core::{Core, Error};
 use crate::core_shapes::{RunParams, Terminal};
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, sync::mpsc::SyncSender, thread, time::Duration};
 
 pub const LABEL: &str = "voyager.service";
 pub const WAIT: Duration = Duration::from_secs(8);
@@ -25,6 +26,13 @@ pub enum ProgramRequest {
         service: String,
         program: String,
     },
+    Status {
+        terminal: String,
+    },
+    Send {
+        terminal: String,
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,6 +40,8 @@ pub enum ProgramReply {
     Started(String),
     Live(bool),
     Stopped,
+    Status { live: bool, state: Option<String> },
+    Sent,
 }
 
 fn runs(terminal: &Terminal, service: &str, program: &str) -> bool {
@@ -40,7 +50,28 @@ fn runs(terminal: &Terminal, service: &str, program: &str) -> bool {
         && terminal.argv.first().map(Path::new) == Some(Path::new(program))
 }
 
-pub(super) fn perform(core: &mut Core, request: ProgramRequest) -> Result<ProgramReply, Error> {
+pub(super) fn perform(
+    core: &mut Core,
+    request: ProgramRequest,
+    reply: SyncSender<Result<ProgramReply, Error>>,
+) {
+    if let ProgramRequest::Send { terminal, text } = request {
+        match core.begin_terminal_send(&terminal, &text) {
+            Ok(pending) => {
+                thread::spawn(move || {
+                    let _ = reply.try_send(pending.wait().map(|_| ProgramReply::Sent));
+                });
+            }
+            Err(error) => {
+                let _ = reply.try_send(Err(error));
+            }
+        }
+        return;
+    }
+    let _ = reply.try_send(perform_now(core, request));
+}
+
+fn perform_now(core: &mut Core, request: ProgramRequest) -> Result<ProgramReply, Error> {
     match request {
         ProgramRequest::Start(spec) => {
             let program = spec.argv.first().cloned().unwrap_or_default();
@@ -64,6 +95,20 @@ pub(super) fn perform(core: &mut Core, request: ProgramRequest) -> Result<Progra
         ProgramRequest::Live { terminal } => {
             Ok(ProgramReply::Live(core.terminal_get(&terminal)?.is_live()))
         }
+        ProgramRequest::Status { terminal } => {
+            let found = core.terminal_get(&terminal)?;
+            let state = serde_json::to_value(&found)
+                .ok()
+                .and_then(|value| value["status"]["state"].as_str().map(str::to_owned));
+            Ok(ProgramReply::Status {
+                live: found.is_live(),
+                state,
+            })
+        }
+        ProgramRequest::Send { .. } => Err(Error::Rejected {
+            kind: "invalid_request".into(),
+            message: "A send is dispatched, never performed in place".into(),
+        }),
         ProgramRequest::Stop {
             terminal,
             service,

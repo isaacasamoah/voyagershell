@@ -997,13 +997,16 @@ to the microphone and records the speaker.
 | --- | --- |
 | `engine-ready` (setup) | The control reads Start voice once the engine has loaded and the acknowledgement clips are kept. |
 | `no-capture-without-click` | The audio server lists no recorder on the microphone while nobody clicks. This is the control case. |
-| `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement for a Voyager that is not running reaches the speaker and matches the kept clip, it starts within 1 s of the click that ends the utterance, and the microphone closes. |
-| `dock-is-heard-as-written` | The word dock comes back as spoken, and no log, trace or terminal scrollback of the engine holds an audio payload. |
+| `voyager-stands-in` (setup) | A program that echoes what it is sent runs under Core, and the app's own binding file names it, as Voyager's start will. |
+| `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement clip for a running Voyager reaches the speaker and matches the kept clip, it starts before hearing ends, and the microphone closes. |
+| `words-reach-voyager` | The stand-in receives `[spoken] Dock on this fleet.` exactly, through the app's real send. No log, trace or terminal scrollback of the engine holds an audio payload. |
+| `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
 
 The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
 `VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech
-only, the words heard. The 1 s bar is a limit for the CPU engine in the sandbox. The
-design's target is about 0.3 s on the graphics build.
+only, the words heard. The first sound is the speaker capture's first loud 20 ms window, counted from the
+moment the recorder delivered its first samples, against the app's own mark for the end
+of capture. The recorder asks for 10 ms buffers.
 
 The speech was made with Edge text to speech, because the engine must hear it exactly.
 The two phrases and the commands that made them:
@@ -1015,9 +1018,11 @@ edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
 
-The journey does not cover the words reaching Voyager, the spoken result, or a stalled
-engine. The first two wait on the Voyager binding and the reply reader. The battery
-does not run `voice`, because it has no engine folder to give it.
+A second control, `tests/native/controls/voice-handoff.patch`, sends the words without the
+spoken marker. Built into a candidate, it must fail `words-reach-voyager`.
+
+The journey does not cover the spoken result or a stalled engine. The first waits on the
+reply reader. The battery does not run `voice`, because it has no engine folder to give it.
 
 ### Negative controls
 

@@ -49,6 +49,7 @@ mod voice_host;
 pub mod voice_layer;
 mod voice_session;
 mod voice_transcript;
+pub mod voice_voyager;
 mod voice_wire;
 
 use diagnostics as typing_trace;

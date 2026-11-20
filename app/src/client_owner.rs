@@ -332,13 +332,12 @@ impl Owner {
             }
             Message::Subscribed => self.subscription.landed(),
             Message::Quit { operation, reply } => self.quit(operation, &reply),
-            Message::Service { request, reply } => {
-                let result = match self.core.as_mut() {
-                    Ok(core) => super::service::perform(core, request),
-                    Err(error) => Err(error.clone()),
-                };
-                let _ = reply.try_send(result);
-            }
+            Message::Service { request, reply } => match self.core.as_mut() {
+                Ok(core) => super::service::perform(core, request, reply),
+                Err(error) => {
+                    let _ = reply.try_send(Err(error.clone()));
+                }
+            },
             Message::Launches { reply } => {
                 let _ = reply.try_send(crate::launch::catalog(self.launches.as_deref(), &self.cwd));
             }

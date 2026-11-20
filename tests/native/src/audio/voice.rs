@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, Stopwatch};
+use crate::native::{Native, Owed, SEND_WAIT};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -29,8 +29,11 @@ pub struct Mark {
 #[derive(Debug, Serialize)]
 pub struct Conversation {
     pub heard: Option<String>,
+    pub acknowledgement: Option<String>,
     pub spoken: Score,
-    pub onset_after_end_ms: i64,
+    pub first_sound_after_capture_ms: i64,
+    pub started_before_heard: bool,
+    pub sent: bool,
     pub microphone_closed: bool,
     pub marks: Vec<Mark>,
 }
@@ -151,15 +154,18 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
     Ok(seen)
 }
 
-pub fn converse(native: &Native, speech: &Speech, key: &str, name: &str) -> Result<Conversation> {
+fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
+    marks.iter().find(|mark| mark.event == event)
+}
+
+pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
-    let reference = clip(&system.evidence.join("home"), key)?;
     let speaker = format!("{SPEAKER}.monitor");
     let mut capture = stack.capture(system, &speaker, name)?;
+    let began = capture.began()?;
     let trace = native.voice_trace();
     let before = marks(&trace)?.len();
-    let begun = Stopwatch::start();
     native.click(&Target::VOICE_CONTROL)?;
     until("the app to open the microphone", || {
         Ok(recorders(native)?
@@ -169,7 +175,14 @@ pub fn converse(native: &Native, speech: &Speech, key: &str, name: &str) -> Resu
     })?;
     stack.feed(system, speech)?;
     native.click(&Target::VOICE_CONTROL)?;
-    let ended = Stopwatch::start();
+    let started = until("the acknowledgement to start", || {
+        let now = marks(&trace)?;
+        Ok(now
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "acknowledgement-started"))
+            .and_then(|mark| mark.words.clone()))
+    })?;
+    let reference = clip(&system.evidence.join("home"), &started)?;
     let score = settle(
         PATIENCE,
         LOOK,
@@ -179,25 +192,61 @@ pub fn converse(native: &Native, speech: &Speech, key: &str, name: &str) -> Resu
     .context("The speaker capture never held still")?;
     let samples = capture.samples()?;
     let onset = onset_ms(&samples).context("No sound reached the speaker")?;
-    let end_ms = i64::try_from(begun.until(ended).millis())?;
+    until("the words to be heard", || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "heard"))
+            .map(|_| ()))
+    })?;
+    let sent = poll(SEND_WAIT.within(), LOOK, true, || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "sent"))
+            .map(|_| ()))
+    })?
+    .is_some();
     let microphone_closed = until("the microphone to close", || {
         Ok(recorders(native)?.is_empty().then_some(()))
     })
     .is_ok();
     capture.finish(stack.folder(), name)?;
     let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
-    let heard = marks
-        .iter()
-        .rev()
-        .find(|mark| mark.event == "heard")
-        .and_then(|mark| mark.words.clone());
+    let ended = mark_of(&marks, "utterance-ended")
+        .map(|mark| mark.at_ms)
+        .context("The app marked no end of capture")?;
+    let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
+    let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
+    let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
     Ok(Conversation {
-        heard,
+        heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
+        acknowledgement: Some(started),
         spoken: score,
-        onset_after_end_ms: onset - end_ms,
+        first_sound_after_capture_ms: first_sound,
+        started_before_heard: acknowledged
+            .zip(heard_at)
+            .is_some_and(|(started, heard)| started <= heard),
+        sent,
         microphone_closed,
         marks,
     })
+}
+
+pub fn terminal_text(native: &Native, address: &str) -> Result<String> {
+    let read = native
+        .system
+        .watch("terminal.read", json!({"terminal":address,"lines":400}))?;
+    Ok(read["text"].as_str().unwrap_or_default().to_owned())
+}
+
+pub fn median(values: &[i64]) -> Option<i64> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    let middle = sorted.len() / 2;
+    match sorted.len() {
+        0 => None,
+        count if count % 2 == 1 => sorted.get(middle).copied(),
+        _ => Some((sorted[middle - 1] + sorted[middle]) / 2),
+    }
 }
 
 pub fn audio_in_text(native: &Native) -> Result<Value> {
@@ -253,4 +302,35 @@ fn engine_screen(native: &Native) -> Result<String> {
         .system
         .watch("terminal.read", json!({"terminal":address,"lines":4000}))?;
     Ok(read["text"].as_str().unwrap_or_default().to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_median_of_an_even_count_is_the_mean_of_the_middle_pair() {
+        assert_eq!(median(&[5, 1, 4, 2]), Some(3));
+        assert_eq!(median(&[9, 1, 5]), Some(5));
+        assert_eq!(median(&[]), None);
+    }
+
+    #[test]
+    fn heard_words_match_ignoring_case_and_punctuation_but_not_words() {
+        assert!(words_match("Dock on this fleet.", "dock on this fleet"));
+        assert!(!words_match("Doc on this fleet.", "Dock on this fleet."));
+        assert!(!words_match(
+            "Dock on this fleet",
+            "[spoken] Dock on this fleet"
+        ));
+    }
+
+    #[test]
+    fn a_trace_line_reads_back_with_and_without_words() {
+        let with: Mark =
+            serde_json::from_str(r#"{"event":"heard","atMs":5,"words":"Dock."}"#).unwrap();
+        let without: Mark = serde_json::from_str(r#"{"event":"click","atMs":4}"#).unwrap();
+        assert_eq!(with.words.as_deref(), Some("Dock."));
+        assert_eq!(without.words, None);
+    }
 }
