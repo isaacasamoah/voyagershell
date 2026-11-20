@@ -4,6 +4,7 @@ export type SocketRequest =
     }
   | {
       command: "focus";
+      prompt?: string | null;
       spoken?: boolean;
     }
   | {

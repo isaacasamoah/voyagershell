@@ -52,6 +52,7 @@ Owns files:
 - `app/src/client_admission_tests.rs`
 - `app/src/adoption.rs`
 - `app/src/vessel_socket.rs`
+- `app/src/vessel_socket_wiring_tests.rs`
 - `app/src/voyager_binding.rs`
 - `app/src/voyager_start.rs`
 - `app/src/client_voyager.rs`

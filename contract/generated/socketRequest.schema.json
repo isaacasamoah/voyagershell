@@ -1563,6 +1563,12 @@
           "const": "focus",
           "type": "string"
         },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "spoken": {
           "type": "boolean"
         }
