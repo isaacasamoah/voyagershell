@@ -6,6 +6,8 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::path::Path;
 
 pub const APP_CLIENT: &str = "voyager-voice";
@@ -34,6 +36,8 @@ pub struct Conversation {
     pub first_sound_after_capture_ms: i64,
     pub started_before_heard: bool,
     pub sent: bool,
+    pub spoken_texts: Vec<String>,
+    pub speech_after_capture_ms: Option<i64>,
     pub microphone_closed: bool,
     pub marks: Vec<Mark>,
 }
@@ -77,14 +81,17 @@ fn clip(home: &Path, key: &str) -> Result<Samples> {
             && u32::from_le_bytes(bytes[24..28].try_into()?) == CLIP_RATE,
         "The kept clip {key} is not 24 kHz mono audio"
     );
-    let narrow = Samples::raw(&bytes[HEADER..]).0;
+    Ok(upsample(&Samples::raw(&bytes[HEADER..]).0))
+}
+
+fn upsample(narrow: &[i16]) -> Samples {
     let mut wide = Vec::with_capacity(narrow.len() * 2);
     for (index, sample) in narrow.iter().enumerate() {
         let next = narrow.get(index + 1).copied().unwrap_or(*sample);
         wide.push(*sample);
         wide.push(((i32::from(*sample) + i32::from(next)) / 2) as i16);
     }
-    Ok(Samples(wide))
+    Samples(wide)
 }
 
 fn onset_ms(samples: &Samples) -> Option<i64> {
@@ -161,6 +168,9 @@ fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
 pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
+    native.drawn_label(&Target::VOICE_CONTROL, "the voice control ready", |label| {
+        label == READY
+    })?;
     let speaker = format!("{SPEAKER}.monitor");
     let mut capture = stack.capture(system, &speaker, name)?;
     let began = capture.began()?;
@@ -205,6 +215,12 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
             .map(|_| ()))
     })?
     .is_some();
+    until("the reply to be spoken", || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "speech-ended"))
+            .map(|_| ()))
+    })?;
     let microphone_closed = until("the microphone to close", || {
         Ok(recorders(native)?.is_empty().then_some(()))
     })
@@ -226,8 +242,93 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
             .zip(heard_at)
             .is_some_and(|(started, heard)| started <= heard),
         sent,
+        spoken_texts: marks
+            .iter()
+            .filter(|mark| mark.event == "speech-started")
+            .filter_map(|mark| mark.words.clone())
+            .collect(),
+        speech_after_capture_ms: mark_of(&marks, "speech-started")
+            .map(|mark| i64::try_from(mark.at_ms).unwrap_or(0) - i64::try_from(ended).unwrap_or(0)),
         microphone_closed,
         marks,
+    })
+}
+
+fn engine_port(native: &Native) -> Result<u16> {
+    let listed = native.system.watch("terminal.list", json!({}))?;
+    listed["terminals"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|terminal| terminal["labels"]["voyager.service"].as_str() == Some("voice-engine"))
+        .find_map(|terminal| {
+            let argv = terminal["argv"].as_array()?;
+            let at = argv.iter().position(|word| word == "--port")?;
+            argv.get(at + 1)?.as_str()?.parse().ok()
+        })
+        .context("Core lists no voice engine with a port")
+}
+
+fn data_of(response: &[u8]) -> Result<(u32, Vec<u8>)> {
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .context("The engine sent no header")?;
+    let head = String::from_utf8_lossy(&response[..split]).to_ascii_lowercase();
+    let mut body = response[split + 4..].to_vec();
+    if head.contains("transfer-encoding: chunked") {
+        let mut whole = Vec::new();
+        let mut rest = body.as_slice();
+        loop {
+            let line = rest
+                .windows(2)
+                .position(|window| window == b"\r\n")
+                .context("A chunk has no size")?;
+            let size = usize::from_str_radix(String::from_utf8_lossy(&rest[..line]).trim(), 16)?;
+            if size == 0 {
+                break;
+            }
+            whole.extend_from_slice(&rest[line + 2..line + 2 + size]);
+            rest = &rest[line + 2 + size + 2..];
+        }
+        body = whole;
+    }
+    let at = body
+        .windows(4)
+        .position(|window| window == b"data")
+        .context("The engine's speech holds no data chunk")?;
+    let rate = u32::from_le_bytes(body.get(24..28).context("Short header")?.try_into()?);
+    Ok((rate, body[at + 8..].to_vec()))
+}
+
+fn render(native: &Native, text: &str) -> Result<Samples> {
+    let port = engine_port(native)?;
+    let body = json!({"input":text,"voice":"female"}).to_string();
+    let mut socket = TcpStream::connect(("127.0.0.1", port))?;
+    write!(
+        socket,
+        "POST /v1/audio/speech HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )?;
+    let mut response = Vec::new();
+    socket.read_to_end(&mut response)?;
+    let (rate, data) = data_of(&response)?;
+    ensure!(rate == CLIP_RATE, "The engine spoke at {rate} Hz");
+    Ok(upsample(&Samples::raw(&data).0))
+}
+
+#[derive(Debug, Serialize)]
+pub struct Judgement {
+    pub wanted: Score,
+    pub other: Score,
+}
+
+pub fn judge_reply(native: &Native, name: &str, wanted: &str, other: &str) -> Result<Judgement> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    Ok(Judgement {
+        wanted: judge::score(&render(native, wanted)?, &heard),
+        other: judge::score(&render(native, other)?, &heard),
     })
 }
 
