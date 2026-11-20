@@ -160,7 +160,7 @@ impl Owner {
             .map_or_else(Binding::unbound, Binding::load);
         Self {
             cwd,
-            launches: profile.map(|profile| profile.join(crate::launch::FILE)),
+            launches: profile.map(|profile| profile.join("launches.json")),
             content,
             adoptions: Adoptions::new(client.placement_notice.clone()),
             sockets: Sockets::new(&session, call, binding),

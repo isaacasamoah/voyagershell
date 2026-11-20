@@ -1,8 +1,6 @@
 use std::{collections::HashSet, io::Read as _, path::Path};
 use voyager_contract::launch::{Catalog, Effort, Launch, LaunchSettings, Permissions};
 
-pub const FILE: &str = "launches.json";
-
 pub fn load(path: &Path) -> Result<LaunchSettings, String> {
     let mut source = Vec::new();
     std::fs::File::open(path)

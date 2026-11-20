@@ -86,7 +86,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let initial_source =
         source_snapshot::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
-    let launches_path = profile.join(voyager_app::launch::FILE);
+    let launches_path = profile.join("launches.json");
     seed(
         &launches_path,
         &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
