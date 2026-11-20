@@ -38,6 +38,18 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         state: None,
     },
     Implementation {
+        type_id: "agent",
+        name: "Agent",
+        module: "voyager_native",
+        component: "Terminal",
+        backend: Some(Backend::CoreTerminal),
+        tool: "voyager_process",
+        input: include_str!("../../../contract/generated/processTool.schema.json"),
+        output: include_str!("../../../contract/generated/processResponse.schema.json"),
+        action_definition: "ProcessAction",
+        state: None,
+    },
+    Implementation {
         type_id: "agents",
         name: "Agents",
         module: "./agents.js",
@@ -238,7 +250,9 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
     });
     Ok(Description {
         type_id: kind.type_id.into(),
-        name: kind.name.into(),
+        name: manifest::built_in(kind.type_id)
+            .map_or(kind.name, |manifest| manifest.name.as_str())
+            .into(),
         availability,
         host: NativeHost {
             runtime: "gpui-shell".into(),

@@ -1,17 +1,3 @@
-export type Launch =
-  | {
-      kind: "terminal";
-    }
-  | {
-      effort?: Effort & string;
-      kind: "codex";
-      model?: string;
-      permissions?: Permissions & string;
-    }
-  | {
-      argv: string[];
-      kind: "program";
-    };
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 
@@ -27,6 +13,13 @@ export interface LaunchSettings {
 }
 export interface LaunchEntry {
   id: string;
-  launch: Launch;
+  launch: LaunchRecord;
   name: string;
+}
+export interface LaunchRecord {
+  argv?: string[] | null;
+  effort?: Effort | null;
+  kind: string;
+  model?: string | null;
+  permissions?: Permissions | null;
 }

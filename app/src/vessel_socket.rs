@@ -110,7 +110,10 @@ fn placed_terminals(layout: &Layout) -> HashMap<String, VesselId> {
     layout
         .vessels
         .iter()
-        .filter(|content| content.type_id == "terminal" && placed.contains(&&content.id))
+        .filter(|content| {
+            voyager_contract::launch::is_terminal_backed(&content.type_id)
+                && placed.contains(&&content.id)
+        })
         .filter_map(|content| {
             content
                 .backend

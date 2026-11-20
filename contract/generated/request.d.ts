@@ -38,7 +38,7 @@ export type Action =
       voyage: string;
     }
   | {
-      launch?: Launch | null;
+      launch?: LaunchRecord | null;
       name: string;
       operation: "create-fleet-with-vessel";
       source: DirectorySource;
@@ -47,7 +47,7 @@ export type Action =
     }
   | {
       destination: ContentDestination;
-      launch?: Launch | null;
+      launch?: LaunchRecord | null;
       operation: "create-vessel";
       typeId: string;
     }
@@ -236,20 +236,6 @@ export type DirectorySource =
       placementId: string;
       vesselId: string;
     };
-export type Launch =
-  | {
-      kind: "terminal";
-    }
-  | {
-      effort?: Effort & string;
-      kind: "codex";
-      model?: string;
-      permissions?: Permissions & string;
-    }
-  | {
-      argv: string[];
-      kind: "program";
-    };
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type ContentDestination = {
@@ -316,4 +302,11 @@ export interface Canvas {
   portalMode?: PortalMode & string;
   root: Node;
   sidebarCollapsed?: boolean;
+}
+export interface LaunchRecord {
+  argv?: string[] | null;
+  effort?: Effort | null;
+  kind: string;
+  model?: string | null;
+  permissions?: Permissions | null;
 }

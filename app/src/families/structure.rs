@@ -265,7 +265,7 @@ pub(crate) fn reopen_backend<'a>(
         .iter()
         .find(|item| item.id == panel.vessel)
         .ok_or("Panel content not found")?;
-    if content.type_id != "terminal" {
+    if !voyager_contract::launch::is_terminal_backed(&content.type_id) {
         return Ok(None);
     }
     if content.start_pending.is_some()

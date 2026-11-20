@@ -89,7 +89,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let launches_path = profile.join("launches.json");
     seed(
         &launches_path,
-        &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
+        &serde_json::to_string_pretty(&voyager_app::agent_programs::default_settings())?,
     )?;
     let client = Client::with_content_and_profile(
         session.clone(),

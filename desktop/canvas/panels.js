@@ -1,3 +1,9 @@
+export function terminalBacked(typeId) {
+  return typeId === "terminal" || typeId === "agent";
+}
+export function typeLabel(typeId) {
+  return terminalBacked(typeId) ? "Terminal" : typeId;
+}
 export function currentVoyage(layout) {
   return layout.view === "home"
     ? (layout.home ?? undefined)
@@ -111,7 +117,7 @@ export function hiddenPanels(layout, destination, processes) {
           if (visible.has(panel.id)) return false;
           const content = contents.get(panel.vessel);
           if (!content || content.startPending) return false;
-          return content.typeId === "terminal"
+          return terminalBacked(content.typeId)
             ? Boolean(
                 content.backend &&
                 live.has(JSON.stringify([content.id, content.backend])),

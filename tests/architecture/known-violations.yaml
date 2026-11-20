@@ -91,34 +91,10 @@ known:
   - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'
-  - id: 'agent-names-stay-in-adapters: claude in app/src/launch.rs'
-    limit: 2
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The launch catalog entries move into that registry.'
-  - id: 'agent-names-stay-in-adapters: claude in contract/src/launch.rs'
-    limit: 3
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The default launch entries move into that registry.'
-  - id: 'agent-names-stay-in-adapters: claude in desktop/canvas/agents.ts'
-    limit: 4
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent display names move into that registry.'
-  - id: 'agent-names-stay-in-adapters: claude in desktop/canvas/process-icons.ts'
-    limit: 3
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
-  - id: 'agent-names-stay-in-adapters: claude in desktop/src/shipped.rs'
-    limit: 2
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
   - id: 'agent-names-stay-in-adapters: codex in app/src/conversation_audio.rs'
     limit: 1
     owner: isaac
     reason: 'S19a, Give voice its own adapter layer. The Codex voice host moves into that adapter.'
-  - id: 'agent-names-stay-in-adapters: codex in app/src/launch.rs'
-    limit: 5
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The launch catalog entries move into that registry.'
   - id: 'agent-names-stay-in-adapters: codex in app/src/provider_settings.rs'
     limit: 12
     owner: isaac
@@ -127,19 +103,3 @@ known:
     limit: 8
     owner: isaac
     reason: 'S19a, Give voice its own adapter layer. The Codex voice host moves into that adapter.'
-  - id: 'agent-names-stay-in-adapters: codex in contract/src/launch.rs'
-    limit: 4
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The default launch entries move into that registry.'
-  - id: 'agent-names-stay-in-adapters: codex in desktop/canvas/agents.ts'
-    limit: 2
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent display names move into that registry.'
-  - id: 'agent-names-stay-in-adapters: codex in desktop/canvas/process-icons.ts'
-    limit: 3
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'
-  - id: 'agent-names-stay-in-adapters: codex in desktop/src/shipped.rs'
-    limit: 2
-    owner: isaac
-    reason: 'S12c, Register terminals and agents as types with defaults. The agent names in icons and shipped assets move into each agent type registry defaults.'

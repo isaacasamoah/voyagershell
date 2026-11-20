@@ -355,14 +355,14 @@ pub enum Action {
         #[serde(rename = "typeId")]
         type_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        launch: Option<launch::Launch>,
+        launch: Option<launch::LaunchSpec>,
     },
     CreateVessel {
         #[serde(rename = "typeId")]
         type_id: String,
         destination: ContentDestination,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        launch: Option<launch::Launch>,
+        launch: Option<launch::LaunchSpec>,
     },
     StartNewShell {
         #[serde(rename = "vesselId")]

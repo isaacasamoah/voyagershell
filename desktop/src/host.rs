@@ -229,6 +229,11 @@ fn load(
                 .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             Ok(HostValue::from(raw))
         })
+        .function("agent_programs", move |_| {
+            Ok(HostValue::from(
+                voyager_app::agent_programs::source().to_owned(),
+            ))
+        })
         .function("stop_session", move |_| {
             stop.stop_session();
             Ok(HostValue::Null)

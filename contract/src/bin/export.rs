@@ -73,6 +73,7 @@ fn main() {
             "notesConfiguration":schema::<voyager_contract::content::NotesConfiguration>(),
             "voiceState":schema::<voyager_contract::voice::State>(),
             "launchCatalog":schema::<voyager_contract::launch::Catalog>(),
+            "agentPrograms":schema::<voyager_contract::launch::AgentTable>(),
             "place":schema::<voyager_contract::place::Place>(),
             "socketRequest":schema::<voyager_contract::socket::SocketRequest>(),
             "socketReply":schema::<voyager_contract::socket::SocketReply>()}),

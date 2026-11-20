@@ -1039,6 +1039,7 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
 
 test("Home presents the retained out-of-view avatar without docking or starting content", async () => {
   const {
+    agentPrograms: validateAgentPrograms,
     reportedActivity: validateReportedActivity,
     response: validateResponse,
   } = await import("../contract/generated/validate.js");
@@ -1111,6 +1112,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Column",
     "client_decorated",
     "quit",
+    "agent_programs",
+    "validateAgentPrograms",
     source,
   )(
     class {},
@@ -1178,6 +1181,9 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     component,
     () => false,
     () => {},
+    () =>
+      fs.readFileSync(`${__dirname}/../content/agent-programs.json`, "utf8"),
+    validateAgentPrograms,
   );
   const view = new Canvas();
   const context = { kind: "vessel", id: "vessel" };

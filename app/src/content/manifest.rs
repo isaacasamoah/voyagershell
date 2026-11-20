@@ -1,3 +1,4 @@
+mod builtin;
 mod check;
 mod effect;
 mod eval;
@@ -9,6 +10,7 @@ mod problem;
 mod read;
 mod registry;
 
+pub(crate) use builtin::find as built_in;
 pub(crate) use invoke::{placed, respond};
 pub(crate) use problem::valid_type_id;
 pub(crate) use registry::Entry;

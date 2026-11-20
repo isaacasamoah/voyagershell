@@ -158,7 +158,7 @@ fn listed(visible: &Layout, listed: Vec<Terminal>) -> ProcessOutput {
     for binding in visible
         .vessels
         .iter()
-        .filter(|item| item.type_id == "terminal")
+        .filter(|item| voyager_contract::launch::is_terminal_backed(&item.type_id))
     {
         if let Some(address) = &binding.backend {
             if let Some(terminal) = listed.iter().find(|terminal| terminal.address == address.0) {
@@ -405,7 +405,9 @@ pub(crate) fn start(
             .ok_or_else(|| {
                 refused("That content is outside the request's captured avatar focus")
             })?;
-        if binding.type_id != "terminal" || binding.backend.as_ref() != Some(address) {
+        if !voyager_contract::launch::is_terminal_backed(&binding.type_id)
+            || binding.backend.as_ref() != Some(address)
+        {
             return Err(refused(
                 "The content does not match the inspected terminal identity",
             ));
@@ -496,7 +498,7 @@ mod tests {
             .layout
             .vessels
             .iter_mut()
-            .find(|item| item.type_id == "terminal")
+            .find(|item| voyager_contract::launch::is_terminal_backed(&item.type_id))
             .unwrap();
         binding.backend = Some(CoreTerminalId("t1".into()));
         let content = &binding.id.clone();

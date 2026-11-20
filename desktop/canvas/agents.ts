@@ -4,8 +4,8 @@ import { projection } from "voyager_theme";
 import { Marker } from "voyager_native";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
-import { processIcon } from "./process-icons.js";
-import { activeGroups, visiblePanels } from "./panels.js";
+import { processIcon, programName, recognisedAgent } from "./process-icons.js";
+import { activeGroups, terminalBacked, visiblePanels } from "./panels.js";
 import type { Context, NativeElement } from "gpui-kit";
 import type { Layout, PlacementOwner } from "../../contract/generated/response";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
@@ -13,30 +13,6 @@ import type {
   Projection as ActivityProjection,
   ReportedActivity,
 } from "../../contract/generated/reportedActivity";
-
-const AGENT_NAMES: Record<string, string> = {
-  codex: "Codex",
-  claude: "Claude",
-  "claude-code": "Claude",
-  pi: "Pi",
-  opencode: "OpenCode",
-  cursor: "Cursor",
-  "cursor-agent": "Cursor",
-  copilot: "Copilot",
-  amp: "Amp",
-  gemini: "Gemini",
-  grok: "Grok",
-};
-
-function programName(value: string | null | undefined): string | undefined {
-  return (
-    value
-      ?.split(/[\\/]/)
-      .pop()
-      ?.toLowerCase()
-      .replace(/\.exe$/, "") || undefined
-  );
-}
 
 const STATES = {
   "Needs attention": { rank: 0, symbol: "!", color: "#edb478" },
@@ -139,7 +115,7 @@ export function agentsView(
         );
         if (!content) continue;
         if (
-          content.typeId !== "terminal" &&
+          !terminalBacked(content.typeId) &&
           !visiblePanels({ root: group.root, members: group.placements }).some(
             (panel) => panel.id === placement.id,
           )
@@ -153,7 +129,7 @@ export function agentsView(
             )
           : undefined;
         if (
-          content.typeId === "terminal" &&
+          terminalBacked(content.typeId) &&
           (process?.state === "finished" ||
             (!unavailable && process?.state !== "live"))
         )
@@ -170,7 +146,9 @@ export function agentsView(
             ? programName(activity?.app)
             : undefined;
         const recognized = foreground || reportedProgram;
-        const agent = recognized ? AGENT_NAMES[recognized] : undefined;
+        const agent = recognized
+          ? recognisedAgent(recognized)?.name
+          : undefined;
         const badge = activityBadge(activity, unavailable);
         let name =
           process?.agentName && agent
@@ -187,7 +165,7 @@ export function agentsView(
                 ? "Notes"
                 : content.typeId === "agents"
                   ? "Activity"
-                  : content.typeId === "terminal"
+                  : terminalBacked(content.typeId)
                     ? "Terminal"
                     : content.typeId));
         if (/^Terminal\s+\d+$/i.test(name)) {
@@ -201,13 +179,13 @@ export function agentsView(
           name = agent ? folder : `${program} · ${folder}`;
         }
         const state =
-          !content.backend && content.typeId === "terminal"
+          !content.backend && terminalBacked(content.typeId)
             ? content.startPending
               ? "Starting"
               : "Not started"
             : process?.state === "finished"
               ? "Ended"
-              : content.typeId === "terminal" && !process
+              : terminalBacked(content.typeId) && !process
                 ? "Status unavailable"
                 : "";
         rows.push({

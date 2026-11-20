@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /40 violations, 40 known\n.*PASS\n$/s);
+  assert.match(result.out, /30 violations, 30 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -577,7 +577,7 @@ const PLANTS = [
     "a branch in the launch catalog",
     "app/src/launch.rs",
     '\nfn planted(name: &str) -> bool {\n    name == "claude"\n}\n',
-    `${LEAK}: claude in app/src/launch.rs has 3 literals, over its recorded limit of 2`,
+    `${LEAK}: claude in app/src/launch.rs has 1 literals, over the limit of 0`,
   ],
   [
     "a name in the canvas",

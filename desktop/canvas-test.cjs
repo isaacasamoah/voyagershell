@@ -298,7 +298,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   choose({}, cx);
   assert.equal(actions.length, 1);
   assert.deepEqual(actions[0], [
-    { operation: "create-vessel", typeId: "terminal", destination, launch },
+    { operation: "create-vessel", typeId: "agent", destination, launch },
     "7",
     cx,
   ]);
@@ -1071,6 +1071,7 @@ test("hidden choices retain process-free data and require matching live backends
 
 test("Activity scopes live work, orders status rows and preserves navigation", async () => {
   const { activityBadge } = await import("./canvas/activity.js");
+  const validators = await import("../contract/generated/validate.js");
   const buttons = new Map();
   const icons = [];
   const exports = {};
@@ -1097,13 +1098,36 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       };
     if (name === "voyager_theme") return { projection: () => ({}) };
     if (name === "voyager_native") return { Marker: MarkerStub };
-    if (name === "./process-icons.js")
+    if (name === "./process-icons.js") {
+      const shared = {};
+      new Function(
+        "exports",
+        "require",
+        ts.transpileModule(
+          fs.readFileSync(`${__dirname}/canvas/process-icons.ts`, "utf8"),
+          { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+        ).outputText,
+      )(shared, (module) => {
+        if (module === "gpui-kit") return { image: element, svg: element };
+        if (module === "voyager_workspace")
+          return {
+            agent_programs: () =>
+              fs.readFileSync(
+                `${__dirname}/../content/agent-programs.json`,
+                "utf8",
+              ),
+          };
+        if (module === "./validate.js") return validators;
+        throw Error(module);
+      });
       return {
+        ...shared,
         processIcon: (program) => {
           icons.push(program);
           return element();
         },
       };
+    }
     if (name === "./voyage-colours.js")
       return { voyageColour: () => "#59a5ff" };
     if (name === "./panels.js") {

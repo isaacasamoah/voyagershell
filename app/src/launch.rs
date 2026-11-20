@@ -1,5 +1,5 @@
 use std::{collections::HashSet, io::Read as _, path::Path};
-use voyager_contract::launch::{Catalog, Effort, Launch, LaunchSettings, Permissions};
+use voyager_contract::launch::{Catalog, Launch, LaunchSettings, LaunchSpec};
 
 pub(crate) const VOYAGER_ENTRY: &str = "voyager";
 
@@ -21,7 +21,7 @@ pub fn load(path: &Path) -> Result<LaunchSettings, String> {
         {
             return Err("Launch entries need unique identities and nonempty names".into());
         }
-        argv(&entry.launch)?;
+        spec_argv(&entry.launch)?;
     }
     if !identities.contains(&settings.default) {
         return Err("Default launch entry is missing".into());
@@ -29,58 +29,51 @@ pub fn load(path: &Path) -> Result<LaunchSettings, String> {
     Ok(settings)
 }
 
+fn program_argv(argv: &[String]) -> Result<Vec<String>, String> {
+    if argv.first().is_none_or(|value| value.is_empty())
+        || argv.iter().any(|value| value.contains('\0'))
+    {
+        return Err("A program launch needs an executable and valid arguments".into());
+    }
+    Ok(argv.to_vec())
+}
+
 pub fn argv(launch: &Launch) -> Result<Vec<String>, String> {
     match launch {
         Launch::Terminal => Ok(Vec::new()),
-        Launch::Program { argv } => {
-            if argv.first().is_none_or(|value| value.is_empty())
-                || argv.iter().any(|value| value.contains('\0'))
-            {
-                return Err("A program launch needs an executable and valid arguments".into());
-            }
-            Ok(argv.clone())
-        }
-        Launch::Codex {
+        Launch::Program { argv } => program_argv(argv),
+    }
+}
+
+pub fn spec_argv(spec: &LaunchSpec) -> Result<Vec<String>, String> {
+    match spec {
+        LaunchSpec::Terminal => Ok(Vec::new()),
+        LaunchSpec::Program { argv } => program_argv(argv),
+        LaunchSpec::Agent {
+            kind,
             model,
             effort,
             permissions,
-        } => {
-            if model.trim().is_empty() || model.contains('\0') {
-                return Err("A Codex launch needs a model identifier".into());
-            }
-            let effort = match effort {
-                Effort::Low => "low",
-                Effort::Medium => "medium",
-                Effort::High => "high",
-                Effort::Xhigh => "xhigh",
-                Effort::Max => "max",
-                Effort::Ultra => "ultra",
-            };
-            let mut args = vec![
-                "codex".into(),
-                "--no-daemon".into(),
-                "--model".into(),
-                model.clone(),
-                "-c".into(),
-                format!("model_reasoning_effort=\"{effort}\""),
-            ];
-            match permissions {
-                Permissions::Yolo => args.push("--dangerously-bypass-approvals-and-sandbox".into()),
-                Permissions::WorkspaceWrite | Permissions::ReadOnly => {
-                    args.extend([
-                        "--sandbox".into(),
-                        if *permissions == Permissions::ReadOnly {
-                            "read-only".into()
-                        } else {
-                            "workspace-write".into()
-                        },
-                        "--ask-for-approval".into(),
-                        "on-request".into(),
-                    ]);
-                }
-            }
-            Ok(args)
+        } => crate::agent_programs::argv(kind, model.as_deref(), *effort, *permissions),
+    }
+}
+
+pub(crate) fn requested(type_id: &str, spec: Option<LaunchSpec>) -> Result<Option<Launch>, String> {
+    use voyager_contract::launch::{AGENT_TYPE, TERMINAL_TYPE};
+    match (type_id, spec) {
+        (AGENT_TYPE, Some(spec @ LaunchSpec::Agent { .. })) => {
+            crate::agent_programs::resolve(&spec).map(Some)
         }
+        (AGENT_TYPE, _) => Err("An agent Vessel needs an agent launch".into()),
+        (_, None) => Ok(None),
+        (TERMINAL_TYPE, Some(LaunchSpec::Agent { .. })) => {
+            Err("Only agent content accepts an agent launch".into())
+        }
+        (TERMINAL_TYPE, Some(spec)) => {
+            spec_argv(&spec)?;
+            crate::agent_programs::resolve(&spec).map(Some)
+        }
+        (_, Some(_)) => Err("Only terminal content accepts a program launch".into()),
     }
 }
 
@@ -125,33 +118,14 @@ pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>
     shell_command(launch, command(launch, cwd)?)
 }
 
-pub(crate) const AGENT_PROGRAMS: [&str; 11] = [
-    "codex",
-    "claude",
-    "claude-code",
-    "pi",
-    "opencode",
-    "cursor",
-    "cursor-agent",
-    "copilot",
-    "amp",
-    "gemini",
-    "grok",
-];
-
-pub(crate) fn is_agent_program(name: &str) -> bool {
-    AGENT_PROGRAMS.contains(&name)
-}
-
 fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
     let agent = match launch {
-        Launch::Codex { .. } => true,
         Launch::Program { argv } => argv.first().is_some_and(|program| {
             let name = Path::new(program)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
-            is_agent_program(name.trim_end_matches(".exe"))
+            crate::agent_programs::is_agent_program(name.trim_end_matches(".exe"))
         }),
         Launch::Terminal => false,
     };
@@ -174,12 +148,15 @@ fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, Stri
 }
 
 pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {
-    let mut settings = path.map(load).transpose()?.unwrap_or_default();
+    let mut settings = path
+        .map(load)
+        .transpose()?
+        .unwrap_or_else(crate::agent_programs::default_settings);
     settings.entries.retain(|entry| entry.id != VOYAGER_ENTRY);
     let mut available = Vec::new();
     let mut errors = Vec::new();
     for entry in &settings.entries {
-        let args = argv(&entry.launch)?;
+        let args = spec_argv(&entry.launch)?;
         match args.first() {
             None => available.push(entry.id.clone()),
             Some(executable) => match which::which_in(executable, std::env::var_os("PATH"), cwd) {
@@ -216,32 +193,25 @@ mod tests {
         assert_eq!(&args[5..], ["/vendor/cli.js", "literal; $(never-run)"]);
     }
 
-    fn agents_view_programs() -> Vec<String> {
-        let source = include_str!("../../desktop/canvas/agents.ts");
-        let block = source
-            .split("const AGENT_NAMES")
-            .nth(1)
-            .and_then(|rest| rest.split("};").next())
-            .expect("agents view declares AGENT_NAMES");
-        block
-            .lines()
-            .filter_map(|line| line.split_once(':'))
-            .map(|(key, _)| key.trim().trim_matches('"').to_owned())
-            .filter(|key| !key.is_empty() && !key.contains(' ') && !key.contains('='))
-            .collect()
-    }
-
     #[test]
-    fn every_agent_program_is_in_the_launch_list_and_the_agents_list() {
-        for program in AGENT_PROGRAMS {
+    fn every_listed_agent_program_launches_through_bash_and_names_its_conversation() {
+        for program in crate::agent_programs::table()
+            .agents
+            .iter()
+            .flat_map(|agent| agent.programs.iter())
+        {
             let wrapped = shell_command(
                 &Launch::Program {
-                    argv: vec![program.into()],
+                    argv: vec![program.clone()],
                 },
-                vec![program.into()],
+                vec![program.clone()],
             )
             .unwrap();
-            assert_ne!(wrapped, [program], "{program} is launched through Bash");
+            assert_ne!(
+                wrapped,
+                [program.as_str()],
+                "{program} is launched through Bash"
+            );
             let terminal: crate::core_shapes::Terminal =
                 serde_json::from_value(serde_json::json!({
                     "address":"t1", "labels":{}, "argv":[program], "cwd":"/tmp",
@@ -255,13 +225,42 @@ mod tests {
                 "{program} names its conversation"
             );
         }
-        let mut shown = agents_view_programs();
-        let mut table: Vec<String> = AGENT_PROGRAMS
-            .iter()
-            .map(|name| (*name).to_owned())
-            .collect();
-        shown.sort();
-        table.sort();
-        assert_eq!(shown, table, "the Agents view lists the same programs");
+    }
+
+    #[test]
+    fn the_launch_list_the_agents_view_and_adoption_read_one_table() {
+        let agents_view = include_str!("../../desktop/canvas/agents.ts");
+        let lookup = include_str!("../../desktop/canvas/process-icons.ts");
+        assert!(
+            agents_view.contains("recognisedAgent("),
+            "the view asks the shared lookup"
+        );
+        assert!(
+            lookup.contains("agent_programs()"),
+            "the lookup reads the host table"
+        );
+        for source in [agents_view, lookup] {
+            assert!(
+                !source.contains("AGENT_NAMES"),
+                "the view keeps no list of its own"
+            );
+        }
+        let host = include_str!("../../desktop/src/host.rs");
+        assert!(
+            host.contains("agent_programs::source()"),
+            "the call serves the app's table"
+        );
+        let table: voyager_contract::launch::AgentTable =
+            serde_json::from_str(crate::agent_programs::source()).unwrap();
+        assert_eq!(&table, crate::agent_programs::table());
+        for agent in &table.agents {
+            for program in &agent.programs {
+                assert!(crate::agent_programs::is_agent_program(program));
+            }
+        }
+        let seeded = crate::agent_programs::default_settings();
+        for entry in &seeded.entries {
+            assert!(spec_argv(&entry.launch).is_ok(), "{} resolves", entry.id);
+        }
     }
 }

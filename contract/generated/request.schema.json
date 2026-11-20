@@ -171,7 +171,7 @@
             "launch": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/Launch"
+                  "$ref": "#/definitions/LaunchRecord"
                 },
                 {
                   "type": "null"
@@ -213,7 +213,7 @@
             "launch": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/Launch"
+                  "$ref": "#/definitions/LaunchRecord"
                 },
                 {
                   "type": "null"
@@ -978,75 +978,52 @@
       ],
       "type": "string"
     },
-    "Launch": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "terminal",
-              "type": "string"
-            }
+    "LaunchRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
           },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
+          "type": [
+            "array",
+            "null"
+          ]
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "effort": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Effort"
-                }
-              ],
-              "default": "high"
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Effort"
             },
-            "kind": {
-              "const": "codex",
-              "type": "string"
-            },
-            "model": {
-              "default": "gpt-6.1-sol",
-              "type": "string"
-            },
-            "permissions": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Permissions"
-                }
-              ],
-              "default": "yolo"
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
+          ]
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "argv": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
+        "kind": {
+          "type": "string"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Permissions"
             },
-            "kind": {
-              "const": "program",
-              "type": "string"
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "kind",
-            "argv"
-          ],
-          "type": "object"
+          ]
         }
-      ]
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
     },
     "Node": {
       "oneOf": [

@@ -197,7 +197,7 @@ impl Model {
             .iter_mut()
             .find(|item| &item.id == id)
             .ok_or("Terminal content not found")?;
-        if content.type_id != "terminal"
+        if !voyager_contract::launch::is_terminal_backed(&content.type_id)
             || content.backend.as_ref() != Some(backend)
             || content.start_pending.is_some()
         {
@@ -624,12 +624,7 @@ impl Model {
                 if name.trim().is_empty() || !crate::content::valid_type_id(&type_id) {
                     return Err("Fleet name or Vessel type is invalid".into());
                 }
-                if let Some(launch) = &launch {
-                    if type_id != "terminal" {
-                        return Err("Only terminal content accepts a program launch".into());
-                    }
-                    crate::launch::argv(launch)?;
-                }
+                let launch = crate::launch::requested(&type_id, launch)?;
                 let cwd = match source {
                     voyager_contract::DirectorySource::Live { cwd, .. }
                     | voyager_contract::DirectorySource::Voyage { cwd, .. }
@@ -775,12 +770,7 @@ impl Model {
                 if !crate::content::valid_type_id(&type_id) {
                     return Err("Unsupported Vessel type".into());
                 }
-                if let Some(launch) = &launch {
-                    if type_id != "terminal" {
-                        return Err("Only terminal content accepts a program launch".into());
-                    }
-                    crate::launch::argv(launch)?;
-                }
+                let launch = crate::launch::requested(&type_id, launch)?;
                 let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
                 let name =
                     panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);

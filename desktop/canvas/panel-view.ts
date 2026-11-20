@@ -8,7 +8,7 @@ import { take_result } from "voyager_avatar";
 import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
-import { openingPlacement, visiblePanels } from "./panels.js";
+import { openingPlacement, terminalBacked, visiblePanels } from "./panels.js";
 import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
 import type Canvas from "./main.js";
@@ -228,7 +228,7 @@ export function renderPanel(
                       )
                       .child(div().flex_1().min_w(0).child(title))
                       .children(
-                        content.typeId === "terminal" && badge.label
+                        terminalBacked(content.typeId) && badge.label
                           ? [
                               div()
                                 .text_size(9)
@@ -312,7 +312,7 @@ export function renderPanel(
             .flex_1()
             .min_h(0)
             .children(
-              content.typeId === "terminal" && terminal
+              terminalBacked(content.typeId) && terminal
                 ? [Marker.new("terminal", placement.id)]
                 : [],
             )

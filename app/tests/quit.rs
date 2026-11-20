@@ -13,7 +13,7 @@ mod linux {
         core::Core,
         core_shapes::RunParams,
     };
-    use voyager_contract::{Action, Axis, Outcome, Request, launch::Launch};
+    use voyager_contract::{Action, Axis, Outcome, Request, launch::LaunchSpec};
 
     fn wait<T>(future: impl Future<Output = T>) -> T {
         let mut future = Box::pin(future);
@@ -171,7 +171,7 @@ mod linux {
                                 },
                             },
                         },
-                        launch: Some(Launch::Program {
+                        launch: Some(LaunchSpec::Program {
                             argv: vec!["/bin/sleep".into(), "60".into()],
                         }),
                     },
@@ -407,7 +407,7 @@ mod linux {
                             side: voyager_contract::Side::Right,
                         },
                     },
-                    launch: Some(Launch::Program {
+                    launch: Some(LaunchSpec::Program {
                         argv: vec!["/bin/sleep".into(), "60".into()],
                     }),
                 },

@@ -28,7 +28,7 @@ impl CreatedTerminal {
 
     pub(super) fn eligible(&self, content: &voyager_contract::Vessel) -> bool {
         self.matches(content)
-            && content.type_id == "terminal"
+            && voyager_contract::launch::is_terminal_backed(&content.type_id)
             && (content.backend.is_none() || self.shell_intent.is_some())
             && content.start_pending.is_none()
     }
@@ -101,7 +101,7 @@ pub(super) fn start_terminal(
         .iter()
         .find(|item| &item.id == content)
         .ok_or_else(|| rejected("Terminal content not found".into()))?;
-    if target.type_id != "terminal" {
+    if !voyager_contract::launch::is_terminal_backed(&target.type_id) {
         return Err(rejected("Content is not a terminal".into()));
     }
     if let Some(operation) = &target.start_pending {

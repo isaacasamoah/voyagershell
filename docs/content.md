@@ -14,7 +14,7 @@ The existing generator exports their validators beside the workspace and
 conversation contract. `app/src/content.rs` owns persisted data, revisions and
 schema checks. `create-vessel` uses the shared panel owner and an explicit
 empty or beside-placement insertion with a left/right/top/bottom side and
-an explicit type ID. The built-in type IDs are `terminal`, `agents` and `notes`. A package that carries a manifest declares one more type ID, as the next section describes. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
+an explicit type ID. The built-in type IDs are `terminal`, `agent`, `agents` and `notes`. `agent` is one terminal-backed type for every coding agent; the program is the Vessel's launch, not its type. A package that carries a manifest declares one more type ID, as the next section describes. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
 Changing a placement does not change its Vessel ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
@@ -638,5 +638,22 @@ Vessel in the layout whose type has no manifest is not reachable here, and an
 instance's data stays in `data/` when its package is removed.
 
 Local state, merge fields, migrations and the view markup are declared and
-checked. None of them runs yet. Notes, the terminal and the agents are not
-manifests.
+checked. None of them runs yet. Notes and the Agents view are not manifests.
+
+### The terminal and agent types
+
+`content/types/terminal.json` and `content/types/agent.json` are the manifests
+of the `terminal` and `agent` types. `app/src/content/manifest/builtin.rs`
+embeds both and runs each through the same checker as a personal package, with
+its own type ID allowed. A bundled manifest that fails the checker stops the
+application at its first read, and a unit test reads both on every run. Both
+declare a `core-terminal` backend and no actions, because stop, send and the
+other process operations stay in the process tool and the effect grammar
+cannot express them. Each type's catalogue name is the manifest's `name`.
+
+Each declares an orbit that hands an agent the screen to explain. The `agent`
+type adds an entry that asks what the agent is working on. Each declares a dock
+entry `screen` that reads the screen while docked, and it ships `off`. Docking
+an avatar changes focus, not what it reads, so the entry stays off until Isaac
+agrees to the behaviour. Nothing reads orbit or dock entries yet, so the
+declarations are checked data only.

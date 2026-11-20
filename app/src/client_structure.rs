@@ -917,7 +917,8 @@ pub(super) fn record_created_terminals(
             .vessels
             .iter()
             .filter(|item| {
-                item.type_id == "terminal" && !previous.vessels.iter().any(|old| old.id == item.id)
+                voyager_contract::launch::is_terminal_backed(&item.type_id)
+                    && !previous.vessels.iter().any(|old| old.id == item.id)
             })
             .map(|item| CreatedTerminal {
                 id: item.id.clone(),

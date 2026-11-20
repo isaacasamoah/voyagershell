@@ -12,7 +12,9 @@ pub(crate) fn effective_name(
     content: &Vessel,
     directory: &Directory,
 ) -> String {
-    if placement.name_origin == NameOrigin::Deliberate || content.type_id != "terminal" {
+    if placement.name_origin == NameOrigin::Deliberate
+        || !voyager_contract::launch::is_terminal_backed(&content.type_id)
+    {
         return placement.name.clone();
     }
     match directory {
@@ -48,7 +50,7 @@ pub(crate) fn conversation_name(terminal: &Terminal) -> Option<String> {
         .name
         .rsplit(['/', '\\'])
         .next()?;
-    if !crate::launch::is_agent_program(&program.to_ascii_lowercase())
+    if !crate::agent_programs::is_agent_program(&program.to_ascii_lowercase())
         || title.is_empty()
         || title.len() > 192
         || title.chars().any(char::is_control)
@@ -91,7 +93,7 @@ pub(crate) fn voyage_names(
 }
 
 pub(crate) fn directory(content: &Vessel, terminal: Option<&Terminal>) -> Directory {
-    if content.type_id == "terminal" && content.backend.is_some() {
+    if voyager_contract::launch::is_terminal_backed(&content.type_id) && content.backend.is_some() {
         terminal
             .and_then(|terminal| terminal.foreground.as_ref())
             .filter(|process| !process.cwd.is_empty())

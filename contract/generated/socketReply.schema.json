@@ -143,17 +143,6 @@
         }
       ]
     },
-    "Effort": {
-      "enum": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-      ],
-      "type": "string"
-    },
     "Entry": {
       "additionalProperties": false,
       "properties": {
@@ -306,39 +295,6 @@
             "kind": {
               "const": "terminal",
               "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "effort": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Effort"
-                }
-              ],
-              "default": "high"
-            },
-            "kind": {
-              "const": "codex",
-              "type": "string"
-            },
-            "model": {
-              "default": "gpt-6.1-sol",
-              "type": "string"
-            },
-            "permissions": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Permissions"
-                }
-              ],
-              "default": "yolo"
             }
           },
           "required": [
@@ -659,14 +615,6 @@
         "applied",
         "refused",
         "uncertain"
-      ],
-      "type": "string"
-    },
-    "Permissions": {
-      "enum": [
-        "yolo",
-        "workspace-write",
-        "read-only"
       ],
       "type": "string"
     },
