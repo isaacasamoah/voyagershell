@@ -247,6 +247,43 @@ pub fn reject(request: &Request, message: String) -> Response {
     }
 }
 
+pub(crate) fn notes_directory(
+    layout: &voyager_contract::Layout,
+    id: &VesselId,
+) -> Result<PathBuf, String> {
+    let content = layout
+        .vessels
+        .iter()
+        .find(|content| content.id == *id)
+        .ok_or("Content is unavailable")?;
+    let owners: Vec<_> = layout
+        .containers()
+        .filter(|voyage| {
+            voyage
+                .portals
+                .iter()
+                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
+                .any(|placement| placement.vessel == *id)
+        })
+        .collect();
+    let [owner] = owners.as_slice() else {
+        return Err("Notes requires one identified owning Voyage".into());
+    };
+    let home = layout.home.as_ref().is_some_and(|home| home.id == owner.id);
+    let cwd = if home {
+        Some(content.cwd.as_str())
+    } else {
+        owner.cwd.as_deref()
+    }
+    .filter(|cwd| !cwd.is_empty())
+    .ok_or("The owning Voyage has no directory")?;
+    let directory = Path::new(cwd);
+    if !directory.is_absolute() {
+        return Err("The owning directory must be absolute".into());
+    }
+    Ok(directory.join("notes"))
+}
+
 pub(crate) fn member(
     layout: &std::sync::Arc<voyager_contract::Layout>,
     scope: Option<&voyager_contract::Context>,
