@@ -109,18 +109,23 @@ Home prompt, a Core note and `voyager focus` itself are never spoken. The
 spoken request, and the hook then prints nothing for that prompt.
 
 The app keeps one `spoken::TurnLedger` for its Vessel sockets. A focus request
-with `spoken` true, answered with the dock, sets a pending mark for the Vessel
-that sent it. `observe` gives the first turn id it has not seen for that Vessel
-the pending mark, as `Kind::Spoken`, and any other new turn id `Kind::Typed`.
-The verdict stays with the turn id, so a late event of an earlier turn never
-takes a later mark. Marks are in memory, belong to one Vessel and are dropped
-when its socket closes. Nothing is stored.
+with `spoken` true, answered with the dock and sent from the terminal that
+`voyager.json` names, adds one pending mark for that Vessel. Marks are a queue
+that turns consume in order. `observe` gives the first turn id it has not seen
+for that Vessel the oldest pending mark, as `Kind::Spoken`, and any other new
+turn id `Kind::Typed`. Two spoken prompts before any reply therefore give two
+spoken turns. The verdict stays with the turn id, so a late event of an earlier
+turn never takes a later mark. Marks are in memory, belong to one Vessel and are
+dropped when its socket closes. Nothing is stored. A spoken focus request from
+any other terminal sets no mark.
 
 The hook runs before the model starts, so the mark is pending before the turn's
-first event. The reply reader owns the calls to `observe` and has to clear a
-mark whose turn ended with no reply event, because that mark would otherwise
-go to the next turn. Until the reply reader lands, nothing calls `observe` and
-no turn is spoken.
+first event. The reply path calls `observe` through `Replies::accept_with` when
+a turn's first text arrives. A `Stop` for a turn that streamed no text calls it
+too, so a spoken turn that yields no reply event takes its own mark and the next
+turn, a typed one, does not inherit it. Each `Replies` turn carries the verdict
+as `spoken`. Only the terminal that `voyager.json` names can send replies, so a
+turn of any other Vessel is never spoken.
 
 ## Change the workspace
 

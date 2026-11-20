@@ -29,6 +29,7 @@ pub struct Turn {
     pub messages: Vec<Message>,
     pub ending: Option<Ending>,
     pub truncated: bool,
+    pub spoken: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -70,6 +71,7 @@ struct Slot {
     truncated: bool,
     stop: Option<Stopping>,
     lost: bool,
+    spoken: bool,
 }
 
 #[derive(Default)]
@@ -99,13 +101,17 @@ impl Replies {
     }
 
     pub fn accept(&self, event: ReplyEvent) -> Step {
+        self.accept_with(event, |_| false)
+    }
+
+    pub fn accept_with(&self, event: ReplyEvent, observe: impl FnOnce(&str) -> bool) -> Step {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        state.accept(event)
+        state.accept(event, observe)
     }
 }
 
 impl State {
-    fn accept(&mut self, event: ReplyEvent) -> Step {
+    fn accept(&mut self, event: ReplyEvent, observe: impl FnOnce(&str) -> bool) -> Step {
         match event {
             ReplyEvent::Unreadable { event, error } => {
                 self.unreadable = Some(Unreadable { event, error });
@@ -121,13 +127,18 @@ impl State {
                 let (slot, started) = self.slot(&turn);
                 slot.take(&message, index, last, text);
                 if started {
+                    slot.spoken = observe(&turn);
                     Step::Started(turn)
                 } else {
                     Step::Streaming
                 }
             }
-            ReplyEvent::TurnEnd { turn, text } => self.stop(Some(turn), Stopping::Text(text)),
-            ReplyEvent::TurnFailed { turn, error } => self.stop(turn, Stopping::Failed(error)),
+            ReplyEvent::TurnEnd { turn, text } => {
+                self.stop(Some(turn), Stopping::Text(text), observe)
+            }
+            ReplyEvent::TurnFailed { turn, error } => {
+                self.stop(turn, Stopping::Failed(error), observe)
+            }
         }
     }
 
@@ -147,7 +158,12 @@ impl State {
         (&mut self.turns[index], started)
     }
 
-    fn stop(&mut self, turn: Option<String>, stopping: Stopping) -> Step {
+    fn stop(
+        &mut self,
+        turn: Option<String>,
+        stopping: Stopping,
+        observe: impl FnOnce(&str) -> bool,
+    ) -> Step {
         let known = match &turn {
             Some(turn) => self.turns.iter().any(|slot| &slot.id == turn),
             None => !self.turns.is_empty(),
@@ -160,6 +176,9 @@ impl State {
         });
         let (slot, _) = self.slot(&id);
         slot.stop = Some(stopping);
+        if !known {
+            slot.spoken = observe(&id);
+        }
         if known { Step::Ended } else { Step::Silent }
     }
 }
@@ -174,6 +193,7 @@ impl Slot {
             truncated: false,
             stop: None,
             lost: false,
+            spoken: false,
         }
     }
 
@@ -232,6 +252,7 @@ impl Slot {
             messages: self.messages.clone(),
             ending,
             truncated: self.truncated,
+            spoken: self.spoken,
         }
     }
 }

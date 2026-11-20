@@ -1,5 +1,5 @@
 use crate::replies::Replies;
-use crate::spoken::TurnLedger;
+use crate::spoken::{Kind, TurnLedger};
 use crate::voyager_binding::Binding;
 use std::{
     collections::HashMap,
@@ -302,7 +302,7 @@ fn answer(
         Ok(SocketRequest::Status) => status(call, vessel, terminal),
         Ok(SocketRequest::Focus { spoken }) => {
             let reply = focus(call, vessel);
-            if spoken && matches!(reply, SocketReply::Focus { .. }) {
+            if spoken && binding.names(terminal) && matches!(reply, SocketReply::Focus { .. }) {
                 turns
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -311,7 +311,13 @@ fn answer(
             reply
         }
         Ok(SocketRequest::Reply { event }) if binding.names(terminal) => {
-            replies.accept(event);
+            replies.accept_with(event, |turn| {
+                turns
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .observe(vessel, turn)
+                    == Kind::Spoken
+            });
             SocketReply::Noted
         }
         Ok(SocketRequest::Reply { .. }) => SocketReply::Refused {
@@ -397,17 +403,16 @@ impl Listener {
                 std::thread::spawn(move || {
                     let mut line = String::new();
                     let limit = u64::try_from(crate::activity::LINE_LIMIT).unwrap_or(u64::MAX);
-                    let reply =
-                        match std::io::BufReader::new((&stream).take(limit)).read_line(&mut line) {
-                            Ok(_) => answer(
-                                &call, &binding, &turns, &replies, &owner, &address, &line,
+                    let reply = match std::io::BufReader::new((&stream).take(limit))
+                        .read_line(&mut line)
+                    {
+                        Ok(_) => answer(&call, &binding, &turns, &replies, &owner, &address, &line),
+                        Err(error) => SocketReply::Refused {
+                            message: format!(
+                                "Unreadable voyager request: {error}; nothing was queued"
                             ),
-                            Err(error) => SocketReply::Refused {
-                                message: format!(
-                                    "Unreadable voyager request: {error}; nothing was queued"
-                                ),
-                            },
-                        };
+                        },
+                    };
                     if let Ok(mut encoded) = serde_json::to_vec(&reply) {
                         encoded.push(b'\n');
                         let _ = stream.write_all(&encoded);
@@ -589,7 +594,7 @@ mod tests {
                 &call,
                 &binding,
                 &Mutex::default(),
-            &Replies::default(),
+                &Replies::default(),
                 &vessel,
                 &terminal(id),
                 &dock_line(),
@@ -726,9 +731,11 @@ mod tests {
     }
 
     fn ask(call: &Call, turns: &Mutex<TurnLedger>, vessel: &VesselId, line: &str) -> SocketReply {
+        let binding = Binding::unbound();
+        binding.bind(CoreTerminalId("t1".into())).unwrap();
         answer(
             call,
-            &Binding::unbound(),
+            &binding,
             turns,
             &Replies::default(),
             vessel,
@@ -811,5 +818,142 @@ mod tests {
                 .observe(&VesselId("voyager".into()), "turn-1"),
             Kind::Typed
         );
+    }
+
+    fn reply_line(turn: &str, text: &str) -> String {
+        serde_json::to_string(&SocketRequest::Reply {
+            event: voyager_contract::reply::ReplyEvent::Text {
+                turn: turn.into(),
+                message: format!("{turn}-message"),
+                index: 0,
+                last: true,
+                text: text.into(),
+            },
+        })
+        .unwrap()
+    }
+
+    fn stop_line(turn: &str, text: &str) -> String {
+        serde_json::to_string(&SocketRequest::Reply {
+            event: voyager_contract::reply::ReplyEvent::TurnEnd {
+                turn: turn.into(),
+                text: text.into(),
+            },
+        })
+        .unwrap()
+    }
+
+    const SPOKEN_FOCUS: &str = r#"{"command":"focus","spoken":true}"#;
+
+    struct Wiring {
+        call: Call,
+        binding: Binding,
+        turns: Mutex<TurnLedger>,
+        replies: Replies,
+    }
+
+    impl Wiring {
+        fn new() -> Self {
+            let binding = Binding::unbound();
+            binding.bind(terminal("t8")).unwrap();
+            Self {
+                call: answering(workspace()),
+                binding,
+                turns: Mutex::default(),
+                replies: Replies::default(),
+            }
+        }
+
+        fn from(&self, id: &str, vessel: &str, line: &str) -> SocketReply {
+            answer(
+                &self.call,
+                &self.binding,
+                &self.turns,
+                &self.replies,
+                &VesselId(vessel.into()),
+                &terminal(id),
+                line,
+            )
+        }
+
+        fn spoken(&self) -> Vec<(String, bool)> {
+            self.replies
+                .snapshot()
+                .turns
+                .into_iter()
+                .map(|turn| (turn.id, turn.spoken))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn two_spoken_prompts_then_two_replies_are_both_spoken_in_order() {
+        let wiring = Wiring::new();
+        wiring.from("t8", "voyager", SPOKEN_FOCUS);
+        wiring.from("t8", "voyager", SPOKEN_FOCUS);
+        for turn in ["turn-1", "turn-2", "turn-3"] {
+            let reply = wiring.from("t8", "voyager", &reply_line(turn, "answer"));
+            assert_eq!(reply, SocketReply::Noted);
+        }
+        assert_eq!(
+            wiring.spoken(),
+            vec![
+                ("turn-1".into(), true),
+                ("turn-2".into(), true),
+                ("turn-3".into(), false)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_spoken_turn_that_ends_with_no_reply_does_not_pass_its_mark_to_the_next_typed_turn() {
+        let wiring = Wiring::new();
+        wiring.from("t8", "voyager", SPOKEN_FOCUS);
+        wiring.from("t8", "voyager", &stop_line("turn-1", "Done."));
+        wiring.from("t8", "voyager", &reply_line("turn-2", "typed answer"));
+        assert_eq!(
+            wiring.spoken(),
+            vec![("turn-1".into(), true), ("turn-2".into(), false)]
+        );
+    }
+
+    #[test]
+    fn another_terminals_spoken_turn_is_not_spoken() {
+        let wiring = Wiring::new();
+        let marked = wiring.from("t9", "crew", SPOKEN_FOCUS);
+        assert!(matches!(marked, SocketReply::Focus { .. }));
+        let refused = wiring.from("t9", "crew", &reply_line("crew-turn", "spoken?"));
+        assert!(matches!(refused, SocketReply::Refused { .. }));
+        assert!(wiring.replies.snapshot().turns.is_empty());
+        wiring.from("t8", "voyager", &reply_line("turn-1", "typed answer"));
+        assert_eq!(wiring.spoken(), vec![("turn-1".into(), false)]);
+        assert_eq!(
+            wiring
+                .turns
+                .lock()
+                .unwrap()
+                .observe(&VesselId("crew".into()), "crew-turn"),
+            Kind::Typed
+        );
+    }
+
+    #[test]
+    fn a_reply_is_stored_only_when_it_comes_from_the_bound_terminal() {
+        let wiring = Wiring::new();
+        let refused = wiring.from("t9", "crew", &reply_line("turn-1", "no"));
+        assert!(matches!(refused, SocketReply::Refused { .. }));
+        assert!(wiring.replies.snapshot().turns.is_empty());
+        let noted = wiring.from("t8", "voyager", &reply_line("turn-1", "yes"));
+        assert_eq!(noted, SocketReply::Noted);
+        assert_eq!(wiring.replies.snapshot().turns[0].messages[0].text, "yes");
+    }
+
+    #[test]
+    fn a_reply_is_refused_while_nothing_is_bound() {
+        let wiring = Wiring::new();
+        wiring.binding.forget();
+        let reply = wiring.from("t8", "voyager", &reply_line("turn-1", "x"));
+        assert!(matches!(reply, SocketReply::Refused { .. }));
+        assert!(wiring.replies.snapshot().turns.is_empty());
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use voyager_contract::VesselId;
 
 pub const MARKER: &str = "[spoken]";
@@ -28,13 +28,13 @@ pub enum Kind {
 
 #[derive(Debug, Default)]
 pub struct TurnLedger {
-    pending: HashSet<String>,
+    pending: HashMap<String, usize>,
     turns: HashMap<String, HashMap<String, Kind>>,
 }
 
 impl TurnLedger {
     pub fn spoken_prompt(&mut self, vessel: &VesselId) {
-        self.pending.insert(vessel.0.clone());
+        *self.pending.entry(vessel.0.clone()).or_default() += 1;
     }
 
     pub fn observe(&mut self, vessel: &VesselId, turn: &str) -> Kind {
@@ -42,17 +42,19 @@ impl TurnLedger {
         if let Some(kind) = turns.get(turn) {
             return *kind;
         }
-        let kind = if self.pending.remove(&vessel.0) {
-            Kind::Spoken
-        } else {
-            Kind::Typed
+        let kind = match self.pending.get_mut(&vessel.0) {
+            Some(marks) if *marks > 0 => {
+                *marks -= 1;
+                Kind::Spoken
+            }
+            _ => Kind::Typed,
         };
         turns.insert(turn.into(), kind);
         kind
     }
 
     pub fn keep_only(&mut self, live: impl Fn(&str) -> bool) {
-        self.pending.retain(|vessel| live(vessel));
+        self.pending.retain(|vessel, _| live(vessel));
         self.turns.retain(|vessel, _| live(vessel));
     }
 }
@@ -94,6 +96,18 @@ mod tests {
         let voyager = vessel("v1");
         ledger.spoken_prompt(&voyager);
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
+        assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
+    }
+
+    #[test]
+    fn two_spoken_prompts_before_any_turn_give_two_spoken_turns_in_order() {
+        let mut ledger = TurnLedger::default();
+        let voyager = vessel("v1");
+        ledger.spoken_prompt(&voyager);
+        ledger.spoken_prompt(&voyager);
+        assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
+        assert_eq!(ledger.observe(&voyager, "turn-2"), Kind::Spoken);
+        assert_eq!(ledger.observe(&voyager, "turn-3"), Kind::Typed);
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
     }
 
