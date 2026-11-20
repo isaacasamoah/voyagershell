@@ -155,9 +155,9 @@ features:
         kind: user
         says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
         guards: []
-        checks: []
+        checks: ['journey:chat/peek-stays-here']
         formal: []
-        journeys: []
+        journeys: [chat]
       - id: fleets-stay-readable
         kind: user
         says: 'No Vessel is shown narrower than a measured readable width. Past that point the Fleet becomes a grid.'
@@ -240,9 +240,9 @@ features:
         kind: user
         says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
         guards: []
-        checks: []
+        checks: ['journey:chat/peek-stays-here']
         formal: []
-        journeys: []
+        journeys: [chat]
     docs: [docs/arrangement.md, docs/terminal.md, docs/workspace.md]
     sources: [app/src/panels.rs, desktop/src/arrangement.rs, docs/arrangement.md, 'desktop/canvas/panel-view.*']
     code: [app/src/panels.rs, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/arrangement.rs, docs/arrangement.md]
@@ -366,9 +366,9 @@ features:
         kind: user
         says: 'Agents never rearrange what the user placed and never move the user''s view. Agents'' Vessels go in the grid, and Voyager looks without moving the user.'
         guards: []
-        checks: []
+        checks: ['journey:chat/peek-stays-here']
         formal: []
-        journeys: []
+        journeys: [chat]
       - id: adopted-agents-follow-their-label
         kind: user
         says: 'An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel.'
@@ -508,9 +508,9 @@ features:
         says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
         owner: placement
         guards: []
-        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals', 'journey:chat/dock-takes-you-there']
         formal: []
-        journeys: [portals]
+        journeys: [chat, portals]
     docs: ['.agents/skills/verify/features/portals.md', docs/content.md, docs/terminal.md, docs/workspace.md]
     sources: [app/src/content.rs, 'app/src/content/*.rs', app/src/workspace.rs, app/src/panels.rs, desktop/canvas/panels.ts, desktop/canvas/panel-view.ts]
     code:
@@ -800,9 +800,9 @@ features:
         says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
         owner: placement
         guards: []
-        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals', 'journey:chat/dock-takes-you-there']
         formal: []
-        journeys: [portals]
+        journeys: [chat, portals]
       - id: avatar-stays-put
         kind: user
         says: 'The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it.'
@@ -870,9 +870,9 @@ features:
         says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
         owner: placement
         guards: []
-        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals', 'journey:chat/dock-takes-you-there']
         formal: []
-        journeys: [portals]
+        journeys: [chat, portals]
       - id: conversation-acts-through-operations
         kind: user
         says: 'The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name.'
@@ -931,9 +931,9 @@ features:
         says: 'The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it.'
         owner: placement
         guards: []
-        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals']
+        checks: ['journey:portals/dock-portal', 'journey:portals/portal-stays-in-its-voyage', 'journey:portals/hide-portals', 'journey:chat/dock-takes-you-there']
         formal: []
-        journeys: [portals]
+        journeys: [chat, portals]
       - id: voice-is-audible
         kind: user
         says: 'When the assistant speaks, the person hears it through the selected output.'
