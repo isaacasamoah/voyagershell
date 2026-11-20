@@ -289,6 +289,7 @@ pub const WORKSPACE: Module = Module {
             Ty::Text,
         ),
         promise("launches", &[], Ty::Text),
+        function("agent_programs", &[], Ty::Text),
         promise("processes", &[revision("version")], Ty::Text),
         function(
             "notice",

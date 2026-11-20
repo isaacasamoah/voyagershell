@@ -224,6 +224,14 @@
         }
       },
       {
+        "name": "agent_programs",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
         "name": "processes",
         "shape": {
           "kind": "async",
