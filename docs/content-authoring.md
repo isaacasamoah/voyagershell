@@ -1,0 +1,15 @@
+# Customize Voyager content
+
+Supporting instructions for review. See [the proposal](../proposal.md). Main retains the Electron reference; the native-foundation details below describe a separate candidate. Consult the running build's available discovery tools and actual package guide before editing. This document does not establish a universal content installer.
+
+1. Establish the intended view and placement. A Vessel places content inside a Fleet. Voyage-wide Portal placement is the intended model; verify actual scope in the installed build. These share a content identity and supported interface, not necessarily a Core program.
+2. Discover the installed content description and registered renderer. Metadata must identify supported placement scopes, configuration/state, named actions and any optional Core backend. Available metadata alone does not prove that a view renders.
+3. Read the selected package's available agent guide, actual manifest, source and generated declarations. Main's Electron package loader uses `portal.json`; the separate native candidate uses `mod.json`. In the native foundation, inspect the existing Notes or Header package appropriate to the task. Header authority is not available to a Notes package. Do not copy Header-only imports or invent bindings.
+4. Native package JavaScript/TypeScript composes the installed GPUI script components. Browser DOM, HTML/CSS and WebGL are not implicit capabilities. A terminal process can run without an embeddable UI.
+5. Preserve personal source and instance data. Native packages currently seed once, so changing a repository default does not update a running user's copy. Select the actual personal package and make an explicit compatible update. Do not overwrite a personal package to refresh documentation.
+6. The current Notes manifest uses `name`, `entry`, `version`, `contentConfiguration` and `stateSchema`. That is an observed example, not permission to assume a universal manifest or support for arbitrary content registration. Use the current host's contract and loader for a new type.
+7. Views and authorized agents use the application owner for structured content state, expected revisions and named actions. Source editing and structured data updates are different actions. Never bypass the writer with direct persistence edits.
+8. Verify the actual visible instance after a valid live edit. Try a broken source edit and inspect its error and retained usable view. Restore the source, then verify that removing/restoring the view preserves data and backend identity. Hiding or moving it must not stop its program.
+9. Report the supported journey and exact limits. Creating a file, passing type checks or launching a program does not prove native embedding or successful agent interaction.
+
+The private assistant delegates package-source work to a working Vessel under the inspected policy. Package guides describe supported APIs and authoring mechanics; they do not elevate an agent's scope or bypass the user project's instructions.
