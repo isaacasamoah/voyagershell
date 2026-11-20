@@ -1020,8 +1020,10 @@ edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
 
-A second control, `tests/native/controls/voice-handoff.patch`, sends the words without the
-spoken marker. Built into a candidate, it must fail `words-reach-voyager`.
+Two more controls follow the same rule. `tests/native/controls/voice-handoff.patch` sends the
+words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
+`tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
+spoken or not. The typed turn comes first, so the journey hears it and `reply-is-spoken` fails.
 
 The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
