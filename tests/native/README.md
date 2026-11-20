@@ -1028,8 +1028,8 @@ ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexa
 ```
 
 Three more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
-the turn constants from before this rule: no settling, five frames of sound as speech and
-0.6 s of quiet as the end. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
+the turn constants from before this rule. It has no settling, takes five frames of sound as
+speech and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
 words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
 `tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
 spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads

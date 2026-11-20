@@ -30,7 +30,7 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    ended 23 and 1.5 s ended 10. It is the shortest of those that ends at most 15
    early. Waiting 1.5 s instead of 0.6 s adds 0.9 s between the end of speech and
    the acknowledgement. The time from the end of the turn to the clip's first sound is
-   unchanged: in ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
+   unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
    with a median of 201 ms. A model that judges the end of a turn and interruptions
    are later work.
 4. A cached clip answers the moment the turn ends, before hearing finishes. It is
@@ -228,7 +228,7 @@ The native `voice` journey in [the verification guide](../tests/native/README.md
 clicks the real control, feeds committed synthetic speech to the microphone and records the
 speaker. It checks that nothing records the microphone without a click, that the words come
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
-appears in any log. It also checks the turn rule: a thump as the microphone opens is not a
+appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
 voice on, two turns in a row each get a spoken reply with the speaker echoed into the
 microphone, and a click turns voice off.
