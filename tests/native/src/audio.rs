@@ -358,6 +358,21 @@ impl Stack {
         Ok(())
     }
 
+    pub fn start_feed(&self, system: &System, name: &str, samples: &Samples) -> Result<Owned> {
+        let wav = self.folder.join(format!("{name}.wav"));
+        fs::write(&wav, samples.encode())?;
+        let device = format!("--device={MIC_FEED}");
+        system.record(
+            json!({"event":"audio-feed","name":name,"into":MIC_FEED,"samples":samples.0.len()}),
+        )?;
+        system.spawn(
+            Path::new("/usr/bin/paplay"),
+            &[&device, &sandbox::text(&wav)?],
+            &[],
+            &format!("audio/{name}-feed.log"),
+        )
+    }
+
     pub fn stop(&mut self) -> Vec<String> {
         let mut errors = Vec::new();
         while let Some((name, mut owned)) = self.daemons.pop() {

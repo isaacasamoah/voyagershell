@@ -1,6 +1,8 @@
 use super::{Cases, Verdict, cases};
 use crate::agent::TYPED_REPLY;
-use crate::audio::speech::{DOCK_ON_THIS_FLEET, RENAME_TO_HARBOR};
+use crate::audio::speech::{
+    DOCK_ON_THIS_FLEET, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR, Samples,
+};
 use crate::audio::voice::{self, LISTENING, READY, Reply, median, words_contain, words_match};
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, Native, QUIET_MIC};
@@ -13,6 +15,8 @@ cases! {
     EngineReady => "engine-ready" setup,
     NoCaptureWithoutClick => "no-capture-without-click",
     VoyagerIsBound => "voyager-is-bound" setup,
+    TurnWaitsForTheSentence => "turn-waits-for-the-sentence",
+    StartThumpIsNotSpeech => "start-thump-is-not-speech",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
@@ -29,6 +33,7 @@ const SPOKEN_AS: &str = "Docked on this fleet. The rest is in the chat.";
 const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
+const ROOM_SILENCE_MS: u32 = 3000;
 
 fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
@@ -91,6 +96,41 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     else {
         return Ok(());
     };
+    cases.check(native, Case::TurnWaitsForTheSentence, |native| {
+        let speech = Samples::silence(ROOM_SILENCE_MS).then(&Samples::paused_request()?);
+        voice::turn_on(native)?;
+        let turn = voice::feed_turn(native, "silence-then-paused-request", &speech)?;
+        voice::turn_off(native)?;
+        Verdict::new()
+            .expect(
+                "one turn ends, and only after the whole request was spoken",
+                turn.ended_after_the_feed(),
+            )
+            .expect(
+                "the turn holds both sentences across a pause just under the end-of-turn silence",
+                turn.heard.len() == 1 && words_match(&turn.heard[0], PAUSED_WORDS),
+            )
+            .observed("pauseMs", speech.longest_inner_quiet_ms())?
+            .observed("turn", turn)
+    })?;
+    cases.check(native, Case::StartThumpIsNotSpeech, |native| {
+        let speech = Samples::thump()
+            .then(&Samples::silence(ROOM_SILENCE_MS))
+            .then(&OPEN_THEN_DOCK.samples()?);
+        voice::turn_on(native)?;
+        let turn = voice::feed_turn(native, "thump-then-sentence", &speech)?;
+        voice::turn_off(native)?;
+        Verdict::new()
+            .expect(
+                "a thump as the microphone opens does not end a turn before the sentence",
+                turn.ended_after_the_feed(),
+            )
+            .expect(
+                "the turn holds the whole sentence",
+                turn.heard.len() == 1 && words_match(&turn.heard[0], OPEN_THEN_DOCK.words),
+            )
+            .observed("turn", turn)
+    })?;
     cases.check(native, Case::RenameIsHeard, |native| {
         let said = voice::converse(native, &RENAME_TO_HARBOR, "rename", Reply::Leave)?;
         let words = said

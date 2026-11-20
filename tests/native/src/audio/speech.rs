@@ -40,12 +40,28 @@ pub const DOCK_ON_THIS_FLEET: Speech = Speech {
     wav: include_bytes!("../../fixtures/speech/dock-on-this-fleet.wav"),
 };
 
-pub const ALL: [&Speech; 4] = [
+pub const OPEN_THEN_DOCK: Speech = Speech {
+    name: "open-the-roadmap-then-dock",
+    words: "Open the roadmap, and then, when that is done, dock on this fleet.",
+    sha256: "9acce6649d82fbc2b7de7c308563cb2fbbe3e7a96e5364e4a0a3477abb35b6fd",
+    wav: include_bytes!("../../fixtures/speech/open-the-roadmap-then-dock.wav"),
+};
+
+pub const ALL: [&Speech; 5] = [
     &OPEN_THE_ROADMAP,
     &RENAME_THE_FLEET,
     &RENAME_TO_HARBOR,
     &DOCK_ON_THIS_FLEET,
+    &OPEN_THEN_DOCK,
 ];
+
+pub const PAUSED_WORDS: &str = "Open the roadmap. Dock on this fleet.";
+const PAUSE_INSERTED_MS: u32 = 810;
+const QUIET_LEVEL: f64 = 200.0;
+const THUMP_HZ: f64 = 120.0;
+const THUMP_PEAK: f64 = 8000.0;
+const THUMP_DECAY_S: f64 = 0.03;
+const THUMP_MS: u32 = 200;
 
 impl Speech {
     pub fn verify(&self) -> Result<()> {
@@ -142,6 +158,57 @@ impl Samples {
         wav
     }
 
+    pub fn silence(millis: u32) -> Self {
+        Self(vec![0; (RATE / 1000 * millis) as usize])
+    }
+
+    pub fn thump() -> Self {
+        let count = RATE / 1000 * THUMP_MS;
+        Self(
+            (0..count)
+                .map(|index| {
+                    let at = f64::from(index) / f64::from(RATE);
+                    let level = THUMP_PEAK * (-at / THUMP_DECAY_S).exp();
+                    (level * (std::f64::consts::TAU * THUMP_HZ * at).sin()) as i16
+                })
+                .collect(),
+        )
+    }
+
+    pub fn then(mut self, next: &Samples) -> Self {
+        self.0.extend_from_slice(&next.0);
+        self
+    }
+
+    pub fn paused_request() -> Result<Self> {
+        Ok(OPEN_THE_ROADMAP
+            .samples()?
+            .then(&Self::silence(PAUSE_INSERTED_MS))
+            .then(&DOCK_ON_THIS_FLEET.samples()?))
+    }
+
+    pub fn longest_inner_quiet_ms(&self) -> u32 {
+        let frame = (RATE / 50) as usize;
+        let loud: Vec<bool> = self
+            .0
+            .chunks(frame)
+            .map(|chunk| {
+                let sum: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+                (sum / chunk.len() as f64).sqrt() > QUIET_LEVEL
+            })
+            .collect();
+        let first = loud.iter().position(|loud| *loud).unwrap_or(0);
+        let last = loud.iter().rposition(|loud| *loud).unwrap_or(0);
+        let longest = loud
+            .get(first..=last)
+            .unwrap_or_default()
+            .split(|loud| *loud)
+            .map(<[bool]>::len)
+            .max()
+            .unwrap_or(0);
+        u32::try_from(longest * 20).unwrap_or(u32::MAX)
+    }
+
     pub fn peak(&self) -> i16 {
         self.0
             .iter()
@@ -182,6 +249,33 @@ mod tests {
         let samples = OPEN_THE_ROADMAP.samples()?;
         assert_eq!(Samples::decode(&samples.encode())?, samples);
         Ok(())
+    }
+
+    #[test]
+    fn the_paused_request_pauses_just_under_the_end_of_turn_silence() -> Result<()> {
+        let pause = Samples::paused_request()?.longest_inner_quiet_ms();
+        assert!((1300..1450).contains(&pause), "{pause} ms");
+        assert!(OPEN_THEN_DOCK.samples()?.longest_inner_quiet_ms() < 600);
+        Ok(())
+    }
+
+    #[test]
+    fn the_thump_is_loud_for_about_a_tenth_of_a_second_and_then_silent() {
+        let frame = (RATE / 50) as usize;
+        let loud: Vec<bool> = Samples::thump()
+            .0
+            .chunks(frame)
+            .map(|chunk| {
+                let sum: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+                (sum / chunk.len() as f64).sqrt() > 200.0
+            })
+            .collect();
+        assert_eq!(
+            loud,
+            [
+                true, true, true, true, true, false, false, false, false, false
+            ]
+        );
     }
 
     #[test]

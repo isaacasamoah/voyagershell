@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, SEND_WAIT};
+use crate::native::{Native, Owed, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -281,6 +281,77 @@ pub fn converse(
             .map(|mark| i64::try_from(mark.at_ms).unwrap_or(0) - i64::try_from(ended).unwrap_or(0)),
         microphone_closed,
         marks,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Turn {
+    pub fed_until_ms: u64,
+    pub ended_ms: Vec<u64>,
+    pub heard: Vec<String>,
+    pub marks: Vec<Mark>,
+}
+
+impl Turn {
+    pub fn ended_after_the_feed(&self) -> bool {
+        self.ended_ms.len() == 1 && self.ended_ms[0] >= self.fed_until_ms
+    }
+}
+
+pub fn turn_on(native: &Native) -> Result<()> {
+    native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+        label == READY
+    })?;
+    native.click(&Target::VOICE_CONTROL)?;
+    until("the app to open the microphone", || {
+        Ok(recorders(native)?
+            .iter()
+            .any(|who| who == APP_CLIENT)
+            .then_some(()))
+    })
+}
+
+pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    let stack = stack(native)?;
+    let trace = native.voice_trace();
+    let before = marks(&trace)?.len();
+    let mut player = stack.start_feed(&native.system, name, samples)?;
+    super::wait_for_exit(&mut player)?;
+    let fed_until_ms = now_millis();
+    until("the turn to be heard", || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "heard"))
+            .map(|_| ()))
+    })?;
+    let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    Ok(Turn {
+        fed_until_ms,
+        ended_ms: marks
+            .iter()
+            .filter(|mark| mark.event == "utterance-ended")
+            .map(|mark| mark.at_ms)
+            .collect(),
+        heard: marks
+            .iter()
+            .filter(|mark| mark.event == "heard")
+            .filter_map(|mark| mark.words.clone())
+            .collect(),
+        marks,
+    })
+}
+
+pub fn turn_off(native: &Native) -> Result<()> {
+    let label = native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
+    if label != READY {
+        native.click(&Target::VOICE_CONTROL)?;
+    }
+    native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+        label == READY
+    })?;
+    until("the microphone to close", || {
+        Ok(recorders(native)?.is_empty().then_some(()))
     })
 }
 
