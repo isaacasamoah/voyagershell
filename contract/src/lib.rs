@@ -21,13 +21,6 @@ pub mod voice;
 pub mod voyage_close;
 pub mod worktree;
 
-pub(crate) fn standard_integer(schema: &mut schemars::Schema) {
-    schema.remove("format");
-    if schema.get("maximum").is_none() {
-        schema.insert("maximum".into(), serde_json::json!(u32::MAX));
-    }
-}
-
 macro_rules! id {
     ($name:ident) => {
         #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

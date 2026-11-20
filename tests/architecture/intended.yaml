@@ -147,6 +147,7 @@ edges:
   - {from: 'rs:voyager_contract::observation', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_contract::socket', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_contract::socket', to: 'rs:voyager_contract::context', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_contract::voyage_close', to: 'rs:voyager_contract::administrator', from_owner: placement, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::content', from_owner: desktop-presentation, to_owner: content}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::content::install', from_owner: desktop-presentation, to_owner: content}

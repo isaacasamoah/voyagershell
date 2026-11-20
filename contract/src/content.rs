@@ -376,14 +376,21 @@ pub enum Response {
     },
 }
 
+fn plain_integer(schema: &mut schemars::Schema) {
+    schema.remove("format");
+    if schema.get("maximum").is_none() {
+        schema.insert("maximum".into(), serde_json::json!(u32::MAX));
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Manifest {
-    #[schemars(transform = crate::standard_integer)]
+    #[schemars(transform = plain_integer)]
     pub contract: u32,
     pub id: String,
     pub name: String,
-    #[schemars(transform = crate::standard_integer)]
+    #[schemars(transform = plain_integer)]
     pub version: u32,
     pub state: StateDecl,
     #[serde(default)]
@@ -416,7 +423,7 @@ pub struct StateDecl {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Migration {
-    #[schemars(transform = crate::standard_integer)]
+    #[schemars(transform = plain_integer)]
     pub from: u32,
     pub set: BTreeMap<String, serde_json::Value>,
 }
@@ -507,9 +514,9 @@ pub struct Island {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Budget {
-    #[schemars(transform = crate::standard_integer)]
+    #[schemars(transform = plain_integer)]
     pub ms: u32,
-    #[schemars(transform = crate::standard_integer)]
+    #[schemars(transform = plain_integer)]
     pub mb: u32,
 }
 
