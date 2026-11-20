@@ -48,6 +48,7 @@ Owns files:
 - `app/src/client_structure.rs`
 - `app/src/client_worktree.rs`
 - `app/src/client_reply.rs`
+- `app/src/client_service.rs`
 - `app/src/client_terminal.rs`
 - `app/src/client_admission_tests.rs`
 - `app/src/adoption.rs`
