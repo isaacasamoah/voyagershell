@@ -149,9 +149,9 @@ kind = "user"
 source = "D13 grid decision, D2 and C6 (focus-vessel removed, voyager peek); declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
 features = ["fleets", "fleet-arrangement", "agent-vessels"]
 guard = []
-type_gap = "A Request carries no caller, so an agent's call can rearrange a Fleet the person placed. S9a keys authority on the caller. LY1 and AV2 build the behaviour."
-check = []
-gap = "Future. Units LY1 and AV2 build it and add its case. Section 3c named no owner, so a later unit sets it."
+type_gap = "A Request carries no caller, so an agent's call can rearrange a Fleet the person placed. S9a keys authority on the caller. LY1 builds the grid half."
+check = ["journey:chat/peek-stays-here"]
+gap = "AV2 proves only that Voyager's peek moves nothing. Unit LY1 builds and checks the grid half, so no case yet proves that an agent never rearranges a Fleet the person placed."
 confidence = "stated"
 
 [[invariant]]
@@ -177,7 +177,7 @@ source = "AGENTS.md: 'context must remain explicit and separate from keyboard fo
 features = ["avatar", "chat", "voice", "portals"]
 guard = []
 type_gap = "Context::Vessel and Context::Portal both carry a PlacementId, so the variant can disagree with where that Placement sits in the Layout. DI16 makes one Context::Placement and renames the dock record."
-check = ["journey:portals/dock-portal", "journey:portals/portal-stays-in-its-voyage", "journey:portals/hide-portals"]
+check = ["journey:portals/dock-portal", "journey:portals/portal-stays-in-its-voyage", "journey:portals/hide-portals", "journey:chat/dock-takes-you-there"]
 gap = "The portals journey's control case, portal-across-fleets, is not linked here, so no linked case is proved to fail when the rule breaks."
 confidence = "stated"
 
