@@ -173,6 +173,89 @@ fn the_checker_covers_state_effects_files_and_references() {
     }
 }
 
+fn later_element_unknown_name(manifest: &mut Value) {
+    manifest["actions"]["add"]["effect"] = json!([{"op": "set", "path": "items", "value": [
+        {"id": "'a'", "text": "'x'", "done": false},
+        {"id": "$nope", "text": "'y'", "done": false}
+    ]}]);
+}
+
+fn bad_migration_value(manifest: &mut Value) {
+    manifest["state"]["migrations"] = json!([{"from": 1, "set": {"title": 5}}]);
+}
+
+fn bad_match_key(manifest: &mut Value) {
+    manifest["dock"][0]["read"] = json!("match(count(items, done: true), zero: 'none')");
+}
+
+#[test]
+fn every_element_of_an_array_literal_is_typed() {
+    let mut manifest = checklist();
+    later_element_unknown_name(&mut manifest);
+    let listed = problems(&manifest);
+    assert_eq!(listed.len(), 1, "{listed:#?}");
+    assert!(
+        listed[0].starts_with("actions.add.effect[0]: unknown name $nope; in scope: $text"),
+        "{listed:#?}"
+    );
+    manifest["actions"]["add"]["effect"][0]["value"][1] =
+        json!({"id": "'b'", "text": "'y'", "done": 7});
+    let listed = problems(&manifest);
+    assert_eq!(
+        listed,
+        ["actions.add.effect[0]: set items: field \"done\": expected boolean, got number"]
+    );
+}
+
+#[test]
+fn migration_values_are_typed_against_their_target() {
+    let mut manifest = checklist();
+    bad_migration_value(&mut manifest);
+    assert_eq!(
+        problems(&manifest),
+        ["state.migrations[0].set.title: expected string, got number"]
+    );
+    manifest["state"]["migrations"] = json!([{"from": 1, "set": {"items[*].due": "$nope"}}]);
+    let listed = problems(&manifest);
+    assert_eq!(listed.len(), 1, "{listed:#?}");
+    assert!(
+        listed[0].starts_with("state.migrations[0].set.items[*].due: unknown name $nope"),
+        "{listed:#?}"
+    );
+}
+
+#[test]
+fn match_keys_must_fit_the_type_of_their_subject() {
+    let mut manifest = checklist();
+    bad_match_key(&mut manifest);
+    assert_eq!(
+        problems(&manifest),
+        ["dock.open: match key \"zero\": the subject is a number"]
+    );
+    manifest["dock"][0]["read"] = json!("match(count(items, done: true), 0: 'none', 2: 'two')");
+    assert_eq!(problems(&manifest), Vec::<String>::new());
+}
+
+#[test]
+fn an_array_element_a_migration_value_and_a_match_key_are_reported_in_one_load() {
+    let mut manifest = checklist();
+    later_element_unknown_name(&mut manifest);
+    bad_migration_value(&mut manifest);
+    bad_match_key(&mut manifest);
+    let listed = problems(&manifest);
+    assert_eq!(listed.len(), 3, "{listed:#?}");
+    for prefix in [
+        "actions.add.effect[0]: unknown name $nope",
+        "state.migrations[0].set.title: expected string, got number",
+        "dock.open: match key \"zero\"",
+    ] {
+        assert!(
+            listed.iter().any(|problem| problem.starts_with(prefix)),
+            "{prefix}\n{listed:#?}"
+        );
+    }
+}
+
 #[test]
 fn view_files_must_exist_inside_the_package() {
     let mut manifest = checklist();

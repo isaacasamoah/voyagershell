@@ -137,6 +137,15 @@ impl Parser {
         Some(self.chars[start..self.at].iter().collect())
     }
 
+    fn digits(&mut self) -> Option<String> {
+        self.space();
+        let start = self.at;
+        while self.peek().is_some_and(|found| found.is_ascii_digit()) {
+            self.at += 1;
+        }
+        (self.at > start).then(|| self.chars[start..self.at].iter().collect())
+    }
+
     fn or(&mut self) -> Result<Expr, String> {
         let mut left = self.and()?;
         while self.eat("||") {
@@ -304,6 +313,7 @@ impl Parser {
         while self.eat(",") {
             let key = self
                 .ident()
+                .or_else(|| self.digits())
                 .ok_or_else(|| self.fail("expected a name before \":\""))?;
             self.expect(":")?;
             named.push((key, self.or()?));
@@ -441,7 +451,9 @@ impl Shape {
 
     fn either(mut shapes: Vec<Self>) -> Self {
         shapes.dedup();
-        if shapes.len() == 1 {
+        if shapes.is_empty() {
+            Self::Any
+        } else if shapes.len() == 1 {
             shapes.remove(0)
         } else {
             Self::Either(shapes)
@@ -523,11 +535,12 @@ pub(crate) fn infer_source(source: &str, scope: &Scope, problems: &mut Vec<Strin
 pub(crate) fn infer_template(template: &Value, scope: &Scope, problems: &mut Vec<String>) -> Shape {
     match template {
         Value::String(source) => infer_source(source, scope, problems),
-        Value::Array(items) => Shape::List(Box::new(
+        Value::Array(items) => Shape::List(Box::new(Shape::either(
             items
-                .first()
-                .map_or(Shape::Any, |first| infer_template(first, scope, problems)),
-        )),
+                .iter()
+                .map(|item| infer_template(item, scope, problems))
+                .collect(),
+        ))),
         Value::Object(fields) => {
             let fields: Vec<(String, Shape)> = fields
                 .iter()
@@ -581,9 +594,36 @@ fn expect_bool(operator: &str, got: &Shape, problems: &mut Vec<String>) {
     }
 }
 
+fn match_key(subject: &Shape, key: &str) -> Result<(), String> {
+    match subject {
+        Shape::Any | Shape::Text => Ok(()),
+        Shape::Number => key
+            .parse::<f64>()
+            .map(drop)
+            .map_err(|_| "the subject is a number".into()),
+        Shape::Bool => matches!(key, "true" | "false")
+            .then_some(())
+            .ok_or_else(|| "the subject is a boolean, so a key is true or false".into()),
+        Shape::Null => (key == "null")
+            .then_some(())
+            .ok_or_else(|| "the subject is null".into()),
+        Shape::Either(options) => options
+            .iter()
+            .any(|option| match_key(option, key).is_ok())
+            .then_some(())
+            .ok_or_else(|| format!("the subject is {}", subject.name())),
+        other => Err(format!("match needs a single value, got {}", other.name())),
+    }
+}
+
 fn infer_call(call: &Call, scope: &Scope, problems: &mut Vec<String>) -> Shape {
     let subject = infer(&call.subject, scope, problems);
     if call.function == Function::Match {
+        for (key, _) in &call.named {
+            if let Err(error) = match_key(&subject, key) {
+                problems.push(format!("match key \"{key}\": {error}"));
+            }
+        }
         let cases = call
             .named
             .iter()

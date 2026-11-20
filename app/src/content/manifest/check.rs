@@ -126,14 +126,21 @@ fn migrations(manifest: &Manifest, state: &Shape, report: &mut Report) {
                 format!("must be below the manifest version {}", manifest.version),
             );
         }
-        for key in migration.set.keys() {
-            match expression::parse_path(key) {
-                Ok(path) => {
-                    let mut problems = Vec::new();
-                    expression::infer_path(&path, &scope, &mut problems);
-                    report.all(&format!("{at}.set.{key}"), problems);
+        for (key, value) in &migration.set {
+            let at = format!("{at}.set.{key}");
+            let path = match expression::parse_path(key) {
+                Ok(path) => path,
+                Err(error) => {
+                    report.add(&at, error);
+                    continue;
                 }
-                Err(error) => report.add(&format!("{at}.set.{key}"), error),
+            };
+            let mut problems = Vec::new();
+            let want = expression::infer_path(&path, &scope, &mut problems);
+            let got = infer_template(value, &scope, &mut problems);
+            report.all(&at, problems);
+            if let Err(error) = want.accepts(&got) {
+                report.add(&at, error);
             }
         }
     }

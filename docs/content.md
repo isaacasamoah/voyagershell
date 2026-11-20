@@ -575,8 +575,9 @@ checks that:
 
 - the format version is 1, the type ID is well formed and does not name a built-in type, and the name and version are set;
 - the state schema is valid JSON Schema, describes an object, and the initial data fits it;
-- migrations start below the manifest version and name real fields, and `merge` names real state fields;
+- migrations start below the manifest version, name real fields and set values that fit them, and `merge` names real state fields;
 - action and parameter names are plain identifiers, parameter types are known, and every effect path exists and is assigned a value of the right type;
+- every element of an array in an effect value is typed, and every `match` key can be a value of its subject;
 - `backend` effects have a declared backend;
 - the view source and script files exist inside the package, island props type-check and island actions are declared;
 - every orbit and dock entry has a unique ID, runs exactly one of an action or an agent read, names a declared action, gives or asks every parameter, and reads fields that exist.
