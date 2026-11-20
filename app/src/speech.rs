@@ -443,7 +443,7 @@ mod tests {
 
     const REAL_THREE_SENTENCES: &str = "A tidy workspace helps you find what you need quickly, so you spend your time working instead of searching. It also makes mistakes less likely, because old drafts and stray files are less likely to get mixed up with the current ones. And it makes it easier to hand work to someone else or come back to it later, since anyone can see how things are organised.";
 
-    const REAL_LIST_SUMMARY: &str = "Rust has about forty keywords in use, plus a dozen or so reserved for the future. Here they are by group:\n\n- **Declaring things:** let, fn, struct, enum, trait, impl, type, const, static, mod.\n- **Control flow:** if, else, match, loop, while, for, in, break, continue, return.\n- **Ownership and mutability:** mut, ref, move.\n- **Modules and paths:** use, pub, crate, self, super, extern, as.\n- **Other:** async, await, dyn, unsafe, where, true, false.\n\nDo you want me to go through each one and say what it does?";
+    const REAL_LIST_SUMMARY: &str = "Rust has about forty keywords in use, plus a dozen or so reserved for the future. Here they are by group:\n\n- **Declaring things:** let, fn, struct, enum, trait, impl, type, const, static.\n- **Control flow:** if, else, match, loop, while, for, in, break, continue, return.\n- **Ownership and mutability:** mut, ref, move.\n- **Modules and paths:** use, pub, crate, self, super, extern, as.\n- **Other:** async, await, dyn, unsafe, where, true, false.\n\nDo you want me to go through each one and say what it does?";
 
     #[test]
     fn a_real_three_sentence_answer_from_claude_is_spoken_whole() {
