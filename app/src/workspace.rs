@@ -5,6 +5,12 @@ use voyager_contract::{
     Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
 };
 
+pub(crate) const VOYAGER_VESSEL: &str = "voyager";
+
+pub(crate) fn is_voyager(vessel: &Vessel) -> bool {
+    vessel.id.0 == VOYAGER_VESSEL
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FirstVessel {
     DefaultTerminal,
@@ -143,7 +149,7 @@ impl Model {
     }
 
     pub(crate) fn ensure_voyager(&mut self, cwd: &str, launch: Launch) -> Result<bool, String> {
-        if self.layout.vessels.iter().any(Vessel::is_voyager) {
+        if self.layout.vessels.iter().any(is_voyager) {
             return Ok(false);
         }
         let home = self
@@ -153,7 +159,7 @@ impl Model {
             .map(|home| home.id.clone())
             .ok_or("Home is missing")?;
         let placement = PlacementId(self.id("placement")?);
-        let vessel = VesselId(Vessel::VOYAGER.into());
+        let vessel = VesselId(VOYAGER_VESSEL.into());
         self.layout.vessels.push(Vessel {
             id: vessel.clone(),
             type_id: "terminal".into(),
@@ -197,7 +203,7 @@ impl Model {
         {
             return Err("The ended terminal binding changed or is unconfirmed".into());
         }
-        if !content.is_voyager() {
+        if !is_voyager(content) {
             content.launch = Some(voyager_contract::launch::Launch::Terminal);
         }
         content.shell_intent = Some(intent.into());

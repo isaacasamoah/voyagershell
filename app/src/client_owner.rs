@@ -848,7 +848,7 @@ impl Owner {
             .vessels
             .iter()
             .find(|item| item.id == content)
-            .and_then(|item| Some((item.backend.clone()?, item.is_voyager())));
+            .and_then(|item| Some((item.backend.clone()?, crate::workspace::is_voyager(item))));
         if result.is_ok()
             && let Some((backend, voyager)) = opened
         {

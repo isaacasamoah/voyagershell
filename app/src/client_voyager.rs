@@ -53,7 +53,7 @@ impl Owner {
             .layout
             .vessels
             .iter()
-            .find(|item| item.is_voyager())
+            .find(|item| crate::workspace::is_voyager(item))
             .cloned()
             .ok_or_else(|| rejected("Voyager's Vessel is missing".into()))?;
         if let Some(operation) = &vessel.start_pending {

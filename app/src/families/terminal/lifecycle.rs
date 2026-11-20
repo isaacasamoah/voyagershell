@@ -70,7 +70,7 @@ fn prepare_selected(
             || ids.is_some_and(|ids| !ids.contains(&content.id))
             || content.start_pending.is_some()
             || content.shell_intent.is_some()
-            || content.is_voyager()
+            || crate::workspace::is_voyager(content)
             || !retained.iter().any(|(_, id)| id == &content.id)
         {
             continue;

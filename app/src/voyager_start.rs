@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn the_saved_launch_keeps_the_session_for_a_later_resume() {
         let vessel = voyager_contract::Vessel {
-            id: voyager_contract::VesselId(voyager_contract::Vessel::VOYAGER.into()),
+            id: voyager_contract::VesselId(crate::workspace::VOYAGER_VESSEL.into()),
             type_id: "terminal".into(),
             cwd: "/tmp".into(),
             backend: None,
@@ -187,7 +187,7 @@ mod tests {
             shell_intent: None,
             adopted: false,
         };
-        assert!(vessel.is_voyager());
+        assert!(crate::workspace::is_voyager(&vessel));
         assert_eq!(focus_hook::session(&vessel), Some(SESSION));
     }
 

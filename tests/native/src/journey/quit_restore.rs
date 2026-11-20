@@ -96,7 +96,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .unwrap_or_default()
             .to_owned();
         let argv = started[0]["argv"].clone();
-        let vessel = layout.vessels.iter().find(|item| item.is_voyager());
+        let vessel = layout.vessels.iter().find(|item| item.id.0 == "voyager");
         let on_home = layout.home.as_ref().is_some_and(|home| {
             home.portals
                 .iter()

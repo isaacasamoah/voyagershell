@@ -532,7 +532,7 @@ fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
         .iter()
         .find(|item| item.id == portal.vessel)
         .unwrap();
-    assert!(vessel.is_voyager());
+    assert!(is_voyager(vessel));
     assert_eq!(crate::focus_hook::session(vessel), Some("session-1"));
     let saved = model.layout.clone();
     assert_eq!(Model::prepare(saved.clone(), "/elsewhere").unwrap(), saved);
@@ -541,13 +541,13 @@ fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
     let vessel = ended
         .vessels
         .iter_mut()
-        .find(|item| item.is_voyager())
+        .find(|item| is_voyager(item))
         .unwrap();
     vessel.backend = Some(CoreTerminalId("t1".into()));
     let gone: Vec<crate::core_shapes::Terminal> = Vec::new();
     let (ready, closed) = crate::families::terminal::prepare_reopen(&mut ended, &gone);
     assert!(ready.is_empty() && !closed);
-    let vessel = ended.vessels.iter().find(|item| item.is_voyager()).unwrap();
+    let vessel = ended.vessels.iter().find(|item| is_voyager(item)).unwrap();
     assert_eq!(vessel.backend, Some(CoreTerminalId("t1".into())));
     assert_eq!(crate::focus_hook::session(vessel), Some("session-1"));
 }

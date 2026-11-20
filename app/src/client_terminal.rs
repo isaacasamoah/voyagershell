@@ -115,7 +115,7 @@ pub(super) fn start_terminal(
         .iter()
         .find(|pending| &pending.id == content);
     let new_shell = target.shell_intent.is_some() && accepted.is_some();
-    let voyager = target.is_voyager();
+    let voyager = crate::workspace::is_voyager(target);
     let argv = if voyager {
         crate::focus_hook::session(target)
             .ok_or_else(|| "Voyager's saved launch lost its session".to_owned())
