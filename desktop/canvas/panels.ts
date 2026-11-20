@@ -77,10 +77,8 @@ function rememberedPlacement(
   shown: Placement[],
 ): Placement | undefined {
   if (!layout || layout.view === "home") return;
-  const entry = layout.navigation?.find(
-    (item) =>
-      item.voyage === layout.selectedVoyage &&
-      item.fleet === layout.selectedFleet,
+  const entry = layout.lastVessels?.find(
+    (item) => item.fleet === layout.selectedFleet,
   );
   return shown.find((panel) => panel.id === entry?.vessel);
 }

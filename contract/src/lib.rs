@@ -274,8 +274,13 @@ pub enum WorkspaceView {
 pub struct LastUsed {
     pub voyage: VoyageId,
     pub fleet: FleetId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vessel: Option<PlacementId>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LastVessel {
+    pub fleet: FleetId,
+    pub vessel: PlacementId,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -299,6 +304,8 @@ pub struct Layout {
     pub next_id: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub navigation: Vec<LastUsed>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub last_vessels: Vec<LastVessel>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -483,6 +490,7 @@ impl Layout {
             arrangements,
             next_id,
             navigation: _,
+            last_vessels: _,
         } = self;
         voyages == &other.voyages
             && home == &other.home

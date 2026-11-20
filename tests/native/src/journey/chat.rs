@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::fs;
 use voyager_contract::context::Focus;
 use voyager_contract::inspection::Role;
-use voyager_contract::{FleetId, RenameTarget};
+use voyager_contract::{Context as Dock, FleetId, RenameTarget};
 
 cases! {
     OpenChat => "open-chat",
@@ -21,6 +21,8 @@ cases! {
     RenameWhileProviderWorks => "rename-while-provider-works",
     ToolCallInspect => "tool-call-inspect",
     ToolCallEffect => "tool-call-effect",
+    DockTakesYouThere => "dock-takes-you-there",
+    PeekStaysHere => "peek-stays-here",
 }
 
 pub const CONTROL: Case = Case::StreamedReply;
@@ -38,6 +40,11 @@ const INSPECT: &str = "Inspect the workspace";
 const INSPECT_ITEM: &str = "stand-in-inspect";
 const EFFECT: &str = "Rename the Fleet";
 const EFFECT_ITEM: &str = "stand-in-effect";
+const DOCK: &str = "Take me to the other Fleet";
+const DOCK_ITEM: &str = "stand-in-dock";
+const PEEK: &str = "Look at the other Fleet";
+const PEEK_ITEM: &str = "stand-in-peek";
+const PEEK_TOOL: &str = "voyager_peek";
 const DONE: &str = "oru: done.";
 const RENAMED: &str = "Scripted Fleet";
 const PROMPT: &str = "You are the verifier's configured administrator.";
@@ -185,11 +192,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 provider.connections() == 1 && parent == Some(native.candidate()?.pid),
             )
             .expect(
-                "the conversation asks for a read-only sandbox, no approvals, four tools and the profile's conversation folder",
+                "the conversation asks for a read-only sandbox, no approvals, five tools and the profile's conversation folder",
                 threads.len() == 1
                     && thread["sandbox"] == "read-only"
                     && thread["approvalPolicy"] == "never"
-                    && thread["dynamicTools"].as_array().map(Vec::len) == Some(4)
+                    && thread["dynamicTools"].as_array().map(Vec::len) == Some(5)
                     && thread["cwd"].as_str() == folder.to_str(),
             )
             .expect(
@@ -435,6 +442,150 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .observed("drawn", &drawn)?;
         }
         verdict.observed("played", &played)
+    })?;
+
+    cases.check(native, Case::DockTakesYouThere, |native| {
+        let (_, before) = native
+            .document()?
+            .context("The layout document is missing")?;
+        let voyage = before
+            .selected_voyage
+            .clone()
+            .context("The layout has no selected Voyage")?;
+        let here = before
+            .selected_fleet
+            .clone()
+            .context("The layout has no selected Fleet")?;
+        native.click(&Target::create_fleet(&voyage))?;
+        native.click(&Target::worker("terminal"))?;
+        let (other, vessel) = native.settle(
+            "a second Fleet created and selected",
+            |seen| {
+                let fleet = seen
+                    .document
+                    .voyages
+                    .iter()
+                    .flat_map(|voyage| &voyage.fleets)
+                    .find(|fleet| {
+                        fleet.id != here && seen.document.selected_fleet.as_ref() == Some(&fleet.id)
+                    })?;
+                Some((fleet.id.clone(), fleet.placements.first()?.id.clone()))
+            },
+            |_| true,
+        )?;
+        native.click(&Target::name(&RenameTarget::Fleet { id: here.clone() }))?;
+        native.settle(
+            "the first Fleet selected again",
+            |seen| Some(seen.document.selected_fleet.clone()),
+            |selected| selected.as_ref() == Some(&here),
+        )?;
+        let target = Dock::Vessel { id: vessel.clone() };
+        let script = Script::parse(
+            &json!({"calls":[
+                {"tool":WORKSPACE,"arguments":{"expectedVersion":"0","action":{"operation":"inspect"}}},
+                {"atMs":100,"tool":WORKSPACE,"arguments":{
+                    "expectedVersion":{"$result":[0,"/version"]},
+                    "action":{"operation":"dock","context":{"kind":"vessel","id":vessel.0}}}}
+            ]})
+            .to_string(),
+        )?;
+        let turn = ask(native, &provider, DOCK)?;
+        let played = provider.play(&turn, &script)?;
+        conclude(native, &provider, &turn, DOCK_ITEM)?;
+        let there = native.settle(
+            "the other Fleet selected and its Vessel drawn, with the dock on that Vessel",
+            |seen| {
+                Some((
+                    seen.document.selected_fleet.clone(),
+                    seen.document.context.clone(),
+                    seen.document
+                        .last_vessels
+                        .iter()
+                        .find(|entry| Some(&entry.fleet) == seen.document.selected_fleet.as_ref())
+                        .map(|entry| entry.vessel.clone()),
+                    seen.shows(&Target::terminal(&vessel)),
+                ))
+            },
+            |(selected, context, last, drawn)| {
+                selected.as_ref() == Some(&other)
+                    && context == &target
+                    && last.as_ref() == Some(&vessel)
+                    && *drawn
+            },
+        )?;
+        Verdict::new()
+            .expect(
+                "both scripted calls received a result from the app",
+                played.len() == 2 && played.iter().all(|call| is_return(&call.result)),
+            )
+            .expect(
+                "the dock call's result was Applied",
+                played
+                    .get(1)
+                    .and_then(|call| returned_text(&call.result))
+                    .is_some_and(|text| text["status"] == "applied"),
+            )
+            .expect(
+                "the other Fleet is selected, drawn with its Vessel, and remembers that Vessel",
+                there.0.as_ref() == Some(&other) && there.3 && there.2.as_ref() == Some(&vessel),
+            )
+            .expect("the dock is on that Vessel", there.1 == target)
+            .observed("there", &there)?
+            .observed("played", &played)
+    })?;
+
+    cases.check(native, Case::PeekStaysHere, |native| {
+        let (_, before) = native
+            .document()?
+            .context("The layout document is missing")?;
+        let elsewhere = before
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .find(|fleet| before.selected_fleet.as_ref() != Some(&fleet.id))
+            .context("The layout has no other Fleet")?
+            .clone();
+        let vessel = elsewhere
+            .placements
+            .first()
+            .context("The other Fleet has no Vessel")?
+            .id
+            .clone();
+        let script = Script::parse(
+            &json!({"calls":[
+                {"tool":PEEK_TOOL,"arguments":{"target":{"kind":"fleet","id":elsewhere.id.0}}},
+                {"atMs":100,"tool":PEEK_TOOL,"arguments":{"target":{"kind":"vessel","id":vessel.0}}}
+            ]})
+            .to_string(),
+        )?;
+        let turn = ask(native, &provider, PEEK)?;
+        let played = provider.play(&turn, &script)?;
+        conclude(native, &provider, &turn, PEEK_ITEM)?;
+        let (_, after) = native
+            .document()?
+            .context("The layout document is missing")?;
+        Verdict::new()
+            .expect(
+                "both scripted calls received a result from the app",
+                played.len() == 2 && played.iter().all(|call| is_return(&call.result)),
+            )
+            .expect(
+                "each peek returned an Applied read that names the target",
+                played.iter().all(|call| {
+                    returned_text(&call.result).is_some_and(|text| {
+                        text["status"] == "applied" && text.to_string().contains(&elsewhere.id.0)
+                    })
+                }),
+            )
+            .expect(
+                "the selected Fleet, the dock, the view and every remembered Vessel are unchanged",
+                after.selected_fleet == before.selected_fleet
+                    && after.context == before.context
+                    && after.view == before.view
+                    && after.last_vessels == before.last_vessels
+                    && after.navigation == before.navigation,
+            )
+            .observed("played", &played)
     })
 }
 

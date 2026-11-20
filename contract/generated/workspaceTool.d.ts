@@ -124,10 +124,6 @@ export type Action =
     }
   | {
       id: string;
-      operation: "focus-vessel";
-    }
-  | {
-      id: string;
       operation: "close-fleet";
     }
   | {

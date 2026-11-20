@@ -30,6 +30,7 @@ fn navigation_saves_without_a_structure_version_and_reopens_the_last_fleet() {
                 "context",
                 "view",
                 "navigation",
+                "lastVessels",
             ] {
                 document.remove(key);
             }
@@ -83,7 +84,14 @@ fn navigation_saves_without_a_structure_version_and_reopens_the_last_fleet() {
             .unwrap()
             .clone();
         assert_eq!(entry["fleet"], serde_json::json!(second_fleet.0));
-        assert_eq!(entry["vessel"], serde_json::json!(vessel.0));
+        let remembered = after_value["lastVessels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["fleet"] == serde_json::json!(second_fleet.0))
+            .unwrap();
+        assert_eq!(remembered["vessel"], serde_json::json!(vessel.0));
+        assert!(entry.get("vessel").is_none());
         let renamed = call(
             Action::Rename {
                 target: voyager_contract::RenameTarget::Fleet {
@@ -107,6 +115,7 @@ fn navigation_saves_without_a_structure_version_and_reopens_the_last_fleet() {
         assert_eq!(reopened.layout.selected_fleet.as_ref(), Some(&second_fleet));
         let parsed: Layout = serde_json::from_value(after_value).unwrap();
         assert_eq!(parsed.navigation, reopened.layout.navigation);
+        assert_eq!(parsed.last_vessels, reopened.layout.last_vessels);
         let current = call(Action::Inspect, 0);
         let closed = call(
             Action::CloseFleet {

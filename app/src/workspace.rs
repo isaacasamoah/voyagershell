@@ -1,14 +1,26 @@
 use crate::panels;
 use voyager_contract::{
-    Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, Layout,
-    Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget, Split,
-    Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
+    Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, LastVessel,
+    Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget,
+    Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FirstVessel {
     DefaultTerminal,
     Labelled,
+}
+
+enum Landing {
+    Home,
+    Voyage {
+        voyage: VoyageId,
+    },
+    Fleet {
+        voyage: VoyageId,
+        fleet: FleetId,
+        focus: Option<PlacementId>,
+    },
 }
 
 #[derive(Default)]
@@ -295,15 +307,25 @@ impl Model {
             .iter_mut()
             .find(|entry| &entry.voyage == voyage)
         {
-            Some(entry) if &entry.fleet == fleet => {}
-            Some(entry) => {
-                entry.fleet = fleet.clone();
-                entry.vessel = None;
-            }
+            Some(entry) => entry.fleet = fleet.clone(),
             None => self.layout.navigation.push(LastUsed {
                 voyage: voyage.clone(),
                 fleet: fleet.clone(),
-                vessel: None,
+            }),
+        }
+    }
+
+    fn remember_vessel(&mut self, fleet: &FleetId, vessel: PlacementId) {
+        match self
+            .layout
+            .last_vessels
+            .iter_mut()
+            .find(|entry| &entry.fleet == fleet)
+        {
+            Some(entry) => entry.vessel = vessel,
+            None => self.layout.last_vessels.push(LastVessel {
+                fleet: fleet.clone(),
+                vessel,
             }),
         }
     }
@@ -316,27 +338,173 @@ impl Model {
             .find(|voyage| Some(&voyage.id) == self.layout.selected_voyage.as_ref())
             .filter(|_| self.layout.view == WorkspaceView::Fleet)
             .ok_or("Only a Vessel in an open Voyage is remembered")?;
+        let fleet = self
+            .layout
+            .selected_fleet
+            .clone()
+            .ok_or("Only a Vessel in an open Voyage is remembered")?;
         let shown = voyage
             .fleets
             .iter()
-            .filter(|fleet| Some(&fleet.id) == self.layout.selected_fleet.as_ref())
-            .flat_map(|fleet| &fleet.placements)
+            .filter(|candidate| candidate.id == fleet)
+            .flat_map(|candidate| &candidate.placements)
             .chain(&voyage.portals)
             .any(|placement| placement.id == id);
         if !shown {
             return Err("The Vessel is not in the open Fleet or its Portals".into());
         }
-        let voyage = voyage.id.clone();
-        self.remember_fleet();
-        if let Some(entry) = self
-            .layout
-            .navigation
-            .iter_mut()
-            .find(|entry| entry.voyage == voyage)
-        {
-            entry.vessel = Some(id);
-        }
+        self.remember_vessel(&fleet, id);
         Ok(())
+    }
+
+    fn dock(&mut self, context: Context) -> Result<(), String> {
+        let landing = self.landing(&context)?;
+        match landing {
+            Landing::Home => self.layout.view = WorkspaceView::Home,
+            Landing::Voyage { voyage } => {
+                let found = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .find(|candidate| candidate.id == voyage)
+                    .ok_or("Dock target not found")?;
+                self.layout.selected_fleet = opening_fleet(&self.layout.navigation, found);
+                self.layout.selected_voyage = Some(voyage);
+                self.layout.view = WorkspaceView::Fleet;
+            }
+            Landing::Fleet {
+                voyage,
+                fleet,
+                focus,
+            } => {
+                self.layout.selected_voyage = Some(voyage);
+                self.layout.selected_fleet = Some(fleet.clone());
+                self.layout.view = WorkspaceView::Fleet;
+                if let Some(vessel) = focus {
+                    self.remember_vessel(&fleet, vessel);
+                }
+            }
+        }
+        self.layout.context = context;
+        Ok(())
+    }
+
+    fn landing(&self, context: &Context) -> Result<Landing, String> {
+        let home = |voyage: &VoyageId| self.layout.home.as_ref().is_some_and(|h| &h.id == voyage);
+        let open = |voyage: &Voyage| {
+            if voyage.closed {
+                Err(format!(
+                    "{} is closed; reopen it before docking",
+                    voyage.name
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        match context {
+            Context::Workspace => Ok(Landing::Home),
+            Context::Voyage { id } => {
+                let voyage = self
+                    .layout
+                    .containers()
+                    .find(|voyage| &voyage.id == id)
+                    .ok_or("Dock target not found")?;
+                if home(id) {
+                    return Ok(Landing::Home);
+                }
+                open(voyage)?;
+                Ok(Landing::Voyage { voyage: id.clone() })
+            }
+            Context::Fleet { id } => {
+                let (voyage, fleet) = self
+                    .layout
+                    .containers()
+                    .find_map(|voyage| {
+                        voyage
+                            .fleets
+                            .iter()
+                            .find(|fleet| &fleet.id == id)
+                            .map(|fleet| (voyage, fleet))
+                    })
+                    .ok_or("Dock target not found")?;
+                if home(&voyage.id) {
+                    return Ok(Landing::Home);
+                }
+                open(voyage)?;
+                if fleet.closed {
+                    return Err(format!(
+                        "{} is closed; reopen it before docking",
+                        fleet.name
+                    ));
+                }
+                Ok(Landing::Fleet {
+                    voyage: voyage.id.clone(),
+                    fleet: fleet.id.clone(),
+                    focus: None,
+                })
+            }
+            Context::Vessel { id } => {
+                let (voyage, fleet, placement) = self
+                    .layout
+                    .containers()
+                    .flat_map(|voyage| voyage.fleets.iter().map(move |fleet| (voyage, fleet)))
+                    .find_map(|(voyage, fleet)| {
+                        fleet
+                            .placements
+                            .iter()
+                            .find(|placement| &placement.id == id)
+                            .map(|placement| (voyage, fleet, placement))
+                    })
+                    .ok_or("Dock target not found")?;
+                if home(&voyage.id) {
+                    return Ok(Landing::Home);
+                }
+                open(voyage)?;
+                if fleet.closed {
+                    return Err(format!(
+                        "{} is closed; reopen it before docking",
+                        fleet.name
+                    ));
+                }
+                Ok(Landing::Fleet {
+                    voyage: voyage.id.clone(),
+                    fleet: fleet.id.clone(),
+                    focus: (!placement.hidden).then(|| placement.id.clone()),
+                })
+            }
+            Context::Portal { id } => {
+                let (voyage, portal) = self
+                    .layout
+                    .containers()
+                    .find_map(|voyage| {
+                        voyage
+                            .portals
+                            .iter()
+                            .find(|portal| &portal.id == id)
+                            .map(|portal| (voyage, portal))
+                    })
+                    .ok_or("Dock target not found")?;
+                if home(&voyage.id) {
+                    return Ok(Landing::Home);
+                }
+                open(voyage)?;
+                let shown = !portal.hidden
+                    && voyage
+                        .portal_layout
+                        .as_ref()
+                        .is_some_and(|layout| layout.visible);
+                match opening_fleet(&self.layout.navigation, voyage) {
+                    Some(fleet) => Ok(Landing::Fleet {
+                        voyage: voyage.id.clone(),
+                        fleet,
+                        focus: shown.then(|| portal.id.clone()),
+                    }),
+                    None => Ok(Landing::Voyage {
+                        voyage: voyage.id.clone(),
+                    }),
+                }
+            }
+        }
     }
 
     fn change(&mut self, action: Action) -> Result<(), String> {
@@ -626,31 +794,7 @@ impl Model {
                 self.layout.view = WorkspaceView::Fleet;
             }
             Action::FocusVessel { id } => self.focus_vessel(id)?,
-            Action::Dock { context } => {
-                let exists = match &context {
-                    Context::Workspace => true,
-                    Context::Voyage { id } => self.layout.containers().any(|v| &v.id == id),
-                    Context::Fleet { id } => self
-                        .layout
-                        .containers()
-                        .any(|voyage| voyage.fleets.iter().any(|fleet| &fleet.id == id)),
-                    Context::Vessel { id } => self
-                        .layout
-                        .containers()
-                        .flat_map(|v| &v.fleets)
-                        .flat_map(|f| &f.placements)
-                        .any(|p| &p.id == id),
-                    Context::Portal { id } => self
-                        .layout
-                        .containers()
-                        .flat_map(|v| &v.portals)
-                        .any(|p| &p.id == id),
-                };
-                if !exists {
-                    return Err("Dock target not found".into());
-                }
-                self.layout.context = context;
-            }
+            Action::Dock { context } => self.dock(context)?,
             action @ (Action::ResizePlacementSplit { .. }
             | Action::MovePlacement { .. }
             | Action::SetPlacementMaximized { .. }

@@ -272,12 +272,6 @@
         "fleet": {
           "type": "string"
         },
-        "vessel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "voyage": {
           "type": "string"
         }
@@ -285,6 +279,22 @@
       "required": [
         "voyage",
         "fleet"
+      ],
+      "type": "object"
+    },
+    "LastVessel": {
+      "additionalProperties": false,
+      "properties": {
+        "fleet": {
+          "type": "string"
+        },
+        "vessel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fleet",
+        "vessel"
       ],
       "type": "object"
     },
@@ -453,6 +463,12 @@
               "type": "null"
             }
           ]
+        },
+        "lastVessels": {
+          "items": {
+            "$ref": "#/definitions/LastVessel"
+          },
+          "type": "array"
         },
         "navigation": {
           "items": {

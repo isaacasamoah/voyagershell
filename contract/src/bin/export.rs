@@ -9,6 +9,20 @@ fn schema<T: JsonSchema>() -> Schema {
         .into_root_schema_for::<T>()
 }
 
+fn without_operation(mut schema: Schema, operation: &str) -> Schema {
+    if let Some(variants) = schema
+        .get_mut("definitions")
+        .and_then(|definitions| definitions.get_mut("Action"))
+        .and_then(|action| action.get_mut("oneOf"))
+        .and_then(|variants| variants.as_array_mut())
+    {
+        variants.retain(|variant| {
+            variant.pointer("/properties/operation/const") != Some(&json!(operation))
+        });
+    }
+    schema
+}
+
 fn main() {
     if std::env::args().nth(1).as_deref() == Some("--operations") {
         match serde_json::to_string_pretty(&voyager_contract::operations::MODULES) {
@@ -39,7 +53,8 @@ fn main() {
             "conversationRequest":schema::<conversation::Request>(),
             "conversationReply":schema::<conversation::Reply>(),
             "conversationSnapshot":schema::<conversation::Snapshot>(),
-            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>(),
+            "workspaceTool":without_operation(schema::<voyager_contract::administrator::WorkspaceInput>(), "focus-vessel"),
+            "peekTool":schema::<voyager_contract::administrator::PeekInput>(),
             "processTool":schema::<voyager_contract::administrator::ProcessInput>(),
             "processResponse":schema::<voyager_contract::administrator::ProcessResponse>(),
             "contentTool":schema::<voyager_contract::content::Input>(),

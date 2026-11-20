@@ -459,6 +459,7 @@ export default class Canvas extends View {
       "select-fleet",
       "create-voyage",
       "select-voyage",
+      "dock",
     ].includes(action.operation);
     const oldLayout = this.layout;
     const maximization =
@@ -610,6 +611,14 @@ export default class Canvas extends View {
       if (!this.busy) this.flushShortcuts(task, prepared);
     });
     cx.notify();
+  }
+  followDock(cx) {
+    this.run({ operation: "inspect" }, cx, (_result, task) => {
+      moveFocus(this, "opening", task);
+      if (this.chat?.open || this.editing || window.has_active_dialog()) return;
+      const target = this.layout ? openingPlacement(this.layout) : undefined;
+      if (target) this.terminals.get(target.vessel)?.focus();
+    });
   }
   inspectNotice(cx) {
     const notice = workspace_notice();
@@ -1716,8 +1725,10 @@ export default class Canvas extends View {
         if (!validateResponse(result))
           throw Error("Invalid native dock response");
         const accepted = this.acceptSnapshot(result, cx);
-        if (accepted && result.status === "applied")
+        if (accepted && result.status === "applied") {
           this.dockReceipt = result.requestId;
+          this.followDock(cx);
+        }
       }
     } catch (error) {
       this.status = errorMessage(error);

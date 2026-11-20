@@ -679,6 +679,17 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
                 },
             ),
             StateMethodDescriptor::new::<Entity<Pane>>(
+                "focus",
+                "(): void",
+                move |pane, args, window, cx| {
+                    anyhow::ensure!(args.is_empty(), "focus takes no arguments");
+                    if window.is_window_active() {
+                        pane.read(cx).focus.clone().focus(window, cx);
+                    }
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+            StateMethodDescriptor::new::<Entity<Pane>>(
                 "focusIfUnchanged",
                 "(): void",
                 move |pane, args, window, cx| {

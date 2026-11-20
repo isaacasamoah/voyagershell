@@ -426,6 +426,10 @@ mod tests {
                 include_str!("../../contract/generated/workspaceTool.schema.json"),
             ),
             (
+                "voyager_peek",
+                include_str!("../../contract/generated/peekTool.schema.json"),
+            ),
+            (
                 "voyager_process",
                 include_str!("../../contract/generated/processTool.schema.json"),
             ),

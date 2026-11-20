@@ -125,6 +125,7 @@ fn same_workspace(before: &Layout, after: &Layout) -> bool {
         arrangements,
         next_id: _,
         navigation: _,
+        last_vessels: _,
     } = before;
     voyages
         .iter()
