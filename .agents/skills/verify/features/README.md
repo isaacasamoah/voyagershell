@@ -22,7 +22,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | - | avatar, portal-avatar | linux |
 | Chat / conversation | python-only | none | python-only | python-only | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
-| Voice | python-only | none | none | python-only | - | conversation-voice | linux |
+| Voice | covered | none | none | python-only | voice | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | covered | none | none | covered | worktrees | - | linux |
 | Close Voyage / quit / restore | covered | none | none | covered | quit-restore, voyage-close | - | linux |
