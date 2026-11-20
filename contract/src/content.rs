@@ -154,6 +154,12 @@ pub enum Action {
         expected_revision: String,
         data: Notes,
     },
+    Invoke {
+        vessel_id: VesselId,
+        action: String,
+        args: serde_json::Value,
+        expected_revision: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -189,6 +195,11 @@ pub enum Receipt {
     },
     Update {
         vessel_id: VesselId,
+        expected_revision: String,
+    },
+    Invoke {
+        vessel_id: VesselId,
+        action: String,
         expected_revision: String,
     },
 }
@@ -274,6 +285,146 @@ pub enum Request {
         expected_revision: String,
         data: Notes,
     },
+    #[serde(rename = "content.invoke")]
+    Invoke {
+        version: Version,
+        request_id: String,
+        vessel_id: VesselId,
+        expected_revision: String,
+        action: String,
+        args: serde_json::Value,
+    },
+}
+
+impl Action {
+    pub fn receipt(&self) -> Receipt {
+        match self {
+            Self::Configure { vessel_id, .. } => Receipt::Configure {
+                vessel_id: vessel_id.clone(),
+            },
+            Self::Describe { vessel_id } => Receipt::Describe {
+                vessel_id: vessel_id.clone(),
+            },
+            Self::Inspect { vessel_id } => Receipt::Inspect {
+                vessel_id: vessel_id.clone(),
+            },
+            Self::MigrateNote { vessel_id } => Receipt::MigrateNote {
+                vessel_id: vessel_id.clone(),
+            },
+            Self::ListNotes { vessel_id } => Receipt::ListNotes {
+                vessel_id: vessel_id.clone(),
+            },
+            Self::NewNote { vessel_id, title } => Receipt::NewNote {
+                vessel_id: vessel_id.clone(),
+                title: title.clone(),
+            },
+            Self::OpenNote {
+                vessel_id,
+                filename,
+            } => Receipt::OpenNote {
+                vessel_id: vessel_id.clone(),
+                filename: filename.clone(),
+            },
+            Self::Update {
+                vessel_id,
+                expected_revision,
+                ..
+            } => Receipt::Update {
+                vessel_id: vessel_id.clone(),
+                expected_revision: expected_revision.clone(),
+            },
+            Self::Invoke {
+                vessel_id,
+                action,
+                expected_revision,
+                ..
+            } => Receipt::Invoke {
+                vessel_id: vessel_id.clone(),
+                action: action.clone(),
+                expected_revision: expected_revision.clone(),
+            },
+        }
+    }
+}
+
+impl Action {
+    pub fn into_request(self, request_id: String, expected_version: u64) -> Request {
+        let version = Version::V1;
+        match self {
+            Self::Configure {
+                vessel_id,
+                configuration,
+            } => Request::Configure {
+                version,
+                request_id,
+                vessel_id,
+                expected_version,
+                configuration,
+            },
+            Self::Describe { vessel_id } => Request::Describe {
+                version,
+                request_id,
+                vessel_id,
+            },
+            Self::Inspect { vessel_id } => Request::Inspect {
+                version,
+                request_id,
+                vessel_id,
+            },
+            Self::MigrateNote { vessel_id } => Request::MigrateNote {
+                version,
+                request_id,
+                vessel_id,
+                expected_version,
+            },
+            Self::ListNotes { vessel_id } => Request::ListNotes {
+                version,
+                request_id,
+                vessel_id,
+            },
+            Self::NewNote { vessel_id, title } => Request::NewNote {
+                version,
+                request_id,
+                vessel_id,
+                expected_version,
+                title,
+            },
+            Self::OpenNote {
+                vessel_id,
+                filename,
+            } => Request::OpenNote {
+                version,
+                request_id,
+                vessel_id,
+                expected_version,
+                filename,
+            },
+            Self::Update {
+                vessel_id,
+                expected_revision,
+                data,
+            } => Request::Update {
+                version,
+                request_id,
+                vessel_id,
+                expected_revision,
+                data,
+            },
+            Self::Invoke {
+                vessel_id,
+                action,
+                args,
+                expected_revision,
+            } => Request::Invoke {
+                version,
+                request_id,
+                vessel_id,
+                expected_revision,
+                action,
+                args,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -290,6 +441,14 @@ pub struct Snapshot {
     pub data: Notes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StateSnapshot {
+    pub vessel_id: VesselId,
+    pub revision: String,
+    pub state: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -357,6 +516,20 @@ pub enum Response {
         request_id: String,
         vessel_id: VesselId,
         snapshot: Snapshot,
+    },
+    #[serde(rename = "state")]
+    State {
+        version: Version,
+        request_id: String,
+        vessel_id: VesselId,
+        snapshot: StateSnapshot,
+    },
+    #[serde(rename = "invoked")]
+    Invoked {
+        version: Version,
+        request_id: String,
+        vessel_id: VesselId,
+        snapshot: StateSnapshot,
     },
     #[serde(rename = "rejected")]
     Rejected {

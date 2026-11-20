@@ -167,6 +167,20 @@ fn reads_wait_for_queue_space_and_cancel_without_replaying_effects() {
         forbidden.as_mut().poll(&mut cx),
         Poll::Ready(Err(CallError::Rejected(_)))
     ));
+    let invoke = ContentRequest::Invoke {
+        version: Version::V1,
+        request_id: "invoke-read".into(),
+        vessel_id: VesselId("notes".into()),
+        expected_revision: "0".into(),
+        action: "flip".into(),
+        args: serde_json::json!({}),
+    };
+    let mut forbidden =
+        Box::pin(client.read_content(crate::content::Access::View(binding.clone()), invoke));
+    assert!(matches!(
+        forbidden.as_mut().poll(&mut cx),
+        Poll::Ready(Err(CallError::Rejected(_)))
+    ));
     assert_eq!(receive.len(), 8);
     let view = crate::content::ViewBinding::new(binding.clone());
     view.activate().unwrap();

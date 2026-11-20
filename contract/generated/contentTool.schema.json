@@ -159,6 +159,33 @@
             "data"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "args": true,
+            "expectedRevision": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "invoke",
+              "type": "string"
+            },
+            "vesselId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "vesselId",
+            "action",
+            "args",
+            "expectedRevision"
+          ],
+          "type": "object"
         }
       ]
     },

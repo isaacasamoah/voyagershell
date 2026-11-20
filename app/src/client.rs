@@ -799,10 +799,8 @@ impl Client {
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
-                            crate::content::member(&layout, None, &id)?;
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
-                            let binding = requests::register_content(owner, &layout, &id)?;
-                            Ok(binding)
+                            requests::bind(owner, &layout, &id)
                         })();
                         let _ = reply.try_send(result);
                         continue;

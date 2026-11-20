@@ -388,6 +388,12 @@ export type Receipt =
       expectedRevision: string;
       operation: "update";
       vesselId: string;
+    }
+  | {
+      action: string;
+      expectedRevision: string;
+      operation: "invoke";
+      vesselId: string;
     };
 export type Action2 =
   | {

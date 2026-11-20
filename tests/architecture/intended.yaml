@@ -61,6 +61,8 @@ edges:
   - {from: 'rs:voyager_app::client::terminal_start', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_app::scope', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
+  - {from: 'rs:voyager_app::content::manifest::invoke', to: 'rs:voyager_app::scope', from_owner: content, to_owner: placement}
+  - {from: 'rs:voyager_app::content::manifest::invoke', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content::rename', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content::requests', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::context', to: 'rs:voyager_app::content', from_owner: placement, to_owner: content}

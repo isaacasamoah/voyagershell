@@ -438,7 +438,7 @@ impl Shape {
         }
     }
 
-    fn of_value(value: &Value) -> Self {
+    pub(crate) fn of_value(value: &Value) -> Self {
         match value {
             Value::Null => Self::Null,
             Value::Bool(_) => Self::Bool,

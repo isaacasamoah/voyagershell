@@ -163,76 +163,13 @@ pub fn identity(request: &Request) -> (&VesselId, &str, Option<&str>) {
             request_id,
             expected_revision,
             ..
+        }
+        | Request::Invoke {
+            vessel_id,
+            request_id,
+            expected_revision,
+            ..
         } => (vessel_id, request_id, Some(expected_revision)),
-    }
-}
-
-pub fn request(
-    action: voyager_contract::content::Action,
-    request_id: String,
-    expected_version: u64,
-) -> Request {
-    use voyager_contract::content::Action;
-    match action {
-        Action::Configure {
-            vessel_id,
-            configuration,
-        } => Request::Configure {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-            expected_version,
-            configuration,
-        },
-        Action::Describe { vessel_id } => Request::Describe {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-        },
-        Action::Inspect { vessel_id } => Request::Inspect {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-        },
-        Action::MigrateNote { vessel_id } => Request::MigrateNote {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-            expected_version,
-        },
-        Action::ListNotes { vessel_id } => Request::ListNotes {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-        },
-        Action::NewNote { vessel_id, title } => Request::NewNote {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-            expected_version,
-            title,
-        },
-        Action::OpenNote {
-            vessel_id,
-            filename,
-        } => Request::OpenNote {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-            expected_version,
-            filename,
-        },
-        Action::Update {
-            vessel_id,
-            expected_revision,
-            data,
-        } => Request::Update {
-            version: Version::V1,
-            request_id,
-            vessel_id,
-            expected_revision,
-            data,
-        },
     }
 }
 
@@ -289,22 +226,14 @@ pub(crate) fn member(
     scope: Option<&voyager_contract::Context>,
     id: &VesselId,
 ) -> Result<(), String> {
-    let projected = crate::scope::project(layout, scope);
-    if !projected
+    let notes = crate::scope::project(layout, scope)
         .vessels
         .iter()
-        .any(|content| content.id == *id && content.type_id == NOTES_TYPE)
-        || !projected.containers().any(|voyage| {
-            voyage
-                .portals
-                .iter()
-                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.placements))
-                .any(|placement| placement.vessel == *id)
-        })
-    {
-        return Err("That Notes instance is outside the captured workspace scope".into());
-    }
-    Ok(())
+        .any(|content| content.id == *id && content.type_id == NOTES_TYPE);
+    manifest::placed(layout, scope, id)
+        .ok()
+        .filter(|()| notes)
+        .ok_or_else(|| "That Notes instance is outside the captured workspace scope".into())
 }
 
 pub struct Owner {
@@ -346,6 +275,46 @@ impl Owner {
             .expect("profile root")
             .join("vessels")
             .join(name))
+    }
+
+    fn manifest_entry(
+        &self,
+        layout: &voyager_contract::Layout,
+        id: &VesselId,
+    ) -> Option<manifest::Entry> {
+        let vessel = layout.vessels.iter().find(|vessel| vessel.id == *id)?;
+        self.registry.find(&vessel.type_id)
+    }
+
+    fn manifest_call(
+        &mut self,
+        layout: &std::sync::Arc<voyager_contract::Layout>,
+        version: u64,
+        access: &Access,
+        request: &Request,
+    ) -> Option<Response> {
+        let (id, request_id, _) = identity(request);
+        let entry = self.manifest_entry(layout, id)?;
+        let outcome = (|| {
+            let scope = match access {
+                Access::View(binding) if binding.id() == id => None,
+                Access::View(_) => return Err("That content is outside this view".to_owned()),
+                Access::Agent {
+                    scope,
+                    expected_version,
+                } if *expected_version == version => Some(scope),
+                Access::Agent { .. } => {
+                    return Err(
+                        "Workspace revision changed; inspect before content dispatch".into(),
+                    );
+                }
+            };
+            manifest::placed(layout, scope, id)?;
+            manifest::respond(&self.root, ENVELOPE_LIMIT, entry, id, request_id, request)
+        })();
+        let response = outcome.unwrap_or_else(|message| reject(request, message));
+        self.notify(&response);
+        Some(response)
     }
 
     pub(crate) fn require_configure(&self) -> Result<(), String> {
@@ -582,6 +551,7 @@ impl Owner {
         if let Response::Applied { vessel_id, .. }
         | Response::Configured { vessel_id, .. }
         | Response::NoteOpened { vessel_id, .. }
+        | Response::Invoked { vessel_id, .. }
         | Response::Uncertain { vessel_id, .. } = response
             && let Some((version, listener)) = self.changes.get_mut(&vessel_id.0)
         {
@@ -618,6 +588,7 @@ impl Owner {
             | Request::OpenNote { .. } => {
                 rejected("This operation requires the workspace owner".into())
             }
+            Request::Invoke { .. } => rejected("Only a manifest Vessel type runs actions".into()),
             Request::Describe { .. } => {
                 match describe(&packages, NOTES_TYPE).and_then(|description| {
                     description::require_ready(&description)?;

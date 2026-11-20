@@ -492,7 +492,13 @@ features:
       - app/src/content/install/tests.rs
       - app/src/content/manifest.rs
       - app/src/content/manifest/check.rs
+      - app/src/content/manifest/effect.rs
+      - app/src/content/manifest/eval.rs
       - app/src/content/manifest/expression.rs
+      - app/src/content/manifest/instance.rs
+      - app/src/content/manifest/invoke.rs
+      - app/src/content/manifest/invoke_tests.rs
+      - app/src/content/manifest/operations.rs
       - app/src/content/manifest/problem.rs
       - app/src/content/manifest/read.rs
       - app/src/content/manifest/registry.rs

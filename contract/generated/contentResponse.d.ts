@@ -57,6 +57,20 @@ export type Response =
       vesselId: string;
     }
   | {
+      requestId: string;
+      snapshot: StateSnapshot;
+      status: "state";
+      version: Version;
+      vesselId: string;
+    }
+  | {
+      requestId: string;
+      snapshot: StateSnapshot;
+      status: "invoked";
+      version: Version;
+      vesselId: string;
+    }
+  | {
       expectedRevision?: string | null;
       message: string;
       requestId: string;
@@ -99,4 +113,9 @@ export interface Snapshot {
 export interface Notes {
   text: string;
   title: string;
+}
+export interface StateSnapshot {
+  revision: string;
+  state: unknown;
+  vesselId: string;
 }

@@ -7,7 +7,7 @@ use super::{
 use serde_json::{Value, json};
 use std::{fs, path::Path, time::Duration};
 
-fn checklist() -> Value {
+pub(super) fn checklist() -> Value {
     json!({
         "contract": 1,
         "id": "checklist",
