@@ -84,6 +84,17 @@ The offered operations are `inspect`, `create-fleet`, `rename`,
 `select-voyage` and `select-fleet`. Any other operation is refused and nothing
 is queued.
 
+`dock` is offered only to Voyager, the Vessel whose terminal `voyager.json`
+names in the profile. It takes `"context"` as the generated `Context` type and
+sets Isaac's dock without moving the canvas.
+
+```sh
+voyager do workspace '{"requestId":"dock-1","expectedVersion":"<version>","action":{"operation":"dock","context":{"kind":"vessel","id":"<placement id>"}}}'
+```
+
+From any other Vessel it is refused with "dock is offered only to Voyager",
+the exit code is 1 and nothing is queued.
+
 `remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
 takes that placement off the canvas and nothing else. The Vessel's content,
 name and data stay, and its program keeps running, so check it with `hc ls`

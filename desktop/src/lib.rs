@@ -96,6 +96,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         env::current_dir()?.to_string_lossy().into_owned(),
         content_owner,
         launches_path,
+        voyager_app::voyager_binding::Binding::load(&profile),
     );
     let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();

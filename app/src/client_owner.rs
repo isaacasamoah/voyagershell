@@ -14,6 +14,7 @@ use crate::front_door::{Admission, Envelope, FrontDoor};
 use crate::layout_parts::Part;
 use crate::layout_store::{LayoutRevision, Seen, load, rejected, save};
 use crate::vessel_socket::{Call, Sockets};
+use crate::voyager_binding::Binding;
 use std::{
     collections::{HashMap, VecDeque},
     path::PathBuf,
@@ -97,6 +98,7 @@ impl Client {
         cwd: String,
         content: Option<crate::content::Owner>,
         launches: Option<PathBuf>,
+        binding: Binding,
     ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         let package_revision = Arc::new(AtomicU64::new(0));
@@ -123,6 +125,7 @@ impl Client {
                 cwd,
                 content,
                 launches,
+                binding,
                 owner,
                 sender,
                 package_revision,
@@ -139,6 +142,7 @@ impl Owner {
         cwd: String,
         content: Option<crate::content::Owner>,
         launches: Option<PathBuf>,
+        binding: Binding,
         client: Client,
         sender: async_channel::Sender<Message>,
         packages: Arc<AtomicU64>,
@@ -159,7 +163,7 @@ impl Owner {
             launches,
             content,
             adoptions: Adoptions::new(client.placement_notice.clone()),
-            sockets: Sockets::new(&session, call),
+            sockets: Sockets::new(&session, call, binding),
             notices: Notices::new(client.activity.clone(), packages),
             client,
             sender,

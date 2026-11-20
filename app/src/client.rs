@@ -370,12 +370,19 @@ impl Client {
         cwd: String,
         owner: crate::content::Owner,
         launches: std::path::PathBuf,
+        binding: crate::voyager_binding::Binding,
     ) -> Self {
-        Self::start_with_launches(session, cwd, Some(owner), Some(launches))
+        Self::start_with_launches(session, cwd, Some(owner), Some(launches), binding)
     }
 
     fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {
-        Self::start_with_launches(session, cwd, content, None)
+        Self::start_with_launches(
+            session,
+            cwd,
+            content,
+            None,
+            crate::voyager_binding::Binding::unbound(),
+        )
     }
 
     pub async fn bind_content(&self, id: VesselId) -> Result<crate::content::Binding, String> {
