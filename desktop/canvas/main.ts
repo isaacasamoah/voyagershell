@@ -36,7 +36,7 @@ import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import {
-  acceptDockResult,
+  acceptDock,
   focusedPlacement,
   moveFocus,
   renderPanel,
@@ -1955,7 +1955,7 @@ export default class Canvas extends View {
       this.animationNotice = animationNotice;
     }
     try {
-      acceptDockResult(this, cx);
+      acceptDock(this, cx);
     } catch (error) {
       this.status = errorMessage(error);
     }

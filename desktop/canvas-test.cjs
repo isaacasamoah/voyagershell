@@ -817,6 +817,116 @@ test("context metadata rejects a late different dock and notifies only changed f
   assert.deepEqual(view.contextFacts, facts);
 });
 
+test("a dock follows once from the avatar's reply, or from a snapshot once no request is preparing", () => {
+  const layout = (context, last) => ({
+    view: "fleet",
+    selectedVoyage: "voyage-1",
+    selectedFleet: "fleet-4",
+    context,
+    lastVessels: [{ fleet: "fleet-4", vessel: last }],
+    vessels: [{ id: "content-2" }, { id: "content-10" }],
+    voyages: [
+      {
+        id: "voyage-1",
+        name: "Voyager",
+        portals: [],
+        fleets: [
+          {
+            id: "fleet-4",
+            name: "Fleet 1",
+            placements: [
+              { id: "placement-3", vessel: "content-2", name: "First" },
+              { id: "placement-11", vessel: "content-10", name: "Second" },
+            ],
+            root: {
+              kind: "branch",
+              axis: "horizontal",
+              share: 5000,
+              first: { kind: "leaf", placement: "placement-3" },
+              second: { kind: "leaf", placement: "placement-11" },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const reply = (id) => ({
+    requestId: `request-${id}`,
+    status: "applied",
+    version: "1",
+    fresh: true,
+    layout: layout({ kind: "vessel", id }, id),
+  });
+  let result = null;
+  const { Canvas, acceptDock } = new Function(
+    "View",
+    "take_result",
+    "validateResponse",
+    "window",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
+      "\nreturn { Canvas, acceptDock };",
+  )(
+    class {},
+    () => {
+      const taken = result;
+      result = null;
+      return taken;
+    },
+    () => true,
+    { has_active_dialog: () => false },
+  );
+  const focused = [];
+  const view = Object.assign(new Canvas(), {
+    version: "1",
+    names: new Map(),
+    contextFacts: null,
+    terminals: new Map(
+      ["content-2", "content-10"].map((id) => [
+        id,
+        { focus: () => focused.push(id) },
+      ]),
+    ),
+  });
+  view.readContext = async () => {};
+  view.readProcesses = async () => {};
+  view.readObservation = async () => {};
+  const cx = {
+    spawn(callback) {
+      callback(cx);
+    },
+    notify() {},
+    focus_handle: () => ({}),
+  };
+  let next = null;
+  view.run = (action, task, done) => {
+    assert.equal(action.operation, "inspect");
+    view.acceptSnapshot(next, task);
+    done?.(next, task);
+  };
+  const render = () => acceptDock(view, cx);
+  view.acceptSnapshot(reply("placement-3"), cx);
+  render();
+  assert.deepEqual(focused, [], "the first snapshot only records the dock");
+  result = JSON.stringify(reply("placement-11"));
+  next = reply("placement-11");
+  render();
+  render();
+  assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
+  focused.length = 0;
+  view.acceptSnapshot(reply("placement-3"), cx);
+  view.busy = true;
+  render();
+  assert.deepEqual(focused, [], "a dock waits while a request prepares");
+  view.busy = false;
+  render();
+  render();
+  assert.deepEqual(
+    focused,
+    ["content-2"],
+    "a dock read from a snapshot follows once",
+  );
+});
+
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
   const buttons = new Map();
   const Canvas = new Function(

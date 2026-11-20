@@ -2,21 +2,32 @@ use super::adopt_by_label::{address, bound_to};
 use super::{Cases, Verdict, cases};
 use crate::audio::voice::bound_terminal;
 use crate::inspection::Target;
-use crate::native::{Native, Terminal, now_millis};
+use crate::native::{Native, Seen, Terminal, fleets, now_millis};
 use crate::sandbox::COMMAND;
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde_json::{Value, json};
 use voyager_contract::inspection::Role;
-use voyager_contract::{Context, PlacementId};
+use voyager_contract::{Action, Context, FleetId, PlacementId, RenameTarget};
 
 cases! {
     SocketDockTakesKeyboard => "socket-dock-takes-keyboard",
+    RereadKeepsClickedPane => "reread-keeps-clicked-pane",
 }
 
 pub const CONTROL: Case = Case::SocketDockTakesKeyboard;
 
-fn focused(seen: &crate::native::Seen) -> Option<PlacementId> {
+const RENAMED: &str = "Renamed by Voyager";
+
+struct Docked {
+    first: Terminal,
+    docked: Terminal,
+    placed: PlacementId,
+    fleet: FleetId,
+    voyager: String,
+}
+
+fn focused(seen: &Seen) -> Option<PlacementId> {
     seen.frame
         .elements
         .iter()
@@ -24,8 +35,31 @@ fn focused(seen: &crate::native::Seen) -> Option<PlacementId> {
         .map(|element| PlacementId(element.key.clone()))
 }
 
+fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
+    let (version, _) = native.document()?.context("Missing saved layout")?;
+    let request = json!({
+        "requestId": id,
+        "expectedVersion": version.to_string(),
+        "action": action,
+    })
+    .to_string();
+    let caller = format!("HC_TERMINAL_ID={voyager}");
+    Ok(serde_json::from_str(&native.system.execute(
+        "env",
+        &[&caller, COMMAND, "do", "workspace", &request],
+        None,
+    )?)?)
+}
+
+fn typed_into(native: &Native, prefix: &str) -> Result<String> {
+    let marker = format!("{prefix}-{:x}", now_millis() % 0xf_ffff);
+    native.type_text(&format!("echo {marker}"))?;
+    native.press(Key::Return)?;
+    Ok(marker)
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
-    cases.check(native, Case::SocketDockTakesKeyboard, |native| {
+    let setup = cases.make(native, Case::SocketDockTakesKeyboard, |native| {
         let first = Terminal::first(native)?;
         let (_, layout) = native.document()?.context("Missing saved layout")?;
         let fleet = layout
@@ -53,20 +87,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .then(|| seen.shows(&Target::CHAT_COMPOSER))
         })?;
         let voyager = bound_terminal(native)?;
-        let (version, _) = native.document()?.context("Missing saved layout")?;
-        let request = json!({
-            "requestId": "socket-dock-1",
-            "expectedVersion": version.to_string(),
-            "action": {"operation": "dock", "context": {"kind": "vessel", "id": placed.0}}
-        })
-        .to_string();
-        let caller = format!("HC_TERMINAL_ID={voyager}");
-        let reply: Value = serde_json::from_str(&native.system.execute(
-            "env",
-            &[&caller, COMMAND, "do", "workspace", &request],
-            None,
-        )?)?;
         let target = Context::Vessel { id: placed.clone() };
+        let reply = from_voyager(
+            native,
+            &voyager,
+            "socket-dock-1",
+            Action::Dock {
+                context: target.clone(),
+            },
+        )?;
         native.settle(
             "the dock on the second shell",
             |seen| Some(seen.document.context.clone()),
@@ -80,14 +109,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .ok()
             .flatten();
-        let marker = format!("socket-dock-{:x}", now_millis() % 0xf_ffff);
-        native.type_text(&format!("echo {marker}"))?;
-        native.press(Key::Return)?;
+        let marker = typed_into(native, "socket-dock")?;
         let arrived = docked.printed(native, &format!("\n{marker}"))?;
         let docked_screen = docked.screen(native)?;
         let first_screen = first.screen(native)?;
         native.keep_window("socket-dock-takes-keyboard")?;
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect("the chat was closed when Voyager docked", !before)
             .expect(
                 "voyager do workspace applied the dock from Voyager's terminal",
@@ -108,6 +135,80 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("marker", &marker)?
             .observed("followed", &followed)?
             .observed("docked", &docked_screen)?
+            .observed("first", &first_screen)?;
+        Ok((
+            verdict,
+            Some(Docked {
+                first,
+                docked,
+                placed,
+                fleet,
+                voyager,
+            }),
+        ))
+    })?;
+    let Some(Docked {
+        first,
+        docked,
+        placed,
+        fleet,
+        voyager,
+    }) = setup
+    else {
+        return Ok(());
+    };
+
+    cases.check(native, Case::RereadKeepsClickedPane, |native| {
+        first.focus(native)?;
+        native.observe("the first Vessel focused by the click", |seen| {
+            (focused(seen).as_ref() == Some(first.placement())).then_some(())
+        })?;
+        let reply = from_voyager(
+            native,
+            &voyager,
+            "socket-rename-1",
+            Action::Rename {
+                target: RenameTarget::Fleet { id: fleet.clone() },
+                name: RENAMED.into(),
+            },
+        )?;
+        native.observe("the renamed Fleet drawn after the re-read", |seen| {
+            (fleets(seen.document).any(|item| item.id == fleet && item.name == RENAMED)
+                && seen.shows(&Target::name(&RenameTarget::Fleet { id: fleet.clone() })))
+            .then_some(())
+        })?;
+        let held = native.observe("the canvas focus after the re-read", |seen| {
+            Some(focused(seen))
+        })?;
+        let marker = typed_into(native, "socket-reread")?;
+        let arrived = first.printed(native, &format!("\n{marker}"))?;
+        let first_screen = first.screen(native)?;
+        let docked_screen = docked.screen(native)?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        native.keep_window("reread-keeps-clicked-pane")?;
+        Verdict::new()
+            .expect(
+                "voyager do workspace applied the rename",
+                reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "the dock stayed on the docked Vessel",
+                layout.context == Context::Vessel { id: placed.clone() },
+            )
+            .expect(
+                "the canvas focus stayed on the clicked Vessel after the re-read",
+                held.as_ref() == Some(first.placement()),
+            )
+            .expect(
+                "the typed line ran in the clicked Vessel's shell",
+                arrived && first_screen.matches(&marker).count() >= 2,
+            )
+            .expect(
+                "the docked Vessel's shell received none of the typed keys",
+                !docked_screen.contains(&marker),
+            )
+            .observed("marker", &marker)?
+            .observed("held", &held)?
             .observed("first", &first_screen)
     })
 }
