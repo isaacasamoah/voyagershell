@@ -18,6 +18,7 @@ mod layout_store;
 pub mod observation;
 mod panels;
 mod scope;
+pub mod spoken;
 pub mod vessel_socket;
 pub mod vessel_type;
 pub mod voyager_binding;

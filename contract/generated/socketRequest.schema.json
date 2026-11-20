@@ -1458,6 +1458,9 @@
         "command": {
           "const": "focus",
           "type": "string"
+        },
+        "spoken": {
+          "type": "boolean"
         }
       },
       "required": [

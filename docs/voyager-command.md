@@ -73,6 +73,40 @@ claude --settings '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","co
 
 An app older than this request refuses it, and the hook then prints nothing.
 
+## Spoken turns
+
+A prompt that voice sends starts with the marker `[spoken]`, which
+`spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
+the agent reads it. The agent's launch policy carries `spoken::policy_rule`. It
+tells the agent that a prompt starting with the marker came by voice, to act
+first, and to answer with the result in one short plain sentence, then a blank
+line, then any detail, with no ids, paths or code in that sentence. The launch
+that appends the rule is the Voyager start, which this guide does not describe.
+
+The hook reads the prompt from the `UserPromptSubmit` input it receives on
+stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
+hook. A prompt that has not arrived by then is treated as typed and the dock is
+still printed. A prompt that starts
+with the marker sends `{"command":"focus","spoken":true}`. Every other prompt,
+and an input the hook cannot read, sends the plain focus request, so a typed
+Home prompt, a Core note and `voyager focus` itself are never spoken. The
+`spoken` field is omitted when false. An app older than the field refuses a
+spoken request, and the hook then prints nothing for that prompt.
+
+The app keeps one `spoken::TurnLedger` for its Vessel sockets. A focus request
+with `spoken` true, answered with the dock, sets a pending mark for the Vessel
+that sent it. `observe` gives the first turn id it has not seen for that Vessel
+the pending mark, as `Kind::Spoken`, and any other new turn id `Kind::Typed`.
+The verdict stays with the turn id, so a late event of an earlier turn never
+takes a later mark. Marks are in memory, belong to one Vessel and are dropped
+when its socket closes. Nothing is stored.
+
+The hook runs before the model starts, so the mark is pending before the turn's
+first event. The reply reader owns the calls to `observe` and has to clear a
+mark whose turn ended with no reply event, because that mark would otherwise
+go to the next turn. Until the reply reader lands, nothing calls `observe` and
+no turn is spoken.
+
 ## Change the workspace
 
 ```sh

@@ -15,7 +15,7 @@ Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
 fn parse(arguments: &[String]) -> Result<SocketRequest, String> {
     match arguments {
         [command] if command == "status" => Ok(SocketRequest::Status),
-        [command] if command == "focus" => Ok(SocketRequest::Focus),
+        [command] if command == "focus" => Ok(SocketRequest::Focus { spoken: false }),
         [verb, family, request] if verb == "do" && family == "workspace" => {
             serde_json::from_str::<Request>(request)
                 .map(|request| SocketRequest::Workspace {
@@ -74,6 +74,10 @@ fn send(_: &SocketRequest) -> Result<SocketReply, (ExitCode, String)> {
     ))
 }
 
+fn read_stdin() -> String {
+    std::io::read_to_string(std::io::stdin()).unwrap_or_default()
+}
+
 fn code(reply: &SocketReply) -> ExitCode {
     let outcome = match reply {
         SocketReply::Status { .. } | SocketReply::Focus { .. } => Outcome::Applied,
@@ -112,7 +116,9 @@ fn main() -> ExitCode {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
     }
-    if let Some(output) = voyager_app::focus_hook::hook(&arguments, |request| send(&request).ok()) {
+    if let Some(output) =
+        voyager_app::focus_hook::hook(&arguments, read_stdin, |request| send(&request).ok())
+    {
         print!("{output}");
         return ExitCode::SUCCESS;
     }

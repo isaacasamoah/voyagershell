@@ -4,6 +4,7 @@ export type SocketRequest =
     }
   | {
       command: "focus";
+      spoken?: boolean;
     }
   | {
       command: "workspace";

@@ -1,5 +1,10 @@
+use crate::spoken::TurnLedger;
 use crate::voyager_binding::Binding;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use voyager_contract::{
     Action, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response, Unanswered, VesselId,
     socket::{SocketReply, SocketRequest, VesselPlacement, VesselStatus},
@@ -39,6 +44,7 @@ pub(crate) struct Sockets {
     binding: Binding,
     synced: Option<Arc<Layout>>,
     open: HashMap<String, Listener>,
+    turns: Arc<Mutex<TurnLedger>>,
 }
 
 impl Sockets {
@@ -53,6 +59,7 @@ impl Sockets {
             binding,
             synced: None,
             open: HashMap::new(),
+            turns: Arc::default(),
         }
     }
 
@@ -68,12 +75,17 @@ impl Sockets {
         let wanted = placed_terminals(layout);
         self.open
             .retain(|terminal, listener| wanted.get(terminal) == Some(&listener.vessel));
+        self.turns
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .keep_only(|vessel| wanted.values().any(|placed| placed.0 == vessel));
         for (terminal, vessel) in wanted {
             if !self.open.contains_key(&terminal)
                 && let Some(listener) = Listener::bind(
                     &self.session,
                     &self.call,
                     &self.binding,
+                    &self.turns,
                     &CoreTerminalId(terminal.clone()),
                     vessel,
                 )
@@ -271,6 +283,7 @@ fn focus(call: &Call, vessel: &VesselId) -> SocketReply {
 fn answer(
     call: &Call,
     binding: &Binding,
+    turns: &Mutex<TurnLedger>,
     vessel: &VesselId,
     terminal: &CoreTerminalId,
     line: &str,
@@ -280,7 +293,16 @@ fn answer(
             message: format!("Invalid voyager request: {error}; nothing was queued"),
         },
         Ok(SocketRequest::Status) => status(call, vessel, terminal),
-        Ok(SocketRequest::Focus) => focus(call, vessel),
+        Ok(SocketRequest::Focus { spoken }) => {
+            let reply = focus(call, vessel);
+            if spoken && matches!(reply, SocketReply::Focus { .. }) {
+                turns
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .spoken_prompt(vessel);
+            }
+            reply
+        }
         Ok(SocketRequest::Workspace { request }) => {
             match refusal(&request.action, binding.names(terminal)) {
                 Some(message) => SocketReply::Refused {
@@ -307,6 +329,7 @@ impl Listener {
         session: &str,
         call: &Call,
         binding: &Binding,
+        turns: &Arc<Mutex<TurnLedger>>,
         terminal: &CoreTerminalId,
         vessel: VesselId,
     ) -> Option<Self> {
@@ -334,7 +357,7 @@ impl Listener {
         };
         let closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stopped = closed.clone();
-        let (call, binding) = (call.clone(), binding.clone());
+        let (call, binding, turns) = (call.clone(), binding.clone(), turns.clone());
         let (owner, address) = (vessel.clone(), terminal.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
@@ -344,14 +367,14 @@ impl Listener {
                 let Ok(mut stream) = stream else {
                     continue;
                 };
-                let (call, binding) = (call.clone(), binding.clone());
+                let (call, binding, turns) = (call.clone(), binding.clone(), turns.clone());
                 let (owner, address) = (owner.clone(), address.clone());
                 std::thread::spawn(move || {
                     let mut line = String::new();
                     let limit = u64::try_from(crate::activity::LINE_LIMIT).unwrap_or(u64::MAX);
                     let reply =
                         match std::io::BufReader::new((&stream).take(limit)).read_line(&mut line) {
-                            Ok(_) => answer(&call, &binding, &owner, &address, &line),
+                            Ok(_) => answer(&call, &binding, &turns, &owner, &address, &line),
                             Err(error) => SocketReply::Refused {
                                 message: format!(
                                     "Unreadable voyager request: {error}; nothing was queued"
@@ -389,7 +412,14 @@ struct Listener {
 
 #[cfg(not(unix))]
 impl Listener {
-    fn bind(_: &str, _: &Call, _: &Binding, _: &CoreTerminalId, _: VesselId) -> Option<Self> {
+    fn bind(
+        _: &str,
+        _: &Call,
+        _: &Binding,
+        _: &Arc<Mutex<TurnLedger>>,
+        _: &CoreTerminalId,
+        _: VesselId,
+    ) -> Option<Self> {
         None
     }
 }
@@ -483,7 +513,14 @@ mod tests {
         binding.bind(terminal("t8")).unwrap();
         let vessel = VesselId("vessel-1".into());
 
-        let refused = answer(&call, &binding, &vessel, &terminal("t9"), &dock_line());
+        let refused = answer(
+            &call,
+            &binding,
+            &Mutex::default(),
+            &vessel,
+            &terminal("t9"),
+            &dock_line(),
+        );
         assert_eq!(
             refused,
             SocketReply::Refused {
@@ -492,7 +529,14 @@ mod tests {
         );
         assert!(seen.lock().unwrap().is_empty());
 
-        let accepted = answer(&call, &binding, &vessel, &terminal("t8"), &dock_line());
+        let accepted = answer(
+            &call,
+            &binding,
+            &Mutex::default(),
+            &vessel,
+            &terminal("t8"),
+            &dock_line(),
+        );
         assert!(matches!(
             accepted,
             SocketReply::Workspace {
@@ -511,7 +555,14 @@ mod tests {
         let binding = Binding::unbound();
         let vessel = VesselId("vessel-1".into());
         for id in ["t8", "t9"] {
-            let reply = answer(&call, &binding, &vessel, &terminal(id), &dock_line());
+            let reply = answer(
+                &call,
+                &binding,
+                &Mutex::default(),
+                &vessel,
+                &terminal(id),
+                &dock_line(),
+            );
             assert!(matches!(reply, SocketReply::Refused { .. }), "{id}");
         }
         assert!(seen.lock().unwrap().is_empty());
@@ -526,6 +577,7 @@ mod tests {
         let reply = answer(
             &call,
             &binding,
+            &Mutex::default(),
             &VesselId("vessel-1".into()),
             &terminal("t8"),
             &dock_line(),
@@ -557,7 +609,14 @@ mod tests {
         })
         .unwrap();
         let vessel = VesselId("vessel-1".into());
-        let refused = answer(&call, &binding, &vessel, &terminal("t9"), &line);
+        let refused = answer(
+            &call,
+            &binding,
+            &Mutex::default(),
+            &vessel,
+            &terminal("t9"),
+            &line,
+        );
         assert_eq!(
             refused,
             SocketReply::Refused {
@@ -565,7 +624,14 @@ mod tests {
             }
         );
         assert!(seen.lock().unwrap().is_empty());
-        let accepted = answer(&call, &binding, &vessel, &terminal("t8"), &line);
+        let accepted = answer(
+            &call,
+            &binding,
+            &Mutex::default(),
+            &vessel,
+            &terminal("t8"),
+            &line,
+        );
         assert!(matches!(accepted, SocketReply::Workspace { .. }));
         assert!(matches!(
             seen.lock().unwrap().as_slice(),
@@ -587,11 +653,127 @@ mod tests {
         let reply = answer(
             &call,
             &Binding::unbound(),
+            &Mutex::default(),
             &VesselId("vessel-1".into()),
             &terminal("t9"),
             &line,
         );
         assert!(matches!(reply, SocketReply::Workspace { .. }));
         assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    fn answering(layout: Layout) -> Call {
+        let layout = Arc::new(layout);
+        Arc::new(move |_, request| {
+            Ok(Response {
+                request_id: request.request_id,
+                status: voyager_contract::Outcome::Applied,
+                version: 1,
+                layout: layout.clone(),
+                fresh: true,
+                created_workspace: false,
+                created_vessels: Vec::new(),
+                message: None,
+                close_plan: None,
+            })
+        })
+    }
+
+    fn workspace() -> Layout {
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Alpha".into(),
+                cwd: "/alpha".into(),
+            })
+            .unwrap();
+        model.layout
+    }
+
+    fn ask(call: &Call, turns: &Mutex<TurnLedger>, vessel: &VesselId, line: &str) -> SocketReply {
+        answer(
+            call,
+            &Binding::unbound(),
+            turns,
+            vessel,
+            &CoreTerminalId("t1".into()),
+            line,
+        )
+    }
+
+    #[test]
+    fn the_turn_after_a_spoken_focus_read_is_spoken_and_typed_ones_are_not() {
+        use crate::spoken::Kind;
+        let call = answering(workspace());
+        let turns = Mutex::new(TurnLedger::default());
+        let voyager = VesselId("voyager".into());
+
+        ask(&call, &turns, &voyager, r#"{"command":"focus"}"#);
+        assert_eq!(
+            turns.lock().unwrap().observe(&voyager, "typed-1"),
+            Kind::Typed
+        );
+
+        let reply = ask(
+            &call,
+            &turns,
+            &voyager,
+            r#"{"command":"focus","spoken":true}"#,
+        );
+        assert!(matches!(reply, SocketReply::Focus { .. }));
+        assert_eq!(
+            turns.lock().unwrap().observe(&voyager, "spoken-1"),
+            Kind::Spoken
+        );
+
+        ask(&call, &turns, &voyager, r#"{"command":"focus"}"#);
+        assert_eq!(
+            turns.lock().unwrap().observe(&voyager, "note-1"),
+            Kind::Typed
+        );
+        assert_eq!(
+            turns.lock().unwrap().observe(&voyager, "spoken-1"),
+            Kind::Spoken
+        );
+    }
+
+    #[test]
+    fn a_refused_spoken_focus_read_marks_nothing() {
+        use crate::spoken::Kind;
+        let refused: Call =
+            Arc::new(|_, request| Err(Unanswered::refused(request.request_id, "no".into())));
+        let turns = Mutex::new(TurnLedger::default());
+        let voyager = VesselId("voyager".into());
+        let reply = ask(
+            &refused,
+            &turns,
+            &voyager,
+            r#"{"command":"focus","spoken":true}"#,
+        );
+        assert!(matches!(reply, SocketReply::Workspace { .. }));
+        assert_eq!(
+            turns.lock().unwrap().observe(&voyager, "turn-1"),
+            Kind::Typed
+        );
+    }
+
+    #[test]
+    fn a_spoken_mark_from_one_vessel_never_marks_another_vessels_turn() {
+        use crate::spoken::Kind;
+        let call = answering(workspace());
+        let turns = Mutex::new(TurnLedger::default());
+        ask(
+            &call,
+            &turns,
+            &VesselId("crew".into()),
+            r#"{"command":"focus","spoken":true}"#,
+        );
+        assert_eq!(
+            turns
+                .lock()
+                .unwrap()
+                .observe(&VesselId("voyager".into()), "turn-1"),
+            Kind::Typed
+        );
     }
 }

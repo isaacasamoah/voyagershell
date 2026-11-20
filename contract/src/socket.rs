@@ -7,8 +7,13 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "command", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum SocketRequest {
     Status,
-    Focus,
-    Workspace { request: Box<Request> },
+    Focus {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        spoken: bool,
+    },
+    Workspace {
+        request: Box<Request>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
