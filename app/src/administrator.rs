@@ -1,15 +1,18 @@
 use crate::client::{CallError, Client};
-use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
+use crate::provider::{ToolCall, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
     Action, Outcome, Request, Status,
-    administrator::{
-        PeekInput, ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction,
-        WorkspaceInput,
-    },
+    administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction},
     conversation::{CallbackId, ToolOutcome},
 };
+
+mod inputs;
+#[cfg(test)]
+mod peek_tests;
+
+pub(crate) use inputs::catalog;
 
 #[derive(Clone)]
 enum Dispatch {
@@ -68,56 +71,6 @@ pub(crate) struct Completed {
     pub outcome: ToolOutcome,
     pub text: String,
     pub context: voyager_contract::context::Focus,
-}
-
-pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
-    let schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/workspaceTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let process_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/processTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let peek_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/peekTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let content_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/contentTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let worktree_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/worktreeTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    Ok(vec![
-        ToolDefinition {
-            name: "voyager_worktree",
-            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace dock context. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
-            schema: worktree_schema,
-        },
-        ToolDefinition {
-            name: "voyager_workspace",
-            description: "Inspect and manage the captured dock context. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes the context only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
-            schema,
-        },
-        ToolDefinition {
-            name: "voyager_peek",
-            description: "Look at one Voyage, Fleet, Vessel, Portal or the whole workspace without moving the human. Returns the same read as inspecting that target, in one call, and changes nothing: the human's screen and dock stay where they are. Use it to check on something elsewhere while the human stays here. Use workspace dock only when the human wants to be taken there.",
-            schema: peek_schema,
-        },
-        ToolDefinition {
-            name: "voyager_process",
-            description: "Operate only bound terminals within this request's captured dock context. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_vessel tool.",
-            schema: process_schema,
-        },
-        ToolDefinition {
-            name: "voyager_vessel",
-            description: "Describe, inspect, select files and update an existing Notes Vessel only inside the immutable captured dock context. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-vessel initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
-            schema: content_schema,
-        },
-    ])
 }
 
 fn result(success: bool, text: String) -> ToolResult {
@@ -304,40 +257,7 @@ impl Tools {
                 "No active tool capacity; nothing was dispatched",
             );
         }
-        let parsed =
-            match tool {
-                "voyager_workspace" => serde_json::from_value::<WorkspaceInput>(arguments.clone())
-                    .map(|input| {
-                        (
-                            input.expected_version,
-                            Dispatch::Workspace(input.action),
-                            None,
-                        )
-                    }),
-                "voyager_peek" => serde_json::from_value::<PeekInput>(arguments.clone())
-                    .map(|input| (0, Dispatch::Workspace(Action::Inspect), Some(input.target))),
-                "voyager_process" => {
-                    serde_json::from_value::<ProcessInput>(arguments.clone()).map(|input| {
-                        (
-                            input.expected_version,
-                            Dispatch::Process(input.action),
-                            None,
-                        )
-                    })
-                }
-                "voyager_worktree" => {
-                    serde_json::from_value::<voyager_contract::worktree::Input>(arguments.clone())
-                        .map(|input| (input.expected_version, Dispatch::Worktree(input), None))
-                }
-                _ => serde_json::from_value::<voyager_contract::content::Input>(arguments.clone())
-                    .map(|input| {
-                        (
-                            input.expected_version,
-                            Dispatch::Content(input.action),
-                            None,
-                        )
-                    }),
-            };
+        let parsed = inputs::parse(tool, &arguments);
         let (expected_version, action, peek) = match parsed {
             Ok((_, Dispatch::Workspace(Action::FocusVessel { .. }), _)) => {
                 return self.reject(
@@ -1131,7 +1051,7 @@ mod tests {
         checked.unwrap();
     }
 
-    fn completed(tools: &mut Tools) -> Completed {
+    pub(super) fn completed(tools: &mut Tools) -> Completed {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             if let Some(completed) = tools.poll() {
@@ -1140,110 +1060,6 @@ mod tests {
             assert!(Instant::now() < deadline, "workspace effect did not return");
             thread::sleep(Duration::from_millis(5));
         }
-    }
-
-    #[test]
-    fn peek_reads_another_voyage_and_moves_nothing_and_focus_vessel_is_not_an_agent_tool() {
-        let session = format!("voyager-peek-tool-test-{}", std::process::id());
-        let workspace = Client::open(session.clone(), "/tmp".into());
-        let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let call = |action: Action, expected_version: u64| {
-                workspace
-                    .call(Request {
-                        request_id: workspace.request_id(),
-                        expected_version,
-                        action,
-                    })
-                    .unwrap()
-            };
-            let initial = call(Action::Inspect, 0);
-            let a = initial.layout.voyages[0].id.clone();
-            let created = call(
-                Action::CreateVoyage {
-                    name: "Elsewhere".into(),
-                    cwd: "/tmp".into(),
-                },
-                initial.version,
-            );
-            let b = created.layout.voyages[1].id.clone();
-            let vessel = created.layout.voyages[1].fleets[0].placements[0].id.clone();
-            call(Action::SelectVoyage { id: a.clone() }, created.version);
-            let before = call(Action::Inspect, 0);
-            let focus = voyager_contract::context::Focus {
-                scope: Context::Voyage { id: a.clone() },
-                path: vec!["A".into()],
-                cwd: None,
-                revision: before.version,
-                preview: None,
-            };
-            let mut tools = Tools::default();
-            let peek = json!({"id":"peek","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"peek-call","tool":"voyager_peek","arguments":{"target":{"kind":"voyage","id":b}}}});
-            assert!(
-                tools
-                    .callback(
-                        &peek,
-                        Some("thread"),
-                        Some("turn"),
-                        true,
-                        Some(&focus),
-                        &workspace
-                    )
-                    .is_none()
-            );
-            let peeked = completed(&mut tools);
-            let read: Response = serde_json::from_str(
-                crate::provider_settings::codex_reply(&peeked.replies[0])["result"]["contentItems"]
-                    [0]["text"]
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap();
-            assert_eq!(read.status, Outcome::Applied);
-            assert_eq!(
-                read.layout
-                    .voyages
-                    .iter()
-                    .map(|voyage| voyage.id.clone())
-                    .collect::<Vec<_>>(),
-                vec![b.clone()]
-            );
-            let after = call(Action::Inspect, 0);
-            assert_eq!(after.layout.selected_voyage, before.layout.selected_voyage);
-            assert_eq!(after.layout.selected_fleet, before.layout.selected_fleet);
-            assert_eq!(after.layout.context, before.layout.context);
-            assert_eq!(after.layout.view, before.layout.view);
-            assert_eq!(after.layout.last_vessels, before.layout.last_vessels);
-            assert_eq!(after.version, before.version);
-            let focusing = json!({"id":"focus","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"focus-call","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"focus-vessel","id":vessel}}}});
-            let refused = tools
-                .callback(
-                    &focusing,
-                    Some("thread"),
-                    Some("turn"),
-                    true,
-                    Some(&focus),
-                    &workspace,
-                )
-                .unwrap();
-            assert_eq!(refused["result"]["success"], false);
-            assert!(
-                refused.to_string().contains("not an agent tool"),
-                "{refused}"
-            );
-            let definitions = catalog().unwrap();
-            assert!(definitions.iter().any(|tool| tool.name == "voyager_peek"));
-            let workspace_tool = definitions
-                .iter()
-                .find(|tool| tool.name == "voyager_workspace")
-                .unwrap();
-            assert!(!workspace_tool.schema.to_string().contains("focus-vessel"));
-        }));
-        let mut cleanup = crate::core::Core::connect(&session).unwrap();
-        let stopped = cleanup.server_stop();
-        cleanup.close().unwrap();
-        drop(workspace);
-        stopped.unwrap();
-        checked.unwrap();
     }
 
     #[test]
