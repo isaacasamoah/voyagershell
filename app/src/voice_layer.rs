@@ -569,6 +569,24 @@ mod tests {
     }
 
     #[test]
+    fn a_live_voyager_with_no_state_yet_receives_the_words() {
+        let rig = Rig::new(speech_then_pause(), Standing::Unknown, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    }
+
+    #[test]
+    fn a_gone_or_ended_voyager_is_told_it_is_not_running_and_receives_nothing() {
+        let rig = Rig::new(speech_then_pause(), Standing::NotRunning, false);
+        let (_keep, commands) = mpsc::channel();
+        rig.run("open the roadmap", &commands);
+        assert!(rig.said().is_empty());
+        assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
+    }
+
+    #[test]
     fn a_busy_voyager_gets_the_words_and_the_queued_phrase() {
         let rig = Rig::new(speech_then_pause(), Standing::Working, false);
         let (_keep, commands) = mpsc::channel();

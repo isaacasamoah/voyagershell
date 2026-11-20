@@ -107,6 +107,17 @@ mod tests {
     }
 
     #[test]
+    fn a_program_core_reports_ended_or_gone_is_not_running() {
+        for state in [None, Some("done"), Some("working")] {
+            let ended = standing_from(Ok(ProgramReply::Status {
+                live: false,
+                state: state.map(str::to_owned),
+            }));
+            assert_eq!(ended, Standing::NotRunning);
+        }
+    }
+
+    #[test]
     fn an_unclear_answer_is_unknown() {
         assert_eq!(
             standing_from(Ok(ProgramReply::Status {

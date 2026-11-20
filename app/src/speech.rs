@@ -71,7 +71,7 @@ pub struct Acknowledgement {
 
 pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
     match standing {
-        Standing::Idle => Acknowledgement {
+        Standing::Idle | Standing::Unknown => Acknowledgement {
             phrase: if turn.is_multiple_of(2) {
                 Phrase::Asking
             } else {
@@ -87,7 +87,7 @@ pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
             phrase: Phrase::NeedsYou,
             send: false,
         },
-        Standing::NotRunning | Standing::Unknown => Acknowledgement {
+        Standing::NotRunning => Acknowledgement {
             phrase: Phrase::NotRunning,
             send: false,
         },
@@ -329,6 +329,16 @@ mod tests {
     fn a_working_voyager_queues_the_words() {
         let queued = acknowledge(Standing::Working, 0);
         assert_eq!((queued.phrase, queued.send), (Phrase::Queued, true));
+    }
+
+    #[test]
+    fn a_voyager_with_no_state_yet_is_asked_like_an_idle_one() {
+        for turn in [0, 1] {
+            let unknown = acknowledge(Standing::Unknown, turn);
+            let idle = acknowledge(Standing::Idle, turn);
+            assert_eq!(unknown, idle);
+            assert!(unknown.send);
+        }
     }
 
     #[test]

@@ -31,10 +31,10 @@ reply aloud.
 
 | Voyager's standing | Clip | Words sent |
 | --- | --- | --- |
-| Idle or done | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
+| Idle or done, or no state yet | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
 | Working | "Queued for Voyager." | Yes |
 | Blocked | "Voyager needs you on Home first." | No |
-| Not running | "Voyager isn't running. Resume it in the chat." | No |
+| Not running (no binding, or Core reports the program ended or gone) | "Voyager isn't running. Resume it in the chat." | No |
 | Nothing heard | "I didn't catch that." | No |
 
 A click made while the avatar hears or speaks is dropped. A click while Voyager
@@ -99,7 +99,10 @@ trait, which reports its standing and takes the words. `app/src/voice_voyager.rs
 implements it over the application queue. It reads the terminal that the app wrote
 in its own binding file, asks Core for that terminal's reported status, and sends the
 words with Core's own send, which refuses a blocked program and never forces. With no
-binding, or a program that is gone, Voyager counts as not running and nothing is sent.
+binding, or a program that Core reports ended or gone, Voyager counts as not running and
+nothing is sent. A failed read of Core, or a live program that has not reported a state
+yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
+Speech does the opposite and waits on an unknown standing.
 An unconfirmed send is reported and never repeated. Audio goes
 through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
 PulseAudio command line tools, which PipeWire also serves. Linux is the only
