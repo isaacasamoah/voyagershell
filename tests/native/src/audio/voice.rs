@@ -95,6 +95,41 @@ fn onset_ms(samples: &Samples) -> Option<i64> {
         .map(|index| (index * ONSET_WINDOW * 1000 / super::speech::RATE as usize) as i64)
 }
 
+#[derive(Debug, Serialize)]
+pub struct Memory {
+    pub engine_mb: Option<u64>,
+    pub app_mb: Option<u64>,
+}
+
+fn resident_mb(program: &str) -> Option<u64> {
+    fs::read_dir("/proc")
+        .ok()?
+        .filter_map(Result::ok)
+        .find_map(|entry| {
+            let command = fs::read(entry.path().join("cmdline")).ok()?;
+            let name = command.split(|byte| *byte == 0).next()?;
+            let matches = Path::new(std::str::from_utf8(name).ok()?)
+                .file_name()
+                .is_some_and(|file| file == program);
+            let status = fs::read_to_string(entry.path().join("status")).ok()?;
+            let kilobytes: u64 = status
+                .lines()
+                .find_map(|line| line.strip_prefix("VmRSS:"))?
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()?;
+            matches.then_some(kilobytes / 1024)
+        })
+}
+
+pub fn memory() -> Memory {
+    Memory {
+        engine_mb: resident_mb("llama-server"),
+        app_mb: resident_mb("voyager-shell"),
+    }
+}
+
 pub fn recorders(native: &Native) -> Result<Vec<String>> {
     let stack = stack(native)?;
     stack.recorders(&native.system)

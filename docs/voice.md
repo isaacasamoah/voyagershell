@@ -121,5 +121,15 @@ is local and nothing runs until a click.
 ## Privacy
 
 Audio stays in memory. The layer never writes samples to disk, to the log or to
-Core's scrollback. The engine's own log lines carry no audio. An evidence file
-set by `VOYAGER_VOICE_TRACE` records event names and times only, never words.
+Core's scrollback. The engine's own log lines carry no audio. The verifier sets
+`VOYAGER_VOICE_TRACE` to a file that records event names and times, and for its own
+synthetic speech the words heard. The app never sets it, so a real session records
+no words.
+
+## How it is checked
+
+The native `voice` journey in [the verification guide](../tests/native/README.md#the-voice-journey)
+clicks the real control, feeds committed synthetic speech to the microphone and records the
+speaker. It checks that nothing records the microphone without a click, that the words come
+back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
+appears in any log. The spoken result and the words reaching Voyager are not covered yet.

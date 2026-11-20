@@ -30,9 +30,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             "the voice control ready after the engine loads",
             |label| label == READY,
         )?;
+        let memory = voice::memory();
         Verdict::new()
             .expect("the voice control reads Start voice", label == READY)
-            .observed("label", label)
+            .expect(
+                "the engine program runs and holds memory while idle",
+                memory.engine_mb.is_some(),
+            )
+            .observed("label", label)?
+            .observed("idleMemory", memory)
     })?;
     cases.check(native, Case::NoCaptureWithoutClick, |native| {
         let seen = voice::without_capture(native, QUIET_MIC)?;
