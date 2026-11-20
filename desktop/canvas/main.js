@@ -33,7 +33,7 @@ import { agentsShown } from "./agents.js";
 import { openOrRetry, reopens, terminalStatus } from "./terminal-open.js";
 import { CreationPicker } from "./creation.js";
 import {
-  acceptDock,
+  acceptDockResult,
   focusedPlacement,
   moveFocus,
   renderPanel,
@@ -1710,7 +1710,7 @@ export default class Canvas extends View {
       this.animationNotice = animationNotice;
     }
     try {
-      acceptDock(this, cx);
+      acceptDockResult(this, cx);
     } catch (error) {
       this.status = errorMessage(error);
     }

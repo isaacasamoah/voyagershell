@@ -21,7 +21,7 @@ function noteFocus(workspace, id, cx) {
 }
 const VOYAGER_VESSEL = "voyager";
 const seenDocks = new WeakMap();
-export function acceptDock(workspace, cx) {
+export function acceptDockResult(workspace, cx) {
   const raw = take_result();
   if (raw === null) return followSnapshotDock(workspace, cx);
   const result = JSON.parse(raw);

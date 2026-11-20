@@ -1185,10 +1185,10 @@ remembered one and gives that terminal keyboard focus unless a chat, a rename or
 a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
 step. It records the dock, runs the inspect and gives the keyboard from that
 request's completion, because a focus asked for while the canvas renders does
-not reach the terminal. `acceptDock`, beside it, runs at each render. It runs
+not reach the terminal. `acceptDockResult`, beside it, runs at each render. It runs
 `followDock` for the avatar's reply. Every other dock reaches the canvas as an
 accepted layout whose dock context differs from the last one recorded, and
-when no request is preparing, `acceptDock` runs `followDock` for it once. Only
+when no request is preparing, `acceptDockResult` runs `followDock` for it once. Only
 a dock writes the dock context, so no other change follows. A second dock on the context the canvas already
 holds does not differ, so it does not follow. When the user has clicked another
 Vessel and Voyager docks on the same one again, the keyboard stays where the

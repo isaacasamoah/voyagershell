@@ -3,7 +3,7 @@ diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
 @@ -41,7 +41,7 @@
  
- export function acceptDock(workspace: Canvas, cx: UIContext) {
+ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    const raw = take_result();
 -  if (raw === null) return followSnapshotDock(workspace, cx);
 +  if (raw === null) return;
@@ -15,7 +15,7 @@ diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -23,7 +23,7 @@
  const seenDocks = new WeakMap();
- export function acceptDock(workspace, cx) {
+ export function acceptDockResult(workspace, cx) {
    const raw = take_result();
 -  if (raw === null) return followSnapshotDock(workspace, cx);
 +  if (raw === null) return;

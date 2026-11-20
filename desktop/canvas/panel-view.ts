@@ -39,7 +39,7 @@ const VOYAGER_VESSEL = "voyager";
 
 const seenDocks = new WeakMap<Canvas, string>();
 
-export function acceptDock(workspace: Canvas, cx: UIContext) {
+export function acceptDockResult(workspace: Canvas, cx: UIContext) {
   const raw = take_result();
   if (raw === null) return followSnapshotDock(workspace, cx);
   const result: unknown = JSON.parse(raw);

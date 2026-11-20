@@ -858,13 +858,13 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     layout: layout({ kind: "vessel", id }, id),
   });
   let result = null;
-  const { Canvas, acceptDock } = new Function(
+  const { Canvas, acceptDockResult } = new Function(
     "View",
     "take_result",
     "validateResponse",
     "window",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
-      "\nreturn { Canvas, acceptDock };",
+      "\nreturn { Canvas, acceptDockResult };",
   )(
     class {},
     () => {
@@ -905,7 +905,7 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     view.acceptSnapshot(next, task);
     done?.(next, task);
   };
-  const render = () => acceptDock(view, cx);
+  const render = () => acceptDockResult(view, cx);
   view.acceptSnapshot(reply("placement-3"), cx);
   render();
   assert.deepEqual(focused, [], "the first snapshot only records the dock");
