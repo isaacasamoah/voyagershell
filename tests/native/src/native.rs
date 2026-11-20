@@ -12,6 +12,7 @@ pub use settle::{
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
+use crate::audio::Stack;
 use crate::frames;
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::profile;
@@ -216,6 +217,8 @@ pub struct Native {
     pub hc: Pinned,
     pub script: Option<Script>,
     pub probe_frames: bool,
+    pub audio_requested: bool,
+    pub audio: Option<Stack>,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -269,6 +272,8 @@ impl Native {
             hc,
             script: None,
             probe_frames: false,
+            audio_requested: false,
+            audio: None,
             surface,
             display: None,
             x11: None,
@@ -290,6 +295,11 @@ impl Native {
     }
 
     pub fn prepare(&mut self) -> Result<()> {
+        if self.audio_requested {
+            let stack = Stack::start(&self.system)?;
+            stack.canary(&self.system)?;
+            self.audio = Some(stack);
+        }
         self.system
             .env
             .insert("DISPLAY".into(), sandbox::DISPLAY.into());
@@ -1083,6 +1093,11 @@ impl Native {
         {
             return Cause::Fixture(format!("owned display exited: {status}"));
         }
+        if let Some(stack) = self.audio.as_mut()
+            && let Err(error) = stack.alive()
+        {
+            return Cause::Fixture(format!("{error:#}"));
+        }
         if let Some(Defect(detail)) = defect {
             return Cause::Product(detail.clone());
         }
@@ -1211,6 +1226,9 @@ impl Native {
         }
         if let Err(error) = self.release_requests() {
             errors.push(format!("window requests: {error:#}"));
+        }
+        if let Some(mut stack) = self.audio.take() {
+            errors.extend(stack.stop());
         }
         if self.system.socket().exists() {
             let stopped = (|| -> Result<()> {

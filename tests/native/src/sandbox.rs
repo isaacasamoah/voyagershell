@@ -43,8 +43,8 @@ const NAMESPACE: &str = "/usr/bin/bwrap --unshare-user --unshare-pid --unshare-n
 
 pub struct Sandbox<'a> {
     pub verifier: &'a Path,
-    pub candidate: &'a Path,
-    pub core: &'a Path,
+    pub candidate: Option<&'a Path>,
+    pub core: Option<&'a Path>,
     pub second: Option<&'a Path>,
     pub assets: Option<&'a Path>,
     pub second_assets: Option<&'a Path>,
@@ -62,17 +62,21 @@ impl Sandbox<'_> {
                 command.extend(["--ro-bind".into(), link.into(), link.into()]);
             }
         }
-        command.extend(["--ro-bind".into(), text(self.core)?, CORE.into()]);
+        if let Some(core) = self.core {
+            command.extend(["--ro-bind".into(), text(core)?, CORE.into()]);
+        }
         for relay in [PROVIDER, CORE_RELAY, AGENT] {
             command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
         }
-        let command_line = self.candidate.with_file_name("voyager");
-        if command_line.is_file() {
+        let command_line = self
+            .candidate
+            .map(|candidate| candidate.with_file_name("voyager"));
+        if let Some(command_line) = command_line.filter(|path| path.is_file()) {
             command.extend(["--ro-bind".into(), text(&command_line)?, COMMAND.into()]);
         }
         for path in [
             Some(self.verifier),
-            Some(self.candidate),
+            self.candidate,
             self.second,
             self.assets,
             self.second_assets.filter(|path| Some(*path) != self.assets),
@@ -223,7 +227,7 @@ pub fn host_resources() -> Result<Vec<Resource>> {
     let session: Vec<_> = paths
         .iter()
         .filter(|(name, _)| name == "runtime")
-        .map(|(_, folder)| folder.clone())
+        .flat_map(|(_, folder)| [folder.clone(), folder.join("pulse")])
         .chain([PathBuf::from("/tmp/.X11-unix")])
         .collect();
     for folder in session {
@@ -353,8 +357,8 @@ mod tests {
         ) -> Result<Vec<String>> {
             Sandbox {
                 verifier: &self.executable,
-                candidate: &self.executable,
-                core: &self.executable,
+                candidate: Some(&self.executable),
+                core: Some(&self.executable),
                 second: None,
                 assets: exposed,
                 second_assets: None,

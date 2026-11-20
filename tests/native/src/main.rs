@@ -1,4 +1,5 @@
 mod agent;
+mod audio;
 mod battery;
 mod core_relay;
 mod declared_invariants;
@@ -57,7 +58,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, probe, features, lint, journeys, manifest\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nlint [--root DIR] fails with rule check-loosened on a Duration constructor, a sleep or a wall-clock reading in a journey file outside src/native/settle.rs, and names the fix.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, audio-selftest, probe, features, lint, journeys, manifest\naudio-selftest --evidence NEW_ABSOLUTE_PATH starts a private audio server in the sandbox, feeds synthetic speech to a program's microphone path, captures what the program plays and judges both, then runs two controls that must fail. It needs no candidate and runs no app.\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nlint [--root DIR] fails with rule check-loosened on a Duration constructor, a sleep or a wall-clock reading in a journey file outside src/native/settle.rs, and names the fix.\njourneys prints each native journey with its cases, its required sidebar, its smallest window, the Core delay it runs under and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE] [--role head|trunk|control|mutant] [--audio on]\nmanifest --folder VERDICT_FOLDER --input INPUT_JSON writes verdict.json in the folder. The input lists the pull request, the head, every run folder with an optional role, and the gates, mutants, perf pairs and media. The writer refuses a run with no role (checks.json records it when run was given --role, otherwise the input must declare it) and any cited file that does not exist.\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -85,6 +86,13 @@ fn entry() -> Result<i32> {
     }
     if command == "battery" {
         return battery::run(&args);
+    }
+    if command == "audio-selftest" {
+        return audio::selftest::run(&args);
+    }
+    if command == "internal-audio" {
+        ensure!(args.len() == 1, "Sandboxed audio self-test needs its plan");
+        return audio::selftest::internal(serde_json::from_str(&args[0])?);
     }
     if command == "journeys" {
         ensure!(args.is_empty(), "Unexpected journeys options");
@@ -134,6 +142,7 @@ fn entry() -> Result<i32> {
         "--core-document",
         "--role",
         "--probe",
+        "--audio",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -229,8 +238,8 @@ fn entry() -> Result<i32> {
     let confine = |evidence: Option<&Path>, inner: &[&str]| {
         Sandbox {
             verifier: &verifier,
-            candidate: &candidate.path,
-            core: &hc.path,
+            candidate: Some(&candidate.path),
+            core: Some(&hc.path),
             second: second.as_ref().map(|pinned| pinned.path.as_path()),
             assets: assets.as_deref(),
             second_assets: second_assets.as_deref(),
@@ -278,6 +287,11 @@ fn entry() -> Result<i32> {
         Some("frame") => true,
         Some(other) => bail!("Unknown probe {other}; the only probe is frame"),
     };
+    let audio = match get("--audio").ok().as_deref() {
+        None => false,
+        Some("on") => true,
+        Some(other) => bail!("Unknown audio setting {other}; the only setting is on"),
+    };
     let session = format!(
         "{}-{}-{:08x}",
         if probe_frames {
@@ -288,7 +302,7 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"audio":audio,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -341,6 +355,7 @@ struct Plan {
     role: Option<manifest::Role>,
     #[serde(rename = "probeFrames")]
     probe_frames: bool,
+    audio: bool,
 }
 
 fn journey(
@@ -404,6 +419,7 @@ fn drive(plan: Plan) -> Result<i32> {
     let mut native = Native::new(system, plan.candidate, plan.second, plan.hc, plan.surface);
     native.script = plan.provider_script;
     native.probe_frames = plan.probe_frames;
+    native.audio_requested = plan.audio;
     native.seed_documents(plan.documents);
     let mut gate = Run::default();
     let result = journey(
@@ -505,7 +521,7 @@ fn drive(plan: Plan) -> Result<i32> {
             &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let mut report = json!({"schema":3,"journey":plan.journey,"role":plan.role,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":tested.path,"sha256":tested.sha256,"second":second,"builds":native.builds(),"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let mut report = json!({"schema":3,"journey":plan.journey,"role":plan.role,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"audio":plan.audio,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":tested.path,"sha256":tested.sha256,"second":second,"builds":native.builds(),"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     if let Some(Ok(summary)) = frames {
         report["frames"] = summary;
     }
@@ -522,6 +538,11 @@ fn drive(plan: Plan) -> Result<i32> {
 const SOURCES: &[(&str, &[u8])] = &[
     ("src/main.rs", include_bytes!("main.rs")),
     ("src/agent.rs", include_bytes!("agent.rs")),
+    ("src/audio.rs", include_bytes!("audio.rs")),
+    ("src/audio/exchange.rs", include_bytes!("audio/exchange.rs")),
+    ("src/audio/judge.rs", include_bytes!("audio/judge.rs")),
+    ("src/audio/selftest.rs", include_bytes!("audio/selftest.rs")),
+    ("src/audio/speech.rs", include_bytes!("audio/speech.rs")),
     ("src/battery.rs", include_bytes!("battery.rs")),
     ("src/core_relay.rs", include_bytes!("core_relay.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
