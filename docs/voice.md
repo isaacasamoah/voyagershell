@@ -24,8 +24,9 @@ prepares that text is already in place.
    already holds, so hearing adds no inspection call.
 4. A cached clip answers at once. It says only that the words were heard and
    passed on. It never names an action or claims a result.
-5. The words go to Voyager as `[spoken] <words>` through the same send the chat
-   box uses.
+5. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
+   same send the chat box uses. The focus hook reads the marker and tells the app that
+   the turn is spoken.
 
 | Voyager's standing | Clip | Words sent |
 | --- | --- | --- |

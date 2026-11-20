@@ -2,10 +2,7 @@ use crate::{
     audio_io::{Capture, End, Gate, Playing},
     client::Client,
     omni::{self, Clips, Omni, Running, Settings},
-    speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
-        spoken_prompt,
-    },
+    speech::{Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge},
 };
 use std::{
     collections::HashMap,
@@ -306,7 +303,7 @@ impl Exchange<'_> {
         self.shared.set(Phase::Acknowledging, None);
         let mut notice = None;
         if send {
-            match self.voyager.say(&spoken_prompt(&heard)) {
+            match self.voyager.say(&crate::spoken::prompt(&heard)) {
                 Ok(()) => self.trace.mark("sent"),
                 Err(reason) => notice = Some(format!("Not sent. {reason}")),
             }
@@ -594,6 +591,7 @@ mod tests {
             Outcome::Done
         ));
         assert_eq!(rig.said(), vec!["[spoken] Rename this fleet to Harbor."]);
+        assert!(crate::spoken::is_spoken(&rig.said()[0]));
         assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
         assert_eq!(rig.snapshot().phase, Phase::Ready);
     }

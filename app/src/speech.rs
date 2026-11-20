@@ -1,4 +1,3 @@
-pub const MARKER: &str = "[spoken]";
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const MAX_SENTENCES: usize = 2;
 pub const MAX_WORDS: usize = 30;
@@ -90,10 +89,6 @@ pub fn acknowledge(heard: &str, standing: Standing, turn: u64) -> Acknowledgemen
             send: false,
         },
     }
-}
-
-pub fn spoken_prompt(words: &str) -> String {
-    format!("{MARKER} {words}")
 }
 
 pub fn clean_heard(raw: &str) -> String {
@@ -326,11 +321,6 @@ mod tests {
                 assert!(!words.contains(forbidden), "{words}");
             }
         }
-    }
-
-    #[test]
-    fn the_prompt_carries_the_marker_voice_step_two_reads() {
-        assert_eq!(spoken_prompt("open it"), "[spoken] open it");
     }
 
     #[test]
