@@ -939,9 +939,9 @@ features:
         says: 'When the assistant speaks, the person hears it through the selected output.'
         owner: conversation-provider
         guards: []
-        checks: ['manual:an agent proof where one exists, otherwise Isaac by ear']
+        checks: ['manual:an agent proof where one exists, otherwise Isaac by ear', 'journey:voice/reply-is-spoken', 'journey:voice/typed-reply-is-silent']
         formal: []
-        journeys: []
+        journeys: [voice]
       - id: voice-is-click-to-talk
         kind: user
         says: 'Voice listens only after the user clicks, and it never adds per-use API charges.'
@@ -966,7 +966,9 @@ features:
       - app/src/voice.rs
       - app/src/voice_host.rs
       - app/src/voice_layer.rs
+      - app/src/voice_reply.rs
       - app/src/voice_session.rs
+      - app/src/voice_speaker.rs
       - app/src/voice_transcript.rs
       - app/src/voice_voyager.rs
       - app/src/voice_wire.rs

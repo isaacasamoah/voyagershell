@@ -1,7 +1,7 @@
 use crate::{
     client::{Client, ProgramError, ProgramReply, ProgramRequest},
     speech::Standing,
-    voice_layer::Voyager,
+    voice_parts::Voyager,
     voyager_binding::Binding,
 };
 use std::path::PathBuf;

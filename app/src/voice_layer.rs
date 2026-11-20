@@ -1,47 +1,25 @@
 use crate::{
-    audio_io::{Capture, End, Gate, Playing},
+    audio_io::{End, Gate},
     client::Client,
     omni::{self, Clips, Omni, Running, Settings},
     replies::Replies,
     speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
-        heard_nothing,
+        Acknowledgement, Clip, Fault, Hearing, Phrase, Utterance, acknowledge, heard_nothing,
     },
+    voice_parts::{Audio, Phase, Speaker, Trace, Voyager},
     voice_speaker,
 };
 use std::{
     collections::HashMap,
-    fs::OpenOptions,
-    io::{self, Write},
-    path::PathBuf,
     sync::{
         Arc, Condvar, Mutex,
         mpsc::{self, Receiver, Sender, TryRecvError},
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
-pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
-
-pub trait Voyager: Send + Sync {
-    fn standing(&self) -> Standing;
-    fn say(&self, text: &str) -> Result<(), String>;
-}
-
 pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Phase {
-    Starting,
-    Ready,
-    Listening,
-    Hearing,
-    Acknowledging,
-    Speaking,
-    Unavailable(String),
-    Stopped,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Snapshot {
@@ -54,46 +32,6 @@ pub struct Snapshot {
 enum Command {
     Click,
     Shutdown,
-}
-
-pub trait Frames {
-    fn frame(&mut self) -> io::Result<Vec<i16>>;
-}
-
-pub trait Speaker: Send {
-    fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send>;
-}
-
-pub trait Audio: Send + Sync {
-    fn microphone(&self) -> io::Result<Box<dyn Frames>>;
-    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
-}
-
-pub struct System;
-
-impl Frames for Capture {
-    fn frame(&mut self) -> io::Result<Vec<i16>> {
-        Capture::frame(self)
-    }
-}
-
-impl Audio for System {
-    fn microphone(&self) -> io::Result<Box<dyn Frames>> {
-        Capture::open().map(|capture| Box::new(capture) as Box<dyn Frames>)
-    }
-
-    fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>> {
-        Playing::open(rate).map(|playing| Box::new(playing) as Box<dyn Speaker>)
-    }
-}
-
-impl Speaker for Playing {
-    fn play(mut self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
-        Playing::play(&mut self, clip.pcm.clone());
-        Box::new(move || {
-            let _ = self.finish();
-        })
-    }
 }
 
 struct Shared {
@@ -167,44 +105,6 @@ impl Layer {
             .wait_timeout_while(state, within, |state| state.phase != Phase::Stopped)
             .map(|(state, _)| state.phase == Phase::Stopped)
             .unwrap_or(false)
-    }
-}
-
-#[derive(Clone)]
-pub struct Trace(Option<PathBuf>);
-
-impl Trace {
-    pub fn from_environment() -> Self {
-        Self(std::env::var_os(TRACE_VARIABLE).map(PathBuf::from))
-    }
-
-    pub fn off() -> Self {
-        Self(None)
-    }
-
-    pub fn mark(&self, event: &str) {
-        self.record(event, None);
-    }
-
-    pub fn mark_words(&self, event: &str, words: &str) {
-        self.record(event, Some(words));
-    }
-
-    fn record(&self, event: &str, words: Option<&str>) {
-        let Some(path) = &self.0 else {
-            return;
-        };
-        let at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|elapsed| elapsed.as_millis())
-            .unwrap_or(0);
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-            let line = match words {
-                Some(words) => serde_json::json!({"event": event, "atMs": at, "words": words}),
-                None => serde_json::json!({"event": event, "atMs": at}),
-            };
-            let _ = writeln!(file, "{line}");
-        }
     }
 }
 
@@ -464,6 +364,8 @@ pub fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{speech::Standing, voice_parts::Frames};
+    use std::io;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Script(Vec<Vec<i16>>);

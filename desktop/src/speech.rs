@@ -5,7 +5,10 @@ use gpui::{
 };
 use gpui_base::{Button, Theme, Tooltip};
 use std::time::Duration;
-use voyager_app::voice_layer::{Layer, Phase, Snapshot};
+use voyager_app::{
+    voice_layer::{Layer, Snapshot},
+    voice_parts::Phase,
+};
 use voyager_contract::inspection::Role;
 
 struct Controller(Entity<Speech>);

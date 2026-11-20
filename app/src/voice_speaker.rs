@@ -1,7 +1,7 @@
 use crate::{
     replies::Replies,
     speech::{Clip, Phrase, Speaking},
-    voice_layer::{Audio, Phase, Trace, Voyager},
+    voice_parts::{Audio, Phase, Trace, Voyager},
     voice_reply::{Line, Watcher},
 };
 use std::{
@@ -96,7 +96,7 @@ mod tests {
     use super::*;
     use crate::{
         speech::{Fault, SpokenText, Standing},
-        voice_layer::{Frames, Speaker},
+        voice_parts::{Frames, Speaker},
     };
     use std::{
         io,

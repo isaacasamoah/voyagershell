@@ -10,7 +10,8 @@ use voyager_app::{
     core::Core,
     omni::Settings,
     speech::Standing,
-    voice_layer::{self, Phase, System, Trace, Voyager},
+    voice_layer,
+    voice_parts::{Phase, System, Trace, Voyager},
 };
 
 const SERVER: &str = r#"#!/usr/bin/env python3

@@ -310,11 +310,17 @@ fn data_of(response: &[u8]) -> Result<(u32, Vec<u8>)> {
 fn post(native: &Native, path: &str, body: &str) -> Result<Vec<u8>> {
     let port = engine_port(native)?;
     let mut socket = TcpStream::connect(("127.0.0.1", port))?;
-    write!(
-        socket,
-        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
-        body.len()
-    )?;
+    let head = [
+        format!("POST {path} HTTP/1.1"),
+        "Host: 127.0.0.1".to_owned(),
+        "Connection: close".to_owned(),
+        "Content-Type: application/json".to_owned(),
+        format!("Content-Length: {}", body.len()),
+        String::new(),
+        String::new(),
+    ]
+    .join("\r\n");
+    write!(socket, "{head}{body}")?;
     let mut response = Vec::new();
     socket.read_to_end(&mut response)?;
     Ok(response)

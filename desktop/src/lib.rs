@@ -116,8 +116,8 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
             let client = client.clone();
             std::sync::Arc::new(move || client.workspace_words())
         },
-        std::sync::Arc::new(voyager_app::voice_layer::System),
-        voyager_app::voice_layer::Trace::from_environment(),
+        std::sync::Arc::new(voyager_app::voice_parts::System),
+        voyager_app::voice_parts::Trace::from_environment(),
     );
     gpui_platform::application()
         .with_assets(assets)
