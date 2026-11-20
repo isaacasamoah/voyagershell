@@ -35,7 +35,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Front door | covered | none | none | covered | slow-save | - | linux |
 | Refused and uncertain results | covered | none | none | covered | outcomes | - | linux |
 | Core reports and slow reads | covered | none | none | covered | core-events, slow-list | - | linux |
-| Labelled programs as Vessels | covered | none | none | covered | adopt-by-label | - | linux |
+| Labelled programs as Vessels | covered | none | none | covered | adopt-by-label, socket-dock | - | linux |
 | Verification environment | none | none | none | none | - | - | linux |
 <!-- features:end -->
 

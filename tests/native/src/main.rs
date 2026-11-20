@@ -634,6 +634,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         "src/journey/slow_save.rs",
         include_bytes!("journey/slow_save.rs"),
     ),
+    (
+        "src/journey/socket_dock.rs",
+        include_bytes!("journey/socket_dock.rs"),
+    ),
     ("src/journey/voice.rs", include_bytes!("journey/voice.rs")),
     (
         "src/journey/voyage_close.rs",

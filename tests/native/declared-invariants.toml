@@ -182,6 +182,17 @@ gap = "The portals journey's control case, portal-across-fleets, is not linked h
 confidence = "stated"
 
 [[invariant]]
+id = "dock-gives-the-keyboard"
+says = "A dock on a Vessel, from the avatar or from Voyager's voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. Typed keys then reach only the docked Vessel."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 17 Nov 2026: a dock onto a Vessel opens its Voyage and Fleet, shows it and gives it keyboard focus; Verify's trial at main 53f6ffab, 21 Nov 2026, where a voyager command dock left the keys in the first shell"
+features = ["adopted-vessels"]
+guard = ["type:app/src/client_owner.rs#Flight"]
+check = ["journey:socket-dock/socket-dock-takes-keyboard"]
+confidence = "stated"
+
+[[invariant]]
 id = "avatar-stays-put"
 says = "The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it."
 kind = "user"
