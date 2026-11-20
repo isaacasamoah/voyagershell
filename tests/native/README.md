@@ -32,7 +32,8 @@ The environment is not yet accepted as a complete implementation of that design.
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal, provider, content and authority journeys | The `portals` and `chat` journeys are native. Content and authority coverage stays in the retained Python drivers; Rust migration and parity incomplete. |
 | Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. `quit-restore` asserts the window buttons, the corner grip and the close button, and `workspace` asserts the drag, the double-click and the tab drag. See Client decorations and window requests below. |
-| Window-manager behavior, IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
+| Speech in and speech out on Linux | Implemented by `audio-selftest` and `run --audio on`. Samples only, no microphone or speaker. See Audio below. |
+| Window-manager behavior, IME, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
 
 A fixture failure preserves its run, enters diagnosis, receives a demonstrated
@@ -840,6 +841,147 @@ so a plain-text refusal is kept as a string. The app's tool names and argument
 shapes come from `contract/generated`, and nothing in the verifier checks the
 script's arguments against them, so a call that the app refuses as malformed is
 a refusal to read in the ledger and not a verifier error.
+
+### Audio
+
+`voyager-verification audio-selftest --evidence NEW_ABSOLUTE_PATH` proves that the
+environment can put speech into a program's microphone path and capture the speech that
+the program plays. It needs no candidate build and starts no app. `run --audio on` starts
+the same audio server before the app launches, so a journey runs with it. No journey reads
+the server yet. The voice layer's first journey is its first reader.
+
+The proof is captured samples at the monitor of a null sink in a private audio server. It
+is not a physical speaker, a microphone or an ear, and it does not show that anyone can
+hear the sound. `CONSTRAINTS.md` says that silent or decoded audio does not establish
+audible output, and this capability does not claim to. Linux only.
+
+CI does not run the audio self-test. The runners have no PipeWire. The unit tests in
+`src/audio/speech.rs` and `src/audio/judge.rs` need no server, so `cargo test` runs them
+there. The exchange, the controls and the stack run only through `audio-selftest`, on a
+host with the tools below. A change under `src/audio/` is verified by that command at its
+head, and the result is not a CI check.
+
+**Host tools.** `pipewire`, `wireplumber`, `pipewire-pulse`, `pw-cli`, `pactl`, `parec`,
+`paplay`, `arecord` and `aplay`, all under `/usr/bin`. On Fedora the packages are
+`pipewire`, `wireplumber`, `pipewire-pulseaudio`, `pipewire-alsa`, `pipewire-utils`,
+`pulseaudio-utils` and `alsa-utils`. A missing tool ends the command with
+`Verification unavailable` and blames the host, before any sandbox starts. `espeak-ng` and
+`ffmpeg` are needed only to regenerate the speech files.
+
+**The stack.** `Stack::start` in `src/audio.rs` runs inside the sandbox. It starts
+`pipewire`, `wireplumber` and `pipewire-pulse` with the sandbox's private
+`XDG_RUNTIME_DIR`, which holds their sockets, so an app finds the server with no setting.
+The sandbox has no `/dev/snd`, so the server has no hardware, and the host's own audio
+server is not in the namespace. The containment canary also checks the host's Pulse
+socket. Through `pactl` the stack then makes three null sinks and one source.
+
+| Node | What it is |
+| --- | --- |
+| `mic_feed` | A sink. The verifier plays speech into it. |
+| `mic` | A source remapped from the monitor of `mic_feed`, and the default source. A program that records from the default device records this. |
+| `speaker` | A sink and the default sink. A program that plays to the default device plays here. The verifier records its monitor. |
+| `unplugged` | A sink that nothing plays to. Its monitor is the severed capture of the first control. |
+
+Both the Pulse protocol and the ALSA default device reach these nodes, because
+`pipewire-alsa` routes ALSA through the same server. `audio-selftest` drives both. A
+`Source/Virtual` node was tried first and recorded silence, so the source is a remap.
+
+**Speech.** `src/audio/speech.rs` is the one list of speech that can be fed. Each entry
+embeds a 48 kHz mono 16-bit WAV from `fixtures/speech/` and its SHA-256, and only that
+module can build one. A file that is not in the list cannot be fed, so no personal
+recording can enter a run or its evidence. Both files are synthetic speech from
+espeak-ng 1.51.1, resampled with ffmpeg:
+
+```sh
+espeak-ng -v en-us -s 150 -w a.wav "Open the roadmap."
+ffmpeg -i a.wav -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact open-the-roadmap.wav
+espeak-ng -v en-us+f3 -s 140 -w b.wav "Rename this fleet to review."
+ffmpeg -i b.wav -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact rename-the-fleet.wav
+```
+
+**An exchange.** `Stack::exchange` in `src/audio/exchange.rs` runs one loop with a client,
+the Pulse tools or the ALSA tools, standing in for the program under test.
+
+1. The verifier records the default sink's monitor, or the node that the exchange names,
+   from the first step to the last.
+2. The program starts recording from the default source.
+3. The verifier waits until the audio server lists a record stream on `mic`. It never
+   waits a fixed time.
+4. It plays `open-the-roadmap` into `mic_feed` and waits until the program's recording
+   matches it.
+5. The program plays what it recorded to the default sink. The verifier waits until the
+   server lists a play stream on `speaker`, then until the capture matches.
+
+Each step is an expectation of a `Verdict`, and the first unmet one names the hop.
+
+| Expectation | Unmet means |
+| --- | --- |
+| the program opened a record stream on the default source | The program never recorded. |
+| the speech the program recorded matches the speech that was fed | The feed or the source path failed, or the program recorded something else. |
+| the program opened a play stream on the default sink | The program never played. |
+| the speech captured at the speaker matches the speech that was fed | The play path or the capture failed, or the program played something else. |
+
+**Blame.** The stack's canary is the Pulse exchange with the verifier's own clients, and
+`run --audio on` runs it before the app launches. A canary that does not hold, a daemon
+that exits, a default device that the session manager changes and a missing tool are
+verifier blame and end the run `inconclusive`. After the canary held, an unmet expectation
+of the app's own exchange is the app's. The server's stream list is what tells a program
+that never recorded from one that recorded the wrong sound. `Native::diagnose` reports an
+audio daemon that exited as a fixture failure.
+
+**Judging.** `src/audio/judge.rs` compares the speech's fingerprint with the capture. It
+takes the energy in eight bands from 200 Hz to 5 kHz for each 20 ms frame at a 10 ms hop,
+slides the speech across the capture and takes the best Pearson correlation of the log
+energies. The score does not depend on gain or on where the speech sits. Digital silence
+scores 0. `MATCH` is 0.8. The scores below came from one run that called `score` on the first phrase, 1.5 s long,
+padded with 0.25 s of silence on each side. The tests in `judge.rs` assert the same
+separation.
+
+| Capture | Score |
+| --- | --- |
+| The same phrase | 1.000 |
+| The same phrase at 0.3 of the gain | 0.981 |
+| The same phrase with noise of up to 40 counts | 1.000 |
+| The other phrase | 0.657 |
+| Digital silence | 0.000 |
+| Noise only | 0.091 |
+
+The threshold sits between the lowest score for the same phrase and the highest score for
+other sound. The other phrase is the nearest to it.
+
+The scores are measured on synthetic speech only, two phrases from one synthesizer. They
+say nothing about a real voice, a real microphone, a room or a speaker that adds echo,
+and a real voice may need a different threshold. Measure the scores again before a
+recording of a person is ever judged.
+
+**The self-test.** `audio-selftest` runs four exchanges in one sandbox with one stack.
+`pulse` and `alsa` must pass. The two controls must fail, and each must fail at the
+speaker capture. The command runs them itself, so no one runs a control by hand.
+
+- `severed-capture` points the capture at the monitor of `unplugged`. The program records
+  and plays as before, so the first unmet expectation must be the speaker capture.
+- `other-speech` has the program play the other phrase. The capture works, and the first
+  unmet expectation must be the speaker capture.
+
+A control that stops at another expectation, or that passes, fails the self-test, because
+the judge or the capture would then be blind. `selftest.json` in the evidence folder holds
+each exchange's verdict. Exit 0 is `passed`, 1 is `failed` and 2 is `inconclusive`.
+
+```sh
+tests/native/target/debug/voyager-verification audio-selftest --evidence "$run_parent/audio"
+```
+
+**Cleanup.** The stack stops `pipewire-pulse`, `wireplumber` and `pipewire` in that order.
+Beside an app it stops after the candidate and before Core and the display, and the
+sandbox kills whatever is left. A daemon that had to be killed or a socket that remains is
+a cleanup error, and a cleanup error prevents a pass. The evidence folder's `audio/` holds
+the daemons' logs, the fed speech, each recording and capture as `.s16` raw samples and
+`.wav`. Their pids are not in `processes.json`.
+
+Limits. The proof is of PipeWire 1.4.10 and WirePlumber 0.5.13 on one machine. The program
+under test is a Pulse or ALSA client, so a program that opens the device another way is not
+shown to work. A program that lists input devices and skips a source with no hardware has
+not been tried. Latency is not measured. No journey reads the stack yet.
 
 ### Negative controls
 
