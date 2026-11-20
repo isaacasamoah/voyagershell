@@ -8,6 +8,7 @@ const GUIDE: &str = include_str!("../../../docs/voyager-command.md");
 
 const USAGE: &str = "Usage: voyager status
        voyager focus [--hook <agent>]
+       voyager reply --hook <agent>
        voyager do workspace '<request json>'
        voyager --skill
 Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
@@ -80,7 +81,9 @@ fn read_stdin() -> String {
 
 fn code(reply: &SocketReply) -> ExitCode {
     let outcome = match reply {
-        SocketReply::Status { .. } | SocketReply::Focus { .. } => Outcome::Applied,
+        SocketReply::Status { .. } | SocketReply::Focus { .. } | SocketReply::Noted => {
+            Outcome::Applied
+        }
         SocketReply::Refused { .. } => Outcome::Refused,
         SocketReply::Workspace {
             reply: Reply::Answered(response),
@@ -120,6 +123,9 @@ fn main() -> ExitCode {
         voyager_app::focus_hook::hook(&arguments, read_stdin, |request| send(&request).ok())
     {
         print!("{output}");
+        return ExitCode::SUCCESS;
+    }
+    if voyager_app::reply_hook::hook(&arguments, read_stdin, |request| send(&request).ok()) {
         return ExitCode::SUCCESS;
     }
     let request = match parse(&arguments) {

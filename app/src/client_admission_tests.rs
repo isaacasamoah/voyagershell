@@ -7,6 +7,19 @@ use voyager_contract::content::{
     Notes, Request as ContentRequest, Response as ContentResponse, Version,
 };
 
+pub(super) fn detached(sender: async_channel::Sender<Message>, identity: &str) -> Client {
+    Client {
+        sender,
+        sequence: Arc::new(AtomicU64::new(0)),
+        identity: identity.into(),
+        activity: Arc::default(),
+        prepared_context: Arc::default(),
+        placement_notice: Arc::default(),
+        replies: crate::replies::Replies::default(),
+        package_revision: Arc::new(AtomicU64::new(0)),
+    }
+}
+
 fn fill(client: &Client) {
     for _ in 0..8 {
         let (reply, _) = mpsc::sync_channel(1);
@@ -52,15 +65,7 @@ fn reads_wait_for_queue_space_and_cancel_without_replaying_effects() {
     let id = VesselId("notes".into());
     owner.initialize(&id).unwrap();
     let (sender, receive) = async_channel::bounded(8);
-    let client = Client {
-        sender,
-        sequence: Arc::new(AtomicU64::new(0)),
-        identity: "mailbox-test".into(),
-        activity: Arc::default(),
-        prepared_context: Arc::default(),
-        placement_notice: Arc::default(),
-        package_revision: Arc::new(AtomicU64::new(0)),
-    };
+    let client = detached(sender, "mailbox-test");
     let mut cx = TaskContext::from_waker(Waker::noop());
     fill(&client);
     let mut cancelled = Box::pin(client.bind_content(id.clone()));

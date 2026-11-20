@@ -1,3 +1,4 @@
+use crate::replies::Replies;
 use crate::spoken::TurnLedger;
 use crate::voyager_binding::Binding;
 use std::{
@@ -45,6 +46,7 @@ pub(crate) struct Sockets {
     synced: Option<Arc<Layout>>,
     open: HashMap<String, Listener>,
     turns: Arc<Mutex<TurnLedger>>,
+    replies: Replies,
 }
 
 impl Sockets {
@@ -52,7 +54,7 @@ impl Sockets {
         &self.binding
     }
 
-    pub(crate) fn new(session: &str, call: Call, binding: Binding) -> Self {
+    pub(crate) fn new(session: &str, call: Call, binding: Binding, replies: Replies) -> Self {
         Self {
             session: session.into(),
             call,
@@ -60,6 +62,7 @@ impl Sockets {
             synced: None,
             open: HashMap::new(),
             turns: Arc::default(),
+            replies,
         }
     }
 
@@ -86,6 +89,7 @@ impl Sockets {
                     &self.call,
                     &self.binding,
                     &self.turns,
+                    &self.replies,
                     &CoreTerminalId(terminal.clone()),
                     vessel,
                 )
@@ -200,6 +204,8 @@ const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet
 
 const DOCK_NOT_OFFERED: &str = "dock is offered only to Voyager; nothing was queued";
 
+const REPLY_NOT_OFFERED: &str = "reply is accepted only from Voyager; nothing was stored";
+
 const FLEET_WITH_VESSEL_NOT_OFFERED: &str =
     "create-fleet-with-vessel is offered only to Voyager; nothing was queued";
 
@@ -284,6 +290,7 @@ fn answer(
     call: &Call,
     binding: &Binding,
     turns: &Mutex<TurnLedger>,
+    replies: &Replies,
     vessel: &VesselId,
     terminal: &CoreTerminalId,
     line: &str,
@@ -303,6 +310,13 @@ fn answer(
             }
             reply
         }
+        Ok(SocketRequest::Reply { event }) if binding.names(terminal) => {
+            replies.accept(event);
+            SocketReply::Noted
+        }
+        Ok(SocketRequest::Reply { .. }) => SocketReply::Refused {
+            message: REPLY_NOT_OFFERED.into(),
+        },
         Ok(SocketRequest::Workspace { request }) => {
             match refusal(&request.action, binding.names(terminal)) {
                 Some(message) => SocketReply::Refused {
@@ -330,6 +344,7 @@ impl Listener {
         call: &Call,
         binding: &Binding,
         turns: &Arc<Mutex<TurnLedger>>,
+        replies: &Replies,
         terminal: &CoreTerminalId,
         vessel: VesselId,
     ) -> Option<Self> {
@@ -357,7 +372,12 @@ impl Listener {
         };
         let closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stopped = closed.clone();
-        let (call, binding, turns) = (call.clone(), binding.clone(), turns.clone());
+        let (call, binding, turns, replies) = (
+            call.clone(),
+            binding.clone(),
+            turns.clone(),
+            replies.clone(),
+        );
         let (owner, address) = (vessel.clone(), terminal.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
@@ -367,14 +387,21 @@ impl Listener {
                 let Ok(mut stream) = stream else {
                     continue;
                 };
-                let (call, binding, turns) = (call.clone(), binding.clone(), turns.clone());
+                let (call, binding, turns, replies) = (
+                    call.clone(),
+                    binding.clone(),
+                    turns.clone(),
+                    replies.clone(),
+                );
                 let (owner, address) = (owner.clone(), address.clone());
                 std::thread::spawn(move || {
                     let mut line = String::new();
                     let limit = u64::try_from(crate::activity::LINE_LIMIT).unwrap_or(u64::MAX);
                     let reply =
                         match std::io::BufReader::new((&stream).take(limit)).read_line(&mut line) {
-                            Ok(_) => answer(&call, &binding, &turns, &owner, &address, &line),
+                            Ok(_) => answer(
+                                &call, &binding, &turns, &replies, &owner, &address, &line,
+                            ),
                             Err(error) => SocketReply::Refused {
                                 message: format!(
                                     "Unreadable voyager request: {error}; nothing was queued"
@@ -417,6 +444,7 @@ impl Listener {
         _: &Call,
         _: &Binding,
         _: &Arc<Mutex<TurnLedger>>,
+        _: &Replies,
         _: &CoreTerminalId,
         _: VesselId,
     ) -> Option<Self> {
@@ -517,6 +545,7 @@ mod tests {
             &call,
             &binding,
             &Mutex::default(),
+            &Replies::default(),
             &vessel,
             &terminal("t9"),
             &dock_line(),
@@ -533,6 +562,7 @@ mod tests {
             &call,
             &binding,
             &Mutex::default(),
+            &Replies::default(),
             &vessel,
             &terminal("t8"),
             &dock_line(),
@@ -559,6 +589,7 @@ mod tests {
                 &call,
                 &binding,
                 &Mutex::default(),
+            &Replies::default(),
                 &vessel,
                 &terminal(id),
                 &dock_line(),
@@ -578,6 +609,7 @@ mod tests {
             &call,
             &binding,
             &Mutex::default(),
+            &Replies::default(),
             &VesselId("vessel-1".into()),
             &terminal("t8"),
             &dock_line(),
@@ -613,6 +645,7 @@ mod tests {
             &call,
             &binding,
             &Mutex::default(),
+            &Replies::default(),
             &vessel,
             &terminal("t9"),
             &line,
@@ -628,6 +661,7 @@ mod tests {
             &call,
             &binding,
             &Mutex::default(),
+            &Replies::default(),
             &vessel,
             &terminal("t8"),
             &line,
@@ -654,6 +688,7 @@ mod tests {
             &call,
             &Binding::unbound(),
             &Mutex::default(),
+            &Replies::default(),
             &VesselId("vessel-1".into()),
             &terminal("t9"),
             &line,
@@ -695,6 +730,7 @@ mod tests {
             call,
             &Binding::unbound(),
             turns,
+            &Replies::default(),
             vessel,
             &CoreTerminalId("t1".into()),
             line,

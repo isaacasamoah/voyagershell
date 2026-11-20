@@ -17,6 +17,7 @@ pub mod layout_document;
 pub mod observation;
 pub mod operations;
 pub mod place;
+pub mod reply;
 pub mod socket;
 pub mod voice;
 pub mod voyage_close;

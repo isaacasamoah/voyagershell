@@ -1271,6 +1271,19 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
+          "const": "noted",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
           "const": "workspace",
           "type": "string"
         },

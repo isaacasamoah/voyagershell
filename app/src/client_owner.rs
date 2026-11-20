@@ -115,6 +115,7 @@ impl Client {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
+            replies: crate::replies::Replies::default(),
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -170,7 +171,7 @@ impl Owner {
             launches: profile.map(|profile| profile.join("launches.json")),
             content,
             adoptions: Adoptions::new(client.placement_notice.clone()),
-            sockets: Sockets::new(&session, call, binding),
+            sockets: Sockets::new(&session, call, binding, client.replies()),
             notices: Notices::new(client.activity.clone(), packages),
             client,
             sender,

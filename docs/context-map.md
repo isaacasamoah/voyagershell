@@ -57,9 +57,13 @@ Owns files:
 - `app/src/client_voyager.rs`
 - `app/tests/voyager_start.rs`
 - `app/src/focus_hook.rs`
+- `app/src/reply_hook.rs`
+- `app/src/replies.rs`
+- `app/tests/voyager_reply.rs`
 - `app/src/spoken.rs`
 - `app/src/bin/voyager.rs`
 - `contract/src/socket.rs`
+- `contract/src/reply.rs`
 - `app/src/front_door.rs`
 - `app/src/layout_store.rs`
 - `app/src/families.rs`

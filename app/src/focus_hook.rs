@@ -45,6 +45,17 @@ fn quoted(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
+fn settings(command: &Path) -> serde_json::Value {
+    let command = quoted(command);
+    let focus = json!([{"hooks":[{"type":"command","command":format!("{command} focus --hook {PROGRAM}")}]}]);
+    let reply = json!([{"hooks":[{"type":"command","async":true,"command":format!("{command} reply --hook {PROGRAM}")}]}]);
+    json!({"hooks":{
+        "UserPromptSubmit":focus,
+        "MessageDisplay":reply,
+        "Stop":reply,
+        "StopFailure":reply}})
+}
+
 pub(crate) fn voyager_arguments(
     session: &str,
     resume: bool,
@@ -59,10 +70,7 @@ pub(crate) fn voyager_arguments(
         format!("{IDENTITY} {}", crate::spoken::policy_rule()),
     ];
     if let Some(command) = command {
-        let hook = format!("{} focus --hook {PROGRAM}", quoted(command));
-        let settings =
-            json!({"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":hook}]}]}});
-        words.extend(["--settings".into(), settings.to_string()]);
+        words.extend(["--settings".into(), settings(command).to_string()]);
     }
     words
 }
@@ -142,6 +150,31 @@ mod tests {
             cwd: Some("/work".into()),
             revision: 7,
             preview: None,
+        }
+    }
+
+    #[test]
+    fn the_launch_settings_carry_one_sync_focus_hook_and_three_async_reply_hooks() {
+        let settings = settings(Path::new("/opt/it's/voyager"));
+        let hooks = &settings["hooks"];
+        assert_eq!(hooks.as_object().unwrap().len(), 4);
+        let command = |event: &str| hooks[event][0]["hooks"][0].clone();
+        assert!(command("UserPromptSubmit").get("async").is_none());
+        assert!(
+            command("UserPromptSubmit")["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" focus --hook claude")
+        );
+        for event in ["MessageDisplay", "Stop", "StopFailure"] {
+            assert_eq!(command(event)["async"], true, "{event}");
+            assert!(
+                command(event)["command"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with(" reply --hook claude"),
+                "{event}"
+            );
         }
     }
 

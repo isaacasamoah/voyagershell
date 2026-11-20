@@ -73,6 +73,21 @@ claude --settings '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","co
 
 An app older than this request refuses it, and the hook then prints nothing.
 
+## Carry a reply to the app
+
+```sh
+voyager reply --hook claude
+```
+
+This form is for Claude Code's `MessageDisplay`, `Stop` and `StopFailure`
+hooks, which VoyagerShell passes to Voyager at launch with `--settings`. It
+reads the hook's JSON from standard input, sends one `reply` request to the
+Vessel socket, prints nothing and always exits 0. It gives up after 200 ms. The
+app accepts the request only from Voyager's terminal and refuses it from any
+other Vessel. An input from a subagent is ignored. [Voyager's
+replies](workspace.md#voyagers-replies) describes how the app orders and closes
+a turn.
+
 ## Spoken turns
 
 A prompt that voice sends starts with the marker `[spoken]`, which

@@ -7,8 +7,34 @@ export type SocketRequest =
       spoken?: boolean;
     }
   | {
+      command: "reply";
+      event: ReplyEvent;
+    }
+  | {
       command: "workspace";
       request: Request;
+    };
+export type ReplyEvent =
+  | {
+      index: number;
+      kind: "text";
+      last: boolean;
+      message: string;
+      text: string;
+      turn: string;
+    }
+  | {
+      kind: "turn-end";
+      text: string;
+    }
+  | {
+      error: string;
+      kind: "turn-failed";
+    }
+  | {
+      error: string;
+      event: string;
+      kind: "unreadable";
     };
 export type Action =
   | {

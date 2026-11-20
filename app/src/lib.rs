@@ -17,6 +17,8 @@ mod layout_parts;
 mod layout_store;
 pub mod observation;
 mod panels;
+pub mod replies;
+pub mod reply_hook;
 mod scope;
 pub mod spoken;
 pub mod vessel_socket;
