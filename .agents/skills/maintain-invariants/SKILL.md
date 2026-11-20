@@ -52,7 +52,7 @@ One pass reads 58 entries and fits one Sonnet session only if it follows stage 2
 
 ## Rules
 
-- Cite evidence for every claim: a file and line or a command and its output. Label each claim observed, inferred or unproved.
+- Cite evidence for every claim, as a file and line or a command and its output. Label each claim observed, inferred or unproved.
 - A mismatch needs a concrete reading of both sides. A suspicion is a note.
 - When code and wording disagree, propose both directions, the wording to match the code and the code to match the wording, and name Isaac as the one who decides. Never pick the direction.
 - A finding that names no entry is a note, not a mismatch.
