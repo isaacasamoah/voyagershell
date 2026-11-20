@@ -55,5 +55,9 @@ def main():
         if cmd: print("Unknown command. Enter alone starts listening."); continue
         pcm = record()
         if len(pcm) < 8000: print("Heard nothing."); continue
-        last_in = pcm; last_out = turn(w, pcm)
+        last_in = pcm
+        try: last_out = turn(w, pcm)
+        except (BrokenPipeError, ConnectionError, OSError):
+            print("  (the server had closed the idle connection; reconnecting, earlier turns are forgotten)")
+            w = session(); last_out = turn(w, pcm)
 main()
