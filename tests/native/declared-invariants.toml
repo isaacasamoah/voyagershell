@@ -7,343 +7,692 @@
 id = "quit-keeps-programs"
 says = "Ctrl+Q, the window's close button and a window-manager close all quit and keep. Core, every program and its output carry on, and the next launch reattaches to the same programs."
 kind = "user"
+owner = "application-queue"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
-guard = []
+guard = ["type:app/src/families/terminal/lifecycle.rs#Lifecycle"]
 check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
-id = "hide-keeps-backend"
-says = "Closing or hiding a Vessel or Portal panel, moving it or switching Fleets never stops its program, and reopening it shows the same program."
+id = "views-never-start-or-stop-programs"
+says = "Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program."
 kind = "user"
-source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view must not stop its backend'; Isaac, 3 Nov 2026: 'Preserve the existing distinction between removing/hiding a view and explicitly stopping its program'"
+owner = "placement"
+source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view must not stop its backend'; Isaac, 3 Nov 2026: 'Preserve the existing distinction between removing/hiding a view and explicitly stopping its program'; shells started at 17:55 and 20:49 on finished agents' Vessels (unit CC5); merges hide-keeps-backend and showing-starts-nothing per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["vessels", "portals", "fleets"]
-guard = []
+guard = ["type:contract/src/lib.rs#Placement"]
 check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+gap = "The showing half has no linked case. The case unit CC5 added and the shared_panels test are linked by the unit that links existing checks (DI5)."
 confidence = "stated"
 
 [[invariant]]
 id = "stop-is-explicit"
-says = "Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. No key chord stops the session."
+says = "Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session."
 kind = "user"
-source = "AGENTS.md: 'Explicit stop must target only the verified selected program'; docs/terminal.md, Lifecycle"
+owner = "application-queue"
+source = "AGENTS.md: 'Explicit stop must target only the verified selected program'; docs/terminal.md, Lifecycle; docs/workspace.md, Confirmed Voyage shutdown; absorbs the confirm and cancel half of close-voyage-confirms per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["close-quit-restore"]
-guard = []
-check = ["journey:quit-restore/stop-session", "journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+guard = ["type:contract/src/lib.rs#Action"]
+check = ["journey:quit-restore/stop-session", "journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel", "journey:voyage-close/close-voyage-confirm"]
 confidence = "stated"
-
-[[invariant]]
-id = "close-voyage-confirms"
-says = "Close Voyage lists exactly the programs it will stop and stops nothing before Confirm. Cancel changes nothing. A closed Voyage stays closed across a restart and reopens with plain shells in the same Fleets and Vessels."
-kind = "user"
-source = "docs/workspace.md, Confirmed Voyage shutdown; Isaac's accepted shutdown, 5 Nov 2026 (saves Notes, keeps worktrees, reopens plain shells)"
-features = ["close-quit-restore", "notes", "worktrees"]
-guard = []
-check = ["journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel", "journey:voyage-close/close-voyage-confirm", "journey:voyage-close/reopen-voyage", "journey:voyage-close/closed-after-restart", "journey:voyage-close/reopen-after-restart"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
-confidence = "inferred"
 
 [[invariant]]
 id = "restart-reopens-plain-shells"
-says = "After the machine restarts, every Voyage, Fleet, Vessel, name and the selection come back, and each Vessel whose program ended runs a new plain shell. An agent is never resumed automatically."
+says = "An adopted agent's Vessel whose program ended closes, at once or on the next reopen, and starts no new program. A Vessel the person opened keeps its shell when an agent run inside it ends, a typed exit closes it, and after a restart or a Voyage reopen it runs a new plain shell in place of a program that ended. An agent is never resumed automatically."
 kind = "user"
-source = "AGENTS.md: 'Never automatically replay an uncertain operation or restore an uncertain process' and 'Do not ... recreate native agent session recovery'; docs/terminal.md, Lifecycle"
-features = ["close-quit-restore", "agent-vessels"]
+owner = "application-queue"
+source = "Close adopted Vessels whose program ended on reopen (#251); Pin what happens when a program ends (#274); gains the reopen clause of close-voyage-confirms per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026; AGENTS.md: 'Never restore an uncertain process' and 'Do not ... recreate native agent session recovery'; docs/terminal.md, Lifecycle"
+features = ["close-quit-restore", "agent-vessels", "adopted-vessels"]
 guard = []
-check = ["journey:quit-restore/cold-restart-restores", "journey:voyage-close/reopen-after-restart"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+check = ["journey:quit-restore/cold-restart-restores", "journey:voyage-close/reopen-voyage", "journey:voyage-close/reopen-after-restart", "journey:adopt-by-label/reopen-restarts-own-terminal", "journey:adopt-by-label/reopen-closes-ended-adopted", "journey:adopt-by-label/ended-away-adopted-removed-when-shown", "journey:adopt-by-label/agent-exit-in-own-shell-keeps-shell", "journey:adopt-by-label/user-started-agent-vessel-keeps-shell", "journey:adopt-by-label/typed-exit-closes-vessel"]
 confidence = "stated"
+
+[[invariant]]
+id = "live-vessel-attaches"
+says = "A view of a live Program always attaches, and the user never sees a stale-revision refusal for it."
+kind = "user"
+source = "'Layout changed' on Voyager's own Vessel after a relaunch (unit bf1); declared invariants design, section 3c, reworded in 3e, agreed by Isaac 19 Nov 2026"
+features = ["vessels"]
+guard = []
+check = []
+gap = "No case yet; unit bf1 adds it. Section 3c named no owner, so a later unit sets it."
+confidence = "inferred"
 
 # Placement and arrangement
 
 [[invariant]]
 id = "placement-survives-relaunch"
-says = "The Voyages, Fleets, Vessels, Portals, names, split arrangement and avatar dock Isaac set are the same after a relaunch."
+says = "The Voyages, Fleets, placements, Portals, names, arrangements, the avatar's dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus."
 kind = "user"
-source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'"
+owner = "placement"
+source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'; Isaac, 14 Nov 2026 (voyage-reopens-where-left); gains the closed-Voyage clause of close-voyage-confirms and merges voyage-reopens-where-left per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
 features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-maximize"]
 guard = []
-check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart"]
+gap = "The reopen-where-left half has no linked case. Its five workspace focus cases are linked by the unit that links existing checks (DI5)."
 confidence = "stated"
 
 [[invariant]]
 id = "portal-belongs-to-voyage"
 says = "A Portal belongs to its Voyage. It stays shown with the same program on every Fleet of that Voyage, is not drawn in other Voyages, and opens as an overlay by default with make-room as the other mode."
 kind = "user"
+owner = "placement"
 source = "AGENTS.md: 'A Portal is a persistent placement across a Voyage ... overlay as the default and make-room also supported'; Isaac, 3 Nov 2026: selected overlay and make-room modes with overlay as default"
 features = ["portals"]
 guard = []
 check = ["journey:portals/portal-across-fleets", "journey:portals/portal-stays-in-its-voyage"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "rename-and-drag-everything"
 says = "Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept."
 kind = "user"
+owner = "placement"
 source = "Isaac's handwritten notes, 1 Nov 2026: 'Drag and drop everything. Rename everything.'"
 features = ["voyages", "fleets", "vessels", "portals", "fleet-arrangement"]
 guard = []
 check = ["journey:workspace/rename-fleet-enter", "journey:workspace/rename-voyage-blur", "journey:workspace/rename-vessel-f2", "journey:workspace/rename-escape-cancels", "journey:portals/rename-portal", "journey:arrangement/move-vessel", "journey:arrangement/relaunch-keeps-arrangement"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
-id = "drag-never-moves-window"
-says = "A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar moves it."
+id = "split-resize-maximize"
+says = "Any panel can be split, resized and maximized, by pointer and by shortcut, and a window resize keeps the grid."
 kind = "user"
-source = "#189 verdict: a Fleet tab dragged 7 px past the row end onto the empty bar moved the window in 3 of 3 runs"
-features = ["fleets", "fleet-arrangement", "voyages", "selection"]
-guard = []
+owner = "placement"
+source = "tests/native/README.md capability rows; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = ["split-resize-maximize"]
+guard = ["type:contract/src/lib.rs#SplitShare"]
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "Nine arrangement cases exist and are not linked yet. The unit that links existing checks (DI5) links them."
 confidence = "inferred"
 
 [[invariant]]
-id = "renamed-vessel-is-addressable"
-says = "After a Vessel is renamed, the assistant knows it by the new name, not only the label."
+id = "drag-never-moves-window"
+says = "A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it."
 kind = "user"
-source = "Isaac, 3 Nov 2026 owner UX note: wants to rename a Vessel such as Terminal T1 and then address it through the native assistant using that new name"
-features = ["vessels", "chat"]
+owner = "desktop-presentation"
+source = "#189 verdict: a Fleet tab dragged 7 px past the row end onto the empty bar moved the window in 3 of 3 runs; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = ["fleets", "fleet-arrangement", "voyages", "selection", "window-drag-bar"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "Five workspace drag cases exist and are not linked yet (DI5). None of them releases past the row end as #189 did."
+confidence = "inferred"
+
+[[invariant]]
+id = "window-controls-work"
+says = "Under client decorations the window buttons, the corner grip and a double-click on the bar send the right window-manager requests, and under server decorations the app draws none of them."
+kind = "user"
+owner = "desktop-presentation"
+source = "Client decorations under GNOME; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = ["window-drag-bar", "close-quit-restore"]
+guard = []
+check = []
+gap = "Three quit-restore cases and one workspace case exist and are not linked yet (DI5)."
+confidence = "inferred"
+
+[[invariant]]
+id = "user-placement-is-kept"
+says = "Agents never rearrange what the user placed and never move the user's view. Agents' Vessels go in the grid, and Voyager looks without moving the user."
+kind = "user"
+source = "D13 grid decision, D2 and C6 (focus-vessel removed, voyager peek); declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["fleets", "fleet-arrangement", "agent-vessels"]
+guard = []
+check = []
+gap = "Future. Units LY1 and AV2 build it and add its case. Section 3c named no owner, so a later unit sets it."
 confidence = "stated"
 
-# Avatar and context
+[[invariant]]
+id = "fleets-stay-readable"
+says = "No Vessel is shown narrower than a measured readable width. Past that point the Fleet becomes a grid."
+kind = "user"
+source = "Verify nested nine splits deep (D13); declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["fleets", "split-resize-maximize"]
+guard = []
+check = []
+gap = "Future. Unit LY1 builds it, and the readable width is a target to measure. Section 3c named no owner, so a later unit sets it."
+confidence = "inferred"
+
+# Avatar, context and the conversation
 
 [[invariant]]
 id = "context-follows-dock"
 says = "The context the assistant, voice and tools act in comes from where the avatar is docked, never from keyboard focus or visual selection, and hiding or switching does not change it."
 kind = "user"
+owner = "placement"
 source = "AGENTS.md: 'context must remain explicit and separate from keyboard focus, visual selection and delegated assignment'; Isaac, 3 Nov 2026: 'derived from the avatar's dock rather than keyboard focus'"
 features = ["avatar", "chat", "voice", "portals"]
 guard = []
 check = ["journey:portals/dock-portal", "journey:portals/portal-stays-in-its-voyage", "journey:portals/hide-portals"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "avatar-stays-put"
 says = "The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it."
 kind = "user"
+owner = "desktop-presentation"
 source = "Isaac, 26 Oct 2026 (withdrew automatic return), 3 Nov 2026 owner UX note (switching screens leaves the avatar where placed), 9 Nov 2026 decision (still avatar replaces floating and periodic stretching)"
 features = ["avatar"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "No case yet. The unit that gives every user invariant in scope a journey (DI13) adds it."
 confidence = "stated"
 
 [[invariant]]
 id = "avatar-click-minimizes"
 says = "Clicking the avatar minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position."
 kind = "user"
+owner = "desktop-presentation"
 source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026"
 features = ["avatar"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "No case yet. The unit that gives every user invariant in scope a journey (DI13) adds it."
 confidence = "stated"
 
 [[invariant]]
-id = "any-agent-works"
-says = "The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer's agent setup. Agent-specific code lives only in that agent's adapter."
-kind = "developer"
-source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
-features = ["agent-vessels", "avatar"]
-guard = ["gate:agent-names-stay-in-adapters"]
+id = "one-window-by-default"
+says = "Launching the app again reveals the existing window and avatar. A second instance opens only when the person asks for one explicitly, such as New Window from the right-click menu."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 16 Nov 2026, following Ghostty's model"
+features = ["close-quit-restore"]
+guard = []
 check = []
-gap = "The old entry named no owner and no check. Its verified_by named the architecture gate, now its guard, run by npm run architecture:check. The terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit. Owner and check stay empty until a later unit links them."
+gap = "No case yet. The unit that gives every user invariant in scope a journey (DI13) adds it."
 confidence = "stated"
+
+[[invariant]]
+id = "voice-is-audible"
+says = "When the assistant speaks, the person hears it through the selected output."
+kind = "user"
+owner = "conversation-provider"
+source = "Isaac, 16 Nov 2026: prove it with an agent if there is a way, otherwise Isaac confirms by ear"
+features = ["voice"]
+guard = []
+check = ["manual:an agent proof where one exists, otherwise Isaac by ear"]
+confidence = "stated"
+
+[[invariant]]
+id = "voice-is-click-to-talk"
+says = "Voice listens only after the user clicks, and it never adds per-use API charges."
+kind = "user"
+source = "Isaac, 17 Nov 2026; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["voice"]
+guard = []
+check = []
+gap = "Future. The voice unit adds its case. Section 3c named no owner, so a later unit sets it."
+confidence = "stated"
+
+[[invariant]]
+id = "conversation-acts-through-operations"
+says = "The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name."
+kind = "user"
+owner = "conversation-provider"
+source = "AGENTS.md, Content and provider boundaries; Isaac, 3 Nov 2026 owner UX note: wants to rename a Vessel such as Terminal T1 and then address it through the native assistant using that new name; merges renamed-vessel-is-addressable per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = ["chat", "vessels"]
+guard = []
+check = []
+gap = "The six chat cases exist and are not linked yet (DI5). The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name."
+confidence = "stated"
+
+[[invariant]]
+id = "adopted-agents-follow-their-label"
+says = "An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel."
+kind = "user"
+owner = "application-queue"
+source = "#243 and #251; finished-work-leaves-the-screen (#236, #251 and Isaac's tidy-up requests); merged per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = ["adopted-vessels", "agent-vessels"]
+guard = []
+check = []
+gap = "The adopt-by-label cases exist and are not linked yet (DI5)."
+confidence = "stated"
+
+[[invariant]]
+id = "authority-comes-from-assignment"
+says = "The avatar always acts with its user's authority. Any other agent instructs another only through a recorded Assignment with a Rank, stored by the app. Fleet membership and Core parentage grant nothing."
+kind = "user"
+owner = "application-queue"
+source = "AGENTS.md, Application ownership and context; Isaac, 17 Nov 2026; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = ["agent-vessels", "avatar"]
+guard = []
+check = []
+gap = "No Rank or Assignment type exists yet. The authority units build it and add its case."
+confidence = "stated"
+
+[[invariant]]
+id = "avatar-stays-fast"
+says = "Each avatar tool call is one round trip and finishes within the limit in the usage envelope. A dock adds model work only when a dock behaviour the user chose asks for it."
+kind = "user"
+source = "Isaac's top complaint, corrected by Isaac on 18 Nov 2026; declared invariants design, section 3c, reworded in 3e, agreed by Isaac 19 Nov 2026"
+features = ["avatar"]
+guard = []
+check = []
+gap = "No timing case and no envelope limit yet. Section 3c named no owner, so a later unit sets it."
+confidence = "stated"
+
+[[invariant]]
+id = "reports-wait-for-the-user"
+says = "Reports to Voyager never interrupt the user's chat. Only click-yes cards and blockers raise a badge."
+kind = "user"
+source = "Admiral reports typed into Isaac's chat all day; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["chat"]
+guard = []
+check = []
+gap = "Future. The Inbox unit builds it. Section 3c named no owner, so a later unit sets it."
+confidence = "inferred"
+
+[[invariant]]
+id = "irreversible-needs-the-user"
+says = "Stopping Core, updating Core and removing a machine each wait for the user's click."
+kind = "user"
+source = "Admin plan, click-yes; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["close-quit-restore"]
+guard = []
+check = []
+gap = "Future. The Inbox unit builds it. Section 3c named no owner, so a later unit sets it."
+confidence = "inferred"
 
 # Terminals
 
 [[invariant]]
 id = "typing-feels-immediate"
-says = "Typing into a terminal or agent Vessel feels as immediate as the same program in Herdr, while a full captain and crew run is going, which is ordinary load."
+says = "Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going."
 kind = "user"
-source = "Isaac, 8 Nov 2026: 'Typing into Codex in Voyager should feel as immediate under representative load as Isaac's current responsive typing experience' (he reported 5 to 10 s delays, then about 1 s on 9 Nov)"
+owner = "desktop-presentation"
+source = "Isaac, 8 Nov 2026: 'Typing into Codex in Voyager should feel as immediate under representative load as Isaac's current responsive typing experience' (he reported 5 to 10 s delays, then about 1 s on 9 Nov); reworded per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["terminal-io", "agent-vessels"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "The typing-latency envelope entry has no command or measurement yet. The unit that measures typing latency (DI13) closes it."
 confidence = "stated"
 
 [[invariant]]
-id = "keys-reach-the-program"
-says = "Every key typed into a focused terminal, Tab and Shift+Tab included, reaches the program in order, and focus stays in the terminal."
+id = "terminal-input-arrives-intact"
+says = "Every key, paste and click in a focused terminal, Tab included, reaches the Program once and in order, and selecting or copying sends no bytes."
 kind = "user"
-source = "#142 and its issue #141, which Isaac hit in daily use: Tab moved focus out of the terminal"
-features = ["terminal-io"]
+owner = "desktop-presentation"
+source = "#142 and its issue #141, which Isaac hit in daily use: Tab moved focus out of the terminal; docs/terminal.md; merges keys-reach-the-program and selection-and-clipboard per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = ["terminal-io", "selection", "clipboard"]
 guard = []
 check = ["journey:terminal-input/keys-reach-the-program"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+gap = "The other 15 terminal-input cases exist and are not linked yet (DI5)."
 confidence = "inferred"
 
 [[invariant]]
 id = "wheel-scrolls-full-screen-programs"
-says = "The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise."
+says = "The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise, including after reattach."
 kind = "user"
-source = "Isaac's agent-scrolling report and his acceptance of the fix, 10 Nov 2026"
+owner = "desktop-presentation"
+source = "Isaac's agent-scrolling report and his acceptance of the fix, 10 Nov 2026; the reattach clause from the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["terminal-scrolling", "agent-vessels"]
 guard = []
 check = ["journey:terminal-scrolling/mouse", "journey:terminal-scrolling/normal-history"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+gap = "The arrows and reattached-history cases exist and are not linked yet (DI5)."
 confidence = "stated"
 
 [[invariant]]
 id = "terminals-never-run-out"
 says = "Opening and ending terminals any number of times in one session never stops input to the live ones."
 kind = "user"
+owner = "core-adapter"
 source = "#105: after about 64 terminals were opened and ended, every pane stopped taking input until restart"
 features = ["terminal-io", "vessels"]
-guard = []
+guard = ["type:app/src/core_viewer.rs#Lease"]
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+formal = ["core-viewers:BridgeStaysUp", "core-viewers:SlotsWithinLimit", "core-viewers:EveryOccupiedSlotHasAViewer", "core-viewers:BufferAccounting"]
+formal_why = "Two real slot-leak and disconnect bugs that depended on attach timeouts and exit order. Tests missed them and the model found them, as the core-viewers skill records."
+gap = "The viewer_streams test exists and is not linked yet (DI5)."
 confidence = "inferred"
 
 # Results of an action
 
 [[invariant]]
-id = "uncertain-never-replayed"
+id = "uncertain-settled-by-reading"
 says = "When the app cannot tell whether an action took effect, it asks the provider of that hop (Core for the app, the app for the canvas and the avatar). It retries only when the read proves the effect did not happen and a retry cannot double it."
 kind = "user"
-source = "Isaac, 16 Nov 2026: settle an uncertain outcome by asking the provider (replaces the never-replay rule); AGENTS.md: 'A received request is not a completed effect'"
+owner = "application-queue"
+source = "Isaac, 16 Nov 2026: settle an uncertain outcome by asking the provider (replaces the never-replay rule); AGENTS.md: 'A received request is not a completed effect'; renamed from uncertain-never-replayed, whose id contradicted its own text, per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = ["outcomes"]
 guard = []
 check = ["journey:outcomes/rename-stalled-applied", "journey:outcomes/rename-dropped-retried", "journey:outcomes/stop-dropped-retried", "journey:outcomes/stop-held-closed", "journey:outcomes/rename-uncertain-declines-second-enter", "journey:outcomes/close-unanswered-stops-nothing", "journey:outcomes/start-held-adopted", "journey:outcomes/start-stalled-not-repeated"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
 id = "refusal-says-why"
 says = "An action the app declines leaves the state unchanged and shows the owner's reason, to the person and to an agent caller alike."
 kind = "user"
+owner = "application-queue"
 source = "AGENTS.md: 'Preserve request/target identity, structured Core errors and the difference between known refusal and uncertain effect'"
 features = ["outcomes"]
 guard = []
 check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
 confidence = "stated"
 
 [[invariant]]
-id = "unknown-is-not-invented"
-says = "A fact the app does not know, such as an agent's status, shows as unknown. Silence is never shown as finished or idle work done."
+id = "status-is-reported-or-unknown"
+says = "A Program's status is Core's latest report or unknown. Silence, or a turn that ended while the agent's work continues, is never shown as idle or finished."
 kind = "user"
-source = "Isaac, 3 Nov 2026 owner UX note: 'Unknown/unavailable facts must not be invented'"
-features = ["agent-vessels", "layouts-home"]
+owner = "core-adapter"
+source = "Isaac, 3 Nov 2026 owner UX note: 'Unknown/unavailable facts must not be invented'; hc wait woke coordinators on 'done' while work was still running (turn-ended-is-not-finished); widens unknown-is-not-invented and merges turn-ended-is-not-finished per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
+features = ["agent-vessels", "layouts-home", "core-reports"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "The core-events cases exist and are not linked yet (DI5). The unknown half has no case, and the turn-ended half waits for the Status v1 unit."
 confidence = "stated"
 
 [[invariant]]
-id = "assistant-never-blocks-app"
-says = "Waiting on the assistant or its provider never holds up ordinary workspace actions."
+id = "waiting-never-blocks-app"
+says = "Waiting on the Provider or a slow Core reply never holds up ordinary workspace actions or inspection."
 kind = "user"
-source = "AGENTS.md: 'Do not block application actions on provider work'"
-features = ["chat", "front-door"]
+owner = "application-queue"
+source = "AGENTS.md: 'Do not block application actions on provider work'; widens assistant-never-blocks-app per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = ["chat", "front-door", "core-reports"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "The chat, slow-save and slow-list cases and a selected_stop test exist and are not linked yet (DI5)."
 confidence = "stated"
 
 # Stored layout and profile across builds
 
 [[invariant]]
-id = "newer-layout-kept"
-says = "A layout a newer build wrote opens in an older build and keeps every field it does not know when it saves. One that needs a newer reader is refused, left unchanged and copied to the backup."
+id = "layout-is-never-lost"
+says = "An older build keeps the fields of a newer Layout that it does not know. A Layout it cannot read is backed up and left unchanged, the app starts fresh, and a notice naming the backup stays until the person acts."
 kind = "user"
-source = "#171 verdict: an older build replaced a newer layout with a fresh one-Voyage workspace"
+owner = "placement"
+source = "#171 verdict: an older build replaced a newer layout with a fresh one-Voyage workspace, and the corrupt-layout notice vanished before anyone could read it; docs/workspace.md, Unreadable documents; merges newer-layout-kept and unreadable-layout-says-so per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["layout-compat"]
 guard = []
-check = ["journey:layout-compat/newer-layout-opens", "journey:layout-compat/rename-keeps-added-fields", "journey:layout-refused/refusal-message-drawn", "journey:layout-refused/newer-layout-copied-to-backup", "journey:layout-refused/newer-layout-left-unchanged"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
-confidence = "inferred"
-
-[[invariant]]
-id = "unreadable-layout-says-so"
-says = "When the stored layout cannot be read, the app copies it to the backup, starts fresh and keeps a notice naming the backup on screen until the person changes something."
-kind = "user"
-source = "#171 verdict: the corrupt-layout notice vanished before anyone could read it; docs/workspace.md, Unreadable documents"
-features = ["layout-compat"]
-guard = []
-check = ["journey:layout-corrupt/corrupt-layout-notice-drawn", "journey:layout-corrupt/corrupt-layout-copied-to-backup", "journey:layout-corrupt/workspace-starts-fresh"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+check = ["journey:layout-compat/newer-layout-opens", "journey:layout-compat/rename-keeps-added-fields", "journey:layout-refused/refusal-message-drawn", "journey:layout-refused/newer-layout-copied-to-backup", "journey:layout-refused/newer-layout-left-unchanged", "journey:layout-corrupt/corrupt-layout-notice-drawn", "journey:layout-corrupt/corrupt-layout-copied-to-backup", "journey:layout-corrupt/workspace-starts-fresh"]
 confidence = "inferred"
 
 [[invariant]]
 id = "personal-edits-kept"
-says = "An update never overwrites or moves a profile file the person edited. It replaces only untouched first-party files and announces each edited one with a diff."
+says = "An update never overwrites or moves a Profile file the person edited. It announces each kept file once with a diff, and does not announce it again until a newer version of that file ships."
 kind = "user"
-source = "AGENTS.md: 'Keep personal source edits and instance data when considering updates'"
+owner = "desktop-presentation"
+source = "AGENTS.md: 'Keep personal source edits and instance data when considering updates'; #173 verdict: 'The notice returned on the second start ... I found no way to say keep mine'; merges update-notice-settles per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["profile-updates", "profile-theme"]
 guard = []
 check = ["journey:profile-updates/untouched-files-update-and-stop-session-shows", "journey:profile-updates/edited-files-stay-as-they-were", "journey:profile-updates/edited-files-are-announced-with-a-diff", "journey:profile-updates/a-dropped-file-is-deleted-only-when-untouched", "journey:profile/second-build-keeps-voyage"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+gap = "The notice half has no case. It needs one that dismisses the notice and restarts."
 confidence = "stated"
 
 [[invariant]]
 id = "kept-edit-never-blanks-workspace"
 says = "After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix."
 kind = "user"
+owner = "desktop-presentation"
 source = "#173 verdict: 'Canvas load failed: cannot resolve module' for the retired theme module name, and no workspace, after an edited canvas file was kept"
 features = ["profile-updates", "scripts-live-edit"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
-confidence = "inferred"
-
-[[invariant]]
-id = "update-notice-settles"
-says = "Once the person has seen or dismissed the notice for an edited file, it does not return on later starts until a newer version of that file ships."
-kind = "user"
-source = "#173 verdict: 'The notice returned on the second start ... I found no way to say keep mine'"
-features = ["profile-updates"]
-guard = []
-check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "No case yet, so it stays apart from live-edit-keeps-last-good. Isaac, 19 Nov 2026: the two merge once a case exists."
 confidence = "inferred"
 
 [[invariant]]
 id = "live-edit-keeps-last-good"
 says = "A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running."
 kind = "user"
+owner = "content"
 source = "AGENTS.md: 'A valid edit updates the existing instance; a broken edit must expose its error and retain the usable version where supported'"
 features = ["scripts-live-edit", "profile-theme", "notes"]
 guard = []
 check = ["journey:profile/live-edit-recolours"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
+gap = "The broken-edit half is checked only by a retained Python journey."
 confidence = "stated"
 
 # Developer experience
 
 [[invariant]]
-id = "battery-gives-a-verdict"
-says = "The journey battery gives each journey the fixtures and second build it needs. A journey it cannot supply is listed as not run with its reason, never reported inconclusive on every merge."
+id = "pass-means-observed"
+says = "A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason."
 kind = "developer"
-source = "#169: the battery would have reported profile journeys inconclusive on every merge; observed in the #171 verdict"
+owner = "verification"
+source = "The verification-lifecycle skill; #169: the battery would have reported profile journeys inconclusive on every merge, observed in the #171 verdict; merges battery-gives-a-verdict per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["verification-environment", "profile-theme", "profile-updates", "layout-compat"]
-guard = []
+guard = ["type:tests/native/src/lifecycle.rs#Run"]
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "The finite lifecycle check runs by hand and no link type names it. The unit that runs it as a cargo test (DI10) closes that half. The battery half needs a case that withholds a fixture."
 confidence = "inferred"
 
 [[invariant]]
-id = "unit-tests-leave-no-folders"
-says = "A verifier unit-test run, passing, failing or killed, leaves no folder in the temp directory, so leftovers never break the next run."
+id = "verification-leaves-nothing-behind"
+says = "A verifier unit-test run or a crew, passed, failed or killed, leaves no folder, repository copy or scratch file behind."
 kind = "developer"
-source = "#129 verdict: with old-style folders present the suite failed with 'File exists (os error 17)'"
+owner = "verification"
+source = "#129 verdict: with old-style folders present the suite failed with 'File exists (os error 17)'; about 2 GB of plant copies held RAM in /tmp during the 17 Nov trial; merges unit-tests-leave-no-folders and verification-cleans-up per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["verification-environment"]
 guard = []
 check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
+gap = "No check yet. The temp-directory check gains the repository-copy case."
 confidence = "inferred"
+
+[[invariant]]
+id = "live-sessions-untouched"
+says = "Agent tooling never stops or writes into a live user session."
+kind = "developer"
+owner = "verification"
+source = "AGENTS.md: 'Preserve unrelated work and running sessions'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["hook:.claude/hooks/guard-live-session.py"]
+check = []
+gap = "The hook's Python tests run in CI, but a test link names only a Rust fn, so the check field cannot name them yet."
+confidence = "stated"
+
+[[invariant]]
+id = "agents-never-reach-default-session"
+says = "An agent's hc call never reaches Isaac's default Core session."
+kind = "developer"
+source = "Verify's anchor proposal in the third-round verdict on #271, whose finding broke it"
+features = []
+guard = ["hook:.claude/hooks/guard-live-session.py"]
+check = []
+gap = "The hook's Python tests run in CI, but a test link names only a Rust fn, so the check field cannot name them yet. No owner was proposed, so a later unit sets it."
+confidence = "inferred"
+
+[[invariant]]
+id = "sdk-graph-coherent"
+says = "Every native build uses the SDK prepared from the current patch list."
+kind = "developer"
+owner = "desktop-presentation"
+source = "AGENTS.md: 'Preserve one coherent SDK graph'; CONTRIBUTING.md, prepare-sdk.py; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = []
+check = []
+gap = "desktop/build.rs fails a build against an SDK prepared from an older patch list, but no link type names that check yet."
+confidence = "stated"
+
+[[invariant]]
+id = "generated-matches-source"
+says = "Generated client types, schemas, scripts, docs and tables always match their source."
+kind = "developer"
+owner = "application-queue"
+source = "AGENTS.md: 'Generate client definitions and runtime validators from the owning types; do not hand-maintain competing schemas'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = []
+check = []
+gap = "contract:check, vocabulary:check and features --check run in CI, but no link type names a script check yet. core-schema:check is not in CI."
+confidence = "stated"
+
+[[invariant]]
+id = "agent-setup-untouched"
+says = "Voyager never writes to an agent's own home or configuration. It passes its settings through launch flags and the environment."
+kind = "developer"
+source = "Admin plan, and the focus hook passed by flag (#243); declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["agent-vessels"]
+guard = []
+check = []
+gap = "Guarded only by review today. Section 3c named no owner, so a later unit sets it."
+confidence = "inferred"
+
+[[invariant]]
+id = "one-operation-list"
+says = "Views, agents, the voyager command and the authority check all use one catalogue of Operations."
+kind = "developer"
+source = "AGENTS.md: 'Use one typed application contract for UI, content and agent callers'; plan unit S11a; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+features = ["front-door"]
+guard = []
+check = []
+gap = "Future. Unit S11a builds it. Section 3c named no owner, so a later unit sets it."
+confidence = "stated"
+
+[[invariant]]
+id = "loosening-escalates"
+says = "Removing or loosening an invariant, a check, a gate or a known-violation limit goes to Isaac. A known exception names the unit that removes it, and its limit only goes down."
+kind = "developer"
+owner = "verification"
+source = "AGENTS.md: 'Do not weaken the written checks or acceptance criteria'; C8, the 13 agent-name exceptions (debt-only-shrinks); merges debt-only-shrinks per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["policy:check-loosened"]
+check = []
+gap = "review-policy enforces it outside this repository, and no check here names it. The check that every exception names a unit is not built."
+confidence = "stated"
+
+[[invariant]]
+id = "every-journey-has-a-control"
+says = "Each journey has a control patch that must fail it."
+kind = "developer"
+owner = "verification"
+source = "CONSTRAINTS.md, Effective tests; tests/native/README.md, Negative controls; reworded per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = ["verification-environment"]
+guard = ["type:tests/native/src/journey.rs#control"]
+check = []
+gap = "The controls run by hand. The unit test that each patch still applies exists and is not linked yet (DI5)."
+confidence = "stated"
+
+[[invariant]]
+id = "checks-have-a-way-through"
+says = "A failing repository check names a change the developer can make to pass it."
+kind = "developer"
+source = "The feature map verdict on #260, where the change gate blocked every edit under tests/native/src and its message offered no way through"
+features = []
+guard = []
+check = []
+gap = "No guard or check yet, and no owner was proposed, so a later unit sets both."
+confidence = "inferred"
+
+# Structure: a gate in CI is both guard and check
+
+[[invariant]]
+id = "any-agent-works"
+says = "The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer's agent setup. Agent-specific code lives only in that agent's adapter."
+kind = "structure"
+owner = "conversation-provider"
+source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
+features = ["agent-vessels", "avatar"]
+guard = ["gate:agent-names-stay-in-adapters"]
+check = []
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate. The terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit."
+confidence = "stated"
+
+[[invariant]]
+id = "contract-stays-low"
+says = "The contract crate never depends on GPUI, the app or the desktop."
+kind = "structure"
+owner = "placement"
+source = "tests/architecture/rules.yaml; declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:contract-stays-low"]
+check = []
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate."
+confidence = "inferred"
+
+[[invariant]]
+id = "families-stay-apart"
+says = "Vessel type families never use each other."
+kind = "structure"
+owner = "application-queue"
+source = "tests/architecture/rules.yaml; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:families-stay-apart"]
+check = []
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate."
+confidence = "inferred"
+
+[[invariant]]
+id = "contexts-link-only-as-intended"
+says = "Every source file belongs to one context. A context uses another only along a link listed in intended.yaml, and imports form no loop."
+kind = "structure"
+owner = "verification"
+source = "CONTRIBUTING.md, npm run architecture:check; merges one-owner-per-file, only-intended-links and no-cycles per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:one-owner-per-module", "gate:intended-edges", "gate:no-module-cycles", "gate:no-child-cycles", "gate:no-script-cycles", "gate:voyage-close-not-on-client"]
+check = []
+gap = "The gates are their own check, run by npm run architecture:check in CI, and no check link names a gate."
+confidence = "inferred"
+
+[[invariant]]
+id = "files-stay-small"
+says = "Product source files stay under 1000 lines."
+kind = "structure"
+owner = "verification"
+source = "Isaac, 19 Nov 2026. Modules, crates and features that do one thing well stay small, and 1000 lines marks a file that does too much. The number is that proxy, not a measured threshold."
+features = []
+guard = ["gate:file-size"]
+check = []
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate."
+confidence = "stated"
+
+[[invariant]]
+id = "source-is-comment-free"
+says = "Changed product and verifier source carries no comments."
+kind = "structure"
+owner = "verification"
+source = "AGENTS.md: 'Keep changed source comment-free'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["lint:comments"]
+check = []
+gap = "The lint is its own check, run by npm run comments:check in CI, and no check link names a lint. Its scope omits content/ and tests/architecture/."
+confidence = "stated"
+
+[[invariant]]
+id = "one-vocabulary"
+says = "Code, docs and UI use only glossary words, and retired words fail."
+kind = "structure"
+owner = "verification"
+source = "AGENTS.md: 'Use the vocabulary in docs/glossary.md ... npm run vocabulary:check fails on a retired word'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:one-vocabulary"]
+check = []
+gap = "The gate is its own check, run by npm run vocabulary:check in CI, and no check link names a gate."
+confidence = "stated"
+
+[[invariant]]
+id = "product-excludes-experiments"
+says = "Product code never includes experiment code or an unresolved file."
+kind = "structure"
+owner = "verification"
+source = "AGENTS.md: 'Keep exploratory source under experiments/'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:no-experiment-includes", "gate:no-unresolved-includes"]
+check = []
+gap = "The gates are their own check, run by npm run architecture:check in CI, and no check link names a gate."
+confidence = "stated"
+
+[[invariant]]
+id = "vessel-type-id-has-one-home"
+says = "A Vessel type id is written in one place and read from there."
+kind = "structure"
+owner = "content"
+source = "The Notes type rule in tests/architecture/rules.yaml, generalised per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = ["gate:notes-type-has-one-home"]
+check = []
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate. It covers the Notes type id only."
+confidence = "inferred"
+
+[[invariant]]
+id = "core-owns-programs"
+says = "Every Program a person or agent works in runs in Core. The app starts only short helpers through named adapters."
+kind = "structure"
+owner = "core-adapter"
+source = "AGENTS.md: 'Do not introduce a second process supervisor'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+features = []
+guard = []
+check = []
+gap = "No guard or check. A gate is added only on a reachable defect."
+confidence = "stated"
 
 # Usage envelope. Leave measured empty until a real measurement exists.
 
@@ -426,28 +775,6 @@ command = "Sample /proc/pressure, available memory and CPU during each of those 
 measured = "Defined by Isaac, 16 Nov 2026: a full captain and crew run is ordinary load. Its numbers are in the crew resource log and are not yet summarised here."
 expires = "When the build machine or the crew's job limits change"
 confidence = "inferred"
-
-[[invariant]]
-id = "voice-is-audible"
-says = "When the assistant speaks, the person hears it through the selected output."
-kind = "user"
-source = "Isaac, 16 Nov 2026: prove it with an agent if there is a way, otherwise Isaac confirms by ear"
-features = ["voice"]
-guard = []
-check = ["manual:an agent proof where one exists, otherwise Isaac by ear"]
-gap = "The old entry named no owner, so owner stays empty until a later unit sets it."
-confidence = "stated"
-
-[[invariant]]
-id = "one-window-by-default"
-says = "Launching the app again reveals the existing window and avatar. A second instance opens only when the person asks for one explicitly, such as New Window from the right-click menu."
-kind = "user"
-source = "Isaac, 16 Nov 2026, following Ghostty's model"
-features = ["close-quit-restore"]
-guard = []
-check = []
-gap = "The old entry had no owner, checked_by or verified_by, so owner and check stay empty until a later unit links them."
-confidence = "stated"
 
 # Out of scope. Each was checked on origin/main at 87ffcd4.
 
