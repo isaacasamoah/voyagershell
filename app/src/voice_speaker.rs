@@ -11,7 +11,7 @@ use std::{
 };
 
 const LOOK: Duration = Duration::from_millis(100);
-const STANDING_EVERY: Duration = Duration::from_millis(500);
+const STANDING_EVERY: Duration = Duration::from_millis(250);
 
 pub(crate) struct Parts {
     pub speaking: Arc<dyn Speaking>,
@@ -32,13 +32,12 @@ pub(crate) fn spawn(parts: Parts) {
         while !(parts.stopped)() {
             thread::sleep(LOOK);
             let turns = parts.turns.turns();
-            let due = asked.elapsed() >= STANDING_EVERY;
-            let lines = watcher.lines(&turns, || {
-                if due {
+            let lines = watcher.lines(&turns, Instant::now(), || {
+                if asked.elapsed() >= STANDING_EVERY {
                     asked = Instant::now();
-                    parts.voyager.standing()
+                    Some(parts.voyager.standing())
                 } else {
-                    crate::speech::Standing::Idle
+                    None
                 }
             });
             for line in lines {
