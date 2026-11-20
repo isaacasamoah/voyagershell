@@ -336,6 +336,22 @@
         }
       },
       {
+        "name": "Vessel",
+        "shape": {
+          "kind": "component",
+          "props": [
+            {
+              "name": "vesselId",
+              "ty": "text"
+            },
+            {
+              "name": "typeId",
+              "ty": "text"
+            }
+          ]
+        }
+      },
+      {
         "name": "descriptions",
         "shape": {
           "kind": "async",
