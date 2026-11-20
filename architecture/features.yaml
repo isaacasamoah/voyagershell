@@ -500,6 +500,7 @@ features:
       - app/src/content/markdown.rs
       - app/src/content/package.rs
       - app/src/content/rename.rs
+      - app/src/content/requests.rs
       - app/src/content/view.rs
       - app/src/panels.rs
       - app/src/workspace.rs

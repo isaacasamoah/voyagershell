@@ -484,7 +484,7 @@ test("a recorded file that gains another Notes literal fails", () => {
   );
   expectFailure(
     run(directory),
-    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 3 literals, over its recorded limit of 2',
+    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 2 literals, over its recorded limit of 1',
   );
 });
 
