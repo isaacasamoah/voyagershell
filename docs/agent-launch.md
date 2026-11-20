@@ -119,8 +119,8 @@ without a template launches its first program name.
 `app/src/agent_programs.rs` reads the table. The launch list, recognising an
 agent in a terminal for the Bash wrapper, adoption, conversation naming and the
 seeded settings all call it. The canvas reads the same file through the
-`agent_programs` call of `voyager_workspace`: `desktop/canvas/process-icons.ts`
-parses and validates it once, and the Agents view and the process icons look
+`agent_programs` call of `voyager_workspace`.
+`desktop/canvas/process-icons.ts` parses and validates it once, and the Agents view and the process icons look
 programs up there. Adding an agent is one row, plus an icon file that
 `desktop/src/shipped.rs` lists when the row names one. The gate
 `agent-names-stay-in-adapters` scans only `.rs` and `.ts` source, so the table
