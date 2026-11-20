@@ -74,10 +74,11 @@ impl Gate {
             Stage::Settling { seen } => {
                 *seen += 1;
                 if *seen < SETTLE_FRAMES {
-                    return None;
+                    None
+                } else {
+                    self.stage = Stage::Waiting { run: 0 };
+                    Some(Heard::Settled)
                 }
-                self.stage = Stage::Waiting { run: 0 };
-                return Some(Heard::Settled);
             }
             Stage::Waiting { run } => {
                 *run = if loud { *run + 1 } else { 0 };
@@ -91,7 +92,7 @@ impl Gate {
                 } else if self.kept.len() > LEAD_FRAMES {
                     self.kept.pop_front();
                 }
-                return None;
+                None
             }
             Stage::Speaking { frames, quiet } => {
                 *frames += 1;

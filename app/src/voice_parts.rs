@@ -6,10 +6,16 @@ use std::{
     fs::OpenOptions,
     io::{self, Write},
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
+const FLOOR_LOOK: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SendFailure {
@@ -50,6 +56,37 @@ pub trait Speaker: Send {
 pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
+}
+
+#[derive(Default)]
+pub struct Floor {
+    lock: Mutex<()>,
+    pub(crate) wanted: AtomicBool,
+}
+
+impl Floor {
+    pub fn take(&self) -> MutexGuard<'_, ()> {
+        self.wanted.store(true, Ordering::SeqCst);
+        let guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.wanted.store(false, Ordering::SeqCst);
+        guard
+    }
+
+    pub fn hold(&self) -> MutexGuard<'_, ()> {
+        while self.wanted.load(Ordering::SeqCst) {
+            thread::sleep(FLOOR_LOOK);
+        }
+        self.lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn is_wanted(&self) -> bool {
+        self.wanted.load(Ordering::SeqCst)
+    }
 }
 
 pub struct System;

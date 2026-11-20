@@ -1,8 +1,7 @@
 use crate::{
     replies::Replies,
     speech::{Clip, Phrase, Speaking},
-    voice_layer::Floor,
-    voice_parts::{Audio, Phase, Trace, Voyager},
+    voice_parts::{Audio, Floor, Phase, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
 };
 use std::{
@@ -183,7 +182,7 @@ mod tests {
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
             let replies = Replies::default();
-            let floor = Arc::new(Floor::new());
+            let floor = Arc::new(Floor::default());
             let recorded = phases.clone();
             let halted = stop.clone();
             let on = Arc::new(AtomicBool::new(true));
