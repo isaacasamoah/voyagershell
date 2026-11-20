@@ -16,7 +16,10 @@ Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
 fn parse(arguments: &[String]) -> Result<SocketRequest, String> {
     match arguments {
         [command] if command == "status" => Ok(SocketRequest::Status),
-        [command] if command == "focus" => Ok(SocketRequest::Focus { spoken: false }),
+        [command] if command == "focus" => Ok(SocketRequest::Focus {
+            spoken: false,
+            prompt: None,
+        }),
         [verb, family, request] if verb == "do" && family == "workspace" => {
             serde_json::from_str::<Request>(request)
                 .map(|request| SocketRequest::Workspace {

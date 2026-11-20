@@ -8,6 +8,7 @@ use std::{
 };
 use voyager_contract::{
     Action, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response, Unanswered, VesselId,
+    reply::ReplyEvent,
     socket::{SocketReply, SocketRequest, VesselPlacement, VesselStatus},
 };
 
@@ -300,17 +301,25 @@ fn answer(
             message: format!("Invalid voyager request: {error}; nothing was queued"),
         },
         Ok(SocketRequest::Status) => status(call, vessel, terminal),
-        Ok(SocketRequest::Focus { spoken }) => {
+        Ok(SocketRequest::Focus { spoken, prompt }) => {
             let reply = focus(call, vessel);
             if spoken && binding.names(terminal) && matches!(reply, SocketReply::Focus { .. }) {
-                turns
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .spoken_prompt(vessel);
+                match prompt {
+                    Some(prompt) => turns
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .spoken_prompt(vessel, &prompt),
+                    None => eprintln!(
+                        "A spoken focus request carried no prompt id and was treated as typed"
+                    ),
+                }
             }
             reply
         }
         Ok(SocketRequest::Reply { event }) if binding.names(terminal) => {
+            if let ReplyEvent::Unreadable { event, error } = &event {
+                eprintln!("Voyager's {event} hook input was unreadable: {error}");
+            }
             replies.accept_with(event, |turn| {
                 turns
                     .lock()
@@ -761,7 +770,7 @@ mod tests {
             &call,
             &turns,
             &voyager,
-            r#"{"command":"focus","spoken":true}"#,
+            r#"{"command":"focus","spoken":true,"prompt":"spoken-1"}"#,
         );
         assert!(matches!(reply, SocketReply::Focus { .. }));
         assert_eq!(
@@ -791,7 +800,7 @@ mod tests {
             &refused,
             &turns,
             &voyager,
-            r#"{"command":"focus","spoken":true}"#,
+            r#"{"command":"focus","spoken":true,"prompt":"turn-1"}"#,
         );
         assert!(matches!(reply, SocketReply::Workspace { .. }));
         assert_eq!(
@@ -809,7 +818,7 @@ mod tests {
             &call,
             &turns,
             &VesselId("crew".into()),
-            r#"{"command":"focus","spoken":true}"#,
+            r#"{"command":"focus","spoken":true,"prompt":"turn-1"}"#,
         );
         assert_eq!(
             turns
@@ -843,7 +852,13 @@ mod tests {
         .unwrap()
     }
 
-    const SPOKEN_FOCUS: &str = r#"{"command":"focus","spoken":true}"#;
+    fn focus_line(prompt: &str, spoken: bool) -> String {
+        if spoken {
+            format!(r#"{{"command":"focus","spoken":true,"prompt":"{prompt}"}}"#)
+        } else {
+            r#"{"command":"focus"}"#.into()
+        }
+    }
 
     struct Wiring {
         call: Call,
@@ -889,50 +904,88 @@ mod tests {
     #[test]
     fn two_spoken_prompts_then_two_replies_are_both_spoken_in_order() {
         let wiring = Wiring::new();
-        wiring.from("t8", "voyager", SPOKEN_FOCUS);
-        wiring.from("t8", "voyager", SPOKEN_FOCUS);
-        for turn in ["turn-1", "turn-2", "turn-3"] {
+        wiring.from("t8", "voyager", &focus_line("p1", true));
+        wiring.from("t8", "voyager", &focus_line("p2", true));
+        for turn in ["p1", "p2", "p3"] {
             let reply = wiring.from("t8", "voyager", &reply_line(turn, "answer"));
             assert_eq!(reply, SocketReply::Noted);
         }
         assert_eq!(
             wiring.spoken(),
             vec![
-                ("turn-1".into(), true),
-                ("turn-2".into(), true),
-                ("turn-3".into(), false)
+                ("p1".into(), true),
+                ("p2".into(), true),
+                ("p3".into(), false)
             ]
         );
     }
 
     #[test]
-    fn a_spoken_turn_that_ends_with_no_reply_does_not_pass_its_mark_to_the_next_typed_turn() {
+    fn a_spoken_a_typed_and_a_spoken_prompt_before_any_reply_are_spoken_silent_spoken() {
         let wiring = Wiring::new();
-        wiring.from("t8", "voyager", SPOKEN_FOCUS);
-        wiring.from("t8", "voyager", &stop_line("turn-1", "Done."));
-        wiring.from("t8", "voyager", &reply_line("turn-2", "typed answer"));
+        wiring.from("t8", "voyager", &focus_line("p1", true));
+        wiring.from("t8", "voyager", &focus_line("p2", false));
+        wiring.from("t8", "voyager", &focus_line("p3", true));
+        for turn in ["p1", "p2", "p3"] {
+            wiring.from("t8", "voyager", &reply_line(turn, "answer"));
+        }
         assert_eq!(
             wiring.spoken(),
-            vec![("turn-1".into(), true), ("turn-2".into(), false)]
+            vec![
+                ("p1".into(), true),
+                ("p2".into(), false),
+                ("p3".into(), true)
+            ]
         );
+    }
+
+    #[test]
+    fn a_spoken_turn_with_no_stop_or_no_reply_does_not_pass_its_mark_to_a_typed_turn() {
+        let wiring = Wiring::new();
+        wiring.from("t8", "voyager", &focus_line("p1", true));
+        wiring.from("t8", "voyager", &reply_line("p1", "streamed, then no Stop"));
+        wiring.from("t8", "voyager", &focus_line("p2", true));
+        wiring.from("t8", "voyager", &focus_line("p3", false));
+        wiring.from("t8", "voyager", &reply_line("p3", "typed answer"));
+        assert_eq!(
+            wiring.spoken(),
+            vec![("p1".into(), true), ("p3".into(), false)]
+        );
+        wiring.from("t8", "voyager", &stop_line("p2", "Done."));
+        assert_eq!(
+            wiring.spoken(),
+            vec![
+                ("p1".into(), true),
+                ("p3".into(), false),
+                ("p2".into(), true)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_spoken_focus_request_with_no_prompt_id_marks_nothing() {
+        let wiring = Wiring::new();
+        wiring.from("t8", "voyager", r#"{"command":"focus","spoken":true}"#);
+        wiring.from("t8", "voyager", &reply_line("p1", "answer"));
+        assert_eq!(wiring.spoken(), vec![("p1".into(), false)]);
     }
 
     #[test]
     fn another_terminals_spoken_turn_is_not_spoken() {
         let wiring = Wiring::new();
-        let marked = wiring.from("t9", "crew", SPOKEN_FOCUS);
+        let marked = wiring.from("t9", "crew", &focus_line("c1", true));
         assert!(matches!(marked, SocketReply::Focus { .. }));
-        let refused = wiring.from("t9", "crew", &reply_line("crew-turn", "spoken?"));
+        let refused = wiring.from("t9", "crew", &reply_line("c1", "spoken?"));
         assert!(matches!(refused, SocketReply::Refused { .. }));
         assert!(wiring.replies.snapshot().turns.is_empty());
-        wiring.from("t8", "voyager", &reply_line("turn-1", "typed answer"));
-        assert_eq!(wiring.spoken(), vec![("turn-1".into(), false)]);
+        wiring.from("t8", "voyager", &reply_line("p1", "typed answer"));
+        assert_eq!(wiring.spoken(), vec![("p1".into(), false)]);
         assert_eq!(
             wiring
                 .turns
                 .lock()
                 .unwrap()
-                .observe(&VesselId("crew".into()), "crew-turn"),
+                .observe(&VesselId("crew".into()), "c1"),
             Kind::Typed
         );
     }

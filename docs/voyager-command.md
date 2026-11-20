@@ -102,30 +102,40 @@ The hook reads the prompt from the `UserPromptSubmit` input it receives on
 stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
 hook. A prompt that has not arrived by then is treated as typed and the dock is
 still printed. A prompt that starts
-with the marker sends `{"command":"focus","spoken":true}`. Every other prompt,
-and an input the hook cannot read, sends the plain focus request, so a typed
-Home prompt, a Core note and `voyager focus` itself are never spoken. The
-`spoken` field is omitted when false. An app older than the field refuses a
-spoken request, and the hook then prints nothing for that prompt.
+with the marker sends `{"command":"focus","spoken":true,"prompt":"<prompt id>"}`,
+where the prompt id is the `prompt_id` that Claude puts on the same
+`UserPromptSubmit` input and on every `MessageDisplay` and `Stop` input of that
+prompt. A spoken prompt whose input has no `prompt_id` is sent as typed, and the
+hook says so on standard error, because a mark that names no prompt could be
+given to the wrong reply. Every other prompt, and an input the hook cannot read,
+sends the plain focus request, so a typed Home prompt, a Core note and `voyager
+focus` itself are never spoken. `spoken` and `prompt` are omitted when empty. An
+app older than the fields refuses a spoken request, and the hook then prints
+nothing for that prompt.
 
 The app keeps one `spoken::TurnLedger` for its Vessel sockets. A focus request
-with `spoken` true, answered with the dock and sent from the terminal that
-`voyager.json` names, adds one pending mark for that Vessel. Marks are a queue
-that turns consume in order. `observe` gives the first turn id it has not seen
-for that Vessel the oldest pending mark, as `Kind::Spoken`, and any other new
-turn id `Kind::Typed`. Two spoken prompts before any reply therefore give two
-spoken turns. The verdict stays with the turn id, so a late event of an earlier
-turn never takes a later mark. Marks are in memory, belong to one Vessel and are
-dropped when its socket closes. Nothing is stored. A spoken focus request from
-any other terminal sets no mark.
+with `spoken` true and a `prompt`, answered with the dock and sent from the
+terminal that `voyager.json` names, adds that prompt id as a pending mark for
+that Vessel. The ledger keeps at most 16 pending marks per Vessel and drops the
+oldest first. `observe` gives a turn id it has not seen for that Vessel
+`Kind::Spoken` when a pending mark names the same id, and `Kind::Typed`
+otherwise. A turn is a prompt, so each reply is spoken only if its own prompt
+was spoken, however many prompts were sent before the first reply. A typed
+prompt between two spoken ones takes no mark, and a spoken prompt that never
+produced a reply leaves a mark that no other turn can take. The verdict stays
+with the turn id, so a late event never changes it. Marks are in memory, belong
+to one Vessel and are dropped when its socket closes. Nothing is stored. A
+spoken focus request from any other terminal sets no mark, and a spoken request
+with no `prompt` sets none and is logged.
 
 The hook runs before the model starts, so the mark is pending before the turn's
 first event. The reply path calls `observe` through `Replies::accept_with` when
-a turn's first text arrives. A `Stop` for a turn that streamed no text calls it
-too, so a spoken turn that yields no reply event takes its own mark and the next
-turn, a typed one, does not inherit it. Each `Replies` turn carries the verdict
-as `spoken`. Only the terminal that `voyager.json` names can send replies, so a
-turn of any other Vessel is never spoken.
+a turn's first text arrives, and when a `Stop` arrives for a turn that streamed
+no text, so a spoken turn with no streamed reply still gets its verdict. Each
+`Replies` turn carries it as `spoken`. Only the terminal that `voyager.json`
+names can send replies, so a turn of any other Vessel is never spoken. A reply
+hook input with no `prompt_id` is sent as `unreadable` and logged, and no turn
+is spoken for it.
 
 ## Change the workspace
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use voyager_contract::VesselId;
 
 pub const MARKER: &str = "[spoken]";
@@ -26,15 +26,23 @@ pub enum Kind {
     Typed,
 }
 
+const PENDING_LIMIT: usize = 16;
+
 #[derive(Debug, Default)]
 pub struct TurnLedger {
-    pending: HashMap<String, usize>,
+    pending: HashMap<String, VecDeque<String>>,
     turns: HashMap<String, HashMap<String, Kind>>,
 }
 
 impl TurnLedger {
-    pub fn spoken_prompt(&mut self, vessel: &VesselId) {
-        *self.pending.entry(vessel.0.clone()).or_default() += 1;
+    pub fn spoken_prompt(&mut self, vessel: &VesselId, prompt: &str) {
+        let marks = self.pending.entry(vessel.0.clone()).or_default();
+        if !marks.iter().any(|mark| mark == prompt) {
+            marks.push_back(prompt.into());
+        }
+        while marks.len() > PENDING_LIMIT {
+            marks.pop_front();
+        }
     }
 
     pub fn observe(&mut self, vessel: &VesselId, turn: &str) -> Kind {
@@ -42,12 +50,14 @@ impl TurnLedger {
         if let Some(kind) = turns.get(turn) {
             return *kind;
         }
-        let kind = match self.pending.get_mut(&vessel.0) {
-            Some(marks) if *marks > 0 => {
-                *marks -= 1;
-                Kind::Spoken
-            }
-            _ => Kind::Typed,
+        let marked = self.pending.get_mut(&vessel.0).and_then(|marks| {
+            let at = marks.iter().position(|mark| mark == turn)?;
+            marks.remove(at)
+        });
+        let kind = if marked.is_some() {
+            Kind::Spoken
+        } else {
+            Kind::Typed
         };
         turns.insert(turn.into(), kind);
         kind
@@ -94,7 +104,7 @@ mod tests {
     fn the_turn_after_a_spoken_prompt_is_spoken_and_keeps_its_mark() {
         let mut ledger = TurnLedger::default();
         let voyager = vessel("v1");
-        ledger.spoken_prompt(&voyager);
+        ledger.spoken_prompt(&voyager, "turn-1");
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
     }
@@ -103,8 +113,8 @@ mod tests {
     fn two_spoken_prompts_before_any_turn_give_two_spoken_turns_in_order() {
         let mut ledger = TurnLedger::default();
         let voyager = vessel("v1");
-        ledger.spoken_prompt(&voyager);
-        ledger.spoken_prompt(&voyager);
+        ledger.spoken_prompt(&voyager, "turn-1");
+        ledger.spoken_prompt(&voyager, "turn-2");
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Spoken);
         assert_eq!(ledger.observe(&voyager, "turn-2"), Kind::Spoken);
         assert_eq!(ledger.observe(&voyager, "turn-3"), Kind::Typed);
@@ -112,11 +122,11 @@ mod tests {
     }
 
     #[test]
-    fn a_turn_with_no_spoken_prompt_before_it_is_typed() {
+    fn a_spoken_prompt_marks_only_its_own_turn_whatever_order_the_turns_start_in() {
         let mut ledger = TurnLedger::default();
         let voyager = vessel("v1");
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Typed);
-        ledger.spoken_prompt(&voyager);
+        ledger.spoken_prompt(&voyager, "turn-2");
         assert_eq!(ledger.observe(&voyager, "turn-2"), Kind::Spoken);
         assert_eq!(ledger.observe(&voyager, "turn-3"), Kind::Typed);
         assert_eq!(ledger.observe(&voyager, "turn-2"), Kind::Spoken);
@@ -127,7 +137,7 @@ mod tests {
         let mut ledger = TurnLedger::default();
         let voyager = vessel("v1");
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Typed);
-        ledger.spoken_prompt(&voyager);
+        ledger.spoken_prompt(&voyager, "turn-2");
         assert_eq!(ledger.observe(&voyager, "turn-1"), Kind::Typed);
         assert_eq!(ledger.observe(&voyager, "turn-2"), Kind::Spoken);
     }
@@ -135,7 +145,7 @@ mod tests {
     #[test]
     fn a_mark_belongs_to_the_vessel_that_sent_it() {
         let mut ledger = TurnLedger::default();
-        ledger.spoken_prompt(&vessel("v1"));
+        ledger.spoken_prompt(&vessel("v1"), "turn-1");
         assert_eq!(ledger.observe(&vessel("v2"), "turn-1"), Kind::Typed);
         assert_eq!(ledger.observe(&vessel("v1"), "turn-1"), Kind::Spoken);
     }
@@ -143,10 +153,40 @@ mod tests {
     #[test]
     fn a_vessel_that_is_gone_loses_its_marks() {
         let mut ledger = TurnLedger::default();
-        ledger.spoken_prompt(&vessel("v1"));
+        ledger.spoken_prompt(&vessel("v1"), "turn-1");
         ledger.observe(&vessel("v2"), "turn-1");
         ledger.keep_only(|vessel| vessel == "v2");
         assert_eq!(ledger.observe(&vessel("v1"), "turn-1"), Kind::Typed);
         assert_eq!(ledger.observe(&vessel("v2"), "turn-1"), Kind::Typed);
+    }
+
+    #[test]
+    fn a_typed_prompt_between_two_spoken_ones_does_not_take_a_mark() {
+        let mut ledger = TurnLedger::default();
+        let voyager = vessel("v1");
+        ledger.spoken_prompt(&voyager, "p1");
+        ledger.spoken_prompt(&voyager, "p3");
+        assert_eq!(ledger.observe(&voyager, "p1"), Kind::Spoken);
+        assert_eq!(ledger.observe(&voyager, "p2"), Kind::Typed);
+        assert_eq!(ledger.observe(&voyager, "p3"), Kind::Spoken);
+    }
+
+    #[test]
+    fn a_prompt_that_never_produced_a_turn_leaves_no_mark_for_a_later_one() {
+        let mut ledger = TurnLedger::default();
+        let voyager = vessel("v1");
+        ledger.spoken_prompt(&voyager, "p1");
+        assert_eq!(ledger.observe(&voyager, "p2"), Kind::Typed);
+    }
+
+    #[test]
+    fn pending_marks_are_bounded_and_the_oldest_goes_first() {
+        let mut ledger = TurnLedger::default();
+        let voyager = vessel("v1");
+        for number in 0..=PENDING_LIMIT {
+            ledger.spoken_prompt(&voyager, &format!("p{number}"));
+        }
+        assert_eq!(ledger.observe(&voyager, "p0"), Kind::Typed);
+        assert_eq!(ledger.observe(&voyager, "p1"), Kind::Spoken);
     }
 }

@@ -11,6 +11,8 @@ pub enum SocketRequest {
     Focus {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         spoken: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
     },
     Reply {
         event: ReplyEvent,
