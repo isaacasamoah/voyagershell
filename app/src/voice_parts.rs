@@ -27,7 +27,9 @@ pub trait Voyager: Send + Sync {
 pub enum Phase {
     Starting,
     Ready,
+    Connecting,
     Listening,
+    NoMicrophone,
     Hearing,
     Acknowledging,
     Speaking,
@@ -39,8 +41,10 @@ pub trait Frames {
     fn frame(&mut self) -> io::Result<Vec<i16>>;
 }
 
+pub type Finish = Box<dyn FnOnce(&dyn Fn() -> bool) + Send>;
+
 pub trait Speaker: Send {
-    fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send>;
+    fn play(self: Box<Self>, clip: &Clip) -> Finish;
 }
 
 pub trait Audio: Send + Sync {
@@ -67,10 +71,10 @@ impl Audio for System {
 }
 
 impl Speaker for Playing {
-    fn play(mut self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
+    fn play(mut self: Box<Self>, clip: &Clip) -> Finish {
         Playing::play(&mut self, clip.pcm.clone());
-        Box::new(move || {
-            let _ = self.finish();
+        Box::new(move |cut| {
+            let _ = self.finish(cut);
         })
     }
 }

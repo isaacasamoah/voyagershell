@@ -1,12 +1,13 @@
 use crate::{
     replies::Replies,
     speech::{Clip, Phrase, Speaking},
+    voice_layer::Floor,
     voice_parts::{Audio, Phase, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
@@ -21,9 +22,10 @@ pub(crate) struct Parts {
     pub voyager: Arc<dyn Voyager>,
     pub replies: Replies,
     pub trace: Trace,
-    pub floor: Arc<Mutex<()>>,
+    pub floor: Arc<Floor>,
     pub status: Arc<dyn Fn(Phase, Option<String>) + Send + Sync>,
     pub stopped: Arc<dyn Fn() -> bool + Send + Sync>,
+    pub on: Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
 pub(crate) fn spawn(parts: Parts) {
@@ -73,27 +75,33 @@ fn clip_of(parts: &Parts, line: &Line) -> Result<(Clip, String), String> {
 }
 
 fn say(parts: &Parts, line: Line) {
-    let _floor = parts
-        .floor
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if (parts.stopped)() {
+    if !(parts.on)() {
+        return;
+    }
+    let spoken = clip_of(parts, &line);
+    let _floor = parts.floor.take();
+    if (parts.stopped)() || !(parts.on)() {
         return;
     }
     (parts.status)(Phase::Speaking, None);
-    let notice = match clip_of(parts, &line) {
+    let notice = match spoken {
         Err(reason) => Some(reason),
         Ok((clip, label)) => match parts.audio.speaker(clip.rate) {
             Err(error) => Some(format!("The speaker could not be opened: {error}")),
             Ok(speaker) => {
                 parts.trace.mark_words("speech-started", &label);
-                speaker.play(&clip)();
+                speaker.play(&clip)(&|| !(parts.on)());
                 parts.trace.mark("speech-ended");
                 None
             }
         },
     };
-    (parts.status)(Phase::Ready, notice);
+    let after = if (parts.on)() {
+        Phase::Connecting
+    } else {
+        Phase::Ready
+    };
+    (parts.status)(after, notice);
 }
 
 #[cfg(test)]
@@ -105,16 +113,19 @@ mod tests {
     };
     use std::{
         io,
-        sync::atomic::{AtomicBool, Ordering},
+        sync::{
+            Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
     };
     use voyager_contract::reply::ReplyEvent;
 
     struct Voice(Arc<Mutex<Vec<usize>>>);
 
     impl Speaker for Voice {
-        fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
+        fn play(self: Box<Self>, clip: &Clip) -> crate::voice_parts::Finish {
             self.0.lock().unwrap().push(clip.pcm.len());
-            Box::new(|| {})
+            Box::new(|_| {})
         }
     }
 
@@ -160,9 +171,10 @@ mod tests {
     struct Rig {
         played: Arc<Mutex<Vec<usize>>>,
         replies: Replies,
-        floor: Arc<Mutex<()>>,
+        floor: Arc<Floor>,
         phases: Arc<Mutex<Vec<Phase>>>,
         stop: Arc<AtomicBool>,
+        on: Arc<AtomicBool>,
     }
 
     impl Rig {
@@ -171,9 +183,11 @@ mod tests {
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
             let replies = Replies::default();
-            let floor = Arc::new(Mutex::new(()));
+            let floor = Arc::new(Floor::new());
             let recorded = phases.clone();
             let halted = stop.clone();
+            let on = Arc::new(AtomicBool::new(true));
+            let listening = on.clone();
             spawn(Parts {
                 speaking: Arc::new(Reader),
                 clips: Arc::new(
@@ -198,6 +212,7 @@ mod tests {
                 floor: floor.clone(),
                 status: Arc::new(move |phase, _| recorded.lock().unwrap().push(phase)),
                 stopped: Arc::new(move || halted.load(Ordering::SeqCst)),
+                on: Arc::new(move || listening.load(Ordering::SeqCst)),
             });
             Self {
                 played,
@@ -205,6 +220,7 @@ mod tests {
                 floor,
                 phases,
                 stop,
+                on,
             }
         }
 
@@ -239,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn a_spoken_reply_is_read_aloud_and_the_phase_returns_to_ready() {
+    fn a_spoken_reply_is_read_aloud_and_listening_resumes() {
         let rig = Rig::start(Standing::Idle);
         rig.say("p1", true, "Renamed it.\n\nMore.");
         rig.wait_for(1);
@@ -248,8 +264,32 @@ mod tests {
         thread::sleep(Duration::from_millis(250));
         assert_eq!(
             rig.phases.lock().unwrap().clone(),
-            vec![Phase::Speaking, Phase::Ready]
+            vec![Phase::Speaking, Phase::Connecting]
         );
+    }
+
+    #[test]
+    fn a_spoken_reply_after_voice_was_clicked_off_is_not_read_aloud() {
+        let rig = Rig::start(Standing::Idle);
+        rig.on.store(false, Ordering::SeqCst);
+        rig.say("p1", true, "Renamed it.");
+        thread::sleep(Duration::from_millis(500));
+        assert!(rig.played.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_reply_asks_the_listener_for_the_floor_while_it_waits() {
+        let rig = Rig::start(Standing::Idle);
+        let held = rig.floor.hold();
+        rig.say("p1", true, "Done.");
+        let until = Instant::now() + Duration::from_secs(3);
+        while !rig.floor.is_wanted() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(rig.floor.is_wanted());
+        drop(held);
+        rig.wait_for(1);
+        assert!(!rig.floor.is_wanted());
     }
 
     #[test]
@@ -344,7 +384,7 @@ mod tests {
     #[test]
     fn speech_waits_for_the_floor_while_an_exchange_holds_it() {
         let rig = Rig::start(Standing::Idle);
-        let held = rig.floor.lock().unwrap();
+        let held = rig.floor.hold();
         rig.say("p1", true, "Done.");
         thread::sleep(Duration::from_millis(500));
         assert!(rig.played.lock().unwrap().is_empty());

@@ -945,11 +945,13 @@ features:
         journeys: [voice]
       - id: voice-is-click-to-talk
         kind: user
-        says: 'Voice listens only after the user clicks, and it never adds per-use API charges.'
+        says: 'Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges.'
         owner: conversation-provider
         guards: []
         checks:
           - 'journey:voice/no-capture-without-click'
+          - 'journey:voice/silence-keeps-voice-on'
+          - 'journey:voice/click-turns-voice-off'
           - 'journey:voice/rename-is-heard-and-acknowledged'
           - 'journey:voice/words-reach-voyager'
           - 'journey:voice/acknowledgement-is-prompt'

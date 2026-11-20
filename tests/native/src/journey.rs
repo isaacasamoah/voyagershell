@@ -484,6 +484,7 @@ mod tests {
                 "tests/native/controls/frame-stall.patch".to_owned(),
                 "tests/native/controls/voice-handoff.patch".to_owned(),
                 "tests/native/controls/voice-speak.patch".to_owned(),
+                "tests/native/controls/voice-turn.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

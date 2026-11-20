@@ -1,11 +1,11 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -320,6 +320,7 @@
+@@ -468,6 +468,7 @@
              }
          };
          owner.set(Phase::Ready, None);
 +        let _open = audio.microphone();
-         let floor = Arc::new(Mutex::new(()));
-         let (status, stopped) = (owner.clone(), owner.clone());
+         let floor = Arc::new(Floor::new());
+         let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
          voice_speaker::spawn(voice_speaker::Parts {

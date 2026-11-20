@@ -3,9 +3,11 @@ use crate::agent::TYPED_REPLY;
 use crate::audio::speech::{
     DOCK_ON_THIS_FLEET, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR, Samples,
 };
-use crate::audio::voice::{self, LISTENING, READY, Reply, median, words_contain, words_match};
+use crate::audio::voice::{
+    self, CONNECTING, LISTENING, READY, Turn, median, words_contain, words_match,
+};
 use crate::inspection::Target;
-use crate::native::{ENGINE_START, Native, QUIET_MIC};
+use crate::native::{ENGINE_START, LONG_SILENCE, Native, QUIET_MIC};
 use crate::system::until;
 use anyhow::{Context as _, Result};
 use serde_json::json;
@@ -17,10 +19,14 @@ cases! {
     VoyagerIsBound => "voyager-is-bound" setup,
     TurnWaitsForTheSentence => "turn-waits-for-the-sentence",
     StartThumpIsNotSpeech => "start-thump-is-not-speech",
+    ConnectingThenListening => "connecting-then-listening",
+    SilenceKeepsVoiceOn => "silence-keeps-voice-on",
+    ClickTurnsVoiceOff => "click-turns-voice-off",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
     TypedReplyIsSilent => "typed-reply-is-silent",
+    TwoTurnsWithEcho => "two-turns-with-echo",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
     RefusalIsInTheChat => "refusal-is-in-the-chat",
 }
@@ -131,8 +137,80 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("turn", turn)
     })?;
+    cases.check(native, Case::ConnectingThenListening, |native| {
+        native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+            label == READY
+        })?;
+        native.click(&Target::VOICE_CONTROL)?;
+        let connecting = native.drawn_label(&Target::VOICE_CONTROL, "connecting", |label| {
+            label == CONNECTING || label == LISTENING
+        })?;
+        let listening = native.drawn_label(&Target::VOICE_CONTROL, "listening", |label| {
+            label == LISTENING
+        })?;
+        let marks = voice::marks(&native.voice_trace())?;
+        let settle_ms = voice::settle_ms(&marks);
+        voice::turn_off(native)?;
+        Verdict::new()
+            .expect(
+                "the control reads Connecting first",
+                connecting == CONNECTING,
+            )
+            .expect("then it reads Listening", listening == LISTENING)
+            .expect(
+                "listening starts only after the microphone has settled",
+                settle_ms.is_some_and(|settle| settle >= 280),
+            )
+            .observed("settleMs", settle_ms)
+    })?;
+    cases.check(native, Case::SilenceKeepsVoiceOn, |native| {
+        voice::turn_on(native)?;
+        let trace = native.voice_trace();
+        let before = voice::marks(&trace)?.len();
+        let looks = voice::watch_control(native, LONG_SILENCE)?;
+        let fresh: Vec<String> = voice::marks(&trace)?
+            .into_iter()
+            .skip(before)
+            .map(|mark| mark.event)
+            .collect();
+        Verdict::new()
+            .expect(
+                "voice stays on and listening through a long silence",
+                !looks.is_empty()
+                    && looks.iter().all(|(label, recorders)| {
+                        label == LISTENING && recorders.iter().any(|who| who == voice::APP_CLIENT)
+                    }),
+            )
+            .expect("the silence is never a turn", fresh.is_empty())
+            .observed("looks", looks.len())?
+            .observed("events", fresh)
+    })?;
+    cases.check(native, Case::ClickTurnsVoiceOff, |native| {
+        native.click(&Target::VOICE_CONTROL)?;
+        let label =
+            native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+                label == READY
+            })?;
+        let closed = until("the microphone to close", || {
+            Ok(voice::recorders(native)?.is_empty().then_some(()))
+        })
+        .is_ok();
+        let trace = native.voice_trace();
+        let before = voice::marks(&trace)?.len();
+        voice::feed(native, &DOCK_ON_THIS_FLEET)?;
+        let after = voice::without_capture(native, QUIET_MIC)?;
+        let fresh = voice::marks(&trace)?.len() - before;
+        Verdict::new()
+            .expect("the control reads Start voice", label == READY)
+            .expect("the microphone closes", closed)
+            .expect(
+                "speech after the click is never heard",
+                fresh == 0 && after.iter().all(Vec::is_empty),
+            )
+            .observed("freshEvents", fresh)
+    })?;
     cases.check(native, Case::RenameIsHeard, |native| {
-        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename", Reply::Leave)?;
+        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;
         let words = said
             .heard
             .clone()
@@ -156,17 +234,21 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.started_before_heard,
             )
             .expect(
-                "the microphone closes after the utterance",
+                "listening resumes after the turn without another click",
+                said.listening_resumed,
+            )
+            .expect(
+                "the microphone closes when voice is clicked off",
                 said.microphone_closed,
             )
             .expect(
                 "the app opened the microphone after the click and no earlier",
-                events.first() == Some(&"click") && events.contains(&"capture-open"),
+                events.first() == Some(&"capture-open") && said.opened_after_click,
             )
             .observed("conversation", json!(said))
     })?;
     cases.check(native, Case::WordsReachVoyager, |native| {
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock", Reply::Leave)?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock")?;
         let words = said
             .heard
             .clone()
@@ -174,7 +256,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let screen = voice::terminal_text(native, &voyager)?;
         let label = native.drawn_label(
             &Target::VOICE_CONTROL,
-            "the voice control ready again",
+            "the voice control off again",
             |label| label == READY,
         )?;
         let text = voice::audio_in_text(native)?;
@@ -188,7 +270,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "Voyager received the spoken marker and the words exactly",
                 screen.contains(&spoken(DOCK_ON_THIS_FLEET.words)),
             )
-            .expect("the control is ready for another click", label != LISTENING)
+            .expect("the control is off after the click", label == READY)
             .expect(
                 "no audio reached any log or the engine's terminal",
                 text["found"].as_array().is_some_and(Vec::is_empty),
@@ -198,7 +280,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("textScan", text)
     })?;
     let Some(said) = cases.make(native, Case::ReplyIsSpoken, |native| {
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply", Reply::Await)?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply")?;
         let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
         let verdict = Verdict::new()
             .expect(
@@ -238,17 +320,62 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("spokenTexts", &said.spoken_texts)
     })?;
+    cases.check(native, Case::TwoTurnsWithEcho, |native| {
+        let echo = voice::echo(native)?;
+        voice::turn_on(native)?;
+        let first = voice::speak_and_hear_reply(native, &DOCK_ON_THIS_FLEET);
+        let resumed = native
+            .drawn_label(&Target::VOICE_CONTROL, "listening again", |label| {
+                label == LISTENING
+            })
+            .is_ok();
+        let second = voice::speak_and_hear_reply(native, &RENAME_TO_HARBOR);
+        let still_on = native
+            .drawn_label(&Target::VOICE_CONTROL, "listening again", |label| {
+                label == LISTENING
+            })
+            .is_ok();
+        voice::turn_off(native)?;
+        echo.stop(&native.system)?;
+        let (first, second): (Turn, Turn) = (first?, second?);
+        let heard: Vec<&String> = first.heard.iter().chain(&second.heard).collect();
+        let spoken = |turn: &Turn| {
+            turn.marks
+                .iter()
+                .filter(|mark| mark.event == "speech-ended")
+                .count()
+        };
+        Verdict::new()
+            .expect(
+                "each request is one turn, and Voyager's own voice is never a turn",
+                first.ended_ms.len() == 1 && second.ended_ms.len() == 1 && heard.len() == 2,
+            )
+            .expect(
+                "both requests are heard as spoken",
+                heard
+                    .first()
+                    .is_some_and(|words| words_match(words, DOCK_ON_THIS_FLEET.words))
+                    && heard
+                        .get(1)
+                        .is_some_and(|words| words_match(words, RENAME_TO_HARBOR.words)),
+            )
+            .expect(
+                "each reply is spoken",
+                spoken(&first) == 1 && spoken(&second) == 1,
+            )
+            .expect(
+                "listening resumes between the turns and after them without a click",
+                resumed && still_on,
+            )
+            .observed("first", first)?
+            .observed("second", second)
+    })?;
     cases.check(native, Case::AcknowledgementIsPrompt, |native| {
         let mut first_sounds = Vec::new();
         let mut early = 0;
         let mut heard_right = 0;
         for run in 0..RUNS {
-            let said = voice::converse(
-                native,
-                &DOCK_ON_THIS_FLEET,
-                &format!("prompt-{run}"),
-                Reply::Leave,
-            )?;
+            let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
             first_sounds.push(said.first_sound_after_capture_ms);
             early += usize::from(said.started_before_heard);
             heard_right += usize::from(
@@ -280,7 +407,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::RefusalIsInTheChat, |native| {
         let bound = std::fs::read(native.profile_path("voyager.json"))?;
         native.edit_profile_file("voyager.json", REMOVED)?;
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "refused", Reply::Leave);
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "refused");
         native.edit_profile_file("voyager.json", &bound)?;
         let said = said?;
         native.click(&Target::CHAT_TOGGLE)?;

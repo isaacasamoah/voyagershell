@@ -373,6 +373,28 @@ impl Stack {
         )
     }
 
+    pub fn echo(&self, system: &System) -> Result<Echo> {
+        let source = format!("source={SPEAKER}.monitor");
+        let sink = format!("sink={MIC_FEED}");
+        let module = system.act(
+            json!({"audio":"load-module","echo":{"from":SPEAKER,"into":MIC_FEED}}),
+            || {
+                tool(
+                    system,
+                    "pactl",
+                    &[
+                        "load-module",
+                        "module-loopback",
+                        &source,
+                        &sink,
+                        "latency_msec=20",
+                    ],
+                )
+            },
+        )?;
+        Ok(Echo { module })
+    }
+
     pub fn stop(&mut self) -> Vec<String> {
         let mut errors = Vec::new();
         while let Some((name, mut owned)) = self.daemons.pop() {
@@ -394,6 +416,19 @@ impl Stack {
             }
         }
         errors
+    }
+}
+
+pub struct Echo {
+    module: String,
+}
+
+impl Echo {
+    pub fn stop(self, system: &System) -> Result<()> {
+        system.act(json!({"audio":"unload-module","echo":&self.module}), || {
+            tool(system, "pactl", &["unload-module", &self.module])
+        })?;
+        Ok(())
     }
 }
 

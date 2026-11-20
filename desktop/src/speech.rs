@@ -84,12 +84,16 @@ impl Speech {
 impl Render for Speech {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let phase = &self.state.phase;
-        let listening = *phase == Phase::Listening;
-        let usable = matches!(phase, Phase::Ready | Phase::Listening);
-        let color = if listening {
-            rgb(0x94bda0)
-        } else {
-            rgb(0x989ba9)
+        let on = self.state.on;
+        let usable = !matches!(
+            phase,
+            Phase::Starting | Phase::Unavailable(_) | Phase::Stopped
+        );
+        let color = match phase {
+            Phase::Listening => rgb(0x94bda0),
+            Phase::Connecting => rgb(0xd9b26a),
+            Phase::NoMicrophone => rgb(0xc98585),
+            _ => rgb(0x989ba9),
         };
         let wave = svg()
             .path("speech-wave.svg")
@@ -99,15 +103,14 @@ impl Render for Speech {
         let status = match (&self.state.notice, phase) {
             (Some(notice), _) => notice.clone(),
             (None, Phase::Starting) => "Loading voice…".into(),
+            (None, Phase::Connecting) => "Connecting…".into(),
+            (None, Phase::Listening) => "Listening".into(),
+            (None, Phase::NoMicrophone) => "Can't hear the microphone".into(),
             (None, Phase::Hearing) => "Listening to what you said…".into(),
             (None, Phase::Unavailable(reason)) => reason.clone(),
             _ => String::new(),
         };
-        let label = if listening {
-            "Stop listening"
-        } else {
-            "Start voice"
-        };
+        let label = if on { "Turn voice off" } else { "Start voice" };
         let layer = self.layer.clone();
         let control = Button::new("voyager-speech")
             .block_mouse_except_scroll()
@@ -129,6 +132,10 @@ impl Render for Speech {
         let shown = match phase {
             Phase::Starting => "Loading voice…".to_owned(),
             Phase::Unavailable(reason) => reason.clone(),
+            _ if !on => label.to_owned(),
+            Phase::Connecting => "Connecting…".to_owned(),
+            Phase::Listening => "Listening".to_owned(),
+            Phase::NoMicrophone => "Can't hear the microphone".to_owned(),
             Phase::Hearing | Phase::Acknowledging | Phase::Speaking => "Busy".to_owned(),
             _ => label.to_owned(),
         };

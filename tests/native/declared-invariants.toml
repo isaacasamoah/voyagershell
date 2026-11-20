@@ -234,14 +234,14 @@ confidence = "stated"
 
 [[invariant]]
 id = "voice-is-click-to-talk"
-says = "Voice listens only after the user clicks, and it never adds per-use API charges."
+says = "Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges."
 kind = "user"
 owner = "conversation-provider"
-source = "Isaac, 17 Nov 2026; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026"
+source = "Isaac, 17 Nov 2026; declared invariants design, section 3c, agreed by Isaac 19 Nov 2026; Isaac, 21 Nov 2026: the only way voice is deactivated is if I click it again"
 features = ["voice"]
 guard = []
-type_gap = "The microphone is opened by one exchange that the voice layer starts only on a click command. Nothing in the types stops another caller from opening a capture."
-check = ["journey:voice/no-capture-without-click", "journey:voice/rename-is-heard-and-acknowledged", "journey:voice/words-reach-voyager", "journey:voice/acknowledgement-is-prompt", "test:app/src/voice_layer.rs#nothing_is_captured_until_a_click_asks_for_it"]
+type_gap = "The microphone is opened only by the voice layer's listener while the switch that a click flips is on. Nothing in the types stops another caller from opening a capture."
+check = ["journey:voice/no-capture-without-click", "journey:voice/silence-keeps-voice-on", "journey:voice/click-turns-voice-off", "journey:voice/rename-is-heard-and-acknowledged", "journey:voice/words-reach-voyager", "journey:voice/acknowledgement-is-prompt", "test:app/src/voice_layer.rs#nothing_is_captured_until_a_click_asks_for_it"]
 confidence = "stated"
 
 [[invariant]]
