@@ -130,6 +130,9 @@ union all come from that list.
 | `split-right`, `split-bottom` | Placement id of the Vessel or Portal to split | The split buttons | `Workspace.splitControl` |
 | `sidebar-toggle` | Empty | The sidebar toggle | `Workspace.sidebarToggle` |
 | `create-notes`, `create-agents` | Empty | The Notes and Agents entries of the creation menu | `CreationPicker.render` in `creation.ts` |
+| `create-manifest` | Vessel type id | The entry of the creation menu for a type that a manifest declares | `CreationPicker.render` in `creation.ts` |
+| `manifest-state` | Vessel id | The state of a manifest Vessel. Its `label` is `revision N` and the state as JSON | `ManifestView::render` in `manifest_view.rs` |
+| `manifest-action` | Vessel id, a colon and the action name | The button for one declared action that takes no arguments | `ManifestView::render` |
 | `create-worker` | Launch entry id | A terminal or agent entry of the creation menu | `CreationPicker.render` |
 | `create-voyage` | Empty | The Create Voyage button in the sidebar heading, or in the rail when the sidebar is collapsed | `renderSidebar` in `navigation-view.ts` |
 | `create-fleet` | Voyage id | The Create Fleet button after the Voyage's Fleet tabs | `renderFleets` in `navigation-view.ts` |

@@ -7,6 +7,7 @@ mod layout;
 mod layout_compat;
 mod layout_corrupt;
 mod layout_refused;
+mod manifest_vessel;
 mod outcomes;
 mod portals;
 mod profile;
@@ -138,6 +139,7 @@ journeys! {
     SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {

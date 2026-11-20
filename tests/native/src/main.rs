@@ -561,6 +561,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/layout_refused.rs"),
     ),
     (
+        "src/journey/manifest_vessel.rs",
+        include_bytes!("journey/manifest_vessel.rs"),
+    ),
+    (
         "src/journey/portals.rs",
         include_bytes!("journey/portals.rs"),
     ),

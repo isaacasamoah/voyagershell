@@ -31,6 +31,7 @@ On a pull request, `npm run features:check -- --base <base>` fails when a change
 | Window drag bar | Workspace layout | desktop-presentation | native | workspace | - | drag-never-moves-window, window-controls-work | [docs/terminal.md](terminal.md) |
 | Profile theme | Script host | desktop-presentation | native | profile | - | personal-edits-kept, live-edit-keeps-last-good, pass-means-observed | [docs/terminal.md](terminal.md) |
 | Profile updates | Content model | content | native | profile-updates | - | personal-edits-kept, kept-edit-never-blanks-workspace, pass-means-observed | [docs/content.md](content.md), [docs/terminal.md](terminal.md) |
+| Manifest Vessels | Content model | content | native | manifest-vessel | - | - | [docs/content.md](content.md), [docs/terminal.md](terminal.md) |
 | Scripts live edit | Script host | desktop-presentation | python-only | - | canvas-stack | kept-edit-never-blanks-workspace, live-edit-keeps-last-good | [docs/terminal.md](terminal.md) |
 | Stored layout across builds | Workspace layout | application-queue | native | layout-compat, layout-refused, layout-corrupt | - | layout-is-never-lost, pass-means-observed | [docs/workspace.md](workspace.md) |
 | Front door | Shared contract | application-queue | native | slow-save | - | waiting-never-blocks-app, one-operation-list | [docs/terminal.md](terminal.md), [docs/workspace.md](workspace.md) |

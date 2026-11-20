@@ -1,0 +1,22 @@
+{
+  "contract": 1,
+  "id": "flag",
+  "name": "Flag",
+  "version": 1,
+  "state": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raised"],
+      "properties": { "raised": { "type": "boolean" } }
+    },
+    "initial": { "raised": false }
+  },
+  "actions": {
+    "flip": {
+      "rebase": "always",
+      "effect": [{ "op": "set", "path": "raised", "value": "!raised" }]
+    }
+  },
+  "view": { "source": "view.vx" }
+}

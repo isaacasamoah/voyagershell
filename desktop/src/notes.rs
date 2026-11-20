@@ -202,16 +202,23 @@ impl Host {
         let host = self.clone();
         let runtime_error = self.available.as_ref().err().cloned();
         let packages = self.package.parent().map(std::path::Path::to_path_buf);
+        let registry = std::sync::Arc::new(voyager_app::content::open_registry(
+            packages.clone().unwrap_or_default(),
+        ));
+        let manifests = registry.clone();
+        let client = self.client.clone();
+        let opened = Rc::new(RefCell::new(HashMap::new()));
         HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)
             .declarations(crate::script_types::CONTENT_VIEW)
             .async_function("descriptions", move |_| {
                 let packages = packages.clone();
                 let runtime_error = runtime_error.clone();
+                let registry = registry.clone();
                 Ok(async move {
                     let packages = packages
                         .ok_or_else(|| HostError::new("Vessel package root is unavailable"))?;
-                    let mut catalog =
-                        voyager_app::content::discover(&packages).map_err(HostError::new)?;
+                    let mut catalog = voyager_app::content::discover_all(&packages, &registry)
+                        .map_err(HostError::new)?;
                     if let Some(reason) = runtime_error {
                         for kind in &mut catalog.types {
                             if kind.type_id == "notes"
@@ -236,6 +243,37 @@ impl Host {
                     }
                     Ok(HostValue::from(raw))
                 })
+            })
+            .component("Vessel", move |args, _, cx| {
+                let prop = |name: &str| match args.props() {
+                    HostValue::Object(fields) => fields.iter().find_map(|(key, value)| {
+                        (key == name)
+                            .then(|| value.as_str())
+                            .flatten()
+                            .map(str::to_owned)
+                    }),
+                    _ => None,
+                };
+                let (Some(id), Some(type_id)) = (prop("vesselId"), prop("typeId")) else {
+                    return div()
+                        .child("A Vessel needs an identity and a type")
+                        .into_any_element();
+                };
+                let cached: Option<gpui::Entity<crate::manifest_view::ManifestView>> =
+                    opened.borrow().get(&id).cloned();
+                if let Some(view) = cached {
+                    return view.into_any_element();
+                }
+                let view = cx.new(|cx| {
+                    crate::manifest_view::ManifestView::new(
+                        VesselId(id.clone()),
+                        manifests.manifest(&type_id),
+                        client.clone(),
+                        cx,
+                    )
+                });
+                opened.borrow_mut().insert(id, view.clone());
+                view.into_any_element()
             })
             .component("Notes", move |args, window, cx| {
                 if let Err(error) = &host.available {

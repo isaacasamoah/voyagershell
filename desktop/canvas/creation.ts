@@ -64,6 +64,8 @@ export class CreationPicker {
   ready = false;
   notes = false;
   agents = false;
+  declared: { id: string; name: string }[] = [];
+  problems: string[] = [];
   hidden: HiddenPanel[] = [];
   expanded = false;
   error = "";
@@ -81,6 +83,8 @@ export class CreationPicker {
     this.ready = false;
     this.notes = false;
     this.agents = false;
+    this.declared = [];
+    this.problems = [];
     this.hidden = [];
     this.expanded = false;
     this.error = "";
@@ -123,6 +127,19 @@ export class CreationPicker {
               );
               this.notes = value.types.some(
                 (kind) => kind.typeId === "notes" && Boolean(kind.state),
+              );
+              const builtin = ["terminal", "agents", "notes"];
+              this.declared = value.types
+                .filter(
+                  (kind) =>
+                    !builtin.includes(kind.typeId) &&
+                    kind.availability.status === "ready",
+                )
+                .map((kind) => ({ id: kind.typeId, name: kind.name }));
+              this.problems = value.types.flatMap((kind) =>
+                (kind.problems ?? []).map(
+                  (problem) => `${kind.name}: ${problem}`,
+                ),
               );
             }
           } catch (error) {
@@ -202,6 +219,26 @@ export class CreationPicker {
               create(chosen(opening.destination, "notes"), opening.version, cx);
             }),
         );
+      for (const declared of this.declared)
+        content.child(
+          menuButton(
+            `create-manifest-${declared.id}`,
+            `Create ${declared.name} ${entity}`,
+          )
+            .child(Marker.new("create-manifest", declared.id))
+            .child(declared.name)
+            .on_click((_event, cx) => {
+              if (this.current !== opening) return;
+              this.current = null;
+              create(
+                chosen(opening.destination, declared.id),
+                opening.version,
+                cx,
+              );
+            }),
+        );
+      for (const problem of this.problems)
+        content.child(div().text_size(10).text_color("#ffcad3").child(problem));
       if (this.agents)
         content.child(
           menuButton("create-agents-vessel", `Create Agents ${entity}`)

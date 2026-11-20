@@ -6,7 +6,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 use voyager_contract::inspection::{Element, Frame, Rect, Role};
-use voyager_contract::{FleetId, PlacementId, RenameTarget, VoyageId};
+use voyager_contract::{FleetId, PlacementId, RenameTarget, VesselId, VoyageId};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Target {
@@ -86,6 +86,18 @@ impl Target {
     pub const GO_THERE: Self = Self::single(Role::GoThere);
     pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
     pub const CREATE_AGENTS: Self = Self::single(Role::CreateAgents);
+
+    pub fn create_manifest(type_id: &str) -> Self {
+        Self::keyed(Role::CreateManifest, type_id)
+    }
+
+    pub fn manifest_state(vessel: &VesselId) -> Self {
+        Self::keyed(Role::ManifestState, &vessel.0)
+    }
+
+    pub fn manifest_action(vessel: &VesselId, action: &str) -> Self {
+        Self::keyed(Role::ManifestAction, &format!("{}:{action}", vessel.0))
+    }
 
     pub fn agents_row(placement: &PlacementId) -> Self {
         Self::keyed(Role::AgentsRow, &placement.0)

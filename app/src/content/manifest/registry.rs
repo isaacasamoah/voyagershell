@@ -170,6 +170,10 @@ impl Registry {
         self.find(type_id).map(|entry| entry.folder)
     }
 
+    pub fn manifest(&self, type_id: &str) -> Option<Manifest> {
+        self.find(type_id).and_then(|entry| entry.manifest)
+    }
+
     pub fn describe(&self, type_id: &str) -> Option<Description> {
         self.find(type_id).as_ref().map(describe)
     }

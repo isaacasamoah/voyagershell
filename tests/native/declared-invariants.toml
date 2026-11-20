@@ -474,7 +474,7 @@ source = "AGENTS.md: 'A valid edit updates the existing instance; a broken edit 
 features = ["scripts-live-edit", "profile-theme", "notes"]
 guard = []
 type_gap = "No type holds a last-good copy beside the edit, so a broken edit can replace the running version. S14a keeps the last good copy per script Vessel."
-check = ["journey:profile/live-edit-recolours"]
+check = ["journey:profile/live-edit-recolours", "journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed"]
 gap = "The broken-edit half is checked only by a retained Python journey. The profile journey's control case, seeded-theme-drawn, is not linked, so the live-edit-recolours case is not proved to fail when the rule breaks."
 confidence = "stated"
 
