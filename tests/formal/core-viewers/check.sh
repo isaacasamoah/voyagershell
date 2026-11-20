@@ -16,7 +16,11 @@ if [ ! -f "$jar" ]; then
 fi
 echo "$digest  $jar" | sha256sum -c --quiet
 
-sync=$(sed -n 's/^Sync commit: `\([0-9a-f]\{40\}\)`$/\1/p' "$skill")
+sync=$(sed -n 's/^Sync commit is `\([0-9a-f]\{40\}\)`\.$/\1/p' "$skill")
+if [ -z "$sync" ]; then
+    echo "$skill has no line like: Sync commit is \`<40 hex digits>\`."
+    exit 1
+fi
 covered=$(sed -n 's/^| `\([^`]*\)` |.*/\1/p' "$skill" | sort -u)
 drift=0
 if ! git -C "$root" diff --quiet "$sync" -- $covered; then
