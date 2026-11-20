@@ -1564,6 +1564,11 @@ features:
     sources: ['tests/native/src/**']
     code:
       - tests/native/src/agent.rs
+      - tests/native/src/audio.rs
+      - tests/native/src/audio/exchange.rs
+      - tests/native/src/audio/judge.rs
+      - tests/native/src/audio/selftest.rs
+      - tests/native/src/audio/speech.rs
       - tests/native/src/battery.rs
       - tests/native/src/core_relay.rs
       - tests/native/src/declared_invariants.rs
