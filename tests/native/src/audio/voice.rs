@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, SEND_WAIT, now_millis};
+use crate::native::{Native, Owed, REPLY_WAIT, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -224,17 +224,11 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
     })?
     .is_some();
     if sent {
-        until("the reply to be spoken", || {
+        poll(REPLY_WAIT.within(), LOOK, true, || {
             Ok(marks(&trace)?
                 .get(before..)
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
                 .map(|_| ()))
-        })
-        .with_context(|| {
-            let screen = bound_terminal(native)
-                .and_then(|terminal| terminal_text(native, &terminal))
-                .unwrap_or_else(|error| format!("unreadable: {error:#}"));
-            format!("Voyager's terminal showed: {}", screen.trim())
         })?;
     }
     let listening_resumed = native
@@ -367,6 +361,14 @@ pub fn watch_control(native: &Native, during: Owed) -> Result<Vec<(String, Vec<S
         Ok(None::<()>)
     })?;
     Ok(looks)
+}
+
+pub fn spoken_ever(native: &Native) -> Result<Vec<String>> {
+    Ok(marks(&native.voice_trace())?
+        .into_iter()
+        .filter(|mark| mark.event == "speech-started")
+        .filter_map(|mark| mark.words)
+        .collect())
 }
 
 pub fn settle_ms(marks: &[Mark]) -> Option<u64> {
@@ -563,14 +565,6 @@ pub fn words_contain(heard: &str, wanted: &str) -> bool {
             .join(" ")
     };
     plain(heard).contains(&plain(wanted))
-}
-
-pub fn bound_terminal(native: &Native) -> Result<String> {
-    let stored = fs::read_to_string(native.profile_path("voyager.json"))?;
-    serde_json::from_str::<Value>(&stored)?["terminal"]
-        .as_str()
-        .map(str::to_owned)
-        .context("voyager.json names no terminal")
 }
 
 pub fn terminal_text(native: &Native, address: &str) -> Result<String> {

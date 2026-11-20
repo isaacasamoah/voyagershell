@@ -306,19 +306,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     else {
         return Ok(());
     };
-    cases.check(native, Case::TypedReplyIsSilent, |_| {
+    cases.check(native, Case::TypedReplyIsSilent, |native| {
+        let ever = voice::spoken_ever(native)?;
         Verdict::new()
             .expect(
-                "the typed turn that came first was never spoken",
-                said.spoken_texts
-                    .iter()
-                    .all(|text| !text.contains(TYPED_REPLY)),
+                "no typed turn was ever spoken in the whole run",
+                ever.iter().all(|text| !text.contains(TYPED_REPLY)),
             )
             .expect(
                 "exactly one reply was spoken for the one spoken prompt",
                 said.spoken_texts.len() == 1,
             )
-            .observed("spokenTexts", &said.spoken_texts)
+            .observed("spokenTexts", &said.spoken_texts)?
+            .observed("spokenEver", ever)
     })?;
     cases.check(native, Case::TwoTurnsWithEcho, |native| {
         let echo = voice::echo(native)?;
