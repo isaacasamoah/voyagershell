@@ -29,7 +29,9 @@ if ! git -C "$root" diff --quiet "$sync" -- $covered; then
     drift=1
 fi
 
-work=$(mktemp -d)
+scratch="${TMPDIR:-$cache/work}"
+mkdir -p "$scratch"
+work=$(mktemp -d "$scratch/core-viewers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp "$here/CoreViewers.tla" "$here"/*.cfg "$work/"
 
