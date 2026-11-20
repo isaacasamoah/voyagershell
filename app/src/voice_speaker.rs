@@ -1,7 +1,8 @@
 use crate::{
+    replies::Replies,
     speech::{Clip, Phrase, Speaking},
     voice_layer::{Audio, Phase, Trace, Voyager},
-    voice_reply::{Line, Turns, Watcher},
+    voice_reply::{Line, Watcher},
 };
 use std::{
     collections::HashMap,
@@ -18,7 +19,7 @@ pub(crate) struct Parts {
     pub clips: Arc<HashMap<Phrase, Clip>>,
     pub audio: Arc<dyn Audio>,
     pub voyager: Arc<dyn Voyager>,
-    pub turns: Arc<dyn Turns>,
+    pub replies: Replies,
     pub trace: Trace,
     pub floor: Arc<Mutex<()>>,
     pub status: Arc<dyn Fn(Phase, Option<String>) + Send + Sync>,
@@ -26,14 +27,17 @@ pub(crate) struct Parts {
 }
 
 pub(crate) fn spawn(parts: Parts) {
-    let mut watcher = Watcher::starting_at(&parts.turns.turns());
+    let mut watcher = Watcher::starting_at(&parts.replies.snapshot().turns);
     thread::spawn(move || {
         let mut asked = Instant::now();
         while !(parts.stopped)() {
             thread::sleep(LOOK);
-            let turns = parts.turns.turns();
-            let lines = watcher.lines(&turns, Instant::now(), || {
-                if asked.elapsed() >= STANDING_EVERY {
+            let turns = parts.replies.snapshot().turns;
+            if !watcher.waiting_on_voyager(&turns) {
+                continue;
+            }
+            let lines = watcher.lines(&turns, |urgent| {
+                if urgent || asked.elapsed() >= STANDING_EVERY {
                     asked = Instant::now();
                     Some(parts.voyager.standing())
                 } else {
@@ -93,12 +97,12 @@ mod tests {
     use crate::{
         speech::{Fault, SpokenText, Standing},
         voice_layer::{Frames, Speaker},
-        voice_reply::{Ending, Turn},
     };
     use std::{
         io,
         sync::atomic::{AtomicBool, Ordering},
     };
+    use voyager_contract::reply::ReplyEvent;
 
     struct Voice(Arc<Mutex<Vec<usize>>>);
 
@@ -136,14 +140,6 @@ mod tests {
         }
     }
 
-    struct Fixed(Mutex<Vec<Turn>>);
-
-    impl Turns for Fixed {
-        fn turns(&self) -> Vec<Turn> {
-            self.0.lock().unwrap().clone()
-        }
-    }
-
     struct Here(Standing);
 
     impl Voyager for Here {
@@ -158,7 +154,7 @@ mod tests {
 
     struct Rig {
         played: Arc<Mutex<Vec<usize>>>,
-        turns: Arc<Fixed>,
+        replies: Replies,
         floor: Arc<Mutex<()>>,
         phases: Arc<Mutex<Vec<Phase>>>,
         stop: Arc<AtomicBool>,
@@ -169,7 +165,7 @@ mod tests {
             let played = Arc::new(Mutex::default());
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
-            let turns = Arc::new(Fixed(Mutex::default()));
+            let replies = Replies::default();
             let floor = Arc::new(Mutex::new(()));
             let recorded = phases.clone();
             let halted = stop.clone();
@@ -192,7 +188,7 @@ mod tests {
                 ),
                 audio: Arc::new(Out(played.clone())),
                 voyager: Arc::new(Here(standing)),
-                turns: turns.clone(),
+                replies: replies.clone(),
                 trace: Trace::off(),
                 floor: floor.clone(),
                 status: Arc::new(move |phase, _| recorded.lock().unwrap().push(phase)),
@@ -200,15 +196,27 @@ mod tests {
             });
             Self {
                 played,
-                turns,
+                replies,
                 floor,
                 phases,
                 stop,
             }
         }
 
-        fn show(&self, turn: Turn) {
-            self.turns.0.lock().unwrap().push(turn);
+        fn say(&self, turn: &str, spoken: bool, words: &str) {
+            let text = ReplyEvent::Text {
+                turn: turn.into(),
+                message: format!("m-{turn}"),
+                index: 0,
+                last: true,
+                text: words.into(),
+            };
+            let end = ReplyEvent::TurnEnd {
+                turn: turn.into(),
+                text: words.into(),
+            };
+            self.replies.accept_with(text, |_| spoken);
+            self.replies.accept(end);
         }
 
         fn wait_for(&self, count: usize) {
@@ -225,22 +233,10 @@ mod tests {
         }
     }
 
-    fn turn(id: &str, spoken: bool, ending: Ending) -> Turn {
-        Turn {
-            id: id.into(),
-            spoken,
-            ending,
-        }
-    }
-
     #[test]
     fn a_spoken_reply_is_read_aloud_and_the_phase_returns_to_ready() {
         let rig = Rig::start(Standing::Idle);
-        rig.show(turn(
-            "p1",
-            true,
-            Ending::Text("Renamed it.\n\nMore.".into()),
-        ));
+        rig.say("p1", true, "Renamed it.\n\nMore.");
         rig.wait_for(1);
         let heard = "Renamed it. The rest is in the chat.".len();
         assert_eq!(rig.played.lock().unwrap().clone(), vec![heard]);
@@ -254,7 +250,7 @@ mod tests {
     #[test]
     fn a_typed_reply_makes_no_sound() {
         let rig = Rig::start(Standing::Idle);
-        rig.show(turn("t1", false, Ending::Text("Typed answer.".into())));
+        rig.say("t1", false, "Typed answer.");
         thread::sleep(Duration::from_millis(500));
         assert!(rig.played.lock().unwrap().is_empty());
     }
@@ -262,7 +258,20 @@ mod tests {
     #[test]
     fn a_failed_spoken_turn_plays_the_failure_clip() {
         let rig = Rig::start(Standing::Idle);
-        rig.show(turn("p1", true, Ending::Failed));
+        rig.replies.accept_with(
+            ReplyEvent::Text {
+                turn: "p1".into(),
+                message: "m1".into(),
+                index: 0,
+                last: true,
+                text: "Working.".into(),
+            },
+            |_| true,
+        );
+        rig.replies.accept(ReplyEvent::TurnFailed {
+            turn: Some("p1".into()),
+            error: "rate_limit".into(),
+        });
         rig.wait_for(1);
         let failed = 1000
             + Phrase::ALL
@@ -275,7 +284,16 @@ mod tests {
     #[test]
     fn a_blocked_voyager_is_announced_once_while_its_spoken_turn_is_open() {
         let rig = Rig::start(Standing::Blocked);
-        rig.show(turn("p1", true, Ending::Open));
+        rig.replies.accept_with(
+            ReplyEvent::Text {
+                turn: "p1".into(),
+                message: "m1".into(),
+                index: 0,
+                last: false,
+                text: "Starting.".into(),
+            },
+            |_| true,
+        );
         rig.wait_for(1);
         thread::sleep(Duration::from_millis(800));
         let blocked = 1000
@@ -290,7 +308,7 @@ mod tests {
     fn speech_waits_for_the_floor_while_an_exchange_holds_it() {
         let rig = Rig::start(Standing::Idle);
         let held = rig.floor.lock().unwrap();
-        rig.show(turn("p1", true, Ending::Text("Done.".into())));
+        rig.say("p1", true, "Done.");
         thread::sleep(Duration::from_millis(500));
         assert!(rig.played.lock().unwrap().is_empty());
         drop(held);

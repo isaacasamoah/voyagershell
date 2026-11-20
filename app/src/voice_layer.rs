@@ -2,11 +2,11 @@ use crate::{
     audio_io::{Capture, End, Gate, Playing},
     client::Client,
     omni::{self, Clips, Omni, Running, Settings},
+    replies::Replies,
     speech::{
         Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
         heard_nothing,
     },
-    voice_reply::Turns,
     voice_speaker,
 };
 use std::{
@@ -390,7 +390,7 @@ pub fn start(
     client: Client,
     settings: Settings,
     voyager: Arc<dyn Voyager>,
-    turns: Arc<dyn Turns>,
+    replies: Replies,
     vocabulary: Vocabulary,
     audio: Arc<dyn Audio>,
     trace: Trace,
@@ -427,7 +427,7 @@ pub fn start(
             clips: engine.clips.clone(),
             audio: audio.clone(),
             voyager: voyager.clone(),
-            turns,
+            replies,
             trace: trace.clone(),
             floor: floor.clone(),
             status: Arc::new(move |phase, notice| status.set(phase, notice)),

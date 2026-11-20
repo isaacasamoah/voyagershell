@@ -307,26 +307,101 @@ fn data_of(response: &[u8]) -> Result<(u32, Vec<u8>)> {
     Ok((rate, body[at + 8..].to_vec()))
 }
 
-fn render(native: &Native, text: &str) -> Result<Samples> {
+fn post(native: &Native, path: &str, body: &str) -> Result<Vec<u8>> {
     let port = engine_port(native)?;
-    let body = json!({"input":text,"voice":"female"}).to_string();
     let mut socket = TcpStream::connect(("127.0.0.1", port))?;
     write!(
         socket,
-        "POST /v1/audio/speech HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
         body.len()
     )?;
     let mut response = Vec::new();
     socket.read_to_end(&mut response)?;
-    let (rate, data) = data_of(&response)?;
+    Ok(response)
+}
+
+fn render(native: &Native, text: &str) -> Result<Samples> {
+    let body = json!({"input":text,"voice":"female"}).to_string();
+    let (rate, data) = data_of(&post(native, "/v1/audio/speech", &body)?)?;
     ensure!(rate == CLIP_RATE, "The engine spoke at {rate} Hz");
     Ok(upsample(&Samples::raw(&data).0))
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut text = String::new();
+    for group in bytes.chunks(3) {
+        let value = group.iter().enumerate().fold(0u32, |value, (index, byte)| {
+            value | u32::from(*byte) << (16 - 8 * index)
+        });
+        for index in 0..4 {
+            if index <= group.len() {
+                text.push(char::from(TABLE[(value >> (18 - 6 * index) & 63) as usize]));
+            } else {
+                text.push('=');
+            }
+        }
+    }
+    text
+}
+
+fn wav_16k(narrow: &[i16]) -> Vec<u8> {
+    let data = u32::try_from(narrow.len() * 2).unwrap_or(u32::MAX);
+    let mut wav = Vec::with_capacity(44 + narrow.len() * 2);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&16_000u32.to_le_bytes());
+    wav.extend_from_slice(&32_000u32.to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data.to_le_bytes());
+    for sample in narrow {
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+    wav
+}
+
+pub fn transcribe(native: &Native, name: &str) -> Result<String> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    let narrow: Vec<i16> = heard
+        .0
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|trio| ((i32::from(trio[0]) + i32::from(trio[1]) + i32::from(trio[2])) / 3) as i16)
+        .collect();
+    let body = json!({
+        "temperature": 0,
+        "max_tokens": 200,
+        "messages": [
+            {"role": "system", "content": "Transcribe the audio exactly as spoken. Output only the words, nothing else."},
+            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav_16k(&narrow)), "format": "wav"}}]}
+        ]
+    })
+    .to_string();
+    let response = post(native, "/v1/chat/completions", &body)?;
+    let at = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .context("The engine sent no header")?;
+    let reply: Value = serde_json::from_slice(&response[at + 4..])?;
+    Ok(reply["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned())
 }
 
 #[derive(Debug, Serialize)]
 pub struct Judgement {
     pub wanted: Score,
     pub other: Score,
+    pub transcript: String,
 }
 
 pub fn judge_reply(native: &Native, name: &str, wanted: &str, other: &str) -> Result<Judgement> {
@@ -335,7 +410,21 @@ pub fn judge_reply(native: &Native, name: &str, wanted: &str, other: &str) -> Re
     Ok(Judgement {
         wanted: judge::score(&render(native, wanted)?, &heard),
         other: judge::score(&render(native, other)?, &heard),
+        transcript: transcribe(native, name)?,
     })
+}
+
+pub fn words_contain(heard: &str, wanted: &str) -> bool {
+    let plain = |text: &str| {
+        text.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    plain(heard).contains(&plain(wanted))
 }
 
 pub fn bound_terminal(native: &Native) -> Result<String> {
@@ -422,6 +511,22 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn words_are_found_inside_a_longer_transcript_ignoring_case_and_punctuation() {
+        assert!(words_contain(
+            "Asking Voyager. Docked on this fleet. The rest is in the chat.",
+            "Docked on this fleet. The rest is in the chat."
+        ));
+        assert!(!words_contain("Asking Voyager.", "Docked on this fleet."));
+    }
+
+    #[test]
+    fn base64_matches_the_standard_vectors() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
 
     #[test]
     fn the_median_of_an_even_count_is_the_mean_of_the_middle_pair() {

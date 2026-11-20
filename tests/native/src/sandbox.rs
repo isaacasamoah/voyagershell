@@ -74,7 +74,11 @@ impl Sandbox<'_> {
             .map(|candidate| candidate.with_file_name("voyager"));
         if let Some(command_line) = command_line.filter(|path| path.is_file()) {
             command.extend(["--ro-bind".into(), text(&command_line)?, COMMAND.into()]);
-            command.extend(["--ro-bind".into(), text(&command_line)?, text(&command_line)?]);
+            command.extend([
+                "--ro-bind".into(),
+                text(&command_line)?,
+                text(&command_line)?,
+            ]);
         }
         for path in [
             Some(self.verifier),

@@ -1,35 +1,8 @@
-use crate::speech::{Phrase, SpokenText, Standing};
-use std::{
-    collections::{HashMap, HashSet},
-    time::{Duration, Instant},
+use crate::{
+    replies::{Ending, Turn},
+    speech::{Phrase, SpokenText, Standing},
 };
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Ending {
-    Open,
-    Text(String),
-    Failed,
-    Lost,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Turn {
-    pub id: String,
-    pub spoken: bool,
-    pub ending: Ending,
-}
-
-pub trait Turns: Send + Sync {
-    fn turns(&self) -> Vec<Turn>;
-}
-
-pub struct Silent;
-
-impl Turns for Silent {
-    fn turns(&self) -> Vec<Turn> {
-        Vec::new()
-    }
-}
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Line {
@@ -37,34 +10,17 @@ pub enum Line {
     Said(Phrase),
 }
 
-pub const SETTLE: Duration = Duration::from_millis(600);
-
-#[derive(Debug)]
-struct Settling {
-    key: String,
-    since: Instant,
-}
-
 #[derive(Debug, Default)]
 pub struct Watcher {
     ended: HashSet<String>,
     blocked: HashSet<String>,
-    settling: HashMap<String, Settling>,
-}
-
-fn settle_key(ending: &Ending) -> Option<String> {
-    match ending {
-        Ending::Text(text) => Some(format!("text:{text}")),
-        Ending::Failed => Some("failed".to_owned()),
-        Ending::Open | Ending::Lost => None,
-    }
 }
 
 impl Watcher {
     pub fn starting_at(turns: &[Turn]) -> Self {
         let mut watcher = Self::default();
         for turn in turns {
-            if turn.ending != Ending::Open {
+            if turn.ending.is_some() {
                 watcher.ended.insert(turn.id.clone());
             }
             watcher.blocked.insert(turn.id.clone());
@@ -75,50 +31,44 @@ impl Watcher {
     pub fn lines(
         &mut self,
         turns: &[Turn],
-        now: Instant,
-        mut standing: impl FnMut() -> Option<Standing>,
+        mut standing: impl FnMut(bool) -> Option<Standing>,
     ) -> Vec<Line> {
         let mut lines = Vec::new();
-        let mut asked: Option<Option<Standing>> = None;
-        let mut standing_now = || *asked.get_or_insert_with(&mut standing);
+        let mut known: Option<Standing> = None;
+        let mut ask = |urgent: bool| {
+            if known.is_none() {
+                known = standing(urgent);
+            }
+            known
+        };
         for turn in turns.iter().filter(|turn| turn.spoken) {
             if self.ended.contains(&turn.id) {
                 continue;
             }
-            let Some(key) = settle_key(&turn.ending) else {
-                self.settling.remove(&turn.id);
-                if turn.ending == Ending::Open
-                    && !self.blocked.contains(&turn.id)
-                    && standing_now() == Some(Standing::Blocked)
-                {
-                    self.blocked.insert(turn.id.clone());
-                    lines.push(Line::Said(Phrase::Blocked));
-                }
-                continue;
-            };
-            let settling = self.settling.entry(turn.id.clone()).or_insert(Settling {
-                key: key.clone(),
-                since: now,
-            });
-            if settling.key != key {
-                *settling = Settling { key, since: now };
-                continue;
-            }
-            if now.saturating_duration_since(settling.since) < SETTLE {
-                continue;
-            }
-            if matches!(standing_now(), None | Some(Standing::Working)) {
-                continue;
-            }
-            self.ended.insert(turn.id.clone());
-            self.settling.remove(&turn.id);
             match &turn.ending {
-                Ending::Text(text) => {
+                Some(Ending::Stopped { text, .. }) => {
+                    if matches!(ask(true), None | Some(Standing::Working)) {
+                        continue;
+                    }
+                    self.ended.insert(turn.id.clone());
                     if let Some(reply) = SpokenText::from_reply(text) {
                         lines.push(Line::Reply(reply));
                     }
                 }
-                _ => lines.push(Line::Said(Phrase::Failed)),
+                Some(Ending::Failed { .. }) => {
+                    if matches!(ask(true), None | Some(Standing::Working)) {
+                        continue;
+                    }
+                    self.ended.insert(turn.id.clone());
+                    lines.push(Line::Said(Phrase::Failed));
+                }
+                Some(Ending::Lost) => {}
+                None => {
+                    if !self.blocked.contains(&turn.id) && ask(false) == Some(Standing::Blocked) {
+                        self.blocked.insert(turn.id.clone());
+                        lines.push(Line::Said(Phrase::Blocked));
+                    }
+                }
             }
         }
         lines
@@ -128,8 +78,11 @@ impl Watcher {
         turns.iter().any(|turn| {
             turn.spoken
                 && !self.ended.contains(&turn.id)
-                && (settle_key(&turn.ending).is_some()
-                    || (turn.ending == Ending::Open && !self.blocked.contains(&turn.id)))
+                && match &turn.ending {
+                    Some(Ending::Stopped { .. } | Ending::Failed { .. }) => true,
+                    Some(Ending::Lost) => false,
+                    None => !self.blocked.contains(&turn.id),
+                }
         })
     }
 }
@@ -137,188 +90,227 @@ impl Watcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::replies::Replies;
+    use voyager_contract::reply::ReplyEvent;
 
-    fn turn(id: &str, spoken: bool, ending: Ending) -> Turn {
-        Turn {
-            id: id.into(),
-            spoken,
-            ending,
+    fn text(turn: &str, message: &str, index: u32, last: bool, words: &str) -> ReplyEvent {
+        ReplyEvent::Text {
+            turn: turn.into(),
+            message: message.into(),
+            index,
+            last,
+            text: words.into(),
         }
     }
 
-    fn text(id: &str, words: &str) -> Turn {
-        turn(id, true, Ending::Text(words.into()))
+    fn end(turn: &str, words: &str) -> ReplyEvent {
+        ReplyEvent::TurnEnd {
+            turn: turn.into(),
+            text: words.into(),
+        }
     }
 
-    fn idle() -> Option<Standing> {
+    fn spoken(replies: &Replies, event: ReplyEvent) {
+        replies.accept_with(event, |_| true);
+    }
+
+    fn typed(replies: &Replies, event: ReplyEvent) {
+        replies.accept(event);
+    }
+
+    fn idle(_: bool) -> Option<Standing> {
         Some(Standing::Idle)
     }
 
-    struct Clock(Instant);
+    fn working(_: bool) -> Option<Standing> {
+        Some(Standing::Working)
+    }
 
-    impl Clock {
-        fn after(&self, millis: u64) -> Instant {
-            self.0 + Duration::from_millis(millis)
+    fn tick(
+        watcher: &mut Watcher,
+        replies: &Replies,
+        standing: impl FnMut(bool) -> Option<Standing>,
+    ) -> Vec<String> {
+        watcher
+            .lines(&replies.snapshot().turns, standing)
+            .into_iter()
+            .map(|line| match line {
+                Line::Reply(text) => text.as_str().to_owned(),
+                Line::Said(phrase) => phrase.key().to_owned(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_spoken_turn_is_spoken_once_the_moment_its_stop_has_arrived() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(
+            &replies,
+            text("p1", "m1", 0, true, "Renamed the fleet.\n\nMore."),
+        );
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
+        spoken(&replies, end("p1", "Renamed the fleet.\n\nMore."));
+        assert_eq!(
+            tick(&mut watcher, &replies, idle),
+            vec!["Renamed the fleet. The rest is in the chat."]
+        );
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
+    }
+
+    #[test]
+    fn a_stop_that_arrives_twice_is_spoken_once() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Done."));
+        for _ in 0..3 {
+            spoken(&replies, end("p1", "Done."));
         }
-    }
-
-    fn clock() -> Clock {
-        Clock(Instant::now())
-    }
-
-    fn settled(watcher: &mut Watcher, turns: &[Turn], clock: &Clock, at: u64) -> Vec<Line> {
-        watcher.lines(turns, clock.after(at), idle)
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Done."]);
+        spoken(&replies, end("p1", "Done."));
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 
     #[test]
-    fn a_spoken_turn_is_spoken_once_after_its_ending_has_held_still() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let turns = [text("p1", "Renamed the fleet.\n\nI also tidied the tabs.")];
-        assert!(settled(&mut watcher, &turns, &clock, 0).is_empty());
-        assert!(settled(&mut watcher, &turns, &clock, 300).is_empty());
-        let lines = settled(&mut watcher, &turns, &clock, 700);
-        assert_eq!(lines.len(), 1);
-        let Line::Reply(reply) = &lines[0] else {
-            panic!("expected a reply")
-        };
+    fn a_late_chunk_of_the_same_message_after_the_stop_makes_no_second_or_partial_reply() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, false, "Docked it. "));
+        spoken(&replies, end("p1", "Docked it. Then renamed the fleet."));
         assert_eq!(
-            reply.as_str(),
-            "Renamed the fleet. The rest is in the chat."
+            tick(&mut watcher, &replies, idle),
+            vec!["Docked it. Then renamed the fleet."]
         );
-        assert!(settled(&mut watcher, &turns, &clock, 2000).is_empty());
+        spoken(
+            &replies,
+            text("p1", "m1", 1, true, "Then renamed the fleet."),
+        );
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 
     #[test]
-    fn a_turn_that_reopens_and_settles_again_is_spoken_once_with_its_final_paragraph() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let first = [text("p1", "Docked it.")];
-        let reopened = [turn("p1", true, Ending::Open)];
-        let second = [text("p1", "Docked it, then renamed the fleet.\n\nMore.")];
-        assert!(settled(&mut watcher, &first, &clock, 0).is_empty());
-        assert!(settled(&mut watcher, &first, &clock, 300).is_empty());
-        assert!(settled(&mut watcher, &reopened, &clock, 400).is_empty());
-        assert!(settled(&mut watcher, &second, &clock, 500).is_empty());
-        assert!(settled(&mut watcher, &second, &clock, 900).is_empty());
-        let lines = settled(&mut watcher, &second, &clock, 1200);
-        assert_eq!(lines.len(), 1);
-        let Line::Reply(reply) = &lines[0] else {
-            panic!("expected a reply")
-        };
+    fn a_new_message_that_reopens_the_turn_while_voyager_works_speaks_only_the_final_paragraph() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Docked it."));
+        spoken(&replies, end("p1", "Docked it."));
+        assert!(tick(&mut watcher, &replies, working).is_empty());
+        spoken(
+            &replies,
+            text(
+                "p1",
+                "m2",
+                0,
+                true,
+                "Docked it, then renamed the fleet.\n\nMore.",
+            ),
+        );
+        assert!(tick(&mut watcher, &replies, working).is_empty());
+        spoken(
+            &replies,
+            end("p1", "Docked it, then renamed the fleet.\n\nMore."),
+        );
+        assert!(tick(&mut watcher, &replies, working).is_empty());
         assert_eq!(
-            reply.as_str(),
-            "Docked it, then renamed the fleet. The rest is in the chat."
+            tick(&mut watcher, &replies, idle),
+            vec!["Docked it, then renamed the fleet. The rest is in the chat."]
         );
-        assert!(settled(&mut watcher, &second, &clock, 5000).is_empty());
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 
     #[test]
-    fn a_settle_that_changes_its_text_without_a_reopen_starts_the_wait_again() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        assert!(settled(&mut watcher, &[text("p1", "First.")], &clock, 0).is_empty());
-        assert!(settled(&mut watcher, &[text("p1", "Second.")], &clock, 500).is_empty());
-        assert!(settled(&mut watcher, &[text("p1", "Second.")], &clock, 900).is_empty());
-        assert_eq!(
-            settled(&mut watcher, &[text("p1", "Second.")], &clock, 1200).len(),
-            1
-        );
+    fn a_reopen_after_the_turn_was_spoken_is_never_spoken_again() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "First answer."));
+        spoken(&replies, end("p1", "First answer."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["First answer."]);
+        spoken(&replies, text("p1", "m2", 0, true, "Second answer."));
+        spoken(&replies, end("p1", "Second answer."));
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 
     #[test]
-    fn nothing_is_spoken_while_voyager_is_still_working_or_its_standing_is_unknown() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let turns = [text("p1", "Done.")];
-        watcher.lines(&turns, clock.after(0), idle);
-        assert!(
-            watcher
-                .lines(&turns, clock.after(1000), || Some(Standing::Working))
-                .is_empty()
-        );
-        assert!(watcher.lines(&turns, clock.after(1100), || None).is_empty());
-        assert_eq!(watcher.lines(&turns, clock.after(1200), idle).len(), 1);
+    fn nothing_is_spoken_while_voyagers_standing_is_unknown() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Done."));
+        spoken(&replies, end("p1", "Done."));
+        assert!(tick(&mut watcher, &replies, |_| None).is_empty());
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Done."]);
     }
 
     #[test]
     fn a_turn_the_ledger_did_not_mark_spoken_stays_silent_whatever_it_says() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let turns = [
-            turn("typed", false, Ending::Text("Done.".into())),
-            turn("failed", false, Ending::Failed),
-        ];
-        settled(&mut watcher, &turns, &clock, 0);
-        assert!(
-            watcher
-                .lines(&turns, clock.after(5000), || Some(Standing::Blocked))
-                .is_empty()
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        typed(&replies, text("t1", "m1", 0, true, "Typed answer."));
+        typed(&replies, end("t1", "Typed answer."));
+        typed(
+            &replies,
+            ReplyEvent::TurnFailed {
+                turn: Some("t2".into()),
+                error: "rate_limit".into(),
+            },
         );
+        assert!(tick(&mut watcher, &replies, |_| Some(Standing::Blocked)).is_empty());
     }
 
     #[test]
     fn a_failed_spoken_turn_says_the_fixed_failure_line_once() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let turns = [turn("p1", true, Ending::Failed)];
-        settled(&mut watcher, &turns, &clock, 0);
-        assert_eq!(
-            settled(&mut watcher, &turns, &clock, 700),
-            vec![Line::Said(Phrase::Failed)]
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Working on it."));
+        spoken(
+            &replies,
+            ReplyEvent::TurnFailed {
+                turn: Some("p1".into()),
+                error: "rate_limit".into(),
+            },
         );
-        assert!(settled(&mut watcher, &turns, &clock, 1500).is_empty());
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["failed"]);
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 
     #[test]
     fn a_spoken_turn_that_is_blocked_says_so_once_and_still_speaks_when_it_ends() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let open = [turn("p1", true, Ending::Open)];
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, false, "Starting. "));
         assert_eq!(
-            watcher.lines(&open, clock.after(0), || Some(Standing::Blocked)),
-            vec![Line::Said(Phrase::Blocked)]
+            tick(&mut watcher, &replies, |_| Some(Standing::Blocked)),
+            vec!["blocked"]
         );
-        assert!(
-            watcher
-                .lines(&open, clock.after(100), || Some(Standing::Blocked))
-                .is_empty()
-        );
-        let ended = [text("p1", "Done. Opened it.")];
-        settled(&mut watcher, &ended, &clock, 200);
-        assert_eq!(settled(&mut watcher, &ended, &clock, 900).len(), 1);
+        assert!(tick(&mut watcher, &replies, |_| Some(Standing::Blocked)).is_empty());
+        spoken(&replies, text("p1", "m1", 1, true, "Done."));
+        spoken(&replies, end("p1", "Starting. Done."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Starting. Done."]);
     }
 
     #[test]
-    fn standing_is_asked_only_for_a_spoken_turn_still_open_or_ready_to_speak() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
+    fn standing_is_not_asked_for_a_turn_nobody_will_speak() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        typed(&replies, text("t1", "m1", 0, true, "Typed."));
         let asked = std::cell::Cell::new(0);
-        let count = || {
+        tick(&mut watcher, &replies, |_| {
             asked.set(asked.get() + 1);
-            Some(Standing::Working)
-        };
-        watcher.lines(&[turn("p1", false, Ending::Open)], clock.after(0), count);
+            Some(Standing::Idle)
+        });
         assert_eq!(asked.get(), 0);
-        assert!(!watcher.waiting_on_voyager(&[turn("p1", false, Ending::Open)]));
-        assert!(watcher.waiting_on_voyager(&[turn("p2", true, Ending::Open)]));
+        assert!(!watcher.waiting_on_voyager(&replies.snapshot().turns));
     }
 
     #[test]
     fn turns_that_ended_before_the_watcher_started_are_never_spoken() {
-        let clock = clock();
-        let before = [text("old", "Old news."), turn("open", true, Ending::Open)];
-        let mut watcher = Watcher::starting_at(&before);
-        assert!(
-            watcher
-                .lines(&before, clock.after(0), || Some(Standing::Blocked))
-                .is_empty()
+        let replies = Replies::default();
+        spoken(&replies, text("old", "m1", 0, true, "Old news."));
+        spoken(&replies, end("old", "Old news."));
+        spoken(&replies, text("open", "m1", 0, false, "Working. "));
+        let mut watcher = Watcher::starting_at(&replies.snapshot().turns);
+        assert!(tick(&mut watcher, &replies, |_| Some(Standing::Blocked)).is_empty());
+        spoken(&replies, end("open", "Working. Now done."));
+        assert_eq!(
+            tick(&mut watcher, &replies, idle),
+            vec!["Working. Now done."]
         );
-        let later = [before[0].clone(), text("open", "Now done.")];
-        settled(&mut watcher, &later, &clock, 100);
-        assert_eq!(settled(&mut watcher, &later, &clock, 800).len(), 1);
     }
 
     #[test]
-    fn a_lost_turn_and_a_reply_with_nothing_speakable_say_nothing() {
-        let (mut watcher, clock) = (Watcher::default(), clock());
-        let turns = [
-            turn("lost", true, Ending::Lost),
-            text("code", "```\nonly code\n```"),
-        ];
-        settled(&mut watcher, &turns, &clock, 0);
-        assert!(settled(&mut watcher, &turns, &clock, 1000).is_empty());
+    fn a_reply_with_nothing_speakable_says_nothing() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("code", "m1", 0, true, "```\nonly code\n```"));
+        spoken(&replies, end("code", "```\nonly code\n```"));
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
 }

@@ -1,7 +1,7 @@
 use super::{Cases, Verdict, cases};
 use crate::agent::TYPED_REPLY;
 use crate::audio::speech::{DOCK_ON_THIS_FLEET, RENAME_TO_HARBOR};
-use crate::audio::voice::{self, LISTENING, READY, median, words_match};
+use crate::audio::voice::{self, LISTENING, READY, median, words_contain, words_match};
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, Native, QUIET_MIC};
 use crate::system::until;
@@ -162,12 +162,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.spoken_texts.iter().any(|text| text == SPOKEN_AS),
             )
             .expect(
-                "what reached the speaker matches a render of that text",
-                judged.wanted.matches(),
+                "the engine hears the spoken reply as the expected sentence",
+                words_contain(&judged.transcript, SPOKEN_AS),
             )
             .expect(
-                "what reached the speaker does not match a render of another sentence",
-                !judged.other.matches(),
+                "the engine does not hear another sentence in it",
+                !words_contain(&judged.transcript, OTHER),
             )
             .expect(
                 "the reply is spoken after the words were sent",

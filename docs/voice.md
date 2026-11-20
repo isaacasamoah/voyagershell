@@ -7,9 +7,8 @@ runtime. It hears and speaks, and Voyager acts. The Codex realtime helper
 described in [the conversation guide](conversation.md) stays compiled and has no
 control until its own adapter step.
 
-This guide covers the hearing half. The spoken reply is a later step. It reads
-the first paragraph of Voyager's final message, and the speech filter that
-prepares that text is already in place.
+This guide covers hearing a request, handing it to Voyager and reading Voyager's
+reply aloud.
 
 ## One spoken exchange
 
@@ -40,6 +39,42 @@ prepares that text is already in place.
 
 A click made while the avatar hears or speaks is dropped. A click while Voyager
 works starts a new utterance, which queues. There is no interrupt and no stop.
+
+## Speaking the reply
+
+Only a turn that the app's ledger marked spoken is ever read aloud. The ledger
+marks a turn when the focus hook sees the `[spoken]` marker on its own prompt id, so a
+reply is never judged spoken by guessing which prompt came last. The voice layer reads
+the same store of Voyager's replies that the chat reads, `app/src/replies.rs`, on its
+own thread, off the canvas path. A typed turn, a Core note and a turn of any other
+Vessel stay silent.
+
+A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
+candidate when its final `Stop` is recorded and Core reports that Voyager is not
+working. Then the speech filter takes the first paragraph of the final message, cut to
+two sentences or 30 words, with "The rest is in the chat." when it cut anything, and
+the engine reads it. The turn is marked done, so a repeated `Stop`, a late chunk of the
+same message and a later reopen never speak it again. A failed turn plays one fixed
+clip, "That didn't work. The reason is in the chat.". While a spoken turn is open and
+Core reports Voyager blocked, one fixed clip, "I need you on Home.", plays once.
+
+There is no fixed hold before speech. Claude can continue a turn after `Stop` when
+a `Stop` hook in the person's own setup asks it to, so the store can settle one turn
+twice. A real run shows that case does not look settled to Core. In seven runs of
+Claude Code 2.1.322 under Core, each with a `Stop` hook that continued the turn once,
+Core reported the program working from before the first `Stop` to 42 to 66 ms after the
+last one, a gap of 0.9 to 1.0 s between the two `Stop` events with no change of
+status. Three runs without a continuation gave 52 to 69 ms from `Stop` to Core's
+`done`. The rule therefore waits on Core and not on a timer. The first `Stop` of a
+continued turn is not read aloud, because Core still says working, and the final one
+is read within about 0.1 to 0.2 s of Core's change. The residual case is a continuation
+that starts after Core already reports Voyager not working. It was not seen. If it
+happened, the first settle would be spoken and the later one never would, which keeps
+the rule "at most once" and risks a partial reply.
+
+Speech holds the audio floor. A click while Voyager is being read is ignored, and a
+reply that is ready while an utterance is being heard waits for it to finish. There is
+no interrupt and no stop.
 
 ## The seam
 

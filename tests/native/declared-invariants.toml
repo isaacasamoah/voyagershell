@@ -229,7 +229,7 @@ source = "Isaac, 16 Nov 2026: prove it with an agent if there is a way, otherwis
 features = ["voice"]
 guard = []
 type_gap = "Not state-shaped: it is sound reaching a speaker, outside any type."
-check = ["manual:an agent proof where one exists, otherwise Isaac by ear"]
+check = ["manual:an agent proof where one exists, otherwise Isaac by ear", "journey:voice/reply-is-spoken", "journey:voice/typed-reply-is-silent"]
 confidence = "stated"
 
 [[invariant]]

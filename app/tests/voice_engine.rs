@@ -94,7 +94,7 @@ fn an_engine_that_cannot_warm_up_is_stopped_and_the_reason_is_shown() {
             client,
             engine_folder(&root),
             Arc::new(Absent),
-            Arc::new(voyager_app::voice_reply::Silent),
+            voyager_app::replies::Replies::default(),
             Arc::new(Vec::<String>::new),
             Arc::new(System),
             Trace::off(),
