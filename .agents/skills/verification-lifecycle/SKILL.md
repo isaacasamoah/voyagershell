@@ -5,7 +5,7 @@ description: Check VoyagerShell's finite Rust verification reporting gate and ke
 
 # Verification lifecycle
 
-Read tests/native/README.md and the project constraints. The checked promise is
+Read tests/native/README.md and the project constraints. The checked invariant is
 that an unobserved, unfinished, unrecorded or unclean run cannot report passed.
 A false pass would let later work rely on behavior that was never established.
 

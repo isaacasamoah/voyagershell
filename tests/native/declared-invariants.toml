@@ -23,6 +23,7 @@ source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view mu
 features = ["vessels", "portals", "fleets"]
 guard = ["type:contract/src/lib.rs#Placement"]
 check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal", "journey:adopt-by-label/ended-away-adopted-removed-when-shown"]
+gap = "The linked control case, portals/portal-across-fleets, has a patch that changes portal visibility on a Fleet switch, so the clause that a view never starts or stops its Program is not proved to fail."
 confidence = "stated"
 
 [[invariant]]
@@ -35,6 +36,7 @@ features = ["close-quit-restore"]
 guard = ["type:contract/src/lib.rs#Action"]
 type_gap = "ConfirmVoyageClose and its cancel take plan: String, so any string passes as a close plan id. DI14 adds VoyageClosePlanId."
 check = ["journey:quit-restore/stop-session", "journey:voyage-close/close-voyage-asks", "journey:voyage-close/close-voyage-cancel", "journey:voyage-close/close-voyage-confirm"]
+gap = "The linked control case, voyage-close/close-voyage-confirm, proves Confirm only, so the Cancel, Stop session and no-chord clauses are not proved to fail."
 confidence = "stated"
 
 [[invariant]]
@@ -47,6 +49,7 @@ features = ["close-quit-restore", "agent-vessels", "adopted-vessels"]
 guard = []
 type_gap = "A Vessel can hold a backend terminal and a pending start at once, and an adopted Vessel can have no backend, because backend, start_pending and adopted are independent fields of Vessel. DI16 replaces them with one BackendState."
 check = ["journey:quit-restore/cold-restart-restores", "journey:voyage-close/reopen-voyage", "journey:voyage-close/reopen-after-restart", "journey:adopt-by-label/reopen-restarts-own-terminal", "journey:adopt-by-label/reopen-closes-ended-adopted", "journey:adopt-by-label/ended-away-adopted-removed-when-shown", "journey:adopt-by-label/agent-exit-in-own-shell-keeps-shell", "journey:adopt-by-label/user-started-agent-vessel-keeps-shell", "journey:adopt-by-label/typed-exit-closes-vessel"]
+gap = "No linked case is proved to fail when this breaks. The control cases of its three journeys are quit-restore/relaunch-reattaches, voyage-close/close-voyage-confirm and adopt-by-label/agent-in-fleet, and none is linked here."
 confidence = "stated"
 
 [[invariant]]
@@ -57,8 +60,8 @@ source = "'Layout changed' on Voyager's own Vessel after a relaunch (unit bf1); 
 features = ["vessels"]
 guard = []
 type_gap = "Every request carries a Layout-wide expected_version u64 that any stale value can fill, and it is a bare number beside the per-Vessel revision String. DI14 adds LayoutVersion and VesselRevision so one cannot stand in for the other. A stale value for a live Program stays representable, and no planned unit removes it."
-check = []
-gap = "No case yet; unit bf1 adds it. Section 3c named no owner, so a later unit sets it."
+check = ["journey:quit-restore/relaunch-adopts-and-attaches"]
+gap = "No owner is set. Section 3c named none, so a later unit sets it."
 confidence = "inferred"
 
 # Placement and arrangement
@@ -73,6 +76,7 @@ features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-m
 guard = []
 type_gap = "The stored Layout keeps selected_voyage, selected_fleet and each LastUsed entry as separate ids, so a selected Fleet outside the selected Voyage, or a LastUsed naming a Fleet its Voyage lacks, can be written. No planned unit removes it."
 check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart", "journey:workspace/split-focus-remembered", "journey:workspace/reopen-voyage-restores-fleet", "journey:workspace/relaunch-restores-focus", "journey:workspace/maximize-focus-remembered", "journey:workspace/fleet-tab-focus-remembered"]
+gap = "The linked control case, quit-restore/relaunch-reattaches, has a patch that breaks reattach and not placement, so no linked case is proved to fail when placement, names, arrangement or the dock do not survive."
 confidence = "stated"
 
 [[invariant]]
@@ -85,6 +89,7 @@ features = ["portals"]
 guard = []
 type_gap = "A stored Layout can list one Portal Placement id under two Voyages, because ids are unique only by the Workspace::id convention (see out_of_scope layout-duplicate-id). No planned unit removes it."
 check = ["journey:portals/portal-across-fleets", "journey:portals/portal-stays-in-its-voyage"]
+gap = "The linked control case, portals/portal-across-fleets, proves the Fleet half only, so the clause that a Portal is not drawn in other Voyages is not proved to fail."
 confidence = "stated"
 
 [[invariant]]
@@ -97,6 +102,7 @@ features = ["voyages", "fleets", "vessels", "portals", "fleet-arrangement"]
 guard = []
 type_gap = "A Fleet's root Split can name a PlacementId that is not in that Fleet's placements, so an arrangement can lose a Vessel. No planned unit removes it."
 check = ["journey:workspace/rename-fleet-enter", "journey:workspace/rename-voyage-blur", "journey:workspace/rename-vessel-f2", "journey:workspace/rename-escape-cancels", "journey:portals/rename-portal", "journey:arrangement/move-vessel", "journey:arrangement/relaunch-keeps-arrangement"]
+gap = "The linked control case, workspace/rename-fleet-enter, proves rename trimming only, so the drag clause is not proved to fail."
 confidence = "stated"
 
 [[invariant]]
@@ -120,7 +126,7 @@ features = ["fleets", "fleet-arrangement", "voyages", "selection", "window-drag-
 guard = []
 type_gap = "Not state-shaped: it is a rule about which pointer events reach the window manager, with no stored state to restrict."
 check = ["journey:workspace/tab-drag-does-not-move-window", "journey:workspace/voyage-drag-does-not-move-window", "journey:workspace/terminal-selection-does-not-move-window", "journey:workspace/drag-bar-moves-window", "journey:workspace/sidebar-drag-moves-window"]
-gap = "None of the linked cases releases past the row end as #189 did."
+gap = "None of the linked cases releases past the row end as #189 did. No linked case is the workspace journey's control (rename-fleet-enter), so none is proved to fail when the rule breaks."
 confidence = "inferred"
 
 [[invariant]]
@@ -133,6 +139,7 @@ features = ["window-drag-bar", "close-quit-restore"]
 guard = []
 type_gap = "Not state-shaped: it is a window-manager request sent on a click, with no stored state to restrict."
 check = ["journey:quit-restore/window-buttons-send-minimise-and-maximise-requests", "journey:quit-restore/bottom-right-grip-sends-resize-request", "journey:quit-restore/controls-absent-under-server-decorations", "journey:workspace/double-click-bar-maximises-window"]
+gap = "No linked case is the control of its journeys (quit-restore/relaunch-reattaches, workspace/rename-fleet-enter), so none is proved to fail when the rule breaks."
 confidence = "inferred"
 
 [[invariant]]
@@ -171,6 +178,7 @@ features = ["avatar", "chat", "voice", "portals"]
 guard = []
 type_gap = "Context::Vessel and Context::Portal both carry a PlacementId, so the variant can disagree with where that Placement sits in the Layout. DI16 makes one Context::Placement and renames the dock record."
 check = ["journey:portals/dock-portal", "journey:portals/portal-stays-in-its-voyage", "journey:portals/hide-portals"]
+gap = "The portals journey's control case, portal-across-fleets, is not linked here, so no linked case is proved to fail when the rule breaks."
 confidence = "stated"
 
 [[invariant]]
@@ -246,7 +254,7 @@ features = ["chat", "vessels"]
 guard = []
 type_gap = "A conversation tool can be written by hand against a copy of the workspace, so a renamed Vessel keeps its old name there. S11b generates the avatar's tools from the operation catalogue."
 check = ["journey:chat/streamed-reply", "journey:chat/provider-error", "journey:chat/tool-call-inspect", "journey:chat/tool-call-effect"]
-gap = "The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name."
+gap = "The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name. The linked control case, chat/streamed-reply, proves reply text only, so the tool-call clause is not proved to fail."
 confidence = "stated"
 
 [[invariant]]
@@ -336,7 +344,7 @@ features = ["terminal-io", "selection", "clipboard"]
 guard = []
 type_gap = "Not state-shaped: it is the order and count of bytes through the input path, with no stored state to restrict."
 check = ["journey:terminal-input/keys-reach-the-program", "journey:terminal-input/typed-command-runs", "journey:terminal-input/keys-follow-program-modes", "journey:terminal-input/paste-sends-another-clients-text", "journey:terminal-input/input-reaches-one-terminal-while-another-floods", "journey:terminal-input/a-click-sends-no-bytes-and-a-middle-click-pastes-primary", "journey:terminal-input/a-click-in-the-shell-input-line-moves-the-cursor-there", "journey:terminal-input/a-click-in-a-line-reading-program-moves-its-cursor-to-the-clicked-column", "journey:terminal-input/a-click-across-a-wide-character-sends-one-arrow-per-character"]
-gap = "No case reads the Program's bytes during a drag selection or a copy."
+gap = "No case reads the Program's bytes during a drag selection or a copy. No linked case is the journey's control (copy-puts-the-selection-on-the-clipboard), so none is proved to fail when the rule breaks."
 confidence = "inferred"
 
 [[invariant]]
@@ -376,6 +384,7 @@ features = ["outcomes"]
 guard = []
 type_gap = "request_id is a bare String in every request and reply, and a TerminalResponse can be Applied with reason Ended. DI14 adds RequestId. DI16 makes one Outcome with data per variant, including UncertainEffect."
 check = ["journey:outcomes/rename-stalled-applied", "journey:outcomes/rename-dropped-retried", "journey:outcomes/stop-dropped-retried", "journey:outcomes/stop-held-closed", "journey:outcomes/rename-uncertain-declines-second-enter", "journey:outcomes/close-unanswered-stops-nothing", "journey:outcomes/start-held-adopted", "journey:outcomes/start-stalled-not-repeated"]
+gap = "The outcomes journey's control case, refused-shows-reason, is not linked here, so no linked case is proved to fail when the rule breaks."
 confidence = "stated"
 
 [[invariant]]
@@ -440,7 +449,7 @@ features = ["profile-updates", "profile-theme"]
 guard = []
 type_gap = "A shipped file and an edited file are the same kind of file, so an update can overwrite either, and only a fingerprint comparison tells them apart. No planned unit removes it."
 check = ["journey:profile-updates/untouched-files-update-and-stop-session-shows", "journey:profile-updates/edited-files-stay-as-they-were", "journey:profile-updates/edited-files-are-announced-with-a-diff", "journey:profile-updates/a-dropped-file-is-deleted-only-when-untouched", "journey:profile/second-build-keeps-voyage"]
-gap = "The notice half has no case. It needs one that dismisses the notice and restarts."
+gap = "The notice half has no case. It needs one that dismisses the notice and restarts. The linked control case, profile-updates/edited-files-stay-as-they-were, does not reach the notice clause, so it is not proved to fail when a kept file is announced again."
 confidence = "stated"
 
 [[invariant]]
@@ -466,7 +475,7 @@ features = ["scripts-live-edit", "profile-theme", "notes"]
 guard = []
 type_gap = "No type holds a last-good copy beside the edit, so a broken edit can replace the running version. S14a keeps the last good copy per script Vessel."
 check = ["journey:profile/live-edit-recolours"]
-gap = "The broken-edit half is checked only by a retained Python journey."
+gap = "The broken-edit half is checked only by a retained Python journey. The profile journey's control case, seeded-theme-drawn, is not linked, so the live-edit-recolours case is not proved to fail when the rule breaks."
 confidence = "stated"
 
 # Developer experience
@@ -492,34 +501,22 @@ source = "#129 verdict: with old-style folders present the suite failed with 'Fi
 features = ["verification-environment"]
 guard = []
 type_gap = "Not state-shaped: it is about files left on disk after a process ends, outside any type."
-check = []
-gap = "No check yet. The temp-directory check gains the repository-copy case."
+check = ["test:tests/native/src/scratch.rs#a_failing_test_removes_its_folder", "test:tests/native/src/scratch.rs#a_sweep_removes_only_abandoned_folders"]
+gap = "No test covers the repository copy or the crew. The linked tests cover the verifier unit-test folder and the sweep of abandoned folders only."
 confidence = "inferred"
 
 [[invariant]]
 id = "live-sessions-untouched"
-says = "Agent tooling never stops or writes into a live user session."
+says = "Agents never stop, restart or upgrade Core."
 kind = "developer"
 owner = "verification"
-source = "AGENTS.md: 'Preserve unrelated work and running sessions'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+source = "AGENTS.md: 'Preserve unrelated work and running sessions'; declared invariants design, section 3, agreed by Isaac 19 Nov 2026; narrowed by Isaac, 20 Nov 2026, after the first upkeep pass (#303)"
 features = []
 guard = ["hook:.claude/hooks/guard-live-session.py"]
 type_gap = "Not state-shaped: it limits which commands an agent's tools may run, and the hook is its guard."
 check = []
-gap = "The hook's Python tests run in CI, but a test link names only a Rust fn, so the check field cannot name them yet."
+gap = "The check is the hc stand-in's test in the Workshop's bin/test-hc-shim.sh, which refuses server stop, server restart and update. A test link names a Rust fn in this repository and a manual link names a person, so the check field cannot name it yet."
 confidence = "stated"
-
-[[invariant]]
-id = "agents-never-reach-default-session"
-says = "An agent's hc call never reaches Isaac's default Core session."
-kind = "developer"
-source = "Verify's anchor proposal in the third-round verdict on #271, whose finding broke it"
-features = []
-guard = ["hook:.claude/hooks/guard-live-session.py"]
-type_gap = "Not state-shaped: it limits which commands an agent's tools may run, and the hook is its guard."
-check = []
-gap = "The hook's Python tests run in CI, but a test link names only a Rust fn, so the check field cannot name them yet. No owner was proposed, so a later unit sets it."
-confidence = "inferred"
 
 [[invariant]]
 id = "sdk-graph-coherent"
@@ -618,7 +615,7 @@ owner = "conversation-provider"
 source = "Isaac, 17 Nov 2026 (D18); AGENTS.md, Content and provider boundaries"
 features = ["agent-vessels", "avatar"]
 guard = ["gate:agent-names-stay-in-adapters"]
-type_gap = "Agent names are plain strings in launch code, so agent-specific code can sit outside its adapter. S12c registers terminals and agents as types and clears ten of the exceptions, and S19a clears the voice ones."
+type_gap = "Agent names are plain strings in launch code, so agent-specific code can sit outside its adapter. S12c registers terminals and agents as types and clears ten of the exceptions, S19a clears the voice ones, and Avatar unit 9 removes the in-app Codex provider path and its name in app/src/provider_settings.rs."
 check = []
 gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate. The terms claude and codex, case-insensitive, in identifiers, enum variants and strings of Rust and canvas TypeScript source may appear only in the adapter files the rule lists. Code already on main that names them is in known-violations with its migration unit."
 confidence = "stated"
@@ -643,7 +640,7 @@ kind = "structure"
 owner = "application-queue"
 source = "tests/architecture/rules.yaml; declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
 features = []
-guard = ["gate:families-stay-apart"]
+guard = ["gate:families-stay-apart", "gate:families-not-aliased", "gate:families-reach-shared-only", "gate:families-no-widened-visibility"]
 type_gap = "Not state-shaped: it is which modules use which, which the gate reads."
 check = []
 gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate."

@@ -59,7 +59,7 @@ validates it and prints the coverage table. `features --write` regenerates the t
 
 ### Declared invariants
 
-`tests/native/declared-invariants.toml` holds the promises the app keeps. The same
+`tests/native/declared-invariants.toml` holds the declared invariants the app keeps. The same
 `features` run parses it and resolves every link, and `committed_model_passes` runs that
 check in `cargo test`. Each `[[invariant]]` has these fields.
 

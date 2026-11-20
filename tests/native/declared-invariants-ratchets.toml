@@ -41,9 +41,6 @@ unguarded = [
 ]
 
 orphans = [
-  "gate:families-no-widened-visibility",
-  "gate:families-not-aliased",
-  "gate:families-reach-shared-only",
   "journey:adopt-by-label/command-creates-fleet",
   "journey:adopt-by-label/command-removes-placement",
   "journey:adopt-by-label/focus-command-prints-dock",
