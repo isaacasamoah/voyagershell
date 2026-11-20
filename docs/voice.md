@@ -67,7 +67,8 @@ Core program, so Core stays the only process supervisor and the queue stays the
 only caller of Core. The program has no place label, so it never reaches the
 canvas. The app starts it when the app launches and keeps it warm while the app
 runs. A start replaces any live program that carries the same service label and
-server path, which clears an engine left by an earlier run. A stop checks the
+server path, which clears an engine left by an earlier run. If the app ends without
+quitting, its engine program stays until the next launch replaces it or the session stops. A stop checks the
 label and the server path before it kills, so it ends only that program. A start
 or stop that Core does not confirm is reported and never repeated.
 
