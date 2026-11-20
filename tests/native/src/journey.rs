@@ -29,11 +29,15 @@ use std::path::PathBuf;
 
 pub trait Case: Copy + 'static {
     const NAMES: &'static [&'static str];
+    const SETUP: &'static [&'static str];
     fn name(self) -> &'static str;
 }
 
 macro_rules! cases {
-    ($($variant:ident => $name:literal),+ $(,)?) => {
+    (@setup setup $name:literal) => {
+        $name
+    };
+    ($($variant:ident => $name:literal $($setup:ident)?),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Case {
             $($variant),+
@@ -41,6 +45,7 @@ macro_rules! cases {
 
         impl crate::journey::Case for Case {
             const NAMES: &'static [&'static str] = &[$($name),+];
+            const SETUP: &'static [&'static str] = &[$($($crate::journey::cases!(@setup $setup $name),)?)+];
 
             fn name(self) -> &'static str {
                 match self {
@@ -75,6 +80,12 @@ macro_rules! journeys {
             pub fn cases(self) -> &'static [&'static str] {
                 match self {
                     $(Journey::$variant => <$module::Case as Case>::NAMES),+
+                }
+            }
+
+            pub fn setup(self) -> &'static [&'static str] {
+                match self {
+                    $(Journey::$variant => <$module::Case as Case>::SETUP),+
                 }
             }
 
@@ -397,6 +408,23 @@ mod tests {
     use std::process::Command;
 
     const JOURNEY: Journey = Journey::TerminalScrolling;
+
+    mod declared {
+        cases! {
+            Open => "open" setup,
+            Judged => "judged",
+            Seeded => "seeded" setup,
+        }
+    }
+
+    #[test]
+    fn setup_cases_are_declared_beside_their_names() {
+        use declared::Case as Declared;
+        assert_eq!(Declared::NAMES, ["open", "judged", "seeded"]);
+        assert_eq!(Declared::SETUP, ["open", "seeded"]);
+        let names = [Declared::Open, Declared::Judged, Declared::Seeded].map(Case::name);
+        assert_eq!(names, Declared::NAMES);
+    }
 
     fn outcomes() -> Outcomes {
         Outcomes::new(JOURNEY, PathBuf::from("unsaved"))
