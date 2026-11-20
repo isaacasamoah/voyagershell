@@ -1494,7 +1494,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: [adopt-by-label]
+    native_journeys: [adopt-by-label, socket-dock]
     python_journeys: []
     invariants:
       - id: restart-reopens-plain-shells
@@ -1514,6 +1514,14 @@ features:
           - 'journey:adopt-by-label/typed-exit-closes-vessel'
         formal: []
         journeys: [adopt-by-label, quit-restore, voyage-close]
+      - id: dock-gives-the-keyboard
+        kind: user
+        says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
+        owner: desktop-presentation
+        guards: ['type:app/src/client_owner.rs#Flight']
+        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane']
+        formal: []
+        journeys: [socket-dock]
       - id: adopted-agents-follow-their-label
         kind: user
         says: 'An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel.'
@@ -1625,6 +1633,7 @@ features:
       - tests/native/src/journey/scrolling.rs
       - tests/native/src/journey/slow_list.rs
       - tests/native/src/journey/slow_save.rs
+      - tests/native/src/journey/socket_dock.rs
       - tests/native/src/journey/voice.rs
       - tests/native/src/journey/voyage_close.rs
       - tests/native/src/journey/workspace.rs
