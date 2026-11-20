@@ -71,7 +71,7 @@ check in `cargo test`. Each `[[invariant]]` has these fields.
 | `check` | `journey:<journey>/<case>`, `test:<path>#<fn>`, `perf:<envelope id>` or `manual:<who and how>` |
 | `formal` | `<model>:<property>`, a property in the INVARIANTS block of a `.cfg` under `tests/formal/<model>/` |
 | `formal_why` | The defect that justified the model. Required with `formal`. |
-| `type_gap` | Why no `type:` guard keeps the promise |
+| `type_gap` | Required when `guard` has no `type:` link. Either `Not state-shaped:` with the reason, or the undesired state the types still allow and the unit that removes it. |
 | `gap` | Why `check` is empty or `owner` is unset, and which unit closes it. Required when either is. |
 
 Links parse into typed values at load. A journey link must name a native journey and one

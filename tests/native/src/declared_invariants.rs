@@ -556,6 +556,12 @@ impl Model {
             ),
             _ => {}
         }
+        if entry.type_gap.is_none() && !entry.guard.iter().any(|g| matches!(g, Guard::Type(_))) {
+            push(
+                "no type: guard; add one, or a type_gap naming the state the types still allow and the unit that removes it"
+                    .into(),
+            );
+        }
         if entry.gap.is_none() {
             if entry.check.is_empty() {
                 push(
@@ -703,6 +709,7 @@ source = "a verdict"
 features = []
 guard = []
 check = []
+type_gap = "A Run can finish with nothing observed; DI10 checks it."
 gap = "No check yet; DI5 links one."
 confidence = "inferred"
 
@@ -898,6 +905,19 @@ confidence = "stated"
     }
 
     #[test]
+    fn a_missing_type_guard_needs_a_type_gap() {
+        let message = broken(
+            "type_gap = \"A Run can finish with nothing observed; DI10 checks it.\"\n",
+            "",
+        );
+        assert_eq!(
+            message,
+            "invariant tidy: no type: guard; add one, or a type_gap naming the state the types still allow and the unit that removes it"
+        );
+        assert_eq!(message.lines().count(), 1, "{message}");
+    }
+
+    #[test]
     fn formal_needs_its_why_and_why_needs_formal() {
         assert_eq!(
             broken("formal_why = \"A slot leak the tests missed.\"\n", ""),
@@ -969,8 +989,8 @@ confidence = "stated"
         );
         assert_eq!(
             broken(
-                "gap = \"No check yet; DI5 links one.\"",
-                "gap = \"No check yet; DI5 links one.\"\ntype_gap = \" \""
+                "type_gap = \"A Run can finish with nothing observed; DI10 checks it.\"",
+                "type_gap = \" \""
             ),
             "invariant tidy: type_gap is empty"
         );
