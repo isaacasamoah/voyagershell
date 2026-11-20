@@ -9,6 +9,7 @@ pub enum Standing {
     Working,
     Blocked,
     NotRunning,
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -86,7 +87,7 @@ pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
             phrase: Phrase::NeedsYou,
             send: false,
         },
-        Standing::NotRunning => Acknowledgement {
+        Standing::NotRunning | Standing::Unknown => Acknowledgement {
             phrase: Phrase::NotRunning,
             send: false,
         },
@@ -159,10 +160,24 @@ impl SpokenText {
 
     pub fn from_reply(reply: &str) -> Option<Self> {
         let (paragraph, more) = first_paragraph(reply)?;
-        let words: Vec<String> = paragraph
-            .split_whitespace()
-            .filter_map(plain_word)
-            .collect();
+        let mut words: Vec<String> = Vec::new();
+        for raw in paragraph.split_whitespace() {
+            match plain_word(raw) {
+                Some(word) => words.push(word),
+                None => {
+                    let end = raw
+                        .trim_end_matches(['"', '\'', ')'])
+                        .chars()
+                        .last()
+                        .filter(|character| matches!(character, '.' | '!' | '?'));
+                    if let (Some(end), Some(last)) = (end, words.last_mut())
+                        && !last.ends_with(['.', '!', '?'])
+                    {
+                        last.push(end);
+                    }
+                }
+            }
+        }
         let (kept, cut) = limit(&words);
         if kept.is_empty() {
             return None;
@@ -221,6 +236,7 @@ fn plain_word(word: &str) -> Option<String> {
     if word.is_empty()
         || word.contains('/')
         || word.contains("://")
+        || looks_like_an_id(&word)
         || (word.len() >= 16
             && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             && word.chars().any(|c| c.is_ascii_digit()))
@@ -228,6 +244,21 @@ fn plain_word(word: &str) -> Option<String> {
         return None;
     }
     Some(word)
+}
+
+fn looks_like_an_id(word: &str) -> bool {
+    let core = word
+        .trim_start_matches(['(', '"', '\''])
+        .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', '"', '\'']);
+    let hex = core.len() >= 7
+        && core.chars().all(|character| character.is_ascii_hexdigit())
+        && core.chars().any(|character| character.is_ascii_digit())
+        && core
+            .chars()
+            .any(|character| character.is_ascii_alphabetic());
+    let coded = core.chars().next().is_some_and(char::is_alphabetic)
+        && core.chars().any(|character| character.is_ascii_digit());
+    hex || coded
 }
 
 fn limit(words: &[String]) -> (Vec<&str>, bool) {
@@ -370,6 +401,51 @@ mod tests {
         let reply = "```\nlet x = 1;\n```\n| a | b |\nSee [the guide](http://x.y/z) at /home/me/notes with 3f9a1c7e5b2d4a6f8c01 done.";
         let text = SpokenText::from_reply(reply).unwrap();
         assert_eq!(text.as_str(), "See the guide at with done.");
+    }
+
+    #[test]
+    fn commit_ids_and_terminal_ids_are_not_read_out() {
+        let text = SpokenText::from_reply("Committed 3a80051a and pushed the change.").unwrap();
+        assert_eq!(text.as_str(), "Committed and pushed the change.");
+        for id in [
+            "t8s",
+            "w1:t3",
+            "fleet-25",
+            "voyage-1",
+            "terminal-34",
+            "t128",
+        ] {
+            let text = SpokenText::from_reply(&format!("Opened {id} for you.")).unwrap();
+            assert_eq!(text.as_str(), "Opened for you.", "{id}");
+        }
+    }
+
+    #[test]
+    fn a_dropped_id_at_the_end_of_a_sentence_keeps_the_sentence_end() {
+        let text =
+            SpokenText::from_reply("Opened terminal t8s in fleet-25 on voyage-1. Then I stopped.")
+                .unwrap();
+        assert_eq!(text.as_str(), "Opened terminal in on. Then I stopped.");
+    }
+
+    #[test]
+    fn ordinary_words_and_plain_numbers_are_kept() {
+        let text = SpokenText::from_reply(
+            "Changed 3 files on the 3rd try with 1,200 lines, 50% done, in defaced mode.",
+        )
+        .unwrap();
+        assert_eq!(
+            text.as_str(),
+            "Changed 3 files on the 3rd try with 1,200 lines, 50% done, in defaced mode."
+        );
+    }
+
+    #[test]
+    fn a_hex_run_of_seven_or_more_with_a_digit_is_dropped_and_a_shorter_one_is_kept() {
+        let long = SpokenText::from_reply("Built 1a2b3c4 first.").unwrap();
+        assert_eq!(long.as_str(), "Built first.");
+        let short = SpokenText::from_reply("Built 1a2b3c first.").unwrap();
+        assert_eq!(short.as_str(), "Built 1a2b3c first.");
     }
 
     #[test]

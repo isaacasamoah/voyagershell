@@ -28,7 +28,15 @@ pub fn standing_of(live: bool, state: Option<&str>) -> Standing {
         (false, _) => Standing::NotRunning,
         (true, Some("working")) => Standing::Working,
         (true, Some("blocked")) => Standing::Blocked,
-        (true, _) => Standing::Idle,
+        (true, Some("idle" | "done" | "error")) => Standing::Idle,
+        (true, _) => Standing::Unknown,
+    }
+}
+
+pub fn standing_from(read: Result<ProgramReply, ProgramError>) -> Standing {
+    match read {
+        Ok(ProgramReply::Status { live, state }) => standing_of(live, state.as_deref()),
+        _ => Standing::Unknown,
     }
 }
 
@@ -46,10 +54,7 @@ impl Voyager for Bound {
         let Some(terminal) = self.terminal() else {
             return Standing::NotRunning;
         };
-        match self.client.service(ProgramRequest::Status { terminal }) {
-            Ok(ProgramReply::Status { live, state }) => standing_of(live, state.as_deref()),
-            _ => Standing::NotRunning,
-        }
+        standing_from(self.client.service(ProgramRequest::Status { terminal }))
     }
 
     fn say(&self, text: &str) -> Result<(), String> {
@@ -71,8 +76,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_live_program_that_reports_nothing_counts_as_idle() {
-        assert_eq!(standing_of(true, None), Standing::Idle);
+    fn a_live_program_with_no_report_is_unknown_and_the_idle_words_are_idle() {
+        assert_eq!(standing_of(true, None), Standing::Unknown);
         for state in ["idle", "done", "error"] {
             assert_eq!(standing_of(true, Some(state)), Standing::Idle, "{state}");
         }
@@ -88,6 +93,47 @@ mod tests {
     fn a_program_that_is_gone_is_not_running_whatever_it_last_said() {
         assert_eq!(standing_of(false, Some("working")), Standing::NotRunning);
         assert_eq!(standing_of(false, None), Standing::NotRunning);
+    }
+
+    #[test]
+    fn a_failed_read_of_core_is_unknown_and_never_not_running() {
+        let lost = ProgramError::Uncertain("Core did not answer".into());
+        assert_eq!(standing_from(Err(lost)), Standing::Unknown);
+        let refused = ProgramError::Rejected {
+            kind: "not_found".into(),
+            message: "no such program".into(),
+        };
+        assert_eq!(standing_from(Err(refused)), Standing::Unknown);
+    }
+
+    #[test]
+    fn an_unclear_answer_is_unknown() {
+        assert_eq!(
+            standing_from(Ok(ProgramReply::Status {
+                live: true,
+                state: Some("starting".into())
+            })),
+            Standing::Unknown
+        );
+        assert_eq!(standing_from(Ok(ProgramReply::Sent)), Standing::Unknown);
+        assert_eq!(
+            standing_from(Ok(ProgramReply::Live(true))),
+            Standing::Unknown
+        );
+    }
+
+    #[test]
+    fn only_an_answer_that_says_not_working_counts_as_idle() {
+        let said = |live, state: Option<&str>| {
+            standing_from(Ok(ProgramReply::Status {
+                live,
+                state: state.map(str::to_owned),
+            }))
+        };
+        assert_eq!(said(true, Some("done")), Standing::Idle);
+        assert_eq!(said(true, None), Standing::Unknown);
+        assert_eq!(said(false, None), Standing::NotRunning);
+        assert_eq!(said(true, Some("working")), Standing::Working);
     }
 
     #[test]

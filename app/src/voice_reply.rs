@@ -2,18 +2,23 @@ use crate::{
     replies::{Ending, Turn},
     speech::{Phrase, SpokenText, Standing},
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Line {
     Reply(SpokenText),
     Said(Phrase),
+    Partial,
 }
+
+pub const PARTIAL: &str = "spoken reply was partial; turn reopened";
 
 #[derive(Debug, Default)]
 pub struct Watcher {
     ended: HashSet<String>,
     blocked: HashSet<String>,
+    read: HashMap<String, String>,
+    partial: HashSet<String>,
 }
 
 impl Watcher {
@@ -42,21 +47,39 @@ impl Watcher {
             known
         };
         for turn in turns.iter().filter(|turn| turn.spoken) {
+            if let Some(said) = self.read.get(&turn.id) {
+                let reopened = match &turn.ending {
+                    None => true,
+                    Some(Ending::Stopped { text, .. }) => text != said,
+                    Some(_) => false,
+                };
+                if reopened && self.partial.insert(turn.id.clone()) {
+                    lines.push(Line::Partial);
+                }
+                continue;
+            }
             if self.ended.contains(&turn.id) {
                 continue;
             }
             match &turn.ending {
                 Some(Ending::Stopped { text, .. }) => {
-                    if matches!(ask(true), None | Some(Standing::Working)) {
+                    if matches!(
+                        ask(true),
+                        None | Some(Standing::Working | Standing::Unknown)
+                    ) {
                         continue;
                     }
                     self.ended.insert(turn.id.clone());
+                    self.read.insert(turn.id.clone(), text.clone());
                     if let Some(reply) = SpokenText::from_reply(text) {
                         lines.push(Line::Reply(reply));
                     }
                 }
                 Some(Ending::Failed { .. }) => {
-                    if matches!(ask(true), None | Some(Standing::Working)) {
+                    if matches!(
+                        ask(true),
+                        None | Some(Standing::Working | Standing::Unknown)
+                    ) {
                         continue;
                     }
                     self.ended.insert(turn.id.clone());
@@ -77,11 +100,23 @@ impl Watcher {
     pub fn waiting_on_voyager(&self, turns: &[Turn]) -> bool {
         turns.iter().any(|turn| {
             turn.spoken
-                && !self.ended.contains(&turn.id)
-                && match &turn.ending {
-                    Some(Ending::Stopped { .. } | Ending::Failed { .. }) => true,
-                    Some(Ending::Lost) => false,
-                    None => !self.blocked.contains(&turn.id),
+                && match self.read.get(&turn.id) {
+                    Some(said) => {
+                        !self.partial.contains(&turn.id)
+                            && match &turn.ending {
+                                None => true,
+                                Some(Ending::Stopped { text, .. }) => text != said,
+                                Some(_) => false,
+                            }
+                    }
+                    None => {
+                        !self.ended.contains(&turn.id)
+                            && match &turn.ending {
+                                Some(Ending::Stopped { .. } | Ending::Failed { .. }) => true,
+                                Some(Ending::Lost) => false,
+                                None => !self.blocked.contains(&turn.id),
+                            }
+                    }
                 }
         })
     }
@@ -137,6 +172,7 @@ mod tests {
             .map(|line| match line {
                 Line::Reply(text) => text.as_str().to_owned(),
                 Line::Said(phrase) => phrase.key().to_owned(),
+                Line::Partial => "partial".to_owned(),
             })
             .collect()
     }
@@ -222,7 +258,62 @@ mod tests {
         assert_eq!(tick(&mut watcher, &replies, idle), vec!["First answer."]);
         spoken(&replies, text("p1", "m2", 0, true, "Second answer."));
         spoken(&replies, end("p1", "Second answer."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["partial"]);
         assert!(tick(&mut watcher, &replies, idle).is_empty());
+    }
+
+    fn unknown(_: bool) -> Option<Standing> {
+        Some(Standing::Unknown)
+    }
+
+    #[test]
+    fn a_standing_core_could_not_answer_never_speaks() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Part one."));
+        spoken(&replies, end("p1", "Part one."));
+        for _ in 0..3 {
+            assert!(tick(&mut watcher, &replies, unknown).is_empty());
+        }
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Part one."]);
+    }
+
+    #[test]
+    fn a_flicker_that_lets_the_first_stop_speak_logs_one_partial_when_the_turn_reopens() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Part one."));
+        spoken(&replies, end("p1", "Part one."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Part one."]);
+        assert!(!watcher.waiting_on_voyager(&replies.snapshot().turns));
+        spoken(&replies, text("p1", "m2", 0, true, "Part two."));
+        assert!(watcher.waiting_on_voyager(&replies.snapshot().turns));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["partial"]);
+        spoken(&replies, end("p1", "Part one. Part two."));
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
+        assert!(!watcher.waiting_on_voyager(&replies.snapshot().turns));
+    }
+
+    #[test]
+    fn a_stop_text_that_changes_after_it_was_read_logs_one_partial_and_is_not_read_again() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "First."));
+        spoken(&replies, end("p1", "First."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["First."]);
+        spoken(&replies, end("p1", "First. Second."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["partial"]);
+        assert!(tick(&mut watcher, &replies, idle).is_empty());
+    }
+
+    #[test]
+    fn a_turn_read_once_and_never_reopened_logs_nothing() {
+        let (replies, mut watcher) = (Replies::default(), Watcher::default());
+        spoken(&replies, text("p1", "m1", 0, true, "Done."));
+        spoken(&replies, end("p1", "Done."));
+        assert_eq!(tick(&mut watcher, &replies, idle), vec!["Done."]);
+        for _ in 0..3 {
+            spoken(&replies, end("p1", "Done."));
+            assert!(tick(&mut watcher, &replies, idle).is_empty());
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::{
     replies::Replies,
     speech::{Clip, Phrase, Speaking},
     voice_parts::{Audio, Phase, Trace, Voyager},
-    voice_reply::{Line, Watcher},
+    voice_reply::{Line, PARTIAL, Watcher},
 };
 use std::{
     collections::HashMap,
@@ -45,7 +45,11 @@ pub(crate) fn spawn(parts: Parts) {
                 }
             });
             for line in lines {
-                say(&parts, line);
+                if matches!(line, Line::Partial) {
+                    eprintln!("{}", PARTIAL);
+                } else {
+                    say(&parts, line);
+                }
             }
         }
     });
@@ -64,6 +68,7 @@ fn clip_of(parts: &Parts, line: &Line) -> Result<(Clip, String), String> {
             .cloned()
             .map(|clip| (clip, phrase.key().to_owned()))
             .ok_or_else(|| "The clip is not kept".to_owned()),
+        Line::Partial => Err(PARTIAL.to_owned()),
     }
 }
 
@@ -302,6 +307,26 @@ mod tests {
                 .position(|p| *p == Phrase::Blocked)
                 .unwrap();
         assert_eq!(rig.played.lock().unwrap().clone(), vec![blocked]);
+    }
+
+    #[test]
+    fn a_flicker_that_speaks_the_first_stop_then_reopening_speaks_nothing_more() {
+        let rig = Rig::start(Standing::Idle);
+        rig.say("p1", true, "Part one.");
+        rig.wait_for(1);
+        rig.replies.accept(ReplyEvent::Text {
+            turn: "p1".into(),
+            message: "m2".into(),
+            index: 0,
+            last: true,
+            text: "Part two.".into(),
+        });
+        rig.replies.accept(ReplyEvent::TurnEnd {
+            turn: "p1".into(),
+            text: "Part one. Part two.".into(),
+        });
+        thread::sleep(Duration::from_millis(700));
+        assert_eq!(rig.played.lock().unwrap().len(), 1);
     }
 
     #[test]
