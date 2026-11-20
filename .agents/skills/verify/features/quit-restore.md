@@ -27,6 +27,9 @@ desktop/src/quit.rs through the owner's `Lifecycle` in app/src/client_owner.rs a
 decides which terminals to keep or start again in
 app/src/families/terminal/lifecycle.rs.
 
+- `voyager-starts-at-launch` runs before any chat opens. Core must list one live
+  Voyager, a program run as `-n voyager` with a session id. `voyager.json` must
+  name it, and the saved Voyager Vessel must hold it and be a Portal on Home.
 - `quit-and-keep` prints `QUIT-42`, presses Ctrl+Q, and reads Core with no app
   running. Core, the shell, Core's live terminals and the layout document with
   its version must all be unchanged. It records `quitMillis`, the time from
@@ -46,6 +49,13 @@ app/src/families/terminal/lifecycle.rs.
   The adopted Vessel is also the one the app closes after a cold restart, so
   `cold-restart-restores` expects the saved document without the adopted
   Vessel's place in the split, and draws and checks only the other Vessels.
+- `voyager-rebinds-after-relaunch` closes the app, writes the id of another
+  live terminal into `voyager.json` and launches again. The file must name the
+  verified Voyager again, no second Voyager may start, and the planted terminal
+  must still run.
+- `voyager-resumes-when-ended` closes the app, kills Voyager's terminal in Core
+  and launches again. One live Voyager must run with `--resume` and the session
+  that ended, and `voyager.json` must name it.
 - `quit-busy-keeps-output` starts a loop that prints `BUSY-1` to `BUSY-100`
   over ten seconds and then `BUSY-DONE-42`, and quits after `BUSY-3`. While the
   app is closed, the shell must be the same live program, and one read of Core's

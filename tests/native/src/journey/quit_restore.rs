@@ -12,9 +12,12 @@ use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Placement};
 
 cases! {
+    VoyagerStartsAtLaunch => "voyager-starts-at-launch",
     QuitAndKeep => "quit-and-keep",
     RelaunchReattaches => "relaunch-reattaches",
     RelaunchAdoptsAndAttaches => "relaunch-adopts-and-attaches",
+    VoyagerRebindsAfterRelaunch => "voyager-rebinds-after-relaunch",
+    VoyagerResumesWhenEnded => "voyager-resumes-when-ended",
     QuitBusy => "quit-busy-keeps-output",
     CloseWindow => "close-window-keeps",
     WindowButtons => "window-buttons-send-minimise-and-maximise-requests",
@@ -77,6 +80,52 @@ impl Drawn {
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
     let original = native.decorations();
+    cases.check(native, Case::VoyagerStartsAtLaunch, |native| {
+        let started = until("Voyager runs under Core and voyager.json names it", || {
+            let running = live_voyagers(native)?;
+            Ok(match running.as_slice() {
+                [one] if bound_terminal(native).as_deref() == one["address"].as_str() => {
+                    Some(running)
+                }
+                _ => None,
+            })
+        })?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let address = started[0]["address"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let argv = started[0]["argv"].clone();
+        let vessel = layout.vessels.iter().find(|item| item.is_voyager());
+        let on_home = layout.home.as_ref().is_some_and(|home| {
+            home.portals
+                .iter()
+                .any(|portal| vessel.is_some_and(|vessel| portal.vessel == vessel.id))
+        });
+        Verdict::new()
+            .expect(
+                "exactly one Voyager runs under Core at launch",
+                started.len() == 1,
+            )
+            .expect(
+                "voyager.json names that terminal",
+                bound_terminal(native).as_deref() == Some(address.as_str()),
+            )
+            .expect(
+                "the saved Voyager Vessel holds that terminal and is a Portal on Home",
+                on_home
+                    && vessel.is_some_and(|vessel| {
+                        vessel.backend.as_ref().map(|backend| backend.0.as_str())
+                            == Some(address.as_str())
+                    }),
+            )
+            .expect(
+                "it started fresh with a session id and its own name",
+                has_flag(&argv, "--session-id").is_some()
+                    && has_flag(&argv, "-n") == Some("voyager"),
+            )
+            .observed("voyager", &started)
+    })?;
     let before = cases.make(native, Case::QuitAndKeep, |native| {
         terminal.line(native, "echo QUIT-$((6*7))")?;
         terminal.shows(native, "QUIT-42")?;
@@ -217,6 +266,84 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("late", &late)?
             .observed("drawn", picture.as_ref().map(|(picture, _)| picture))
+    })?;
+    cases.check(native, Case::VoyagerRebindsAfterRelaunch, |native| {
+        let before = live_voyagers(native)?;
+        let address = before
+            .first()
+            .and_then(|voyager| voyager["address"].as_str())
+            .context("No Voyager runs before the relaunch")?
+            .to_owned();
+        let other = native
+            .live_terminals()?
+            .into_iter()
+            .find(|candidate| *candidate != address)
+            .context("No other live terminal to plant")?;
+        native.close()?;
+        native.edit_profile_file(
+            "voyager.json",
+            json!({"terminal": other}).to_string().as_bytes(),
+        )?;
+        native.launch()?;
+        let named = until("voyager.json names the verified Voyager again", || {
+            Ok((bound_terminal(native).as_deref() != Some(other.as_str()))
+                .then(|| bound_terminal(native)))
+        })?;
+        let after = live_voyagers(native)?;
+        let planted = native.live_terminals()?.contains(&other);
+        Verdict::new()
+            .expect(
+                "voyager.json names the Voyager again, not the terminal planted in it",
+                named.as_deref() == Some(address.as_str()),
+            )
+            .expect(
+                "the relaunch started no second Voyager",
+                after.len() == 1 && after[0]["address"] == address.as_str(),
+            )
+            .expect("the planted terminal was left running", planted)
+            .observed("planted", &other)?
+            .observed("voyagers", json!({"before":before,"after":after}))
+    })?;
+    cases.check(native, Case::VoyagerResumesWhenEnded, |native| {
+        let before = live_voyagers(native)?;
+        let ended = before
+            .first()
+            .and_then(|voyager| voyager["address"].as_str())
+            .context("No Voyager runs before it ends")?
+            .to_owned();
+        let session = has_flag(&before[0]["argv"], "--session-id").map(str::to_owned);
+        native.close()?;
+        native
+            .system
+            .rpc("terminal.kill", json!({"terminal": ended}))?;
+        native.launch()?;
+        let resumed = until("a resumed Voyager runs under Core", || {
+            let running = live_voyagers(native)?;
+            Ok(
+                (!running.is_empty() && bound_terminal(native).is_some_and(|name| name != ended))
+                    .then_some(running),
+            )
+        })?;
+        let address = resumed[0]["address"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        Verdict::new()
+            .expect(
+                "exactly one Voyager runs after the relaunch",
+                resumed.len() == 1,
+            )
+            .expect(
+                "it resumed the session that ended",
+                session.is_some()
+                    && has_flag(&resumed[0]["argv"], "--resume") == session.as_deref(),
+            )
+            .expect(
+                "voyager.json names the resumed terminal",
+                bound_terminal(native).as_deref() == Some(address.as_str()),
+            )
+            .observed("ended", &ended)?
+            .observed("resumed", &resumed)
     })?;
     cases.check(native, Case::QuitBusy, |native| {
         terminal.line(
@@ -551,6 +678,33 @@ fn under(native: &mut Native, decorations: Decorations) -> Result<()> {
             |picture| picture.whole() && picture.bound(),
         )
         .map(drop)
+}
+
+fn live_voyagers(native: &Native) -> Result<Vec<Value>> {
+    let listed = native.system.rpc("terminal.list", json!({"all":true}))?;
+    Ok(listed["terminals"]
+        .as_array()
+        .context("Core listed no terminals")?
+        .iter()
+        .filter(|terminal| {
+            terminal["state"] == "live" && has_flag(&terminal["argv"], "-n") == Some("voyager")
+        })
+        .cloned()
+        .collect())
+}
+
+fn has_flag<'a>(argv: &'a Value, flag: &str) -> Option<&'a str> {
+    let words = argv.as_array()?;
+    words
+        .windows(2)
+        .find(|pair| pair[0] == flag)
+        .and_then(|pair| pair[1].as_str())
+}
+
+fn bound_terminal(native: &Native) -> Option<String> {
+    let stored: Value =
+        serde_json::from_slice(&std::fs::read(native.profile_path("voyager.json")).ok()?).ok()?;
+    stored["terminal"].as_str().map(str::to_owned)
 }
 
 fn at_rest(native: &Native) -> Result<Saved> {
