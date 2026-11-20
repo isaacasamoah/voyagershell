@@ -7,6 +7,8 @@ pub(crate) use protocol::{decode as normalize, reported_version, tool_reply as e
 use serde_json::{Value, json};
 use std::{
     env,
+    ffi::OsString,
+    fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -25,6 +27,42 @@ fn without_api_keys(command: &mut Command) -> &mut Command {
         command.env_remove(variable);
     }
     command
+}
+
+fn codex_dotenv(codex_home: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
+    match codex_home.filter(|value| !value.is_empty()) {
+        Some(directory) => Some(PathBuf::from(directory).join(".env")),
+        None => home.map(|home| PathBuf::from(home).join(".codex/.env")),
+    }
+}
+
+fn api_key_name(line: &str) -> Option<&'static str> {
+    let line = line.trim_start();
+    let line = line
+        .strip_prefix("export")
+        .filter(|rest| rest.starts_with(char::is_whitespace))
+        .map_or(line, str::trim_start);
+    let (name, _) = line.split_once('=')?;
+    let name = name.trim_end();
+    API_KEY_VARIABLES
+        .into_iter()
+        .find(|variable| name.eq_ignore_ascii_case(variable))
+}
+
+fn refuse_dotenv_api_key(dotenv: &Path) -> Result<(), String> {
+    let Ok(bytes) = fs::read(dotenv) else {
+        return Ok(());
+    };
+    match String::from_utf8_lossy(&bytes)
+        .lines()
+        .find_map(api_key_name)
+    {
+        Some(name) => Err(format!(
+            "{} sets {name}. Codex reads that file itself and would bill voice per use, so voice did not start. Remove the line to use voice.",
+            dotenv.display()
+        )),
+        None => Ok(()),
+    }
 }
 
 fn decode(bytes: &[u8]) -> Result<Value, String> {
@@ -152,6 +190,15 @@ impl Codex {
         self.input.flush().map_err(|e| e.to_string())
     }
 
+    fn voice_package_with(&self, dotenv: Option<PathBuf>) -> Result<Package, String> {
+        if let Some(dotenv) = dotenv {
+            refuse_dotenv_api_key(&dotenv)?;
+        }
+        let package = Package::discover(&self.executable)?;
+        package.check_provider(self.version.as_deref())?;
+        Ok(package)
+    }
+
     pub(crate) fn voice_capability() -> voyager_contract::voice::Capability {
         match Self::executable().and_then(|path| Package::discover(&path)) {
             Ok(package) => voyager_contract::voice::Capability::Candidate {
@@ -189,9 +236,10 @@ impl Provider for Codex {
     }
 
     fn voice_package(&self) -> Result<Package, String> {
-        let package = Package::discover(&self.executable)?;
-        package.check_provider(self.version.as_deref())?;
-        Ok(package)
+        self.voice_package_with(codex_dotenv(
+            env::var_os("CODEX_HOME"),
+            env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")),
+        ))
     }
 
     fn shutdown(&mut self) -> Result<(), String> {
@@ -255,6 +303,94 @@ mod tests {
             .env("KEPT", "kept");
         let output = without_api_keys(&mut command).output().unwrap();
         assert_eq!(String::from_utf8(output.stdout).unwrap(), "||kept");
+    }
+
+    #[cfg(unix)]
+    fn voice_fixture(name: &str, dotenv: &str) -> (PathBuf, Codex, PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("voyager-codex-{name}-{}", std::process::id()));
+        let executable = root.join("package/bin/codex");
+        let voice = root.join("package/codex-resources/voice");
+        let home = root.join("codex-home");
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        fs::create_dir_all(voice.join("bin")).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::write(&executable, b"").unwrap();
+        let helper = format!("bin/codex-voice-host{}", std::env::consts::EXE_SUFFIX);
+        fs::write(voice.join(helper), b"").unwrap();
+        fs::write(
+            voice.join("manifest.json"),
+            json!({"schemaVersion":1,"appVersion":"0.167.0","buildCommit":"a".repeat(40)})
+                .to_string(),
+        )
+        .unwrap();
+        fs::write(home.join(".env"), dotenv).unwrap();
+        let mut child = Command::new("/bin/sleep")
+            .arg("10")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let codex = Codex {
+            input: child.stdin.take().unwrap(),
+            child,
+            executable,
+            version: Some("0.167.0".into()),
+            pending: Arc::new(Mutex::new(None)),
+        };
+        (root, codex, home)
+    }
+
+    #[cfg(unix)]
+    fn finish_fixture(root: PathBuf, mut codex: Codex) {
+        codex.child.kill().unwrap();
+        codex.child.wait().unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn voice_refuses_to_start_when_codex_dotenv_names_an_api_key() {
+        let planted = "# note\nOTHER=1\nexport OPENAI_API_KEY=\"sk-planted-value\"\n";
+        let (root, codex, home) = voice_fixture("refuse", planted);
+        let dotenv = codex_dotenv(Some(home.clone().into()), None);
+        let outcome = codex.voice_package_with(dotenv);
+        let message = outcome.err().expect("a key in the dotenv refuses voice");
+        finish_fixture(root, codex);
+        assert!(
+            message.contains(&home.join(".env").display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("OPENAI_API_KEY"), "{message}");
+        assert!(message.contains("per use"), "{message}");
+        assert!(!message.contains("sk-planted-value"), "{message}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn voice_starts_when_codex_dotenv_names_no_api_key() {
+        let unrelated = "OPENAI_BASE_URL=https://example.invalid\n# OPENAI_API_KEY=sk-commented\nMY_OPENAI_API_KEY=x\n";
+        let (root, codex, home) = voice_fixture("start", unrelated);
+        let started = codex.voice_package_with(codex_dotenv(Some(home.clone().into()), None));
+        fs::remove_file(home.join(".env")).unwrap();
+        let without_file = codex.voice_package_with(codex_dotenv(Some(home.into()), None));
+        finish_fixture(root, codex);
+        assert!(started.is_ok(), "{:?}", started.err());
+        assert!(without_file.is_ok(), "{:?}", without_file.err());
+    }
+
+    #[test]
+    fn codex_dotenv_follows_codex_home_then_the_home_directory() {
+        let some = |value: &str| Some(OsString::from(value));
+        assert_eq!(codex_dotenv(some("/c"), some("/h")), Some("/c/.env".into()));
+        assert_eq!(
+            codex_dotenv(some(""), some("/h")),
+            Some("/h/.codex/.env".into())
+        );
+        assert_eq!(
+            codex_dotenv(None, some("/h")),
+            Some("/h/.codex/.env".into())
+        );
+        assert_eq!(codex_dotenv(None, None), None);
     }
 
     #[test]

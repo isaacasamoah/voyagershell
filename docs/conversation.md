@@ -265,9 +265,15 @@ Before requesting native audio, the provider checks its existing account type
 without requesting a token refresh. This candidate accepts only the ChatGPT
 account route. The adapter reduces that reply to a readiness boolean. Voyager
 does not expose the account record, inspect credentials or select paid API audio.
-The Codex runtime never sees an API key, so voice cannot bill per use, because
-the private runtime starts without `OPENAI_API_KEY` and `CODEX_API_KEY` in its
-environment.
+The app starts the private Codex runtime without `OPENAI_API_KEY` and
+`CODEX_API_KEY` in the environment it passes. Codex itself loads `.env` from
+`$CODEX_HOME`, else `~/.codex`, and sets every variable in it except names that
+start with `CODEX_`. So before native voice starts, the app reads the names in
+that file, never the values. If the file names either variable, voice does not
+start and the message names the file and the variable. Codex 0.167.0 drops
+`CODEX_` names from that file, so the check on `CODEX_API_KEY` is a safeguard
+against a later Codex that does not. The app checks no other source of an API
+key, such as a user-defined provider in the Codex configuration.
 
 The helper owns native WebRTC, microphone capture and speaker playback. Its
 control pipe carries big-endian length-prefixed JSON of at most 128 KiB, without
