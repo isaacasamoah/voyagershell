@@ -112,7 +112,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 let conversation = conversation.clone();
                 std::sync::Arc::new(move |line: &str| {
                     if let Err(error) = conversation.note(line) {
-                        eprintln!("The note was not added to the chat: {error}");
+                        eprintln!("The refusal was not added to the chat: {error}");
                     }
                 })
             }),
