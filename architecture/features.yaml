@@ -257,9 +257,9 @@ features:
         kind: user
         says: 'A view of a live Program always attaches, and the user never sees a stale-revision refusal for it.'
         guards: []
-        checks: []
+        checks: ['journey:quit-restore/relaunch-adopts-and-attaches']
         formal: []
-        journeys: []
+        journeys: [quit-restore]
       - id: rename-and-drag-everything
         kind: user
         says: 'Every Voyage, Fleet, Vessel and Portal can be renamed in place, and Vessels can be dragged into a new arrangement that is kept.'
@@ -1457,7 +1457,7 @@ features:
         says: 'A verifier unit-test run or a crew, passed, failed or killed, leaves no folder, repository copy or scratch file behind.'
         owner: verification
         guards: []
-        checks: []
+        checks: ['test:tests/native/src/scratch.rs#a_failing_test_removes_its_folder', 'test:tests/native/src/scratch.rs#a_sweep_removes_only_abandoned_folders']
         formal: []
         journeys: []
       - id: every-journey-has-a-control
