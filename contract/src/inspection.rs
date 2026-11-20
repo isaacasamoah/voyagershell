@@ -100,6 +100,7 @@ roles! {
     ChatMessage => "chat-message",
     ChatStatus => "chat-status",
     ChatError => "chat-error",
+    VoiceControl => "voice-control",
     WorkspaceStatus => "workspace-status",
     WorkspaceRefresh => "workspace-refresh",
     SplitDivider => "split-divider",

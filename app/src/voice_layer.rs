@@ -174,6 +174,14 @@ impl Trace {
     }
 
     pub fn mark(&self, event: &str) {
+        self.record(event, None);
+    }
+
+    pub fn mark_words(&self, event: &str, words: &str) {
+        self.record(event, Some(words));
+    }
+
+    fn record(&self, event: &str, words: Option<&str>) {
         let Some(path) = &self.0 else {
             return;
         };
@@ -182,7 +190,11 @@ impl Trace {
             .map(|elapsed| elapsed.as_millis())
             .unwrap_or(0);
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-            let _ = writeln!(file, "{{\"event\":\"{event}\",\"atMs\":{at}}}");
+            let line = match words {
+                Some(words) => serde_json::json!({"event": event, "atMs": at, "words": words}),
+                None => serde_json::json!({"event": event, "atMs": at}),
+            };
+            let _ = writeln!(file, "{line}");
         }
     }
 }
@@ -268,7 +280,7 @@ impl Exchange<'_> {
                 }
             },
         };
-        self.trace.mark("heard");
+        self.trace.mark_words("heard", &heard);
         let Acknowledgement { phrase, send } = acknowledge(&heard, self.voyager.standing(), turn);
         let finish = self.play(phrase);
         self.trace.mark("acknowledgement-started");

@@ -31,6 +31,7 @@ const LIVENESS_EVERY: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
+    pub cache: PathBuf,
     pub directory: PathBuf,
     pub server: Option<PathBuf>,
     pub gpu_layers: u32,
@@ -47,10 +48,12 @@ impl Settings {
         let huggingface = env::var_os("HF_HOME")
             .map(|path| PathBuf::from(path).join("hub"))
             .unwrap_or_else(|| cache.join("huggingface/hub"));
+        let voice = cache.join("voyager/voice");
         Self {
             directory: env::var_os(DIRECTORY_VARIABLE)
                 .map(PathBuf::from)
-                .unwrap_or_else(|| cache.join("voyager/voice/omni")),
+                .unwrap_or_else(|| voice.join("omni")),
+            cache: voice,
             server: env::var_os(SERVER_VARIABLE).map(PathBuf::from),
             gpu_layers: env::var(GPU_LAYERS_VARIABLE)
                 .ok()
@@ -61,10 +64,7 @@ impl Settings {
     }
 
     pub fn clips(&self) -> PathBuf {
-        self.directory
-            .parent()
-            .map(|voice| voice.join("clips"))
-            .unwrap_or_else(|| self.directory.join("clips"))
+        self.cache.join("clips")
     }
 }
 
@@ -351,6 +351,7 @@ mod tests {
 
     fn settings(root: &Path) -> Settings {
         Settings {
+            cache: root.join("voice"),
             directory: root.join("voice/omni"),
             server: None,
             gpu_layers: 0,

@@ -511,6 +511,10 @@ fn journey_inputs(
         Journey::LayoutCompat => layout_seed(fixtures, "newer-additions.json"),
         Journey::LayoutRefused => layout_seed(fixtures, "newer-min-reader.json"),
         Journey::LayoutCorrupt => layout_seed(fixtures, "corrupt.json"),
+        Journey::Voice => Err(
+            "it needs --audio on and a --voice-engine folder, which the battery does not supply"
+                .into(),
+        ),
         _ => Ok(Vec::new()),
     }
 }

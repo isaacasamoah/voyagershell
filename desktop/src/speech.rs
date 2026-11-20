@@ -6,6 +6,7 @@ use gpui::{
 use gpui_base::{Button, Theme, Tooltip};
 use std::time::Duration;
 use voyager_app::voice_layer::{Layer, Phase, Snapshot};
+use voyager_contract::inspection::Role;
 
 struct Controller(Entity<Speech>);
 
@@ -122,11 +123,22 @@ impl Render for Speech {
                 control.tooltip(move |_, cx| cx.new(|_| VoiceHint(status.clone())).into())
             })
             .into_any_element();
+        let shown = match phase {
+            Phase::Starting => "Loading voice…".to_owned(),
+            Phase::Unavailable(reason) => reason.clone(),
+            Phase::Hearing | Phase::Acknowledging => "Busy".to_owned(),
+            _ => label.to_owned(),
+        };
         div()
             .relative()
             .w(px(20.))
             .h(px(20.))
             .child(control)
+            .child(crate::inspect::labelled(
+                Role::VoiceControl,
+                String::new(),
+                shown,
+            ))
             .into_any_element()
     }
 }

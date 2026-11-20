@@ -137,6 +137,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         second: None,
         assets: None,
         second_assets: None,
+        voice: None,
         evidence: Some(&evidence),
     }
     .command(&[

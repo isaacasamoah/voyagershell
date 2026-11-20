@@ -7,23 +7,45 @@ pub const RATE: u32 = 48_000;
 
 pub struct Speech {
     pub name: &'static str,
+    pub words: &'static str,
     pub sha256: &'static str,
     wav: &'static [u8],
 }
 
 pub const OPEN_THE_ROADMAP: Speech = Speech {
     name: "open-the-roadmap",
+    words: "Open the roadmap.",
     sha256: "417c0358c6f0c92b4c252c36ef9730e339c3beac62486f27e8684d7fb75fe513",
     wav: include_bytes!("../../fixtures/speech/open-the-roadmap.wav"),
 };
 
 pub const RENAME_THE_FLEET: Speech = Speech {
     name: "rename-the-fleet",
+    words: "Rename this fleet to review.",
     sha256: "33f1cf21ed5ce58c41d829101ba00d57f5fb7ef52b040faa0469f9692a5f7401",
     wav: include_bytes!("../../fixtures/speech/rename-the-fleet.wav"),
 };
 
-pub const ALL: [&Speech; 2] = [&OPEN_THE_ROADMAP, &RENAME_THE_FLEET];
+pub const RENAME_TO_HARBOR: Speech = Speech {
+    name: "rename-this-fleet-to-harbor",
+    words: "Rename this fleet to Harbor.",
+    sha256: "68f7dcf80ef247d50953d6372f558fc0d736671228ea21d504f0c7a4e28717c2",
+    wav: include_bytes!("../../fixtures/speech/rename-this-fleet-to-harbor.wav"),
+};
+
+pub const DOCK_ON_THIS_FLEET: Speech = Speech {
+    name: "dock-on-this-fleet",
+    words: "Dock on this fleet.",
+    sha256: "7b278b6405cbf419de2027bfecfd5712baaaa57113ae6795faef11b299b5a1cc",
+    wav: include_bytes!("../../fixtures/speech/dock-on-this-fleet.wav"),
+};
+
+pub const ALL: [&Speech; 4] = [
+    &OPEN_THE_ROADMAP,
+    &RENAME_THE_FLEET,
+    &RENAME_TO_HARBOR,
+    &DOCK_ON_THIS_FLEET,
+];
 
 impl Speech {
     pub fn verify(&self) -> Result<()> {
@@ -148,6 +170,7 @@ mod tests {
     fn a_changed_recording_is_refused() {
         let altered = Speech {
             name: "altered",
+            words: "",
             sha256: OPEN_THE_ROADMAP.sha256,
             wav: RENAME_THE_FLEET.wav,
         };

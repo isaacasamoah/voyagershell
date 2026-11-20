@@ -2,6 +2,7 @@ pub mod exchange;
 pub mod judge;
 pub mod selftest;
 pub mod speech;
+pub mod voice;
 
 use crate::sandbox;
 use crate::system::{Owned, PATIENCE, Stopped, System, settle, until, until_cleanup};

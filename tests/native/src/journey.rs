@@ -16,6 +16,7 @@ mod quit_restore;
 mod scrolling;
 mod slow_list;
 mod slow_save;
+mod voice;
 mod voyage_close;
 mod workspace;
 mod worktrees;
@@ -140,6 +141,7 @@ journeys! {
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
