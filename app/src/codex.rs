@@ -58,7 +58,7 @@ fn refuse_dotenv_api_key(dotenv: &Path) -> Result<(), String> {
         .find_map(api_key_name)
     {
         Some(name) => Err(format!(
-            "{} sets {name}. Codex reads that file itself and would bill voice per use, so voice did not start. Remove the line to use voice.",
+            "{} sets {name}. Codex reads that file itself and would bill per use, so the private Codex runtime did not start. Remove the line to use it.",
             dotenv.display()
         )),
         None => Ok(()),
@@ -119,7 +119,22 @@ impl Codex {
         cwd: &Path,
         events: SyncSender<Result<Event, String>>,
     ) -> Result<Self, String> {
-        let executable = Self::executable()?;
+        let dotenv = codex_dotenv(
+            env::var_os("CODEX_HOME"),
+            env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")),
+        );
+        Self::start(Self::executable()?, dotenv, cwd, events)
+    }
+
+    fn start(
+        executable: PathBuf,
+        dotenv: Option<PathBuf>,
+        cwd: &Path,
+        events: SyncSender<Result<Event, String>>,
+    ) -> Result<Self, String> {
+        if let Some(dotenv) = dotenv {
+            refuse_dotenv_api_key(&dotenv)?;
+        }
         let mut command = Command::new(&executable);
         command
             .args([
@@ -190,15 +205,6 @@ impl Codex {
         self.input.flush().map_err(|e| e.to_string())
     }
 
-    fn voice_package_with(&self, dotenv: Option<PathBuf>) -> Result<Package, String> {
-        if let Some(dotenv) = dotenv {
-            refuse_dotenv_api_key(&dotenv)?;
-        }
-        let package = Package::discover(&self.executable)?;
-        package.check_provider(self.version.as_deref())?;
-        Ok(package)
-    }
-
     pub(crate) fn voice_capability() -> voyager_contract::voice::Capability {
         match Self::executable().and_then(|path| Package::discover(&path)) {
             Ok(package) => voyager_contract::voice::Capability::Candidate {
@@ -236,10 +242,9 @@ impl Provider for Codex {
     }
 
     fn voice_package(&self) -> Result<Package, String> {
-        self.voice_package_with(codex_dotenv(
-            env::var_os("CODEX_HOME"),
-            env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")),
-        ))
+        let package = Package::discover(&self.executable)?;
+        package.check_provider(self.version.as_deref())?;
+        Ok(package)
     }
 
     fn shutdown(&mut self) -> Result<(), String> {
@@ -306,56 +311,38 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn voice_fixture(name: &str, dotenv: &str) -> (PathBuf, Codex, PathBuf) {
+    fn stand_in_codex(name: &str, dotenv: &str) -> (PathBuf, PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
         let root =
             std::env::temp_dir().join(format!("voyager-codex-{name}-{}", std::process::id()));
-        let executable = root.join("package/bin/codex");
-        let voice = root.join("package/codex-resources/voice");
         let home = root.join("codex-home");
-        fs::create_dir_all(executable.parent().unwrap()).unwrap();
-        fs::create_dir_all(voice.join("bin")).unwrap();
+        let cwd = root.join("cwd");
         fs::create_dir_all(&home).unwrap();
-        fs::write(&executable, b"").unwrap();
-        let helper = format!("bin/codex-voice-host{}", std::env::consts::EXE_SUFFIX);
-        fs::write(voice.join(helper), b"").unwrap();
-        fs::write(
-            voice.join("manifest.json"),
-            json!({"schemaVersion":1,"appVersion":"0.167.0","buildCommit":"a".repeat(40)})
-                .to_string(),
-        )
-        .unwrap();
+        fs::create_dir_all(&cwd).unwrap();
+        let executable = root.join("codex");
+        fs::write(&executable, "#!/bin/sh\ntouch started\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
         fs::write(home.join(".env"), dotenv).unwrap();
-        let mut child = Command::new("/bin/sleep")
-            .arg("10")
-            .stdin(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let codex = Codex {
-            input: child.stdin.take().unwrap(),
-            child,
-            executable,
-            version: Some("0.167.0".into()),
-            pending: Arc::new(Mutex::new(None)),
-        };
-        (root, codex, home)
-    }
-
-    #[cfg(unix)]
-    fn finish_fixture(root: PathBuf, mut codex: Codex) {
-        codex.child.kill().unwrap();
-        codex.child.wait().unwrap();
-        fs::remove_dir_all(root).unwrap();
+        (root, executable, home)
     }
 
     #[test]
     #[cfg(unix)]
-    fn voice_refuses_to_start_when_codex_dotenv_names_an_api_key() {
+    fn a_dotenv_naming_an_api_key_stops_the_codex_runtime_from_starting() {
         let planted = "# note\nOTHER=1\nexport OPENAI_API_KEY=\"sk-planted-value\"\n";
-        let (root, codex, home) = voice_fixture("refuse", planted);
-        let dotenv = codex_dotenv(Some(home.clone().into()), None);
-        let outcome = codex.voice_package_with(dotenv);
-        let message = outcome.err().expect("a key in the dotenv refuses voice");
-        finish_fixture(root, codex);
+        let (root, executable, home) = stand_in_codex("refuse", planted);
+        let (events, _received) = std::sync::mpsc::sync_channel(1);
+        let outcome = Codex::start(
+            executable,
+            codex_dotenv(Some(home.clone().into()), None),
+            &root.join("cwd"),
+            events,
+        );
+        thread::sleep(Duration::from_millis(500));
+        let launched = root.join("cwd/started").exists();
+        let message = outcome.err().expect("a key in the dotenv refuses to start");
+        fs::remove_dir_all(&root).unwrap();
+        assert!(!launched, "the stand-in Codex process was started");
         assert!(
             message.contains(&home.join(".env").display().to_string()),
             "{message}"
@@ -367,15 +354,31 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn voice_starts_when_codex_dotenv_names_no_api_key() {
+    fn a_dotenv_without_an_api_key_lets_the_codex_runtime_start() {
         let unrelated = "OPENAI_BASE_URL=https://example.invalid\n# OPENAI_API_KEY=sk-commented\nMY_OPENAI_API_KEY=x\n";
-        let (root, codex, home) = voice_fixture("start", unrelated);
-        let started = codex.voice_package_with(codex_dotenv(Some(home.clone().into()), None));
+        let (root, executable, home) = stand_in_codex("start", unrelated);
+        let started = |executable: &PathBuf, home: &Path| {
+            let (events, _received) = std::sync::mpsc::sync_channel(1);
+            Codex::start(
+                executable.clone(),
+                codex_dotenv(Some(home.into()), None),
+                &root.join("cwd"),
+                events,
+            )
+        };
+        let with_file = started(&executable, &home);
         fs::remove_file(home.join(".env")).unwrap();
-        let without_file = codex.voice_package_with(codex_dotenv(Some(home.into()), None));
-        finish_fixture(root, codex);
-        assert!(started.is_ok(), "{:?}", started.err());
-        assert!(without_file.is_ok(), "{:?}", without_file.err());
+        let without_file = started(&executable, &home);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !root.join("cwd/started").exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        let launched = root.join("cwd/started").exists();
+        for mut codex in [with_file, without_file].into_iter().flatten() {
+            codex.shutdown().unwrap();
+        }
+        fs::remove_dir_all(&root).unwrap();
+        assert!(launched, "the stand-in Codex process never ran");
     }
 
     #[test]

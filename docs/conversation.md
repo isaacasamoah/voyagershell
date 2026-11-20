@@ -268,9 +268,10 @@ does not expose the account record, inspect credentials or select paid API audio
 The app starts the private Codex runtime without `OPENAI_API_KEY` and
 `CODEX_API_KEY` in the environment it passes. Codex itself loads `.env` from
 `$CODEX_HOME`, else `~/.codex`, and sets every variable in it except names that
-start with `CODEX_`. So before native voice starts, the app reads the names in
-that file, never the values. If the file names either variable, voice does not
-start and the message names the file and the variable. Codex 0.167.0 drops
+start with `CODEX_`. So before the private Codex runtime starts, for chat or
+voice, the app reads the names in that file, never the values. If the file names
+either variable, the runtime does not start and the message names the file and
+the variable. Codex 0.167.0 drops
 `CODEX_` names from that file, so the check on `CODEX_API_KEY` is a safeguard
 against a later Codex that does not. The app checks no other source of an API
 key, such as a user-defined provider in the Codex configuration.
