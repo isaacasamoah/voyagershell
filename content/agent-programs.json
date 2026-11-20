@@ -1,0 +1,57 @@
+{
+  "agents": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "programs": ["codex"],
+      "icon": "openai.svg",
+      "seeded": true,
+      "launch": {
+        "argv": ["codex", "--no-daemon"],
+        "model": {
+          "default": "gpt-6.1-sol",
+          "flags": ["--model", "{model}"]
+        },
+        "effort": {
+          "default": "high",
+          "flags": ["-c", "model_reasoning_effort=\"{effort}\""]
+        },
+        "permissions": {
+          "default": "yolo",
+          "yolo": ["--dangerously-bypass-approvals-and-sandbox"],
+          "workspaceWrite": [
+            "--sandbox",
+            "workspace-write",
+            "--ask-for-approval",
+            "on-request"
+          ],
+          "readOnly": [
+            "--sandbox",
+            "read-only",
+            "--ask-for-approval",
+            "on-request"
+          ]
+        }
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "programs": ["claude", "claude-code"],
+      "icon": "anthropic.svg",
+      "seeded": true,
+      "launch": { "argv": ["claude"] }
+    },
+    { "id": "pi", "name": "Pi", "programs": ["pi"] },
+    { "id": "opencode", "name": "OpenCode", "programs": ["opencode"] },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "programs": ["cursor", "cursor-agent"]
+    },
+    { "id": "copilot", "name": "Copilot", "programs": ["copilot"] },
+    { "id": "amp", "name": "Amp", "programs": ["amp"] },
+    { "id": "gemini", "name": "Gemini", "programs": ["gemini"] },
+    { "id": "grok", "name": "Grok", "programs": ["grok"] }
+  ]
+}

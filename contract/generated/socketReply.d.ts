@@ -104,17 +104,9 @@ export type Launch =
       kind: "terminal";
     }
   | {
-      effort?: Effort & string;
-      kind: "codex";
-      model?: string;
-      permissions?: Permissions & string;
-    }
-  | {
       argv: string[];
       kind: "program";
     };
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
-export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type WorkspaceView = "home" | "fleet";
 export type Outcome = "applied" | "refused" | "uncertain";
 export type Unapplied = "refused" | "uncertain";

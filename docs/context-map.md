@@ -71,6 +71,7 @@ Owns files:
 - `app/src/families.rs`
 - `app/src/families/terminal.rs`
 - `app/src/launch.rs`
+- `app/src/agent_programs.rs`
 - `app/src/activity.rs`
 - `app/src/diagnostics.rs`
 - `app/src/observation.rs`

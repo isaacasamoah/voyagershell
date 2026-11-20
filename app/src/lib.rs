@@ -1,6 +1,7 @@
 mod activity;
 mod administrator;
 mod adoption;
+pub mod agent_programs;
 mod canvas;
 pub mod client;
 pub mod content;

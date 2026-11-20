@@ -13,76 +13,6 @@
       ],
       "type": "string"
     },
-    "Launch": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "terminal",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "effort": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Effort"
-                }
-              ],
-              "default": "high"
-            },
-            "kind": {
-              "const": "codex",
-              "type": "string"
-            },
-            "model": {
-              "default": "gpt-6.1-sol",
-              "type": "string"
-            },
-            "permissions": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Permissions"
-                }
-              ],
-              "default": "yolo"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "argv": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "program",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "argv"
-          ],
-          "type": "object"
-        }
-      ]
-    },
     "LaunchEntry": {
       "additionalProperties": false,
       "properties": {
@@ -90,7 +20,7 @@
           "type": "string"
         },
         "launch": {
-          "$ref": "#/definitions/Launch"
+          "$ref": "#/definitions/LaunchRecord"
         },
         "name": {
           "type": "string"
@@ -100,6 +30,53 @@
         "id",
         "name",
         "launch"
+      ],
+      "type": "object"
+    },
+    "LaunchRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Effort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Permissions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind"
       ],
       "type": "object"
     },

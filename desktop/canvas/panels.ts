@@ -14,6 +14,14 @@ export type PanelGroup = {
   maximizedPlacement?: string | null;
 };
 
+export function terminalBacked(typeId: string | undefined): boolean {
+  return typeId === "terminal" || typeId === "agent";
+}
+
+export function typeLabel(typeId: string | undefined): string | undefined {
+  return terminalBacked(typeId) ? "Terminal" : typeId;
+}
+
 export function currentVoyage(layout: Layout): Voyage | undefined {
   return layout.view === "home"
     ? (layout.home ?? undefined)
@@ -146,7 +154,7 @@ export function hiddenPanels(
           if (visible.has(panel.id)) return false;
           const content = contents.get(panel.vessel);
           if (!content || content.startPending) return false;
-          return content.typeId === "terminal"
+          return terminalBacked(content.typeId)
             ? Boolean(
                 content.backend &&
                 live.has(JSON.stringify([content.id, content.backend])),

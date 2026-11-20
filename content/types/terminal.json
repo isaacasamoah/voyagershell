@@ -1,0 +1,40 @@
+{
+  "contract": 1,
+  "id": "terminal",
+  "name": "Terminal",
+  "version": 1,
+  "state": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["screen", "title"],
+      "properties": {
+        "screen": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "initial": { "screen": "", "title": "" }
+  },
+  "actions": {},
+  "view": { "source": "native/terminal" },
+  "backend": { "kind": "core-terminal" },
+  "orbit": [
+    {
+      "id": "ask-screen",
+      "label": "Ask about this terminal",
+      "short": "Ask",
+      "icon": "message",
+      "group": "ask",
+      "run": { "agent": "explain-terminal", "read": "screen" }
+    }
+  ],
+  "dock": [
+    {
+      "id": "screen",
+      "label": "Read the screen while docked",
+      "trigger": "while-docked",
+      "default": "off",
+      "read": "screen"
+    }
+  ]
+}

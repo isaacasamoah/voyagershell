@@ -3,8 +3,8 @@ use voyager_contract::Action;
 
 #[test]
 fn configured_codex_defaults_use_direct_literal_arguments() {
-    use voyager_contract::launch::{Launch, LaunchSettings};
-    let settings = LaunchSettings::default();
+    use voyager_contract::launch::{Launch, LaunchSpec};
+    let settings = voyager_app::agent_programs::default_settings();
     let launch = &settings
         .entries
         .iter()
@@ -12,7 +12,7 @@ fn configured_codex_defaults_use_direct_literal_arguments() {
         .unwrap()
         .launch;
     assert_eq!(
-        voyager_app::launch::argv(launch).unwrap(),
+        voyager_app::launch::spec_argv(launch).unwrap(),
         [
             "codex",
             "--no-daemon",
@@ -23,11 +23,11 @@ fn configured_codex_defaults_use_direct_literal_arguments() {
             "--dangerously-bypass-approvals-and-sandbox"
         ]
     );
-    let changed: Launch = serde_json::from_value(serde_json::json!({
+    let changed: LaunchSpec = serde_json::from_value(serde_json::json!({
         "kind": "codex", "model": "chosen-model", "effort": "medium", "permissions": "read-only"
     }))
     .unwrap();
-    let argv = voyager_app::launch::argv(&changed).unwrap();
+    let argv = voyager_app::launch::spec_argv(&changed).unwrap();
     assert_eq!(argv[3], "chosen-model");
     assert!(argv.contains(&"model_reasoning_effort=\"medium\"".into()));
     assert!(
@@ -46,14 +46,14 @@ fn configured_codex_defaults_use_direct_literal_arguments() {
 
 #[test]
 fn profile_choices_reload_without_replacing_missing_programs() {
-    use voyager_contract::launch::{Launch, LaunchEntry, LaunchSettings};
+    use voyager_contract::launch::{LaunchEntry, LaunchSpec};
     let path = std::env::temp_dir().join(format!("voyager-launches-{}.json", std::process::id()));
     let checked = std::panic::catch_unwind(|| {
-        let mut settings = LaunchSettings::default();
+        let mut settings = voyager_app::agent_programs::default_settings();
         settings.entries.push(LaunchEntry {
             id: "missing".into(),
             name: "Missing worker".into(),
-            launch: Launch::Program {
+            launch: LaunchSpec::Program {
                 argv: vec!["/no-voyager-worker-here".into()],
             },
         });
@@ -95,8 +95,8 @@ fn explicit_worker_creation_binds_only_its_new_content() {
     let original = model.layout.vessels[0].clone();
     let fleet = model.layout.selected_fleet.clone().unwrap();
     let after = model.layout.voyages[0].fleets[0].placements[0].id.clone();
-    let mut request = serde_json::json!({
-        "operation": "create-vessel", "typeId": "terminal",
+    let request = serde_json::json!({
+        "operation": "create-vessel", "typeId": "agent",
         "destination": {"kind": "placement", "owner": {"kind": "fleet", "id": fleet}, "insertion": {"kind": "beside", "id": after, "side": "right"}},
         "launch": {"kind": "codex", "model": "gpt-6.1-sol", "effort": "high", "permissions": "yolo"}
     });
@@ -104,16 +104,37 @@ fn explicit_worker_creation_binds_only_its_new_content() {
     model.apply(create).unwrap();
     assert_eq!(model.layout.vessels[0], original);
     let worker = serde_json::to_value(model.layout.vessels.last().unwrap()).unwrap();
-    assert_eq!(worker["launch"], request["launch"]);
+    assert_eq!(worker["typeId"], "agent");
+    assert_eq!(
+        worker["launch"],
+        serde_json::json!({"kind": "program", "argv": [
+            "codex", "--no-daemon", "--model", "gpt-6.1-sol", "-c",
+            "model_reasoning_effort=\"high\"", "--dangerously-bypass-approvals-and-sandbox"
+        ]})
+    );
     assert!(worker["backend"].is_null());
     let before = model.layout.clone();
-    request["typeId"] = "notes".into();
-    assert!(
-        model
-            .apply(serde_json::from_value(request).unwrap())
-            .is_err()
-    );
-    assert_eq!(model.layout, before);
+    for (type_id, launch) in [
+        ("notes", request["launch"].clone()),
+        ("terminal", request["launch"].clone()),
+        (
+            "agent",
+            serde_json::json!({"kind": "program", "argv": ["sh"]}),
+        ),
+        ("agent", serde_json::json!({"kind": "terminal"})),
+        ("agent", serde_json::json!({"kind": "unlisted"})),
+    ] {
+        let mut refused = request.clone();
+        refused["typeId"] = type_id.into();
+        refused["launch"] = launch;
+        assert!(
+            model
+                .apply(serde_json::from_value(refused).unwrap())
+                .is_err(),
+            "{type_id} with that launch is refused"
+        );
+        assert_eq!(model.layout, before);
+    }
 }
 
 #[test]
@@ -156,7 +177,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         assert_eq!(created.status, Outcome::Applied);
         let mut changed = request.clone();
         if let Action::CreateVessel { launch, .. } = &mut changed.action {
-            *launch = Some(voyager_contract::launch::Launch::Terminal);
+            *launch = Some(voyager_contract::launch::LaunchSpec::Terminal);
         }
         let changed = client.call(changed).unwrap();
         assert_eq!(changed.status, Outcome::Refused);

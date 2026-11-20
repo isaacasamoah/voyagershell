@@ -51,9 +51,11 @@ fn entry_argv(launches: Option<&Path>) -> Result<Vec<String>, String> {
             .iter()
             .map(|word| (*word).to_owned())
             .collect()),
-        Some(entry) => match entry.launch {
-            Launch::Program { argv } => Ok(argv),
-            _ => Err("The voyager entry in launches.json must be a program launch".into()),
+        Some(entry) => match crate::launch::spec_argv(&entry.launch)? {
+            argv if argv.is_empty() => {
+                Err("The voyager entry in launches.json must be a program launch".into())
+            }
+            argv => Ok(argv),
         },
     }
 }
@@ -235,5 +237,20 @@ mod tests {
             entry_argv(None).unwrap(),
             ["claude", "--model", "claude-sonnet-5-5", "--effort", "low"]
         );
+    }
+
+    #[test]
+    fn a_voyager_entry_of_an_agent_kind_resolves_through_the_table() {
+        let directory =
+            std::env::temp_dir().join(format!("voyager-entry-agent-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let launches = directory.join("launches.json");
+        std::fs::write(
+            &launches,
+            r#"{"default":"voyager","entries":[{"id":"voyager","name":"Voyager","launch":{"kind":"claude"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(entry_argv(Some(&launches)).unwrap(), ["claude"]);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

@@ -48,9 +48,11 @@ impl Labelled {
             cwd: origin.cwd,
             name: origin.name,
             launch: match program {
-                Some(program) if crate::launch::is_agent_program(&program) => Launch::Program {
-                    argv: vec![program],
-                },
+                Some(program) if crate::agent_programs::is_agent_program(&program) => {
+                    Launch::Program {
+                        argv: vec![program],
+                    }
+                }
                 _ => Launch::Terminal,
             },
         })

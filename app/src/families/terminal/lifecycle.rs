@@ -66,7 +66,7 @@ fn prepare_selected(
     let mut ready = Vec::new();
     let mut closing = Vec::new();
     for content in &mut layout.vessels {
-        if content.type_id != "terminal"
+        if !voyager_contract::launch::is_terminal_backed(&content.type_id)
             || ids.is_some_and(|ids| !ids.contains(&content.id))
             || content.start_pending.is_some()
             || content.shell_intent.is_some()
@@ -194,7 +194,7 @@ mod tests {
             .layout
             .vessels
             .iter_mut()
-            .filter(|item| item.type_id == "terminal")
+            .filter(|item| voyager_contract::launch::is_terminal_backed(&item.type_id))
             .enumerate()
         {
             content.backend = Some(CoreTerminalId(format!("t{index}")));
@@ -261,7 +261,7 @@ mod tests {
             .layout
             .vessels
             .iter_mut()
-            .filter(|item| item.type_id == "terminal")
+            .filter(|item| voyager_contract::launch::is_terminal_backed(&item.type_id))
         {
             content.adopted = content.backend == Some(CoreTerminalId("t2".into()));
         }

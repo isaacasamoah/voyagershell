@@ -520,6 +520,7 @@ features:
       - app/src/content/install/diff.rs
       - app/src/content/install/tests.rs
       - app/src/content/manifest.rs
+      - app/src/content/manifest/builtin.rs
       - app/src/content/manifest/check.rs
       - app/src/content/manifest/effect.rs
       - app/src/content/manifest/eval.rs

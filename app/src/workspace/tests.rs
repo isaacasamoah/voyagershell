@@ -462,7 +462,7 @@ fn a_fleet_voyager_makes_for_the_person_opens_a_terminal_and_names_its_program()
         ("Plain", None),
         (
             "Review",
-            Some(Launch::Program {
+            Some(voyager_contract::launch::LaunchSpec::Program {
                 argv: vec!["claude".into()],
             }),
         ),

@@ -126,12 +126,12 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../canvas/note.svg").as_slice(),
     ),
     (
-        "canvas/codex.svg",
-        include_bytes!("../canvas/codex.svg").as_slice(),
+        "canvas/openai.svg",
+        include_bytes!("../canvas/openai.svg").as_slice(),
     ),
     (
-        "canvas/claude.svg",
-        include_bytes!("../canvas/claude.svg").as_slice(),
+        "canvas/anthropic.svg",
+        include_bytes!("../canvas/anthropic.svg").as_slice(),
     ),
     (
         "canvas/icons-LICENSE.txt",

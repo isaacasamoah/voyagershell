@@ -107,7 +107,46 @@ required before acceptance. Linux source checks establish no other platform.
 
 ## Agent program table
 
-`AGENT_PROGRAMS` in `app/src/launch.rs` is the one list of recognized agent programs. The launch wrapper below and `observation::conversation_name` both read it, and each keeps its own name normalisation. The Agents view's `AGENT_NAMES` in `desktop/canvas/agents.ts` must list the same programs, and a unit test compares the two. A seeded profile keeps its own copy of `agents.js`, so a new program reaches an existing profile only through an update policy, which is not yet selected. A program named `cursor` now starts inside interactive Bash and returns to a Bash prompt when it exits.
+`content/agent-programs.json` is the one table of coding agents. Each row has
+an `id`, a display `name`, the `programs` that identify it by executable name,
+an optional `icon` file, `seeded` and a `launch` template. `seeded` rows start
+as entries of a new profile's `launches.json`. The template gives the base
+`argv` and, for each setting the program takes, a default and the flags it adds:
+`model` and `effort` carry `{model}` and `{effort}`, and `permissions` carries
+one list of flags for each of `yolo`, `workspaceWrite` and `readOnly`. A row
+without a template launches its first program name.
+
+`app/src/agent_programs.rs` reads the table. The launch list, recognising an
+agent in a terminal for the Bash wrapper, adoption, conversation naming and the
+seeded settings all call it. The canvas reads the same file through the
+`agent_programs` call of `voyager_workspace`.
+`desktop/canvas/process-icons.ts` parses and validates it once, and the Agents view and the process icons look
+programs up there. Adding an agent is one row, plus an icon file that
+`desktop/src/shipped.rs` lists when the row names one. The gate
+`agent-names-stay-in-adapters` scans only `.rs` and `.ts` source, so the table
+holds the names and the code holds none. A unit test checks that every listed
+program launches through Bash and names its conversation, and that the canvas
+modules and the host read the table and keep no list of their own.
+
+A launch entry has the kind `terminal`, `program` or the `id` of a table row, as
+in `{"kind":"codex","model":"gpt-6.1-sol"}`. An entry of the third kind
+resolves through the row's template to one argv, and a setting the row does not
+take is refused. A Vessel created from such an entry has the type `agent` and
+stores the resolved argv as a `program` launch, so its stored record is the
+same shape a terminal that runs a program has. A layout stored before this change
+may hold a Vessel with a launch of the third kind; reading the layout turns that
+launch into the same `program` argv and leaves the Vessel's type as stored. A
+launch whose kind the table no longer lists becomes a plain terminal launch. The
+type `agent` takes only an agent entry, and an agent entry takes only the type
+`agent`.
+
+A profile's `launches.json` is seeded once and never rewritten, so a new table
+row appears in the picker only when the person adds an entry for it. The canvas
+files follow the first-party update rules in `docs/content.md`. A canvas file the
+person edited stays, and its update is written as a diff. An edited
+`process-icons.js` next to an updated `agents.js` lacks the lookup the new view
+imports. A program named `cursor`
+starts inside interactive Bash and returns to a Bash prompt when it exits.
 
 ## Returning from an agent
 

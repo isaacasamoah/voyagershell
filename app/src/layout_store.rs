@@ -166,6 +166,8 @@ pub(crate) fn load(
     } else {
         (DOCUMENT, document.value, false)
     };
+    let mut value = value;
+    crate::agent_programs::upgrade_stored_launches(&mut value);
     match read(value) {
         Reading::Open { layout, kept } => {
             let layout = match prepared(*layout, cwd) {

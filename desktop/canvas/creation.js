@@ -154,7 +154,13 @@ export class CreationPicker {
                 if (this.current !== opening) return;
                 this.current = null;
                 create(
-                  chosen(opening.destination, "terminal", launch),
+                  chosen(
+                    opening.destination,
+                    launch.kind === "terminal" || launch.kind === "program"
+                      ? "terminal"
+                      : "agent",
+                    launch,
+                  ),
                   opening.version,
                   cx,
                 );

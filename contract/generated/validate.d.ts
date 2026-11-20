@@ -1,3 +1,4 @@
+export function agentPrograms(data: unknown): data is import("./agentPrograms").AgentTable;
 export function canvas(data: unknown): data is import("./canvas").Canvas;
 export function contentCatalog(data: unknown): data is import("./contentCatalog").Catalog;
 export function contentManifest(data: unknown): data is import("./contentManifest").Manifest;

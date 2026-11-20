@@ -842,7 +842,7 @@ mod tests {
         .unwrap();
         fs::write(package.join("main.js"), "personal source").unwrap();
         let catalog = discover(&packages).unwrap();
-        assert_eq!(catalog.types.len(), 3);
+        assert_eq!(catalog.types.len(), 4);
         let terminal = describe(&packages, "terminal").unwrap();
         let notes = describe(&packages, NOTES_TYPE).unwrap();
         let agents = describe(&packages, "agents").unwrap();

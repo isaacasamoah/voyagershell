@@ -328,10 +328,8 @@ fn explicit_new_shell_preserves_placement_and_grants_only_a_fresh_shell() {
     let id = model.layout.vessels[0].id.clone();
     let backend = CoreTerminalId("t1".into());
     model.layout.vessels[0].backend = Some(backend.clone());
-    model.layout.vessels[0].launch = Some(voyager_contract::launch::Launch::Codex {
-        model: "old-worker".into(),
-        effort: Default::default(),
-        permissions: Default::default(),
+    model.layout.vessels[0].launch = Some(voyager_contract::launch::Launch::Program {
+        argv: vec!["old-worker".into()],
     });
     let mut observed: crate::core_shapes::Terminal = serde_json::from_value(serde_json::json!({
         "address": "t1", "labels": {}, "argv": ["old-agent"], "cwd": "/tmp", "state": "finished", "pid": 123,

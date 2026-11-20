@@ -59,6 +59,8 @@ import {
   shownPanels,
   visiblePanels,
   hiddenPanels,
+  terminalBacked,
+  typeLabel,
 } from "./panels.js";
 import type { PanelGroup } from "./panels.js";
 import type { MenuItem } from "./menu.js";
@@ -901,9 +903,7 @@ export default class Canvas extends View {
       ?.replace(/[\\/]+$/, "")
       .split(/[\\/]/)
       .pop();
-    const program =
-      observed?.program ||
-      (content?.typeId === "terminal" ? "Terminal" : content?.typeId);
+    const program = observed?.program || typeLabel(content?.typeId);
     const name = this.contentName(placement);
     return [program, folder, name !== folder ? name : null]
       .filter(Boolean)
@@ -950,7 +950,7 @@ export default class Canvas extends View {
     for (const vessel of shownPanels(layout)) {
       visited.add(vessel.vessel);
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
-      if (content?.typeId !== "terminal") continue;
+      if (!content || !terminalBacked(content.typeId)) continue;
       const opening = this.openings.get(vessel.vessel);
       if (allowed.has(vessel.vessel) && reopens(content, opening)) {
         this.openings.delete(vessel.vessel);
