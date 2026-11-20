@@ -3,14 +3,14 @@ use crate::provider::AudioEvent as ProviderAudio;
 
 impl super::Client {
     pub fn note(&self, text: &str) -> Result<(), String> {
-        let id = self.request_id();
-        self.projection.edit(|state| {
-            while state.messages.len() >= 64
-                || state.messages.iter().map(|m| m.text.len()).sum::<usize>() > 192 * 1024
-            {
-                state.messages.remove(0);
-                state.omitted = state.omitted.saturating_add(1);
-            }
+        self.projection.note(self.request_id(), text)
+    }
+}
+
+impl Projection {
+    pub(super) fn note(&self, id: String, text: &str) -> Result<(), String> {
+        self.edit(|state| {
+            Self::make_room(state);
             state.messages.push(Message {
                 id: id.clone(),
                 request_id: id,

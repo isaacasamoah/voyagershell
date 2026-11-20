@@ -183,6 +183,7 @@ impl Rig {
         let failure = refuse.then(|| SendFailure {
             reason: "Not sent. Voyager needs you on Home".into(),
             refused: true,
+            phrase: Phrase::NotRunning,
         });
         Self::failing(mics, standing, failure)
     }
@@ -521,6 +522,7 @@ fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
     let failure = SendFailure {
         reason: "The send is unconfirmed and was not repeated. Core did not answer".into(),
         refused: false,
+        phrase: Phrase::NotRunning,
     };
     let rig = Rig::failing(vec![Mic::Opens(sentence())], Standing::Idle, Some(failure));
     rig.serve("open the roadmap");

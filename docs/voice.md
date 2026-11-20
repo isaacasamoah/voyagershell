@@ -60,14 +60,26 @@ shows "Can't hear the microphone" in a colour that is not green, and the voice s
 "I can't hear your microphone." once for that outage. The app tries again every 3 s
 and turns green when the microphone is back.
 
-| Voyager's standing | Clip | Words sent |
-| --- | --- | --- |
-| Idle or done, or no state yet | "Asking Voyager." and "Okay, asking Voyager.", in turn | Yes |
-| Working | "Queued for Voyager." | Yes |
-| Blocked | "Voyager needs you on Home first." | No |
-| Not running (no binding, or Core reports the program ended or gone) | "I couldn't pass that to Voyager." | No |
-| Nothing heard, or hearing failed | "I didn't catch that." | No |
+Every fixed phrase the voice says is in this table. A clip is cached, keyed by its key and a
+short hash of its words. The voice speaks as "I" and never as Voyager.
 
+| Key | Words | Played when | Words sent |
+| --- | --- | --- | --- |
+| `asking` | "Asking Voyager." | Voyager is idle or done, or has no state yet, on even turns | Yes |
+| `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
+| `queued` | "Queued for Voyager." | Voyager is working | Yes |
+| `needs-you` | "Voyager needs you on Home first." | Voyager is blocked, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
+| `not-running` | "I couldn't pass that to Voyager." | Core reports the program ended or gone, or Core refuses a send with a kind not listed in this table, including `conflict` | No |
+| `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
+| `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
+| `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
+| `missed` | "I didn't catch that." | Nothing was heard, or hearing failed | No |
+| `no-microphone` | "I can't hear your microphone." | The microphone cannot be opened or its stream ends, once for each outage | No |
+| `failed` | "That didn't work." | A spoken turn ends in failure | No |
+
+A reply past the ceiling also ends with "I can say more if you ask." That sentence is
+part of the spoken text and not a clip. The words in the table never name an action or claim
+a result, and none points to the chat.
 
 ## Speaking the reply
 
@@ -83,14 +95,16 @@ candidate when its final `Stop` is recorded and Core answers that Voyager is not
 working. Only an answered "idle", "done" or "error" counts. A failed read of Core, an
 answer for a live program that carries no state word and a state word the app cannot
 read are all unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
-first paragraph of the final message, drops paths, code, hex runs of seven or more
+final message, drops code, tables, paths, hex runs of seven or more
 characters with a digit and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25`
-and `terminal-34`, cuts what is left to two sentences or 30 words, and adds "The rest
-is in the chat." when it cut anything. The engine reads the result. Plain words and
-numbers such as "3 files" are kept. The turn is marked done, so a repeated `Stop`, a
-late chunk of the same message and a later reopen never speak it again. A failed turn
-plays one fixed clip, "That didn't work. The reason is in the chat.". While a spoken
-turn is open and Core reports Voyager blocked, one fixed clip, "I need you on Home.",
+and `terminal-34`, and gives each list item, heading and paragraph a sentence end. The
+engine reads all of what is left. Plain words and numbers such as "3 files" are kept.
+The turn is marked done, so a repeated `Stop`, a late chunk of the same message and a
+later reopen never speak it again. A failed turn plays one fixed clip, "That didn't
+work.". Once the audio has started, the same words are added to the private chat as an
+assistant line through `Client::note`, which never starts a turn. That add never delays
+speech. While a spoken
+turn is open and Core reports Voyager blocked, one fixed clip, "Voyager needs you on Home first.",
 plays once.
 
 There is no fixed hold before speech. Claude can continue a turn after `Stop` when
@@ -119,14 +133,35 @@ target. It has not been measured in a real room.
 Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
 
+### The whole answer, written for the ear
+
+Voice is the primary surface, and the chat is an alternative. A spoken reply is the
+whole answer and never says that more is in the chat. The agent's launch policy,
+`spoken::policy_rule`, tells it to answer a spoken prompt aloud in full, brief and
+plain, with no ids, paths or code, to say the reason when something fails, to summarise a
+very long answer such as a list and offer more, and never to point to the chat. Each word
+of the rule is sent on every spoken turn, so it stays short.
+
+The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
+is a target to measure against the engine's render time, which has a 30 s limit per
+request, and not a measured limit. Past it the filter cuts at the last sentence end in
+the second half of the kept words, or at the ceiling when there is none, and adds "I can
+say more if you ask." It adds no pointer to the chat.
+
+The chat was empty for a voice turn because Voyager's replies reach the app only through
+the reply store, which feeds the speaker and the agent socket. The chat is the private
+conversation, a separate surface that held only refusal notes. Nothing wrote a spoken
+reply into it, so the chat could not hold what the voice said. A note never takes the
+place of a user turn. While a first message is starting, notes keep their oldest-first
+trim but never trim out the accepted message.
+
 ## The seam
 
 `app/src/speech.rs` holds the traits `Hearing` and `Speaking`, the `Engine`
 that pairs them, the clip table and the speech filter. `SpokenText` can only be
 built by the filter, so unfiltered reply text never reaches an engine. The filter
-keeps the first paragraph, drops code, tables, links, paths and long ids, stops at
-two sentences or 30 words, and adds "The rest is in the chat." when it cut
-anything.
+keeps every paragraph, drops code, tables, links, paths and long ids, and stops only at
+the safety ceiling.
 
 `app/src/voice_layer.rs` owns the exchange. A click flips the switch at once from
 the canvas thread. One listening thread converges on it, so two utterances never
@@ -140,13 +175,9 @@ nothing is sent. A failed read of Core, or a live program that has not reported 
 yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
 Speech does the opposite and waits on an unknown standing.
 A send that Core refuses after the acknowledgement is a known refusal. The app plays
-the cached "I couldn't pass that to Voyager." clip once, adds the refusal
-as a line in the chat, and shows it in the voice control's tooltip. The design page has
-no phrase for a failed send, so it reuses that clip. An unconfirmed send stays silent
-and is shown only in the tooltip. A send is never repeated. Audio goes
-through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
-PulseAudio command line tools, which PipeWire also serves. Linux is the only
-verified platform.
+one cached clip chosen by Core's refusal kind, adds the refusal as a line in the chat,
+and shows it in the voice control's tooltip. Each clip is true for every kind mapped to
+it, and an unknown kind keeps "I couldn't pass that to Voyager." The table above lists each kind.
 
 A stalled engine never delays the canvas. The layer runs on its own thread, reaches
 Core only through the application queue, and the canvas only reads a small snapshot.

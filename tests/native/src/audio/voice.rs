@@ -647,8 +647,8 @@ mod tests {
     #[test]
     fn words_are_found_inside_a_longer_transcript_ignoring_case_and_punctuation() {
         assert!(words_contain(
-            "Asking Voyager. Docked on this fleet. The rest is in the chat.",
-            "Docked on this fleet. The rest is in the chat."
+            "Asking Voyager. Docked on this fleet. The Fleet was already open.",
+            "Docked on this fleet. The Fleet was already open."
         ));
         assert!(!words_contain("Asking Voyager.", "Docked on this fleet."));
     }

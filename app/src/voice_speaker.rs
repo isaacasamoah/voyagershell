@@ -89,7 +89,11 @@ fn say(parts: &Parts, line: Line) {
             Err(error) => Some(format!("The speaker could not be opened: {error}")),
             Ok(speaker) => {
                 parts.trace.mark_words("speech-started", &label);
-                speaker.play(&clip)(&|| !(parts.on)());
+                let finish = speaker.play(&clip);
+                if let Line::Reply(text) = &line {
+                    parts.voyager.note(text.as_str());
+                }
+                finish(&|| !(parts.on)());
                 parts.trace.mark("speech-ended");
                 None
             }
@@ -155,7 +159,11 @@ mod tests {
         }
     }
 
-    struct Here(Standing);
+    struct Here(
+        Standing,
+        Arc<Mutex<Vec<usize>>>,
+        Arc<Mutex<Vec<(String, usize)>>>,
+    );
 
     impl Voyager for Here {
         fn standing(&self) -> Standing {
@@ -164,6 +172,11 @@ mod tests {
 
         fn say(&self, _: &str) -> Result<(), crate::voice_parts::SendFailure> {
             Ok(())
+        }
+
+        fn note(&self, line: &str) {
+            let started = self.1.lock().unwrap().len();
+            self.2.lock().unwrap().push((line.to_owned(), started));
         }
     }
 
@@ -174,6 +187,7 @@ mod tests {
         phases: Arc<Mutex<Vec<Phase>>>,
         stop: Arc<AtomicBool>,
         on: Arc<AtomicBool>,
+        noted: Arc<Mutex<Vec<(String, usize)>>>,
     }
 
     impl Rig {
@@ -182,6 +196,7 @@ mod tests {
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
             let replies = Replies::default();
+            let noted: Arc<Mutex<Vec<(String, usize)>>> = Arc::default();
             let floor = Arc::new(Floor::default());
             let recorded = phases.clone();
             let halted = stop.clone();
@@ -205,7 +220,7 @@ mod tests {
                         .collect(),
                 ),
                 audio: Arc::new(Out(played.clone())),
-                voyager: Arc::new(Here(standing)),
+                voyager: Arc::new(Here(standing, played.clone(), noted.clone())),
                 replies: replies.clone(),
                 trace: Trace::off(),
                 floor: floor.clone(),
@@ -220,6 +235,7 @@ mod tests {
                 phases,
                 stop,
                 on,
+                noted,
             }
         }
 
@@ -258,7 +274,7 @@ mod tests {
         let rig = Rig::start(Standing::Idle);
         rig.say("p1", true, "Renamed it.\n\nMore.");
         rig.wait_for(1);
-        let heard = "Renamed it. The rest is in the chat.".len();
+        let heard = "Renamed it. More.".len();
         assert_eq!(rig.played.lock().unwrap().clone(), vec![heard]);
         thread::sleep(Duration::from_millis(250));
         assert_eq!(
@@ -289,6 +305,26 @@ mod tests {
         drop(held);
         rig.wait_for(1);
         assert!(!rig.floor.is_wanted());
+    }
+
+    #[test]
+    fn the_spoken_reply_is_noted_in_the_chat_only_after_its_audio_has_started() {
+        let rig = Rig::start(Standing::Idle);
+        rig.say("p1", true, "Renamed it. Then I tidied the tabs.");
+        rig.wait_for(1);
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(
+            rig.noted.lock().unwrap().clone(),
+            vec![("Renamed it. Then I tidied the tabs.".to_owned(), 1)]
+        );
+    }
+
+    #[test]
+    fn a_typed_reply_adds_nothing_to_the_chat() {
+        let rig = Rig::start(Standing::Idle);
+        rig.say("t1", false, "Typed answer.");
+        thread::sleep(Duration::from_millis(500));
+        assert!(rig.noted.lock().unwrap().is_empty());
     }
 
     #[test]
@@ -343,7 +379,7 @@ mod tests {
         let blocked = 1000
             + Phrase::ALL
                 .iter()
-                .position(|p| *p == Phrase::Blocked)
+                .position(|p| *p == Phrase::NeedsYou)
                 .unwrap();
         assert_eq!(rig.played.lock().unwrap().clone(), vec![blocked]);
     }

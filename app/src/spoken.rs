@@ -16,7 +16,7 @@ pub fn is_spoken(prompt: &str) -> bool {
 
 pub fn policy_rule() -> String {
     format!(
-        "A prompt that starts with {MARKER} came by voice. Act first, then answer with the result in one short plain sentence, a blank line, then any detail. Put no ids, paths or code in that sentence."
+        "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. Summarise a very long answer, such as a list, and offer more. Never point to the chat."
     )
 }
 
@@ -96,8 +96,11 @@ mod tests {
     fn the_policy_rule_names_the_marker_the_prompt_carries() {
         let rule = policy_rule();
         assert!(rule.starts_with(&format!("A prompt that starts with {MARKER} ")));
-        assert!(rule.contains("one short plain sentence"));
+        assert!(rule.contains("answer aloud in full"));
         assert!(rule.contains("no ids, paths or code"));
+        assert!(rule.contains("Say the reason when something fails."));
+        assert!(rule.ends_with("Never point to the chat."));
+        assert!(!rule.contains("one short"));
     }
 
     #[test]

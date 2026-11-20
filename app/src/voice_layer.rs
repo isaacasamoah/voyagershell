@@ -306,9 +306,9 @@ impl Exchange<'_> {
                                 if let Some(done) = finish.take() {
                                     done(&|| !self.shared.is_on());
                                 }
-                                finish = self.play(Phrase::NotRunning, None);
+                                finish = self.play(failure.phrase, None);
                                 self.trace
-                                    .mark_words("refusal-started", Phrase::NotRunning.key());
+                                    .mark_words("refusal-started", failure.phrase.key());
                             }
                             notice = Some(failure.reason);
                         }

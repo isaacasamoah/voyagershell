@@ -94,8 +94,9 @@ A prompt that voice sends starts with the marker `[spoken]`, which
 `spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
 the agent reads it. The agent's launch policy carries `spoken::policy_rule`. It
 tells the agent that a prompt starting with the marker came by voice, to act
-first, and to answer with the result in one short plain sentence, then a blank
-line, then any detail, with no ids, paths or code in that sentence. The launch
+first, and to answer aloud in full, brief and plain, with no ids, paths or code, to
+say the reason when something fails, to summarise a very long answer and offer more,
+and never to point to the chat. The launch
 that appends the rule is the Voyager start, which this guide does not describe.
 
 The hook reads the prompt from the `UserPromptSubmit` input it receives on

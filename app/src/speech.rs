@@ -1,7 +1,6 @@
 pub const SAMPLE_RATE: u32 = 16_000;
-pub const MAX_SENTENCES: usize = 2;
-pub const MAX_WORDS: usize = 30;
-pub const REST_IN_CHAT: &str = "The rest is in the chat.";
+pub const CEILING_WORDS: usize = 120;
+pub const OFFER_MORE: &str = "I can say more if you ask.";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Standing {
@@ -21,12 +20,14 @@ pub enum Phrase {
     NotRunning,
     Missed,
     Failed,
-    Blocked,
+    Gone,
+    Busy,
+    Disconnected,
     NoMicrophone,
 }
 
 impl Phrase {
-    pub const ALL: [Phrase; 9] = [
+    pub const ALL: [Phrase; 11] = [
         Phrase::Asking,
         Phrase::OkayAsking,
         Phrase::Queued,
@@ -34,7 +35,9 @@ impl Phrase {
         Phrase::NotRunning,
         Phrase::Missed,
         Phrase::Failed,
-        Phrase::Blocked,
+        Phrase::Gone,
+        Phrase::Busy,
+        Phrase::Disconnected,
         Phrase::NoMicrophone,
     ];
 
@@ -46,8 +49,10 @@ impl Phrase {
             Phrase::NeedsYou => "Voyager needs you on Home first.",
             Phrase::NotRunning => "I couldn't pass that to Voyager.",
             Phrase::Missed => "I didn't catch that.",
-            Phrase::Failed => "That didn't work. The reason is in the chat.",
-            Phrase::Blocked => "I need you on Home.",
+            Phrase::Failed => "That didn't work.",
+            Phrase::Gone => "Voyager isn't running.",
+            Phrase::Busy => "Voyager can't take that right now. Try again in a moment.",
+            Phrase::Disconnected => "I lost the connection to Voyager.",
             Phrase::NoMicrophone => "I can't hear your microphone.",
         }
     }
@@ -61,8 +66,20 @@ impl Phrase {
             Phrase::NotRunning => "not-running",
             Phrase::Missed => "missed",
             Phrase::Failed => "failed",
-            Phrase::Blocked => "blocked",
+            Phrase::Gone => "gone",
+            Phrase::Busy => "busy",
+            Phrase::Disconnected => "disconnected",
             Phrase::NoMicrophone => "no-microphone",
+        }
+    }
+
+    pub fn refused(kind: &str) -> Phrase {
+        match kind {
+            "not_found" | "finished" => Phrase::Gone,
+            "blocked" => Phrase::NeedsYou,
+            "busy" => Phrase::Busy,
+            "disconnected" => Phrase::Disconnected,
+            _ => Phrase::NotRunning,
         }
     }
 }
@@ -163,26 +180,35 @@ impl SpokenText {
     }
 
     pub fn from_reply(reply: &str) -> Option<Self> {
-        let (paragraph, more) = first_paragraph(reply)?;
         let mut words: Vec<String> = Vec::new();
-        for raw in paragraph.split_whitespace() {
-            match plain_word(raw) {
-                Some(word) => words.push(word),
-                None => {
-                    let end = raw
-                        .trim_end_matches(['"', '\'', ')'])
-                        .chars()
-                        .last()
-                        .filter(|character| matches!(character, '.' | '!' | '?'));
-                    if let (Some(end), Some(last)) = (end, words.last_mut())
-                        && !last.ends_with(['.', '!', '?'])
-                    {
-                        last.push(end);
+        for (line, closes) in speakable_lines(reply) {
+            let first = words.len();
+            for raw in line.split_whitespace() {
+                match plain_word(raw) {
+                    Some(word) => words.push(word),
+                    None => {
+                        let end = raw
+                            .trim_end_matches(['"', '\'', ')'])
+                            .chars()
+                            .last()
+                            .filter(|character| matches!(character, '.' | '!' | '?'));
+                        if let (Some(end), Some(last)) = (end, words.last_mut())
+                            && !last.ends_with(['.', '!', '?'])
+                        {
+                            last.push(end);
+                        }
                     }
                 }
             }
+            if closes
+                && words.len() > first
+                && let Some(last) = words.last_mut()
+                && !last.ends_with(['.', '!', '?'])
+            {
+                last.push('.');
+            }
         }
-        let (kept, cut) = limit(&words);
+        let (kept, cut) = limit(words);
         if kept.is_empty() {
             return None;
         }
@@ -190,17 +216,17 @@ impl SpokenText {
         if !text.ends_with(['.', '!', '?']) {
             text.push('.');
         }
-        if cut || more {
+        if cut {
             text.push(' ');
-            text.push_str(REST_IN_CHAT);
+            text.push_str(OFFER_MORE);
         }
         Some(Self(text))
     }
 }
 
-fn first_paragraph(reply: &str) -> Option<(String, bool)> {
+fn speakable_lines(reply: &str) -> Vec<(String, bool)> {
     let mut fenced = false;
-    let mut paragraphs: Vec<Vec<&str>> = vec![Vec::new()];
+    let mut lines: Vec<(String, bool)> = Vec::new();
     for line in reply.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("```") {
@@ -211,21 +237,23 @@ fn first_paragraph(reply: &str) -> Option<(String, bool)> {
             continue;
         }
         if trimmed.is_empty() {
-            if paragraphs.last().is_some_and(|last| !last.is_empty()) {
-                paragraphs.push(Vec::new());
+            if let Some(last) = lines.last_mut() {
+                last.1 = true;
             }
             continue;
         }
-        if let Some(last) = paragraphs.last_mut() {
-            last.push(trimmed);
-        }
+        lines.push((trimmed.to_owned(), is_item(trimmed)));
     }
-    paragraphs.retain(|paragraph| !paragraph.is_empty());
-    let more = paragraphs.len() > 1;
-    paragraphs
-        .into_iter()
-        .next()
-        .map(|lines| (lines.join(" "), more))
+    if let Some(last) = lines.last_mut() {
+        last.1 = true;
+    }
+    lines
+}
+
+fn is_item(line: &str) -> bool {
+    let digits = line.trim_start_matches(|character: char| character.is_ascii_digit());
+    line.starts_with(['#', '-', '*', '>'])
+        || (digits.len() < line.len() && digits.starts_with(['.', ')']))
 }
 
 fn plain_word(word: &str) -> Option<String> {
@@ -265,22 +293,19 @@ fn looks_like_an_id(word: &str) -> bool {
     hex || coded
 }
 
-fn limit(words: &[String]) -> (Vec<&str>, bool) {
-    let mut kept = Vec::new();
-    let mut sentences = 0;
-    for (index, word) in words.iter().enumerate() {
-        if kept.len() == MAX_WORDS {
-            return (kept, true);
-        }
-        kept.push(word.as_str());
-        if word.ends_with(['.', '!', '?']) && !is_abbreviation(word) {
-            sentences += 1;
-            if sentences == MAX_SENTENCES {
-                return (kept, index + 1 < words.len());
-            }
-        }
+fn limit(mut words: Vec<String>) -> (Vec<String>, bool) {
+    if words.len() <= CEILING_WORDS {
+        return (words, false);
     }
-    (kept, false)
+    words.truncate(CEILING_WORDS);
+    if let Some(end) = words
+        .iter()
+        .rposition(|word| word.ends_with(['.', '!', '?']) && !is_abbreviation(word))
+        && end + 1 >= CEILING_WORDS / 2
+    {
+        words.truncate(end + 1);
+    }
+    (words, true)
 }
 
 fn is_abbreviation(word: &str) -> bool {
@@ -384,9 +409,16 @@ mod tests {
     }
 
     #[test]
-    fn only_the_first_paragraph_is_spoken_and_the_rest_is_pointed_to() {
+    fn every_paragraph_is_spoken_and_nothing_points_to_the_chat() {
         let text = SpokenText::from_reply("Renamed the fleet.\n\nI also tidied the tabs.").unwrap();
-        assert_eq!(text.as_str(), "Renamed the fleet. The rest is in the chat.");
+        assert_eq!(text.as_str(), "Renamed the fleet. I also tidied the tabs.");
+    }
+
+    #[test]
+    fn a_three_sentence_answer_is_spoken_whole() {
+        let reply = "The build passed. Two tests were slow. I left them alone.";
+        let text = SpokenText::from_reply(reply).unwrap();
+        assert_eq!(text.as_str(), reply);
     }
 
     #[test]
@@ -396,18 +428,65 @@ mod tests {
     }
 
     #[test]
-    fn two_sentences_is_the_limit() {
-        let text = SpokenText::from_reply("One. Two. Three.").unwrap();
-        assert_eq!(text.as_str(), "One. Two. The rest is in the chat.");
+    fn list_items_and_headings_each_end_as_a_sentence() {
+        let text = SpokenText::from_reply("## Fleets\n- Build\n- Review\n1. Home").unwrap();
+        assert_eq!(text.as_str(), "Fleets. Build. Review. 1. Home.");
     }
 
     #[test]
-    fn thirty_words_is_the_limit() {
-        let long = vec!["word"; 40].join(" ");
+    fn a_wrapped_paragraph_keeps_its_own_punctuation() {
+        let text = SpokenText::from_reply("The build\npassed on the\nsecond try.").unwrap();
+        assert_eq!(text.as_str(), "The build passed on the second try.");
+    }
+
+    #[test]
+    fn a_reply_of_exactly_the_ceiling_is_spoken_whole() {
+        let reply = vec!["word"; CEILING_WORDS].join(" ");
+        let text = SpokenText::from_reply(&reply).unwrap();
+        assert_eq!(text.as_str(), format!("{reply}."));
+    }
+
+    #[test]
+    fn past_the_ceiling_the_reply_is_cut_at_a_sentence_end_and_offers_more_not_the_chat() {
+        let sentence = format!("{}.", vec!["word"; 29].join(" "));
+        let sentence = format!("word {sentence}");
+        let long = [sentence.as_str(); 6].join(" ");
         let text = SpokenText::from_reply(&long).unwrap();
-        let spoken = text.as_str().strip_suffix(REST_IN_CHAT).unwrap();
-        assert_eq!(spoken.split_whitespace().count(), MAX_WORDS);
-        assert!(text.as_str().ends_with(REST_IN_CHAT));
+        let spoken = text.as_str().strip_suffix(OFFER_MORE).unwrap().trim_end();
+        assert_eq!(spoken.split_whitespace().count(), 120);
+        assert!(spoken.ends_with("word."));
+        assert!(!text.as_str().contains("chat"));
+    }
+
+    #[test]
+    fn runaway_text_with_no_sentence_end_is_cut_at_the_ceiling() {
+        let long = vec!["word"; 500].join(" ");
+        let text = SpokenText::from_reply(&long).unwrap();
+        let spoken = text.as_str().strip_suffix(OFFER_MORE).unwrap().trim_end();
+        assert_eq!(spoken.split_whitespace().count(), CEILING_WORDS);
+        assert!(spoken.ends_with("word."));
+    }
+
+    #[test]
+    fn a_refusal_kind_gets_a_phrase_that_is_true_for_it_and_an_unknown_kind_the_generic_one() {
+        for (kind, phrase) in [
+            ("not_found", Phrase::Gone),
+            ("finished", Phrase::Gone),
+            ("blocked", Phrase::NeedsYou),
+            ("busy", Phrase::Busy),
+            ("disconnected", Phrase::Disconnected),
+            ("conflict", Phrase::NotRunning),
+            ("anything_else", Phrase::NotRunning),
+        ] {
+            assert_eq!(Phrase::refused(kind), phrase, "{kind}");
+        }
+    }
+
+    #[test]
+    fn no_phrase_points_to_the_chat() {
+        for phrase in Phrase::ALL {
+            assert!(!phrase.words().to_lowercase().contains("chat"));
+        }
     }
 
     #[test]
