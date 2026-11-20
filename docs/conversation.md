@@ -265,6 +265,9 @@ Before requesting native audio, the provider checks its existing account type
 without requesting a token refresh. This candidate accepts only the ChatGPT
 account route. The adapter reduces that reply to a readiness boolean. Voyager
 does not expose the account record, inspect credentials or select paid API audio.
+The Codex runtime never sees an API key, so voice cannot bill per use: the
+private runtime starts without `OPENAI_API_KEY` and `CODEX_API_KEY` in its
+environment.
 
 The helper owns native WebRTC, microphone capture and speaker playback. Its
 control pipe carries big-endian length-prefixed JSON of at most 128 KiB, without

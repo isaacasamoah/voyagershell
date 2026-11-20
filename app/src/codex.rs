@@ -17,7 +17,15 @@ use std::{
 
 pub(crate) const DEFAULT_MODEL: &str = "gpt-6.1-sol";
 pub(crate) const DEFAULT_EFFORT: &str = "high";
+const API_KEY_VARIABLES: [&str; 2] = ["OPENAI_API_KEY", "CODEX_API_KEY"];
 const CONTENT_FRAME_LIMIT: usize = 2 * crate::content::ENVELOPE_LIMIT + 4096;
+
+fn without_api_keys(command: &mut Command) -> &mut Command {
+    for variable in API_KEY_VARIABLES {
+        command.env_remove(variable);
+    }
+    command
+}
 
 fn decode(bytes: &[u8]) -> Result<Value, String> {
     if bytes.is_empty() || bytes.len() > CONTENT_FRAME_LIMIT {
@@ -74,7 +82,8 @@ impl Codex {
         events: SyncSender<Result<Event, String>>,
     ) -> Result<Self, String> {
         let executable = Self::executable()?;
-        let mut child = Command::new(&executable)
+        let mut command = Command::new(&executable);
+        command
             .args([
                 "app-server",
                 "--listen",
@@ -89,7 +98,8 @@ impl Codex {
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = without_api_keys(&mut command)
             .spawn()
             .map_err(|e| format!("Starting the private Codex runtime: {e}"))?;
         let input = child.stdin.take().ok_or("Codex input unavailable")?;
@@ -229,6 +239,22 @@ mod tests {
         other.kill().unwrap();
         other.wait().unwrap();
         assert!(result.is_ok() && exited && survived);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn api_keys_never_reach_the_codex_child() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .args([
+                "-c",
+                "printf '%s|%s|%s' \"$OPENAI_API_KEY\" \"$CODEX_API_KEY\" \"$KEPT\"",
+            ])
+            .env("OPENAI_API_KEY", "sk-openai")
+            .env("CODEX_API_KEY", "sk-codex")
+            .env("KEPT", "kept");
+        let output = without_api_keys(&mut command).output().unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "||kept");
     }
 
     #[test]
