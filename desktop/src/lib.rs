@@ -111,6 +111,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
             client.clone(),
             profile.clone(),
         )),
+        std::sync::Arc::new(voyager_app::voice_reply::Silent),
         {
             let client = client.clone();
             std::sync::Arc::new(move || client.workspace_words())

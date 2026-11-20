@@ -126,7 +126,7 @@ impl Render for Speech {
         let shown = match phase {
             Phase::Starting => "Loading voice…".to_owned(),
             Phase::Unavailable(reason) => reason.clone(),
-            Phase::Hearing | Phase::Acknowledging => "Busy".to_owned(),
+            Phase::Hearing | Phase::Acknowledging | Phase::Speaking => "Busy".to_owned(),
             _ => label.to_owned(),
         };
         div()

@@ -19,16 +19,20 @@ pub enum Phrase {
     NeedsYou,
     NotRunning,
     Missed,
+    Failed,
+    Blocked,
 }
 
 impl Phrase {
-    pub const ALL: [Phrase; 6] = [
+    pub const ALL: [Phrase; 8] = [
         Phrase::Asking,
         Phrase::OkayAsking,
         Phrase::Queued,
         Phrase::NeedsYou,
         Phrase::NotRunning,
         Phrase::Missed,
+        Phrase::Failed,
+        Phrase::Blocked,
     ];
 
     pub fn words(self) -> &'static str {
@@ -39,6 +43,8 @@ impl Phrase {
             Phrase::NeedsYou => "Voyager needs you on Home first.",
             Phrase::NotRunning => "Voyager isn't running. Resume it in the chat.",
             Phrase::Missed => "I didn't catch that.",
+            Phrase::Failed => "That didn't work. The reason is in the chat.",
+            Phrase::Blocked => "I need you on Home.",
         }
     }
 
@@ -50,6 +56,8 @@ impl Phrase {
             Phrase::NeedsYou => "needs-you",
             Phrase::NotRunning => "not-running",
             Phrase::Missed => "missed",
+            Phrase::Failed => "failed",
+            Phrase::Blocked => "blocked",
         }
     }
 }

@@ -6,6 +6,8 @@ use crate::{
         Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
         heard_nothing,
     },
+    voice_reply::Turns,
+    voice_speaker,
 };
 use std::{
     collections::HashMap,
@@ -36,6 +38,7 @@ pub enum Phase {
     Listening,
     Hearing,
     Acknowledging,
+    Speaking,
     Unavailable(String),
     Stopped,
 }
@@ -99,6 +102,13 @@ struct Shared {
 }
 
 impl Shared {
+    fn has_stopped(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.phase == Phase::Stopped)
+            .unwrap_or(true)
+    }
+
     fn set(&self, phase: Phase, notice: Option<String>) {
         if let Ok(mut state) = self.state.lock() {
             state.version += 1;
@@ -160,6 +170,7 @@ impl Layer {
     }
 }
 
+#[derive(Clone)]
 pub struct Trace(Option<PathBuf>);
 
 impl Trace {
@@ -334,7 +345,7 @@ struct Engine {
     running: Running,
     files: omni::Files,
     omni: Arc<Omni>,
-    clips: HashMap<Phrase, Clip>,
+    clips: Arc<HashMap<Phrase, Clip>>,
 }
 
 fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
@@ -357,11 +368,13 @@ fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
     }
 }
 
+type Prepared = (Arc<Omni>, Arc<HashMap<Phrase, Clip>>);
+
 fn prepare(
     running: &Running,
     settings: &Settings,
     files: &omni::Files,
-) -> Result<(Arc<Omni>, HashMap<Phrase, Clip>), String> {
+) -> Result<Prepared, String> {
     let engine = Arc::new(Omni::new(running.port));
     engine.warm().map_err(|fault: Fault| fault.to_string())?;
     let kept = Clips::new(settings, files);
@@ -370,13 +383,14 @@ fn prepare(
         .into_iter()
         .filter_map(|phrase| kept.load(phrase).map(|clip| (phrase, clip)))
         .collect();
-    Ok((engine, clips))
+    Ok((engine, Arc::new(clips)))
 }
 
 pub fn start(
     client: Client,
     settings: Settings,
     voyager: Arc<dyn Voyager>,
+    turns: Arc<dyn Turns>,
     vocabulary: Vocabulary,
     audio: Arc<dyn Audio>,
     trace: Trace,
@@ -406,8 +420,24 @@ pub fn start(
             }
         };
         owner.set(Phase::Ready, None);
+        let floor = Arc::new(Mutex::new(()));
+        let (status, stopped) = (owner.clone(), owner.clone());
+        voice_speaker::spawn(voice_speaker::Parts {
+            speaking: engine.omni.clone(),
+            clips: engine.clips.clone(),
+            audio: audio.clone(),
+            voyager: voyager.clone(),
+            turns,
+            trace: trace.clone(),
+            floor: floor.clone(),
+            status: Arc::new(move |phase, notice| status.set(phase, notice)),
+            stopped: Arc::new(move || stopped.has_stopped()),
+        });
         let mut turn = 0u64;
         while let Ok(Command::Click) = receiver.recv() {
+            let Ok(_floor) = floor.try_lock() else {
+                continue;
+            };
             let outcome = Exchange {
                 hearing: engine.omni.as_ref(),
                 clips: &engine.clips,
