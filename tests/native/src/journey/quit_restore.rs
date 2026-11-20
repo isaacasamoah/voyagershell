@@ -12,12 +12,12 @@ use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Placement};
 
 cases! {
-    VoyagerStartsAtLaunch => "voyager-starts-at-launch",
+    VoyagerStartsAtLaunch => "voyager-starts-at-launch" setup,
     QuitAndKeep => "quit-and-keep",
     RelaunchReattaches => "relaunch-reattaches",
     RelaunchAdoptsAndAttaches => "relaunch-adopts-and-attaches",
-    VoyagerRebindsAfterRelaunch => "voyager-rebinds-after-relaunch",
-    VoyagerResumesWhenEnded => "voyager-resumes-when-ended",
+    VoyagerRebindsAfterRelaunch => "voyager-rebinds-after-relaunch" setup,
+    VoyagerResumesWhenEnded => "voyager-resumes-when-ended" setup,
     QuitBusy => "quit-busy-keeps-output",
     CloseWindow => "close-window-keeps",
     WindowButtons => "window-buttons-send-minimise-and-maximise-requests",
