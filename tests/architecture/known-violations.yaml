@@ -14,9 +14,6 @@ known:
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::markdown'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::rename'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::view'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
@@ -68,11 +65,11 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
-    limit: 3559
+    limit: 3511
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/content.rs'
-    limit: 1520
+    limit: 1297
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/conversation_client.rs'

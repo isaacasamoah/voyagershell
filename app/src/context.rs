@@ -118,7 +118,8 @@ pub(crate) fn prepare(
                 }
             } else if instance.type_id == crate::vessel_type::NOTES_TYPE {
                 if let Some(owner) = content.as_deref_mut() {
-                    let binding = crate::content::register_content(owner, &scoped, &instance.id)?;
+                    let binding =
+                        crate::content::requests::register_content(owner, &scoped, &instance.id)?;
                     let response = owner.call(
                         &binding,
                         voyager_contract::content::Request::Inspect {

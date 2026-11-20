@@ -69,6 +69,16 @@ never resubmits the configuration or claims a confirmed workspace version. A lat
 content read that discovers a changed Core workspace version also publishes that
 observed version to the workspace listener. It leaves the earlier receipt unchanged.
 
+`app/src/content/requests.rs` holds the content request handlers. They admit a
+request, check the workspace version, run a read or an `Update` against the owner,
+choose the Notes file for `new-note`, `open-note` and `migrate-note`, and decide a
+`configure`. A handler returns its candidate workspace without saving it, and the
+Client content queue in `app/src/client.rs` and `app/src/client_content.rs` loads
+and saves the workspace and settles the uncertain outcome. The handlers live under
+the content owner and not under `app/src/families/`, because a family reaches only
+the shared modules and `content` is not one of them, and because the content owner
+using a family would close a module cycle through `workspace`.
+
 Inspect returns optional configuration metadata beside the data snapshot. The
 metadata comes from the fresh workspace, independently of last-good Notes data.
 Title/text revisions and dirty drafts remain separate. Missing stored configuration

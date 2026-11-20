@@ -784,7 +784,7 @@ mod tests {
             request_id: "read".into(),
             vessel_id: voyager_contract::VesselId("notes".into()),
         };
-        let response = crate::content::bounded_response(&request, response);
+        let response = crate::content::requests::bounded_response(&request, response);
         let result = content_result(&response);
         assert_eq!(result.status, Status::Rejected);
         let limited: Value = serde_json::from_str(&result.value.text).unwrap();
