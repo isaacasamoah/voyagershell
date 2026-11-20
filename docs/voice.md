@@ -60,12 +60,16 @@ its own Core connection, and the canvas only reads a small snapshot.
 
 ## The Omni engine
 
-`app/src/omni.rs` runs a local llama.cpp server as a Core program. The program
-has no place label, so it never reaches the canvas. The app starts it when the
-app launches and keeps it warm while the app runs. It writes the program's
-terminal and port as labels. At the next launch it reuses a healthy engine it
-finds by those labels and the server path. It stops only that verified program
-when the app quits. It never restarts a program it cannot verify.
+`app/src/omni.rs` builds the command line for a local llama.cpp server and talks
+to it over the loopback address. It never touches Core. The application queue
+starts, verifies and stops the program through a generic request for a labelled
+Core program, so Core stays the only process supervisor and the queue stays the
+only caller of Core. The program has no place label, so it never reaches the
+canvas. The app starts it when the app launches and keeps it warm while the app
+runs. A start replaces any live program that carries the same service label and
+server path, which clears an engine left by an earlier run. A stop checks the
+label and the server path before it kills, so it ends only that program. A start
+or stop that Core does not confirm is reported and never repeated.
 
 Hearing is a chat completion with the audio attached and the instruction to
 transcribe. Speaking is the speech endpoint with the female voice and no

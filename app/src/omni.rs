@@ -1,7 +1,6 @@
 use crate::{
     audio_io::{base64, parse_wav, samples_wav},
-    core::{Core, Error},
-    core_shapes::{RunParams, Terminal},
+    client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
         Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance, clean_heard, hearing_prompt,
@@ -19,9 +18,7 @@ use std::{
 pub const DIRECTORY_VARIABLE: &str = "VOYAGER_OMNI_DIR";
 pub const SERVER_VARIABLE: &str = "VOYAGER_OMNI_SERVER";
 pub const GPU_LAYERS_VARIABLE: &str = "VOYAGER_OMNI_GPU_LAYERS";
-pub const SERVICE_LABEL: &str = "voyager.service";
-pub const SERVICE: &str = "voice-engine";
-const PORT_LABEL: &str = "voyager.port";
+const SERVICE: &str = "voice-engine";
 const NAME: &str = "voice-engine";
 const MODEL: &str = "LFM3-Omni-2B-Q4_K_M.gguf";
 const PROJECTOR: &str = "mmproj-LFM3-Omni-2B-Q4_K_M.gguf";
@@ -30,6 +27,7 @@ const VOICE: &str = "female";
 const READY_WITHIN: Duration = Duration::from_secs(120);
 const REQUEST_WITHIN: Duration = Duration::from_secs(30);
 const HEALTH_WITHIN: Duration = Duration::from_millis(800);
+const LIVENESS_EVERY: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
@@ -162,81 +160,46 @@ fn healthy(port: u16) -> bool {
         .is_ok_and(|response| response.status == 200)
 }
 
-fn engine_terminal(terminal: &Terminal, files: &Files) -> bool {
-    terminal.labels.get(SERVICE_LABEL).map(String::as_str) == Some(SERVICE)
-        && terminal.argv.first().map(Path::new) == Some(files.server.as_path())
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Running {
     pub terminal: String,
     pub port: u16,
 }
 
-pub fn launch(core: &mut Core, files: &Files, settings: &Settings) -> Result<Running, Fault> {
-    let listed = core
-        .terminal_list()
-        .map_err(|error| Fault::Failed(format!("Core could not list programs: {error:?}")))?;
-    for terminal in listed
-        .iter()
-        .filter(|terminal| terminal.is_live() && engine_terminal(terminal, files))
-    {
-        let port = terminal
-            .labels
-            .get(PORT_LABEL)
-            .and_then(|port| port.parse().ok());
-        match port {
-            Some(port) if healthy(port) => {
-                return Ok(Running {
-                    terminal: terminal.address.clone(),
-                    port,
-                });
-            }
-            _ => {
-                core.terminal_kill(&terminal.address).map_err(|error| {
-                    Fault::Failed(format!(
-                        "The earlier voice engine was not stopped: {error:?}"
-                    ))
-                })?;
-            }
-        }
-    }
+pub fn launch(client: &Client, files: &Files, settings: &Settings) -> Result<Running, Fault> {
     let port = free_port()?;
     let directory = files.server.parent().unwrap_or(Path::new("/"));
-    let started = core
-        .terminal_run_with(RunParams {
+    let folder = directory.to_string_lossy().into_owned();
+    let started = client
+        .service(ProgramRequest::Start(ProgramSpec {
+            service: SERVICE.into(),
+            name: NAME.into(),
             argv: arguments(files, port, settings.gpu_layers),
-            cwd: Some(directory.to_string_lossy().into_owned()),
-            env: HashMap::from([(
-                "LD_LIBRARY_PATH".into(),
-                directory.to_string_lossy().into_owned(),
-            )]),
-            name: Some(NAME.into()),
-            labels: HashMap::from([
-                (SERVICE_LABEL.into(), SERVICE.into()),
-                (PORT_LABEL.into(), port.to_string()),
-            ]),
-            no_parent: true,
-            no_notify: true,
-            ..Default::default()
-        })
-        .map_err(|error| {
-            Fault::Failed(format!("Core did not start the voice engine: {error:?}"))
-        })?;
-    let running = Running {
-        terminal: started.address,
-        port,
+            cwd: folder.clone(),
+            env: HashMap::from([("LD_LIBRARY_PATH".into(), folder)]),
+        }))
+        .map_err(|error| Fault::Failed(format!("The voice engine was not started: {error:?}")))?;
+    let ProgramReply::Started(terminal) = started else {
+        return Err(Fault::Failed(
+            "The voice engine start was not confirmed".into(),
+        ));
     };
     let until = Instant::now() + READY_WITHIN;
+    let mut checked = Instant::now();
     while !healthy(port) {
         if Instant::now() >= until {
             return Err(Fault::Failed(
                 "The voice engine did not become ready".into(),
             ));
         }
-        match core.terminal_get(&running.terminal) {
-            Ok(terminal) if terminal.is_live() => {}
-            _ => {
+        if checked.elapsed() >= LIVENESS_EVERY {
+            checked = Instant::now();
+            if !matches!(
+                client.service(ProgramRequest::Live {
+                    terminal: terminal.clone()
+                }),
+                Ok(ProgramReply::Live(true))
+            ) {
                 return Err(Fault::Failed(
                     "The voice engine stopped while loading".into(),
                 ));
@@ -244,15 +207,18 @@ pub fn launch(core: &mut Core, files: &Files, settings: &Settings) -> Result<Run
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Ok(running)
+    Ok(Running { terminal, port })
 }
 
-pub fn stop(core: &mut Core, running: &Running, files: &Files) -> Result<(), Error> {
-    let terminal = core.terminal_get(&running.terminal)?;
-    if terminal.is_live() && engine_terminal(&terminal, files) {
-        core.terminal_kill(&running.terminal)?;
-    }
-    Ok(())
+pub fn stop(client: &Client, running: &Running, files: &Files) -> Result<(), String> {
+    client
+        .service(ProgramRequest::Stop {
+            terminal: running.terminal.clone(),
+            service: SERVICE.into(),
+            program: files.server.to_string_lossy().into_owned(),
+        })
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
 }
 
 pub struct Omni {

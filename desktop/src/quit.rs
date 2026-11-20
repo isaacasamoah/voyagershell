@@ -78,12 +78,11 @@ impl Ending {
             let executor = cx.background_executor().clone();
             let private = executor.spawn(async move { conversation.quit().await });
             let voice = ending.voice.clone();
-            let engine = executor.spawn(async move {
-                voice.shutdown(std::time::Duration::from_secs(10));
-            });
+            executor
+                .spawn(async move { voice.shutdown(std::time::Duration::from_secs(10)) })
+                .await;
             let owner = executor.spawn(async move { workspace.end(operation).await });
             let (private, owner) = (private.await, owner.await);
-            engine.await;
             let mut errors = Vec::new();
             if let Err(error) = private {
                 errors.push(format!("Private conversation shutdown: {error}"));

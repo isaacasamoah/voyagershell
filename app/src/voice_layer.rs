@@ -1,6 +1,6 @@
 use crate::{
     audio_io::{Capture, End, Gate, Playing},
-    core::Core,
+    client::Client,
     omni::{self, Clips, Omni, Running, Settings},
     speech::{
         Acknowledgement, Clip, Fault, Hearing, Phrase, Standing, Utterance, acknowledge,
@@ -299,18 +299,16 @@ fn drain(commands: &Receiver<Command>) -> bool {
 }
 
 struct Engine {
-    core: Core,
+    client: Client,
     running: Running,
     files: omni::Files,
     omni: Arc<Omni>,
     clips: HashMap<Phrase, Clip>,
 }
 
-fn bring_up(session: &str, settings: &Settings) -> Result<Engine, String> {
+fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
     let files = omni::locate(settings)?;
-    let mut core =
-        Core::connect(session).map_err(|error| format!("Voice could not reach Core: {error:?}"))?;
-    let running = omni::launch(&mut core, &files, settings).map_err(|fault| fault.to_string())?;
+    let running = omni::launch(client, &files, settings).map_err(|fault| fault.to_string())?;
     let engine = Arc::new(Omni::new(running.port));
     engine.warm().map_err(|fault: Fault| fault.to_string())?;
     let kept = Clips::new(settings, &files);
@@ -320,7 +318,7 @@ fn bring_up(session: &str, settings: &Settings) -> Result<Engine, String> {
         .filter_map(|phrase| kept.load(phrase).map(|clip| (phrase, clip)))
         .collect();
     Ok(Engine {
-        core,
+        client: client.clone(),
         running,
         files,
         omni: engine,
@@ -329,7 +327,7 @@ fn bring_up(session: &str, settings: &Settings) -> Result<Engine, String> {
 }
 
 pub fn start(
-    session: String,
+    client: Client,
     settings: Settings,
     voyager: Arc<dyn Voyager>,
     vocabulary: Vocabulary,
@@ -347,7 +345,7 @@ pub fn start(
     let (commands, receiver) = mpsc::channel();
     let owner = shared.clone();
     thread::spawn(move || {
-        let mut engine = match bring_up(&session, &settings) {
+        let engine = match bring_up(&client, &settings) {
             Ok(engine) => engine,
             Err(reason) => {
                 owner.set(Phase::Unavailable(reason), None);
@@ -378,7 +376,7 @@ pub fn start(
                 break;
             }
         }
-        if let Err(error) = omni::stop(&mut engine.core, &engine.running, &engine.files) {
+        if let Err(error) = omni::stop(&engine.client, &engine.running, &engine.files) {
             eprintln!("Voice engine stop was not confirmed: {error:?}");
         }
         owner.set(Phase::Stopped, None);

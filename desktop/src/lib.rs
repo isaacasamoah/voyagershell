@@ -105,7 +105,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         platform::audio_environment(),
     );
     let voice = voyager_app::voice_layer::start(
-        session.clone(),
+        client.clone(),
         voyager_app::omni::Settings::from_environment(),
         std::sync::Arc::new(voyager_app::voice_layer::Unbound),
         {
