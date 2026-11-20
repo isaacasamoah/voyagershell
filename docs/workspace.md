@@ -272,6 +272,22 @@ children of the owner module and add methods to `Owner`, so `client` and the
 owner module never name each other's children. `app/src/client.rs` holds the
 messages, the receipts, the front door glue and the public `Client` calls.
 
+**Inspect only reads.** A workspace inspect loads the stored layout, drops
+creation grants and unconfirmed starts that the layout no longer holds, and
+answers. It saves nothing. The two saves an inspect used to make happen at
+owner start, before the first message:
+
+- When no layout is stored, the owner creates the "Voyager" Voyage in the
+  working folder and saves it. The first inspect after that reports
+  `created_workspace`, and a repeat of that inspect replays it.
+- The owner lists Core's terminals once, closes adopted Vessels whose program
+  ended, prepares reopened terminals and saves the result.
+
+If either save fails, the owner tries again before the next message, and an
+inspect answers with the last failure until one succeeds. If the stored layout
+disappears later, an inspect refuses and asks the caller to inspect again, and
+the owner creates the Voyage again before the next message.
+
 ### A save in flight
 
 A workspace change that only edits the layout sends its `doc.set` to Core and
@@ -296,7 +312,7 @@ again from the start with the list in hand.
 
 The other saves still block the owner. They are opening a terminal, selecting or
 configuring a Note, the last step of a Voyage close or a worktree change, the
-closure of an ended Vessel, and the repairs an inspect makes. A slow Core delays
+closure of an ended Vessel, and the repairs at owner start. A slow Core delays
 every request behind those.
 
 The envelope names a terminal by a machine and a Core address, and the Core

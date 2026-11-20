@@ -57,6 +57,12 @@ enum Step {
     Save(Box<Departure>),
 }
 
+enum Start {
+    Waiting(Option<Error>),
+    Created,
+    Ready,
+}
+
 struct Owner {
     cwd: String,
     launches: Option<PathBuf>,
@@ -72,7 +78,7 @@ struct Owner {
     version: LayoutRevision,
     seen: Seen,
     fresh: bool,
-    reopened: bool,
+    start: Start,
     door: FrontDoor<Receipt>,
     held: VecDeque<Message>,
     flight: Option<Flight>,
@@ -164,7 +170,7 @@ impl Owner {
             version: LayoutRevision::default(),
             seen: Seen::default(),
             fresh: false,
-            reopened: false,
+            start: Start::Waiting(None),
             door: FrontDoor::default(),
             held: VecDeque::new(),
             flight: None,
@@ -210,6 +216,12 @@ impl Owner {
             |event| door.gate(&Envelope::report(event)).is_ok(),
         );
         let before = self.version;
+        self.prepare();
+        if self.version != before
+            && let Some(owner) = self.content.as_mut()
+        {
+            owner.refresh_views();
+        }
         let mut noticed = false;
         if !self.door.flying() && self.adoptions.waiting() {
             if self

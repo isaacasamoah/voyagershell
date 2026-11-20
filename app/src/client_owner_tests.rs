@@ -604,3 +604,54 @@ fn known_finished_attach_is_not_an_unconfirmed_start() {
         Error::Uncertain(_)
     ));
 }
+
+#[test]
+fn inspect_reads_the_workspace_that_owner_start_prepared_and_writes_nothing() {
+    use voyager_contract::layout_document::DOCUMENT;
+    for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
+        assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
+    }
+    let session = format!("voyager-inspect-reads-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = std::panic::catch_unwind(|| {
+        let (reply, facts) = async_channel::bounded(1);
+        client
+            .sender
+            .send_blocking(Message::ContextFacts { reply })
+            .unwrap();
+        facts.recv_blocking().unwrap().unwrap();
+        let mut core = Core::connect(&session).unwrap();
+        let prepared = core.document_get(DOCUMENT).unwrap();
+        assert!(
+            !prepared.value.is_null(),
+            "owner start saved the first Voyage before any inspect"
+        );
+        let first = client.inspect().unwrap();
+        assert_eq!(first.status, Outcome::Applied, "{:?}", first.message);
+        assert!(first.fresh);
+        assert!(
+            first.created_workspace,
+            "first inspect reports the creation"
+        );
+        assert_eq!(first.layout.voyages[0].name, "Voyager");
+        for _ in 0..30 {
+            let again = client.inspect().unwrap();
+            assert_eq!(again.status, Outcome::Applied, "{:?}", again.message);
+            assert!(
+                !again.created_workspace,
+                "only the first inspect reports it"
+            );
+            assert_eq!(again.version, first.version);
+            let stored = core.document_get(DOCUMENT).unwrap();
+            assert_eq!(stored.version, prepared.version, "inspect saved nothing");
+            assert_eq!(stored.value, prepared.value, "inspect changed nothing");
+        }
+        core.close().unwrap();
+    });
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.server_stop().unwrap();
+    cleanup.close().unwrap();
+    if let Err(error) = checked {
+        std::panic::resume_unwind(error);
+    }
+}

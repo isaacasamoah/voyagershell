@@ -1,7 +1,7 @@
 use super::super::core_calls::{post, relist, worktree_changes};
 use super::super::terminal_start::{CreatedTerminal, require_finished};
 use super::super::{Message, Receipt, Settled};
-use super::{Departure, Flight, Owner, Step};
+use super::{Departure, Flight, Owner, Start, Step};
 use crate::content::ViewBinding;
 use crate::content::rename::Plan;
 use crate::content::requests;
@@ -90,16 +90,20 @@ fn unbound(created_notes: bool, error: Error) -> Error {
 }
 
 impl Owner {
-    fn inspect(&mut self, scope: Option<&Context>, response: &mut Response) -> Result<Step, Error> {
-        let core = self.core.as_mut().map_err(|error| error.clone())?;
-        let (mut layout, mut revision, missing) =
-            load(core, &self.cwd, &self.layout, self.version)?;
-        if missing {
-            layout = structure::first_voyage(layout, &self.cwd)?;
-            revision = save(core, &layout, revision)?;
-            response.created_workspace = true;
+    pub(super) fn prepare(&mut self) {
+        if !matches!(self.start, Start::Waiting(_)) || self.door.flying() || self.door.quitting() {
+            return;
         }
-        if !self.reopened {
+        let Ok(core) = self.core.as_mut() else {
+            return;
+        };
+        let prepared = (|| {
+            let (mut layout, mut revision, missing) =
+                load(core, &self.cwd, &self.layout, self.version)?;
+            if missing {
+                layout = structure::first_voyage(layout, &self.cwd)?;
+                revision = save(core, &layout, revision)?;
+            }
             let terminals = core.terminal_list()?;
             let (ready, closed) =
                 crate::families::terminal::prepare_reopen(&mut layout, &terminals);
@@ -118,7 +122,35 @@ impl Owner {
                 .filter(|terminal| terminal.is_live())
                 .map(|terminal| CoreTerminalId(terminal.address.clone()))
                 .collect();
-            self.reopened = true;
+            self.layout = Arc::new(layout);
+            self.version = revision;
+            Ok(missing)
+        })();
+        self.start = match prepared {
+            Ok(true) => Start::Created,
+            Ok(false) => Start::Ready,
+            Err(error) => Start::Waiting(Some(error)),
+        };
+    }
+
+    fn inspect(&mut self, scope: Option<&Context>, response: &mut Response) -> Result<Step, Error> {
+        if let Start::Waiting(error) = &self.start {
+            return Err(error.clone().unwrap_or_else(|| {
+                rejected("The workspace is not prepared yet; inspect again".into())
+            }));
+        }
+        let core = self.core.as_mut().map_err(|error| error.clone())?;
+        let (layout, revision, missing) = load(core, &self.cwd, &self.layout, self.version)?;
+        if missing {
+            self.start = Start::Waiting(None);
+            return Err(rejected(
+                "The stored workspace is missing; Voyager is recreating it, so inspect again"
+                    .into(),
+            ));
+        }
+        if matches!(self.start, Start::Created) {
+            response.created_workspace = true;
+            self.start = Start::Ready;
         }
         self.unconfirmed.retain(|id, _| {
             layout
