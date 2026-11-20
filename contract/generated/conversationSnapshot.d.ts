@@ -25,6 +25,10 @@ export type ToolAction =
       tool: "workspace";
     }
   | {
+      action: Context;
+      tool: "peek";
+    }
+  | {
       action: ProcessAction;
       tool: "process";
     }

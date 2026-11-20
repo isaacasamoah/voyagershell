@@ -1054,18 +1054,51 @@ Change notices carry the structure revision, and a navigation revision that
 moves only when a scoped caller, such as an agent through the administrator,
 changes navigation alone. The canvas inspects again when either moves past what
 it holds. Its own navigation, including `focus-vessel`, and the native avatar's
-dock reach it through their replies, so they send it no notice and cost it no
-second inspect.
+dock reach it through their replies, so they send it no notice. A dock that
+changes the selection costs one inspect, to prepare the terminals it newly shows.
 
-**The navigation record.** `navigation` holds one entry per Voyage, with its
-last-used Fleet and, optionally, its last-used Vessel placement. Any change that
-leaves the workspace on a Voyage and Fleet updates that Voyage's entry, and a
-new Fleet clears the remembered Vessel. The owner records a placement only when
-it is in the open Fleet or that Voyage's Portals.
+**The navigation records.** `navigation` holds one entry per Voyage with its
+last-used Fleet. `lastVessels` holds one entry per Fleet with the Vessel or
+Portal placement last focused there. Both are navigation, not structure. An
+older build keeps `lastVessels` as an unknown root field and writes it back
+unchanged. A stale entry, such as a removed or hidden placement, falls back to
+the Fleet's first shown placement. The owner records a placement only when it is
+in the open Fleet or that Voyage's Portals, so each Fleet remembers its own last
+Vessel across Fleet and Voyage changes. Any change that leaves the workspace on
+a Voyage and Fleet updates that Voyage's entry.
 
 Selecting or reopening a Voyage, or moving to the nearest Voyage after one
 closes, opens its last-used Fleet when that Fleet is still open. Otherwise it
 opens the first open Fleet. Home keeps no entry.
+
+**Docking takes the user there.** `dock` sets the dock context and moves the
+user to the target, in one navigation save:
+
+- A Vessel selects its Voyage and Fleet, shows the Fleet and records the Vessel
+  as that Fleet's last Vessel.
+- A Portal selects its Voyage's last-used Fleet and records the Portal as that
+  Fleet's last placement, so the Portal column is focused.
+- A Fleet selects its Voyage and itself and opens on its last Vessel.
+- A Voyage opens its last-used Fleet on that Fleet's last Vessel.
+- The Workspace, and any Voyage, Fleet, Vessel or Portal on Home, goes Home.
+
+A closed Voyage or Fleet refuses the dock with its name and leaves everything
+as it was. A hidden Vessel or Portal, and a Portal column that is not shown, is
+not revealed. The dock lands on the Fleet and records nothing. A dock runs no
+Vessel type actions and starts no model turn, because the Vessel types declare
+no dock behaviour yet. The canvas follows a dock from the avatar with one
+inspect that also prepares the newly shown terminals, then moves its focused
+placement to the remembered one and gives that terminal keyboard focus unless a
+chat, a rename or a dialog is open.
+
+**Agents look without moving the user.** `focus-vessel` is a canvas click
+operation. It is absent from the `voyager_workspace` tool schema, which the
+exporter builds from the same `Action` type, and the tool refuses it if sent.
+The `voyager` command already refuses it. `voyager_peek` takes a Voyage, Fleet,
+Vessel, Portal or the whole workspace and returns the inspect read for that
+target in one call. It runs a scoped inspect, so it changes no navigation, no
+dock and no structure. It reads layout only. Reading a terminal's text stays
+with `voyager_process` under the captured dock context.
 
 **The canvas's focused placement.** `moveFocus` in
 `desktop/canvas/panel-view.ts` is its only writer. It keeps the placement in a
@@ -1078,12 +1111,11 @@ assignment anywhere else does not compile. A move has one of two targets:
   it outside the action queue, does not wait for it and ignores its reply.
 - The opening placement. It is the remembered placement when it is shown, and the
   first shown placement otherwise. The canvas moves here after a selection
-  change, when nothing is focused in an ordinary Voyage, as on the first layout
-  after launch, and when the focused placement is no longer shown. It sends
-  nothing, because the record already names this placement. A Fleet change
-  clears the remembered Vessel, and a Fleet with no remembered Vessel opens on
-  its first shown placement. A tab click therefore costs one save, the
-  selection itself.
+  change or a dock, when nothing is focused in an ordinary Voyage, as on the
+  first layout after launch, and when the focused placement is no longer shown.
+  It sends nothing, because the record already names this placement. A Fleet
+  with no remembered Vessel opens on its first shown placement. A tab click
+  therefore costs one save, the selection itself.
 
 ## Each part has its own revision
 

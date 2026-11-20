@@ -1,4 +1,4 @@
-use crate::{Action, CoreTerminalId, Status, VesselId};
+use crate::{Action, Context, CoreTerminalId, Status, VesselId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +16,12 @@ pub struct WorkspaceInput {
     #[schemars(with = "String")]
     pub expected_version: u64,
     pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PeekInput {
+    pub target: Context,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -156,6 +162,7 @@ pub struct ProcessResponse {
 )]
 pub enum ToolAction {
     Workspace(Action),
+    Peek(Context),
     Process(ProcessAction),
     Content(crate::content::Receipt),
     Worktree(crate::worktree::Input),

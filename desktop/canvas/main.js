@@ -2,13 +2,8 @@ import { View, div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_theme";
 import { Layer, Target, PortalArea } from "voyager_avatar";
+import { take_animation_notice, window_epoch } from "voyager_avatar";
 import {
-  take_result,
-  take_animation_notice,
-  window_epoch,
-} from "voyager_avatar";
-import {
-  response as validateResponse,
   workspaceObservation as validateObservation,
   contextFacts as validateFacts,
   reportedActivity as validateReportedActivity,
@@ -37,7 +32,12 @@ import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
 import { openOrRetry, reopens, terminalStatus } from "./terminal-open.js";
 import { CreationPicker } from "./creation.js";
-import { focusedPlacement, moveFocus, renderPanel } from "./panel-view.js";
+import {
+  acceptDockResult,
+  focusedPlacement,
+  moveFocus,
+  renderPanel,
+} from "./panel-view.js";
 import {
   renderSidebar,
   renderFleets,
@@ -1710,15 +1710,7 @@ export default class Canvas extends View {
       this.animationNotice = animationNotice;
     }
     try {
-      const raw = take_result();
-      if (raw !== null) {
-        const result = JSON.parse(raw);
-        if (!validateResponse(result))
-          throw Error("Invalid native dock response");
-        const accepted = this.acceptSnapshot(result, cx);
-        if (accepted && result.status === "applied")
-          this.dockReceipt = result.requestId;
-      }
+      acceptDockResult(this, cx);
     } catch (error) {
       this.status = errorMessage(error);
     }

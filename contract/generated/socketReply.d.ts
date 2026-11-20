@@ -168,6 +168,7 @@ export interface Layout {
   canvas?: Canvas;
   context: Context;
   home?: Voyage | null;
+  lastVessels?: LastVessel[];
   navigation?: LastUsed[];
   nextId: string;
   selectedFleet?: string | null;
@@ -220,9 +221,12 @@ export interface PortalLayout {
   visible: boolean;
   width: number;
 }
+export interface LastVessel {
+  fleet: string;
+  vessel: string;
+}
 export interface LastUsed {
   fleet: string;
-  vessel?: string | null;
   voyage: string;
 }
 export interface Vessel {

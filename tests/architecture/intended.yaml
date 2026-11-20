@@ -18,6 +18,9 @@ edges:
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::content', from_owner: conversation-provider, to_owner: content}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::administrator', to: 'rs:voyager_contract::worktree', from_owner: conversation-provider, to_owner: placement}
+  - {from: 'rs:voyager_app::administrator::inputs', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
+  - {from: 'rs:voyager_app::administrator::inputs', to: 'rs:voyager_contract::content', from_owner: conversation-provider, to_owner: content}
+  - {from: 'rs:voyager_app::administrator::inputs', to: 'rs:voyager_contract::worktree', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::adoption', to: 'rs:voyager_app::workspace', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::adoption', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::adoption', to: 'rs:voyager_contract::place', from_owner: application-queue, to_owner: placement}

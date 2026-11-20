@@ -1990,6 +1990,23 @@
           "additionalProperties": false,
           "properties": {
             "action": {
+              "$ref": "#/definitions/Context"
+            },
+            "tool": {
+              "const": "peek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
               "$ref": "#/definitions/ProcessAction"
             },
             "tool": {

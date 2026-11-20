@@ -29,7 +29,7 @@ first Send the journey writes a `prompt` to the profile's conversation.json.
   control reads Send, no message is drawn, and no provider has started.
 - `send-message` types a message and presses Return. Exactly one stand-in
   starts, as a child of the app. The conversation asks for a read-only
-  sandbox, no approvals, four tools and the profile's `conversation` folder.
+  sandbox, no approvals, five tools and the profile's `conversation` folder.
   Its instructions are the configured prompt. The turn carries the typed text and the saved context as its focus. The
   composer clears, and the message is drawn with the reply in progress.
 - `streamed-reply` (the control case) streams `oru: the quiet ` and then

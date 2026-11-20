@@ -70,7 +70,181 @@ fn a_voyage_reopens_on_its_last_used_fleet_and_vessel() {
         .find(|entry| entry.voyage == a)
         .unwrap();
     assert_eq!(entry.fleet, second);
-    assert_eq!(entry.vessel.as_ref(), Some(&vessel));
+    let last = model
+        .layout
+        .last_vessels
+        .iter()
+        .find(|entry| entry.fleet == second)
+        .unwrap();
+    assert_eq!(last.vessel, vessel);
+}
+
+#[test]
+fn each_fleet_remembers_its_own_last_vessel() {
+    let (mut model, a, first, second, _) = two_voyages();
+    model.apply(Action::SelectVoyage { id: a }).unwrap();
+    let in_second = model.layout.voyages[0].fleets[1].placements[0].id.clone();
+    model
+        .apply(Action::FocusVessel {
+            id: in_second.clone(),
+        })
+        .unwrap();
+    model
+        .apply(Action::SelectFleet { id: first.clone() })
+        .unwrap();
+    let in_first = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    model
+        .apply(Action::FocusVessel {
+            id: in_first.clone(),
+        })
+        .unwrap();
+    model
+        .apply(Action::SelectFleet { id: second.clone() })
+        .unwrap();
+    let remembered = |model: &Model, fleet: &FleetId| {
+        model
+            .layout
+            .last_vessels
+            .iter()
+            .find(|entry| &entry.fleet == fleet)
+            .map(|entry| entry.vessel.clone())
+    };
+    assert_eq!(remembered(&model, &second), Some(in_second));
+    assert_eq!(remembered(&model, &first), Some(in_first));
+}
+
+fn docked(model: &mut Model, context: Context) -> Result<(), String> {
+    model.apply(Action::Dock { context })
+}
+
+#[test]
+fn docking_on_a_vessel_in_another_voyage_takes_the_user_there() {
+    let (mut model, a, first, _, b) = two_voyages();
+    assert_eq!(model.layout.selected_voyage.as_ref(), Some(&b));
+    let vessel = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    let before = model.layout.clone();
+    docked(&mut model, Context::Vessel { id: vessel.clone() }).unwrap();
+    assert_eq!(model.layout.selected_voyage.as_ref(), Some(&a));
+    assert_eq!(model.layout.selected_fleet.as_ref(), Some(&first));
+    assert_eq!(model.layout.view, WorkspaceView::Fleet);
+    assert_eq!(model.layout.context, Context::Vessel { id: vessel.clone() });
+    assert_eq!(model.layout.last_vessels.len(), 1);
+    assert_eq!(model.layout.last_vessels[0].fleet, first);
+    assert_eq!(model.layout.last_vessels[0].vessel, vessel);
+    assert!(before.same_structure(&model.layout));
+}
+
+#[test]
+fn docking_on_a_fleet_or_voyage_opens_its_last_vessel() {
+    let (mut model, a, first, second, b) = two_voyages();
+    model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+    model
+        .apply(Action::SelectFleet { id: first.clone() })
+        .unwrap();
+    let in_first = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    model
+        .apply(Action::FocusVessel {
+            id: in_first.clone(),
+        })
+        .unwrap();
+    model.apply(Action::SelectFleet { id: second }).unwrap();
+    docked(&mut model, Context::Fleet { id: first.clone() }).unwrap();
+    assert_eq!(model.layout.selected_fleet.as_ref(), Some(&first));
+    assert_eq!(model.layout.last_vessels[0].vessel, in_first);
+    model.apply(Action::SelectVoyage { id: b }).unwrap();
+    docked(&mut model, Context::Voyage { id: a.clone() }).unwrap();
+    assert_eq!(model.layout.selected_voyage.as_ref(), Some(&a));
+    assert_eq!(model.layout.selected_fleet.as_ref(), Some(&first));
+    assert_eq!(model.layout.context, Context::Voyage { id: a });
+}
+
+#[test]
+fn docking_on_the_workspace_or_a_home_target_goes_home() {
+    let (mut model, _, _, _, _) = two_voyages();
+    docked(&mut model, Context::Workspace).unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Home);
+    model
+        .apply(Action::SelectVoyage {
+            id: model.layout.voyages[0].id.clone(),
+        })
+        .unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Fleet);
+    let home = model.layout.home.as_ref().unwrap();
+    let on_home = home.fleets[0].placements[0].id.clone();
+    let home_voyage = home.id.clone();
+    docked(&mut model, Context::Vessel { id: on_home }).unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Home);
+    model
+        .apply(Action::SelectVoyage {
+            id: model.layout.voyages[0].id.clone(),
+        })
+        .unwrap();
+    docked(&mut model, Context::Voyage { id: home_voyage }).unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Home);
+}
+
+#[test]
+fn docking_on_a_closed_fleet_or_voyage_is_refused_and_changes_nothing() {
+    let (mut model, a, first, _, b) = two_voyages();
+    let vessel = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    model
+        .apply(Action::CloseFleet { id: first.clone() })
+        .unwrap();
+    let before = model.layout.clone();
+    for context in [
+        Context::Fleet { id: first.clone() },
+        Context::Vessel { id: vessel },
+    ] {
+        let error = docked(&mut model, context).unwrap_err();
+        assert!(error.contains("closed"), "{error}");
+        assert_eq!(before, model.layout);
+    }
+    model.apply(Action::SelectVoyage { id: a.clone() }).unwrap();
+    model.apply(Action::SelectVoyage { id: b.clone() }).unwrap();
+    model.apply(Action::CloseVoyage { id: a.clone() }).unwrap();
+    let before = model.layout.clone();
+    let error = docked(&mut model, Context::Voyage { id: a }).unwrap_err();
+    assert!(error.contains("closed"), "{error}");
+    assert_eq!(before, model.layout);
+}
+
+#[test]
+fn docking_on_a_hidden_vessel_lands_on_its_fleet_without_revealing_it() {
+    let (mut model, a, first, _, b) = two_voyages();
+    let vessel = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    model
+        .apply(Action::SetPlacementHidden {
+            id: vessel.clone(),
+            hidden: true,
+        })
+        .unwrap();
+    model.apply(Action::SelectVoyage { id: b }).unwrap();
+    docked(&mut model, Context::Vessel { id: vessel.clone() }).unwrap();
+    assert_eq!(model.layout.selected_voyage.as_ref(), Some(&a));
+    assert_eq!(model.layout.selected_fleet.as_ref(), Some(&first));
+    assert!(model.layout.last_vessels.is_empty());
+    assert!(model.layout.voyages[0].fleets[0].placements[0].hidden);
+}
+
+#[test]
+fn docking_on_a_portal_opens_its_voyage_and_focuses_the_portal() {
+    let (mut model, a, _, second, b) = two_voyages();
+    let portal = PlacementOwner::Portals { voyage: a.clone() };
+    model
+        .adopt(
+            &portal,
+            &CoreTerminalId("t9".into()),
+            "/work".into(),
+            Launch::Terminal,
+            None,
+        )
+        .unwrap();
+    let id = model.layout.voyages[0].portals[0].id.clone();
+    model.apply(Action::SelectVoyage { id: b }).unwrap();
+    docked(&mut model, Context::Portal { id: id.clone() }).unwrap();
+    assert_eq!(model.layout.selected_voyage.as_ref(), Some(&a));
+    assert_eq!(model.layout.selected_fleet.as_ref(), Some(&second));
+    assert_eq!(model.layout.last_vessels[0].vessel, id);
 }
 
 #[test]

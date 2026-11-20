@@ -61,7 +61,7 @@ known:
     owner: isaac
     reason: 'The Notes check repeats the Notes type id. Reading it from NOTES_TYPE clears it.'
   - id: 'file-size: app/src/administrator.rs'
-    limit: 1451
+    limit: 1401
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
@@ -81,7 +81,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/canvas/main.ts'
-    limit: 2097
+    limit: 2089
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/src/avatar.rs'

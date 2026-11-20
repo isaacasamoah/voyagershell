@@ -1469,11 +1469,10 @@ fn remembered(seen: &Seen) -> Focus {
 
 fn last_used(document: &Layout) -> Option<PlacementId> {
     document
-        .navigation
+        .last_vessels
         .iter()
-        .find(|entry| Some(&entry.voyage) == document.selected_voyage.as_ref())
-        .filter(|entry| Some(&entry.fleet) == document.selected_fleet.as_ref())
-        .and_then(|entry| entry.vessel.clone())
+        .find(|entry| Some(&entry.fleet) == document.selected_fleet.as_ref())
+        .map(|entry| entry.vessel.clone())
 }
 
 fn select(native: &Native, subject: &RenameTarget, done: impl Fn(&Seen) -> bool) -> Result<Focus> {

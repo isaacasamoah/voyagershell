@@ -1,7 +1,7 @@
 diff --git a/app/src/workspace.rs b/app/src/workspace.rs
 --- a/app/src/workspace.rs
 +++ b/app/src/workspace.rs
-@@ -526,6 +526,9 @@
+@@ -792,6 +792,9 @@
                  self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
                  self.layout.selected_fleet = Some(id);
                  self.layout.view = WorkspaceView::Fleet;
@@ -10,4 +10,4 @@ diff --git a/app/src/workspace.rs b/app/src/workspace.rs
 +                }
              }
              Action::FocusVessel { id } => self.focus_vessel(id)?,
-             Action::Dock { context } => {
+             Action::Dock { context } => self.dock(context)?,

@@ -4,6 +4,8 @@ import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
 import { Notes, Vessel } from "voyager_content_view";
 import { projection } from "voyager_theme";
+import { take_result } from "voyager_avatar";
+import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
 import { openingPlacement, visiblePanels } from "./panels.js";
@@ -31,6 +33,25 @@ function noteFocus(
       () => null,
     ),
   );
+}
+
+export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+  const raw = take_result();
+  if (raw === null) return;
+  const result: unknown = JSON.parse(raw);
+  if (!validateResponse(result)) throw Error("Invalid native dock response");
+  if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")
+    return;
+  workspace.dockReceipt = result.requestId;
+  workspace.run({ operation: "inspect" }, cx, (_result, task) => {
+    moveFocus(workspace, "opening", task);
+    if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
+      return;
+    const target = workspace.layout
+      ? openingPlacement(workspace.layout)
+      : undefined;
+    if (target) workspace.terminals.get(target.vessel)?.focus();
+  });
 }
 
 const focusedPlacements = new WeakMap<Canvas, string | null>();

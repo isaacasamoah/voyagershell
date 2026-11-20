@@ -1,33 +1,19 @@
 use crate::client::{CallError, Client};
-use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
+use crate::provider::{ToolCall, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
     Action, Outcome, Request, Status,
-    administrator::{
-        ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction, WorkspaceInput,
-    },
+    administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction},
     conversation::{CallbackId, ToolOutcome},
 };
 
-#[derive(Clone)]
-enum Dispatch {
-    Workspace(Action),
-    Process(ProcessAction),
-    Worktree(voyager_contract::worktree::Input),
-    Content(voyager_contract::content::Action),
-}
+mod inputs;
+#[cfg(test)]
+mod peek_tests;
 
-impl Dispatch {
-    fn receipt(&self) -> ToolAction {
-        match self {
-            Self::Workspace(action) => ToolAction::Workspace(action.clone()),
-            Self::Process(action) => ToolAction::Process(action.clone()),
-            Self::Worktree(input) => ToolAction::Worktree(input.clone()),
-            Self::Content(action) => ToolAction::Content(action.receipt()),
-        }
-    }
-}
+use inputs::Dispatch;
+pub(crate) use inputs::catalog;
 
 struct Receipt {
     tool: String,
@@ -67,47 +53,6 @@ pub(crate) struct Completed {
     pub outcome: ToolOutcome,
     pub text: String,
     pub context: voyager_contract::context::Focus,
-}
-
-pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
-    let schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/workspaceTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let process_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/processTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let content_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/contentTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    let worktree_schema: Value = serde_json::from_str(include_str!(
-        "../../contract/generated/worktreeTool.schema.json"
-    ))
-    .map_err(|error| error.to_string())?;
-    Ok(vec![
-        ToolDefinition {
-            name: "voyager_worktree",
-            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace dock context. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
-            schema: worktree_schema,
-        },
-        ToolDefinition {
-            name: "voyager_workspace",
-            description: "Inspect and manage the captured dock context. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes the context only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
-            schema,
-        },
-        ToolDefinition {
-            name: "voyager_process",
-            description: "Operate only bound terminals within this request's captured dock context. Inspect workspace for the current expectedVersion, then list processes for exact vesselId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_vessel tool.",
-            schema: process_schema,
-        },
-        ToolDefinition {
-            name: "voyager_vessel",
-            description: "Describe, inspect, select files and update an existing Notes Vessel only inside the immutable captured dock context. Inspect workspace for expectedVersion and exact vesselId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-vessel initializes new Notes. Use new-note and open-note to change the selected file with the inspected configuration workspaceVersion as expectedVersion. Never change notesFile through configure. Legacy configure is available only when Describe advertises that action; preserve the inspected notesFile. showHeading is retained for personal version-one packages and has no effect in shipped Notes. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
-            schema: content_schema,
-        },
-    ])
 }
 
 fn result(success: bool, text: String) -> ToolResult {
@@ -194,7 +139,11 @@ impl Tools {
             && turn.is_some_and(|turn| !turn.is_empty() && value.turn == turn)
             && matches!(
                 tool,
-                "voyager_workspace" | "voyager_process" | "voyager_vessel" | "voyager_worktree"
+                "voyager_workspace"
+                    | "voyager_peek"
+                    | "voyager_process"
+                    | "voyager_vessel"
+                    | "voyager_worktree"
             )
             && value.namespace.is_none();
         let call = value.call.as_str();
@@ -290,19 +239,17 @@ impl Tools {
                 "No active tool capacity; nothing was dispatched",
             );
         }
-        let parsed = match tool {
-            "voyager_workspace" => serde_json::from_value::<WorkspaceInput>(arguments.clone())
-                .map(|input| (input.expected_version, Dispatch::Workspace(input.action))),
-            "voyager_process" => serde_json::from_value::<ProcessInput>(arguments.clone())
-                .map(|input| (input.expected_version, Dispatch::Process(input.action))),
-            "voyager_worktree" => {
-                serde_json::from_value::<voyager_contract::worktree::Input>(arguments.clone())
-                    .map(|input| (input.expected_version, Dispatch::Worktree(input)))
+        let parsed = inputs::parse(tool, &arguments);
+        let (expected_version, action, peek) = match parsed {
+            Ok((_, Dispatch::Workspace(Action::FocusVessel { .. }), _)) => {
+                return self.reject(
+                    tool,
+                    id,
+                    call,
+                    Some(arguments),
+                    "focus-vessel is not an agent tool. Use voyager_peek to look without moving the human",
+                );
             }
-            _ => serde_json::from_value::<voyager_contract::content::Input>(arguments.clone())
-                .map(|input| (input.expected_version, Dispatch::Content(input.action))),
-        };
-        let (expected_version, action) = match parsed {
             Ok(input) if !self.uncertain || reads(&input.1) => input,
             Ok(_) => {
                 return self.reject(
@@ -318,8 +265,11 @@ impl Tools {
         let context = context.cloned()?;
         let request_id = workspace.request_id();
         let client = workspace.clone();
-        let scope = context.scope.clone();
-        let receipt_action = action.receipt();
+        let receipt_action = match &peek {
+            Some(target) => ToolAction::Peek(target.clone()),
+            None => action.receipt(),
+        };
+        let scope = peek.unwrap_or_else(|| context.scope.clone());
         let effect_action = action;
         let action = receipt_action;
         let effect_id = request_id.clone();
@@ -1083,7 +1033,7 @@ mod tests {
         checked.unwrap();
     }
 
-    fn completed(tools: &mut Tools) -> Completed {
+    pub(super) fn completed(tools: &mut Tools) -> Completed {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             if let Some(completed) = tools.poll() {
