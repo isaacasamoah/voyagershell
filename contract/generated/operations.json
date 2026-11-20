@@ -1,0 +1,483 @@
+[
+  {
+    "name": "voyager_theme",
+    "entries": [
+      {
+        "name": "projection",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "palette"
+        }
+      }
+    ]
+  },
+  {
+    "name": "voyager_avatar",
+    "entries": [
+      {
+        "name": "Brand",
+        "shape": {
+          "kind": "component",
+          "props": []
+        }
+      },
+      {
+        "name": "Layer",
+        "shape": {
+          "kind": "component",
+          "props": [
+            {
+              "name": "dockReceipt",
+              "ty": "text"
+            },
+            {
+              "name": "dockEpoch",
+              "ty": "text"
+            },
+            {
+              "name": "version",
+              "ty": "text"
+            },
+            {
+              "name": "scope",
+              "ty": "text"
+            },
+            {
+              "name": "layoutKey",
+              "ty": "text"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Target",
+        "shape": {
+          "kind": "component",
+          "props": [
+            {
+              "name": "scope",
+              "ty": "text"
+            },
+            {
+              "name": "fallback",
+              "ty": "bool"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PortalArea",
+        "shape": {
+          "kind": "component",
+          "props": []
+        }
+      },
+      {
+        "name": "window_epoch",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "dock_target_visible",
+        "shape": {
+          "kind": "sync",
+          "parameters": [
+            {
+              "name": "scope",
+              "ty": "text",
+              "maxBytes": null
+            }
+          ],
+          "returns": "bool"
+        }
+      },
+      {
+        "name": "speech_in_primary",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "bool"
+        }
+      },
+      {
+        "name": "take_result",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": {
+            "nullable": "text"
+          }
+        }
+      },
+      {
+        "name": "take_animation_notice",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": {
+            "nullable": "text"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "voyager_workspace",
+    "entries": [
+      {
+        "name": "request_id",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "call",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "request",
+              "ty": "text",
+              "maxBytes": 65536
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "worktree",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "request",
+              "ty": "text",
+              "maxBytes": 65536
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "terminal_open",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "request",
+              "ty": "text",
+              "maxBytes": 1024
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "revision",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "context_facts",
+        "shape": {
+          "kind": "async",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "workspace_observation",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "version",
+              "ty": "decimal",
+              "maxBytes": null
+            },
+            {
+              "name": "active",
+              "ty": {
+                "nullable": "text"
+              },
+              "maxBytes": null
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "launches",
+        "shape": {
+          "kind": "async",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "processes",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "version",
+              "ty": "decimal",
+              "maxBytes": null
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "notice",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": {
+            "record": [
+              {
+                "name": "revision",
+                "ty": "text"
+              },
+              {
+                "name": "closeRevision",
+                "ty": "text"
+              },
+              {
+                "name": "navigationRevision",
+                "ty": "text"
+              },
+              {
+                "name": "packageRevision",
+                "ty": "text"
+              },
+              {
+                "name": "activityRevision",
+                "ty": "text"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "take_placement_notice",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": {
+            "nullable": "text"
+          }
+        }
+      },
+      {
+        "name": "reported_activity",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "refresh_activity",
+        "shape": {
+          "kind": "async",
+          "parameters": [],
+          "returns": "void"
+        }
+      },
+      {
+        "name": "stop_session",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "void"
+        }
+      },
+      {
+        "name": "quit",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "void"
+        }
+      },
+      {
+        "name": "client_decorated",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "bool"
+        }
+      }
+    ]
+  },
+  {
+    "name": "voyager_content_view",
+    "entries": [
+      {
+        "name": "Notes",
+        "shape": {
+          "kind": "component",
+          "props": [
+            {
+              "name": "vesselId",
+              "ty": "text"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Vessel",
+        "shape": {
+          "kind": "component",
+          "props": [
+            {
+              "name": "vesselId",
+              "ty": "text"
+            },
+            {
+              "name": "typeId",
+              "ty": "text"
+            }
+          ]
+        }
+      },
+      {
+        "name": "descriptions",
+        "shape": {
+          "kind": "async",
+          "parameters": [],
+          "returns": "text"
+        }
+      }
+    ]
+  },
+  {
+    "name": "voyager_conversation",
+    "entries": [
+      {
+        "name": "Speech",
+        "shape": {
+          "kind": "component",
+          "props": []
+        }
+      },
+      {
+        "name": "request_id",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "call",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "request",
+              "ty": "text",
+              "maxBytes": 65536
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "snapshot",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "after",
+              "ty": {
+                "nullable": "decimal"
+              },
+              "maxBytes": null
+            }
+          ],
+          "returns": "text"
+        }
+      }
+    ]
+  },
+  {
+    "name": "voyager_vessel",
+    "entries": [
+      {
+        "name": "identity",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "request_id",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "changed",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "after",
+              "ty": {
+                "nullable": "decimal"
+              },
+              "maxBytes": null
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "invoke",
+        "shape": {
+          "kind": "async",
+          "parameters": [
+            {
+              "name": "request",
+              "ty": "text",
+              "maxBytes": null
+            },
+            {
+              "name": "requestId",
+              "ty": "text",
+              "maxBytes": null
+            },
+            {
+              "name": "expectedRevision",
+              "ty": "text",
+              "maxBytes": null
+            }
+          ],
+          "returns": "text"
+        }
+      },
+      {
+        "name": "theme",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": "palette"
+        }
+      }
+    ]
+  }
+]

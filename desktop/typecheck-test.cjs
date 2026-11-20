@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
-const { compile } = require("./typecheck.cjs");
+const { compile, describeDiagnostics } = require("./typecheck.cjs");
 
 test("the registered occluding API retains style chains and refuses id", () => {
   const filename = path.join(__dirname, "../target/script-types/occluding.ts");
@@ -110,5 +110,45 @@ send({ operation: "unknown" });
       null,
       2,
     ) + "\n",
+  );
+});
+
+test("a wrong argument type is refused with the operation's name before its location", () => {
+  const filename = path.join(__dirname, "../target/script-types/operations.ts");
+  fs.writeFileSync(
+    filename,
+    `import { invoke } from "../../contract/generated/workspace";
+import { processes } from "voyager_workspace";
+export function renameWithANumber() {
+  return invoke({ operation: "rename", target: { kind: "fleet", id: "fleet-1" }, name: 7 }, "1");
+}
+export function readProcessesWithANumber() {
+  return processes(1);
+}
+`,
+  );
+  const lines = describeDiagnostics(compile([filename])).split("\n");
+  assert.equal(lines.length, 2);
+  assert.match(
+    lines[0],
+    /^rename: target\/script-types\/operations\.ts\(4,\d+\): error TS2322: Type 'number' is not assignable to type 'string'\.$/,
+  );
+  assert.match(
+    lines[1],
+    /^processes: target\/script-types\/operations\.ts\(7,\d+\): error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'\.$/,
+  );
+});
+
+test("a host function the catalogue does not declare is refused by name", () => {
+  const filename = path.join(__dirname, "../target/script-types/undeclared.ts");
+  fs.writeFileSync(
+    filename,
+    `import { ghost } from "voyager_workspace";
+ghost();
+`,
+  );
+  assert.match(
+    describeDiagnostics(compile([filename])),
+    /Module '"voyager_workspace"' has no exported member 'ghost'/,
   );
 });

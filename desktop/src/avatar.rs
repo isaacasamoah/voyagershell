@@ -23,7 +23,7 @@ use std::{
 use view::AvatarView;
 use voyager_app::client::Client;
 use voyager_contract::avatar_animation::Trigger;
-use voyager_contract::{Action, Context as Scope, Outcome, Reply, Request};
+use voyager_contract::{Action, Context as Scope, Outcome, Reply, Request, operations};
 
 struct Changed;
 
@@ -862,7 +862,7 @@ impl Binding {
         }
     }
 
-    pub fn module(&self) -> HostModule {
+    pub fn module(&self) -> Result<HostModule, HostError> {
         let layer_view = self.view.downgrade();
         let avatar = self.avatar.clone();
         let targets = Rc::clone(&self.targets);
@@ -877,8 +877,7 @@ impl Binding {
         let area_targets = Rc::clone(&self.targets);
         let area_view = self.view.downgrade();
         let area_avatar = self.avatar.downgrade();
-        HostModule::new(crate::script_types::AVATAR_MODULE)
-            .declarations(crate::script_types::AVATAR)
+        crate::bridge::Bridge::new(&operations::AVATAR)
             .function("speech_in_primary", move |_| {
                 Ok(HostValue::from(primary_speech.get()))
             })
@@ -1121,6 +1120,7 @@ impl Binding {
                     .map_err(|error| HostError::new(error.to_string())),
                 Some(Err(error)) => Err(HostError::new(error)),
             })
+            .finish()
     }
 
     pub fn observe(&self, root: &Entity<ShellRoot>, cx: &mut App) -> Subscription {

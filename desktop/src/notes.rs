@@ -20,9 +20,10 @@ use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
     VesselId,
     content::{Request, Response, Version},
+    operations,
 };
 
-use crate::{content_budget::Budget, host::LoadGuard};
+use crate::{bridge::Bridge, content_budget::Budget, host::LoadGuard};
 
 type Colors = Rc<dyn Fn() -> Result<HostValue, HostError>>;
 
@@ -198,7 +199,7 @@ impl Host {
         }
     }
 
-    pub fn module(&self, colors: Colors) -> HostModule {
+    pub fn module(&self, colors: Colors) -> Result<HostModule, HostError> {
         let host = self.clone();
         let runtime_error = self.available.as_ref().err().cloned();
         let packages = self.package.parent().map(std::path::Path::to_path_buf);
@@ -208,8 +209,7 @@ impl Host {
         let manifests = registry.clone();
         let client = self.client.clone();
         let opened = Rc::new(RefCell::new(HashMap::new()));
-        HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)
-            .declarations(crate::script_types::CONTENT_VIEW)
+        Bridge::new(&operations::CONTENT_VIEW)
             .async_function("descriptions", move |_| {
                 let packages = packages.clone();
                 let runtime_error = runtime_error.clone();
@@ -316,6 +316,7 @@ impl Host {
                 host.views.borrow_mut().insert(id, view.clone());
                 view.into_any_element()
             })
+            .finish()
     }
 
     fn watch(&self, window: &mut Window, cx: &mut App) {
@@ -546,8 +547,7 @@ impl Loader {
         let observer = self.client.clone();
         let observed = binding.clone();
         let invoked = binding.clone();
-        let module = HostModule::new(crate::script_types::CONTENT_MODULE)
-            .declarations(crate::script_types::CONTENT)
+        let module = Bridge::new(&operations::VESSEL)
             .function("identity", move |_| Ok(HostValue::from(identity.clone())))
             .function("request_id", move |_| {
                 Ok(HostValue::from(issued.request_id()))
@@ -647,7 +647,8 @@ impl Loader {
                     drop(permit);
                     Ok(HostValue::from(raw))
                 })
-            });
+            })
+            .finish()?;
         let _guard = LoadGuard::enter(
             Policy::new()
                 .with_application(application)

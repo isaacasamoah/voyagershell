@@ -290,8 +290,8 @@ its declaration hash/modules in `desktop/script-types.json`. Wrong native calls,
 unknown builder properties, missing invoke arguments, invalid data types and
 Canvas-only imports fail the maintained control.
 
-The small host function declarations remain in desktop/src/script_types.rs.
-The gate checks that exported ABI, not an inferred Rust callback signature. The
+The host function declarations come from the operation catalogue in
+`contract/src/operations.rs`. The gate checks that exported ABI, not an inferred Rust callback signature. The
 legacy invocation still accepts three strings with correlated generated
 request/result validation. Fresh Notes uses the additive actual native registry
 signatures and the native session's typed Client calls. Type-only fields retain

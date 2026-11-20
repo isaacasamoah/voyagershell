@@ -1274,6 +1274,7 @@ features:
     summary: 'Edit a canvas script and see the change appear live.'
     group: script-host
     owner: desktop-presentation
+    shared_with: [application-queue]
     proof: python-only
     state: {behavior: python-only, performance: python-only, visual: python-only, debug: python-only}
     platforms: [linux]
@@ -1297,9 +1298,9 @@ features:
         checks: ['journey:profile/live-edit-recolours', 'journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed']
         formal: []
         journeys: [manifest-vessel, profile]
-    docs: [docs/terminal.md]
-    sources: [desktop/canvas/main.ts, desktop/src/script_types.rs, desktop/script-types.json]
-    code: [desktop/canvas/main.ts, desktop/script-types.json, desktop/src/script_types.rs]
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: [desktop/canvas/main.ts, contract/src/operations.rs, desktop/src/bridge.rs, desktop/script-types.json]
+    code: [contract/src/operations.rs, desktop/canvas/main.ts, desktop/script-types.json, desktop/src/bridge.rs]
   - id: layout-compat
     name: 'Stored layout across builds'
     summary: 'Open a layout a newer build wrote and keep what this build does not know, refuse a layout that needs a newer build without changing it, and back up an unreadable layout before starting fresh.'
