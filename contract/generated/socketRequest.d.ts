@@ -4,11 +4,40 @@ export type SocketRequest =
     }
   | {
       command: "focus";
+      prompt?: string | null;
       spoken?: boolean;
+    }
+  | {
+      command: "reply";
+      event: ReplyEvent;
     }
   | {
       command: "workspace";
       request: Request;
+    };
+export type ReplyEvent =
+  | {
+      index: number;
+      kind: "text";
+      last: boolean;
+      message: string;
+      text: string;
+      turn: string;
+    }
+  | {
+      kind: "turn-end";
+      text: string;
+      turn: string;
+    }
+  | {
+      error: string;
+      kind: "turn-failed";
+      turn?: string | null;
+    }
+  | {
+      error: string;
+      event: string;
+      kind: "unreadable";
     };
 export type Action =
   | {

@@ -8,6 +8,9 @@ export type SocketReply =
       kind: "focus";
     }
   | {
+      kind: "noted";
+    }
+  | {
       kind: "workspace";
       reply: Reply;
     }

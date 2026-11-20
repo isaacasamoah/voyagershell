@@ -5,6 +5,10 @@ use voyager_contract::administrator::{ProcessInput, ProcessRequest, ProcessRespo
 use voyager_contract::{Action, Context, Request, Response, Unanswered, VesselId};
 
 impl Client {
+    pub fn replies(&self) -> crate::replies::Replies {
+        self.replies.clone()
+    }
+
     pub fn inspect(&self) -> Result<Response, Unanswered> {
         self.call(Request {
             request_id: self.request_id(),
@@ -90,6 +94,7 @@ mod tests {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
+            replies: crate::replies::Replies::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         (client, queue)

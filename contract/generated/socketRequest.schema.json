@@ -1347,6 +1347,110 @@
         }
       ]
     },
+    "ReplyEvent": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "text",
+              "type": "string"
+            },
+            "last": {
+              "type": "boolean"
+            },
+            "message": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "turn": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "turn",
+            "message",
+            "index",
+            "last",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "turn-end",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "turn": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "turn",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "turn-failed",
+              "type": "string"
+            },
+            "turn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "error"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unreadable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "event",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Request": {
       "additionalProperties": false,
       "properties": {
@@ -1459,12 +1563,35 @@
           "const": "focus",
           "type": "string"
         },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "spoken": {
           "type": "boolean"
         }
       },
       "required": [
         "command"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "reply",
+          "type": "string"
+        },
+        "event": {
+          "$ref": "#/definitions/ReplyEvent"
+        }
+      },
+      "required": [
+        "command",
+        "event"
       ],
       "type": "object"
     },

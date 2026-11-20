@@ -45,6 +45,17 @@ fn quoted(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
+fn settings(command: &Path) -> serde_json::Value {
+    let command = quoted(command);
+    let focus = json!([{"hooks":[{"type":"command","command":format!("{command} focus --hook {PROGRAM}")}]}]);
+    let reply = json!([{"hooks":[{"type":"command","async":true,"command":format!("{command} reply --hook {PROGRAM}")}]}]);
+    json!({"hooks":{
+        "UserPromptSubmit":focus,
+        "MessageDisplay":reply,
+        "Stop":reply,
+        "StopFailure":reply}})
+}
+
 pub(crate) fn voyager_arguments(
     session: &str,
     resume: bool,
@@ -59,10 +70,7 @@ pub(crate) fn voyager_arguments(
         format!("{IDENTITY} {}", crate::spoken::policy_rule()),
     ];
     if let Some(command) = command {
-        let hook = format!("{} focus --hook {PROGRAM}", quoted(command));
-        let settings =
-            json!({"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":hook}]}]}});
-        words.extend(["--settings".into(), settings.to_string()]);
+        words.extend(["--settings".into(), settings(command).to_string()]);
     }
     words
 }
@@ -91,10 +99,19 @@ pub fn claude_output(focus: &Focus) -> String {
 struct Submitted {
     #[serde(default)]
     prompt: String,
+    prompt_id: Option<String>,
 }
 
-fn spoken(input: &str) -> bool {
-    serde_json::from_str::<Submitted>(input).is_ok_and(|submitted| is_spoken(&submitted.prompt))
+fn spoken(input: &str) -> Option<String> {
+    let submitted = serde_json::from_str::<Submitted>(input).ok()?;
+    if !is_spoken(&submitted.prompt) {
+        return None;
+    }
+    let id = submitted.prompt_id.filter(|id| !id.is_empty());
+    if id.is_none() {
+        eprintln!("A spoken prompt arrived with no prompt_id, so it is treated as typed");
+    }
+    id
 }
 
 pub fn claude_hook(
@@ -106,10 +123,13 @@ pub fn claude_hook(
     std::thread::spawn(move || {
         let _ = prompt_sender.send(spoken(&read()));
     });
-    let spoken = prompt_receiver.recv_timeout(PROMPT_WAIT).unwrap_or(false);
+    let prompt = prompt_receiver.recv_timeout(PROMPT_WAIT).ok().flatten();
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = sender.send(ask(SocketRequest::Focus { spoken }));
+        let _ = sender.send(ask(SocketRequest::Focus {
+            spoken: prompt.is_some(),
+            prompt,
+        }));
     });
     match receiver.recv_timeout(DEADLINE.saturating_sub(started.elapsed())) {
         Ok(Some(SocketReply::Focus { focus })) => claude_output(&focus),
@@ -142,6 +162,31 @@ mod tests {
             cwd: Some("/work".into()),
             revision: 7,
             preview: None,
+        }
+    }
+
+    #[test]
+    fn the_launch_settings_carry_one_sync_focus_hook_and_three_async_reply_hooks() {
+        let settings = settings(Path::new("/opt/it's/voyager"));
+        let hooks = &settings["hooks"];
+        assert_eq!(hooks.as_object().unwrap().len(), 4);
+        let command = |event: &str| hooks[event][0]["hooks"][0].clone();
+        assert!(command("UserPromptSubmit").get("async").is_none());
+        assert!(
+            command("UserPromptSubmit")["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" focus --hook claude")
+        );
+        for event in ["MessageDisplay", "Stop", "StopFailure"] {
+            assert_eq!(command(event)["async"], true, "{event}");
+            assert!(
+                command(event)["command"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with(" reply --hook claude"),
+                "{event}"
+            );
         }
     }
 
@@ -179,7 +224,13 @@ mod tests {
     fn a_focus_reply_prints_the_hook_output() {
         let reply = SocketReply::Focus { focus: focus() };
         let output = claude_hook(String::new, move |request| {
-            assert_eq!(request, SocketRequest::Focus { spoken: false });
+            assert_eq!(
+                request,
+                SocketRequest::Focus {
+                    spoken: false,
+                    prompt: None
+                }
+            );
             Some(reply)
         });
         assert!(output.contains("UserPromptSubmit"));
@@ -202,7 +253,7 @@ mod tests {
     }
 
     fn submitted(prompt: &str) -> String {
-        json!({"session_id":"s","hook_event_name":"UserPromptSubmit","source":"user","prompt":prompt})
+        json!({"session_id":"s","hook_event_name":"UserPromptSubmit","source":"user","prompt_id":"p1","prompt":prompt})
             .to_string()
     }
 
@@ -223,11 +274,31 @@ mod tests {
     fn a_spoken_prompt_sends_the_spoken_flag_and_a_typed_one_does_not() {
         assert_eq!(
             asked(submitted(&crate::spoken::prompt("rename the build tab"))),
-            SocketRequest::Focus { spoken: true }
+            SocketRequest::Focus {
+                spoken: true,
+                prompt: Some("p1".into())
+            }
         );
         assert_eq!(
             asked(submitted("rename the build tab")),
-            SocketRequest::Focus { spoken: false }
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_spoken_prompt_with_no_prompt_id_is_sent_as_typed() {
+        let input =
+            json!({"hook_event_name":"UserPromptSubmit","prompt":crate::spoken::prompt("open it")})
+                .to_string();
+        assert_eq!(
+            asked(input),
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
         );
     }
 
@@ -235,10 +306,25 @@ mod tests {
     fn an_unreadable_prompt_still_prints_the_dock_as_typed() {
         assert_eq!(
             asked("not json".into()),
-            SocketRequest::Focus { spoken: false }
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
         );
-        assert_eq!(asked(String::new()), SocketRequest::Focus { spoken: false });
-        assert_eq!(asked("{}".into()), SocketRequest::Focus { spoken: false });
+        assert_eq!(
+            asked(String::new()),
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
+        );
+        assert_eq!(
+            asked("{}".into()),
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
+        );
     }
 
     #[test]
@@ -259,7 +345,10 @@ mod tests {
         assert!(output.contains("UserPromptSubmit"));
         assert_eq!(
             receiver.recv().unwrap(),
-            SocketRequest::Focus { spoken: false }
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
         );
         assert!(started.elapsed() < DEADLINE);
     }
@@ -284,16 +373,27 @@ mod tests {
     #[test]
     fn a_typed_focus_request_keeps_its_older_wire_form() {
         assert_eq!(
-            serde_json::to_string(&SocketRequest::Focus { spoken: false }).unwrap(),
+            serde_json::to_string(&SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            })
+            .unwrap(),
             r#"{"command":"focus"}"#
         );
         assert_eq!(
-            serde_json::to_string(&SocketRequest::Focus { spoken: true }).unwrap(),
-            r#"{"command":"focus","spoken":true}"#
+            serde_json::to_string(&SocketRequest::Focus {
+                spoken: true,
+                prompt: Some("p1".into())
+            })
+            .unwrap(),
+            r#"{"command":"focus","spoken":true,"prompt":"p1"}"#
         );
         assert_eq!(
             serde_json::from_str::<SocketRequest>(r#"{"command":"focus"}"#).unwrap(),
-            SocketRequest::Focus { spoken: false }
+            SocketRequest::Focus {
+                spoken: false,
+                prompt: None
+            }
         );
     }
 

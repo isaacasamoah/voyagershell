@@ -206,8 +206,9 @@ Core runs Voyager directly, not through the Bash wrapper that worker agents
 use, so Voyager ending ends its Core terminal. The command is the `voyager`
 entry of `launches.json`, or `claude --model claude-sonnet-5-5 --effort low`
 when the profile has none, followed by `--session-id` or `--resume`, `-n
-voyager`, a short identity prompt and a `--settings` value that holds only the
-`voyager focus --hook claude` hook. The `voyager` entry is read for Voyager
+voyager`, a short identity prompt and a `--settings` value that holds the
+`voyager focus --hook claude` hook and the three `voyager reply --hook claude`
+hooks described in Voyager's replies. The `voyager` entry is read for Voyager
 alone and does not appear in the Create Vessel picker.
 
 At launch the app forgets what `voyager.json` held and decides again from two
@@ -233,6 +234,49 @@ advisory limit stated above.
 A Voyager that ends while the app runs shows Resume on its Portal, in the place
 of Start new shell. Clicking it runs the same step with `--resume` and rewrites
 `voyager.json`. The app never resumes a Voyager that ended while it was open.
+
+### Voyager's replies
+
+Voyager's text reaches the app through the Vessel socket and never through the
+owner queue. The reply hooks are `MessageDisplay`, `Stop` and `StopFailure`.
+Each runs `voyager reply --hook claude` with `async` set, so Claude does not
+wait for it, and the command prints nothing and exits 0 whatever happens. It
+waits at most 200 ms for the app's `Noted`, which bounds a stalled socket or
+stdin. A hook input that has an `agent_id` came from a subagent and sends
+nothing. An input with a missing or renamed field sends `Unreadable`, and the
+chat shows it as a version problem.
+
+The socket thread of the terminal that `voyager.json` names hands each
+`ReplyEvent` to `Replies` in `app/src/replies.rs` and answers `Noted`. Any other
+terminal is refused and nothing is stored. A held connection, a slow hook or a
+reply that never finishes occupies only its own socket thread, so a canvas
+action and an inspect are answered as usual.
+
+`Replies` keeps the last 8 turns. A turn is one prompt, named by the `prompt_id`
+that Claude puts on `MessageDisplay`, `Stop` and `StopFailure` alike, so a `Stop`
+finds its own turn whatever order the hook processes arrive in. Within a
+message it releases text only from the first missing `index` forward, and drops
+a repeated `index`. A message is complete once its `last` flush is released. A
+turn holds at most 256 KiB of text, a target to measure, and past it the turn
+is marked truncated.
+
+`TurnEnd` records the `Stop` text on its turn. The turn is matched when every
+message is complete and the streamed final message equals that text, ignoring
+trailing whitespace. Otherwise it is not matched and the `Stop` text is the
+reply. A lost chunk is never retried, because the `Stop` text settles it. A
+chunk that arrives after its `Stop` and completes a message re-checks the
+match, because the hooks race by a few milliseconds. A Stop hook in the
+person's own setup can continue a turn, so the same turn gets a new message
+after a `Stop` and then a second `Stop`. The new message withdraws the first
+`Stop` and the second one settles the turn. `TurnFailed` records its error,
+and when `StopFailure` carries no `prompt_id` it settles the latest turn. A
+`Stop` for a turn that streamed no text records a turn with no messages. A turn
+whose `Stop` has not come when the next turn starts reads as lost until it does.
+`Replies::stop_missing` says the latest turn has no `Stop` two seconds after Core
+reported the terminal done, a grace period that is a target to measure.
+
+Reply text is display data. It never runs an action and is never sent to an
+agent as an instruction.
 
 ### What the caller is told
 

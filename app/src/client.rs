@@ -319,6 +319,7 @@ pub struct Client {
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
     placement_notice: Arc<Mutex<Option<String>>>,
+    replies: crate::replies::Replies,
 }
 
 impl Client {
@@ -1039,15 +1040,7 @@ mod voice_scope_tests {
     #[test]
     fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
         let (sender, receive) = async_channel::bounded(8);
-        let client = Client {
-            sender,
-            sequence: Arc::new(AtomicU64::new(0)),
-            identity: "voice-scope-test".into(),
-            activity: Arc::default(),
-            prepared_context: Arc::default(),
-            placement_notice: Arc::default(),
-            package_revision: Arc::new(AtomicU64::new(0)),
-        };
+        let client = content_admission_tests::detached(sender, "voice-scope-test");
         let _inspection = client.queue_inspection().unwrap();
         let _later = client
             .queue_workspace(

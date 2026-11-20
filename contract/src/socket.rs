@@ -1,4 +1,5 @@
 use crate::context::Focus;
+use crate::reply::ReplyEvent;
 use crate::{CoreTerminalId, PlacementId, PlacementOwner, Reply, Request, VesselId, VoyageId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,11 @@ pub enum SocketRequest {
     Focus {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         spoken: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+    },
+    Reply {
+        event: ReplyEvent,
     },
     Workspace {
         request: Box<Request>,
@@ -41,6 +47,7 @@ pub struct VesselStatus {
 pub enum SocketReply {
     Status { status: VesselStatus },
     Focus { focus: Focus },
+    Noted,
     Workspace { reply: Reply },
     Refused { message: String },
 }
