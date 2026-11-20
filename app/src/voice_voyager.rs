@@ -28,8 +28,8 @@ pub fn standing_of(live: bool, state: Option<&str>) -> Standing {
         (false, _) => Standing::NotRunning,
         (true, Some("working")) => Standing::Working,
         (true, Some("blocked")) => Standing::Blocked,
-        (true, Some("idle" | "done" | "error")) => Standing::Idle,
-        (true, _) => Standing::Unknown,
+        (true, None | Some("idle" | "done" | "error")) => Standing::Idle,
+        (true, Some(_)) => Standing::Unknown,
     }
 }
 
@@ -76,8 +76,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_live_program_with_no_report_is_unknown_and_the_idle_words_are_idle() {
-        assert_eq!(standing_of(true, None), Standing::Unknown);
+    fn a_live_program_that_reports_nothing_and_the_idle_words_are_idle() {
+        assert_eq!(standing_of(true, None), Standing::Idle);
         for state in ["idle", "done", "error"] {
             assert_eq!(standing_of(true, Some(state)), Standing::Idle, "{state}");
         }
@@ -131,7 +131,7 @@ mod tests {
             }))
         };
         assert_eq!(said(true, Some("done")), Standing::Idle);
-        assert_eq!(said(true, None), Standing::Unknown);
+        assert_eq!(said(true, None), Standing::Idle);
         assert_eq!(said(false, None), Standing::NotRunning);
         assert_eq!(said(true, Some("working")), Standing::Working);
     }
