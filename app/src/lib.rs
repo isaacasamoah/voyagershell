@@ -40,8 +40,13 @@ pub mod conversation_client;
 pub mod provider;
 mod provider_settings;
 
+mod audio_io;
+mod http1;
+pub mod omni;
+pub mod speech;
 mod voice;
 mod voice_host;
+pub mod voice_layer;
 mod voice_session;
 mod voice_transcript;
 mod voice_wire;

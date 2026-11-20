@@ -115,6 +115,7 @@ impl Client {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
+            workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
             identity: format!(
                 "{}-{}",
@@ -284,6 +285,23 @@ impl Owner {
                 .start(core, &self.layout, self.version, self.fresh, &self.sender);
         }
         self.seen.note(self.version, &self.layout);
+        self.publish_words();
+    }
+
+    fn publish_words(&self) {
+        let words: Vec<String> = self
+            .layout
+            .containers()
+            .flat_map(|voyage| {
+                std::iter::once(voyage.name.clone())
+                    .chain(voyage.fleets.iter().map(|fleet| fleet.name.clone()))
+            })
+            .collect();
+        if let Ok(mut held) = self.client.workspace_words.lock()
+            && *held != words
+        {
+            *held = words;
+        }
     }
 
     fn handle(&mut self, message: Message) {

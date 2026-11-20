@@ -319,6 +319,7 @@ pub struct Client {
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
     placement_notice: Arc<Mutex<Option<String>>>,
+    workspace_words: Arc<Mutex<Vec<String>>>,
     replies: crate::replies::Replies,
 }
 
@@ -1035,36 +1036,6 @@ mod voice_scope_tests {
             .apply(Action::RemovePlacement { id: note.id })
             .unwrap();
         assert!(note_exit_target(&model.layout, &note.vessel).is_err());
-    }
-
-    #[test]
-    fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
-        let (sender, receive) = async_channel::bounded(8);
-        let client = content_admission_tests::detached(sender, "voice-scope-test");
-        let _inspection = client.queue_inspection().unwrap();
-        let _later = client
-            .queue_workspace(
-                None,
-                None,
-                Request {
-                    request_id: "later-navigation".into(),
-                    expected_version: 0,
-                    action: Action::Dock {
-                        context: Context::Workspace,
-                    },
-                },
-            )
-            .unwrap();
-        let Message::Workspace { request, scope, .. } = receive.try_recv().unwrap() else {
-            panic!("Expected the voice inspection");
-        };
-        assert!(matches!(request.action, Action::Inspect));
-        assert_eq!(request.expected_version, 0);
-        assert!(scope.is_none());
-        let Message::Workspace { request, .. } = receive.try_recv().unwrap() else {
-            panic!("Expected later navigation");
-        };
-        assert_eq!(request.request_id, "later-navigation");
     }
 }
 

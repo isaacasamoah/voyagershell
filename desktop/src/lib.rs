@@ -104,6 +104,17 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         client.clone(),
         platform::audio_environment(),
     );
+    let voice = voyager_app::voice_layer::start(
+        session.clone(),
+        voyager_app::omni::Settings::from_environment(),
+        std::sync::Arc::new(voyager_app::voice_layer::Unbound),
+        {
+            let client = client.clone();
+            std::sync::Arc::new(move || client.workspace_words())
+        },
+        std::sync::Arc::new(voyager_app::voice_layer::System),
+        voyager_app::voice_layer::Trace::from_environment(),
+    );
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
@@ -155,7 +166,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     window.dispatch_action(Box::new(Quit), cx);
                     false
                 });
-                speech::initialize(conversation.clone(), cx);
+                speech::initialize(voice.clone(), cx);
                 let avatar = avatar::Binding::new(client.clone(), animations, window, cx);
                 let avatar_view = avatar.view();
                 let canvas = cx.new(|cx| {
@@ -182,6 +193,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     canvas.downgrade(),
                     quit_workspace,
                     quit_conversation,
+                    voice,
                     lifecycle_requests,
                     cx,
                 );

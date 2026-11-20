@@ -688,6 +688,8 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
         "Xvfb",
         "xrdb",
         "bash",
+        "parec",
+        "paplay",
     ] {
         let path = Path::new("/usr/bin").join(name);
         ensure!(executable(&path), "Required tool is missing: {name}");

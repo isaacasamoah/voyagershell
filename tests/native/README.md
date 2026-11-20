@@ -1126,7 +1126,8 @@ For a retained candidate, take the expected hash from its reviewed build receipt
 Take the `hc` hash from the Core release you intend to test. Computing a hash
 from an arbitrary file alone does not establish build provenance. Doctor checks
 both hashes, the installed tool paths and the sandbox canary without launching
-an app. Actual readiness additionally requires the owned display, exact window
+an app. The tool paths include `parec` and `paplay` from `pulseaudio-utils`, which
+the avatar's voice layer needs on the host. Actual readiness additionally requires the owned display, exact window
 title and PID, measured viewport, Core identity and bound shell established by
 the run.
 
