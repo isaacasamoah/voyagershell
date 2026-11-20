@@ -1,7 +1,7 @@
 use super::{Cases, Verdict, cases};
 use crate::agent::TYPED_REPLY;
 use crate::audio::speech::{DOCK_ON_THIS_FLEET, RENAME_TO_HARBOR};
-use crate::audio::voice::{self, LISTENING, READY, median, words_contain, words_match};
+use crate::audio::voice::{self, LISTENING, READY, Reply, median, words_contain, words_match};
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, Native, QUIET_MIC};
 use crate::system::until;
@@ -88,7 +88,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         return Ok(());
     };
     cases.check(native, Case::RenameIsHeard, |native| {
-        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;
+        let said = voice::converse(native, &RENAME_TO_HARBOR, "rename", Reply::Leave)?;
         let words = said
             .heard
             .clone()
@@ -122,7 +122,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("conversation", json!(said))
     })?;
     cases.check(native, Case::WordsReachVoyager, |native| {
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock")?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "dock", Reply::Leave)?;
         let words = said
             .heard
             .clone()
@@ -154,7 +154,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("textScan", text)
     })?;
     let Some(said) = cases.make(native, Case::ReplyIsSpoken, |native| {
-        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply")?;
+        let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply", Reply::Await)?;
         let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
         let verdict = Verdict::new()
             .expect(
@@ -199,7 +199,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let mut early = 0;
         let mut heard_right = 0;
         for run in 0..RUNS {
-            let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
+            let said = voice::converse(
+                native,
+                &DOCK_ON_THIS_FLEET,
+                &format!("prompt-{run}"),
+                Reply::Leave,
+            )?;
             first_sounds.push(said.first_sound_after_capture_ms);
             early += usize::from(said.started_before_heard);
             heard_right += usize::from(

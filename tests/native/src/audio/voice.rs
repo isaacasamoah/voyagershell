@@ -161,11 +161,22 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
     Ok(seen)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Reply {
+    Await,
+    Leave,
+}
+
 fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
     marks.iter().find(|mark| mark.event == event)
 }
 
-pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+pub fn converse(
+    native: &Native,
+    speech: &Speech,
+    name: &str,
+    reply: Reply,
+) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control ready", |label| {
@@ -215,18 +226,20 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
             .map(|_| ()))
     })?
     .is_some();
-    until("the reply to be spoken", || {
-        Ok(marks(&trace)?
-            .get(before..)
-            .and_then(|fresh| mark_of(fresh, "speech-ended"))
-            .map(|_| ()))
-    })
-    .with_context(|| {
-        let screen = bound_terminal(native)
-            .and_then(|terminal| terminal_text(native, &terminal))
-            .unwrap_or_else(|error| format!("unreadable: {error:#}"));
-        format!("Voyager's terminal showed: {}", screen.trim())
-    })?;
+    if reply == Reply::Await {
+        until("the reply to be spoken", || {
+            Ok(marks(&trace)?
+                .get(before..)
+                .and_then(|fresh| mark_of(fresh, "speech-ended"))
+                .map(|_| ()))
+        })
+        .with_context(|| {
+            let screen = bound_terminal(native)
+                .and_then(|terminal| terminal_text(native, &terminal))
+                .unwrap_or_else(|error| format!("unreadable: {error:#}"));
+            format!("Voyager's terminal showed: {}", screen.trim())
+        })?;
+    }
     let microphone_closed = until("the microphone to close", || {
         Ok(recorders(native)?.is_empty().then_some(()))
     })
