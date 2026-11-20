@@ -8,6 +8,7 @@ Most `kind = "user"` entries with `journey:` links.
 
 - **Wording.** Read `says` and `source`. Read the owning guide in `docs/` the `features` ids point at, and the code the feature's source globs in `tests/native/features.toml` name. A clause the journeys never exercise is a gap in the check, and a clause the code contradicts is a wording mismatch.
 - **Check.** Open each linked case in `tests/native/src/journey/<journey>.rs`. Confirm that its assertions read the observable effect the rule names, and not a proxy such as a label or a count. Read the journey's `CONTROL` case and its patch in `tests/native/controls/<journey>.patch`. Say which linked cases the control proves can fail. List the others as unproved to fail.
+- **Control join.** Run `voyager-verification journeys`. It prints JSON with each journey's `control.case` and `control.patch`. Join `control.case` with the entry's `journey:` links. When no linked case is the control's case, no linked case is proved to fail, and the entry says so in its report line. When one is, read the patch hunk and say which clause of `says` it breaks. A patch that breaks reattach logic does not prove that placement survives a relaunch.
 - **Gap text.** When the entry carries a `gap` that names a missing case, confirm that no linked case now covers it, and that the unit it names has not landed.
 - **Closes with.** The case file and line, the control patch line, and a one-line reading of what breaks when the patch applies.
 
@@ -18,14 +19,16 @@ Most `kind = "user"` entries with `journey:` links.
 - **Test.** Read the function. A test that pins a data shape and not the behavior in `says` is a partial check. Say what it leaves out.
 - **Type guard.** Read the item. Confirm that the type makes the undesired state in `says` unrepresentable, not only named. Compare with the `type_gap` text. Grep for the field or shape it says is still representable, and report a `type_gap` that describes a shape the code no longer has.
 - **Formal.** Read the property in the INVARIANTS block of the `.cfg` and the `sync` record in `tests/formal/<model>/`. A model that no longer matches the covered code is the `core-viewers` skill's work. Report it and point there.
+- **Sync record.** For a model with a sync commit, run `git diff --stat <sync> -- <covered files>` and read how the sync line is parsed by the model's `check.sh`. A sync line the script cannot parse is a mismatch in the guard, because the drift check cannot compare.
 - **Closes with.** The item's file and line, and the grep that confirms or refutes the `type_gap`.
 
 ## C. Entry with no check, a gap or a future unit
 
 Entries with `check = []` and a `gap`.
 
-- Confirm that the unit the `gap` names is still planned, or that it has landed. Search `git log` and the journey list for the case it says it will add. A landed unit with a stale `gap` is a mismatch, and the proposal links the new case.
+- Confirm that the unit the `gap` names is still planned, or that it has landed. Search `git log origin/main` and the journey list for the unit and for the case it says it will add. A landed unit with a stale `gap` is a mismatch, and the proposal links the new case.
 - Confirm that `says` still states the intended experience. These entries are the easiest to leave stale, because no check pins them.
+- Search the orphan list in `declared-invariants-ratchets.toml` for a case or guard that serves the entry. Cite the lines of the case that make it fit.
 - Do not propose a check. Propose only that a landed case be linked, or that an obsolete `gap` be rewritten.
 - **Closes with.** The `git log` or `git grep` command and its output.
 
@@ -41,7 +44,8 @@ A `manual:` link.
 
 - **Hook.** Read the hook script, and its tests when they exist. Confirm that it blocks the action `says` names, and name the action it does not block. A guard that holds part of the rule is a partial guard.
 - **Policy.** The rules live in the Workshop's `review-policy`. Read the rule from this repository's copy of its id list in the validator, and confirm that the id still matches. Do not edit the Workshop. Report a renamed rule so that its owner renames the id.
-- **Closes with.** The script line that blocks the action, or the id comparison.
+- **Probe.** Call the hook's check function with a planted command for each way the entry can break, and with a compound command that starts with an allowed word such as `git`. A guard that returns nothing for a command that breaks the rule is a mismatch, reported and not patched.
+- **Closes with.** The script line that blocks the action, the planted command and its result, or the id comparison.
 
 ## F. Structure entry guarded by a gate or a lint
 

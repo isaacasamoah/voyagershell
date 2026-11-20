@@ -48,7 +48,7 @@ Run the stages in order. Hold the stage 1 output as the baseline, and do not re-
 
 ## Sizing
 
-One pass reads 58 entries and fits one Sonnet session only if it follows stage 2. Split by `kind` when the context fills past about half. Run `user` first, then `developer` and `structure`, then the envelope and out-of-scope tail. Each split keeps stage 1 as its baseline and reports its own entries. Start at most one read-only subagent, on Sonnet, for one kind, and give it the file pointers and this skill, never a conclusion.
+The first pass over 58 entries fit one Sonnet session by following stage 2, with the entries grouped into the classes in `references/entry-classes.md`. It read each journey's control once and each guard file once. Split by `kind` when the context fills past about half. Run `user` first, then `developer` and `structure`, then the envelope and out-of-scope tail. Each split keeps stage 1 as its baseline and reports its own entries. Start at most one read-only subagent, on Sonnet, for one kind, and give it the file pointers and this skill, never a conclusion.
 
 ## Rules
 
