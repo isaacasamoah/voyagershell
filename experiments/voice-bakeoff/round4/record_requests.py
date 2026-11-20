@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from requests4 import R, HELD_OUT
 
 RATE = 16000
+DEFAULT_DIR = os.path.expanduser("~/.local/share/voyagershell-voice-recordings")
 SYNC_MARKERS = (".stfolder", ".dropbox", ".nextcloudsync", ".owncloudsync")
 SYNC_NAMES = ("dropbox", "nextcloud", "owncloud", "syncthing", "google drive", "onedrive", "icloud", "obsidian")
 
@@ -85,13 +86,12 @@ def save_manifest(path, m):
 
 def main():
     ap = argparse.ArgumentParser(description="Record the spoken requests of the voice hillclimb set, one wav each, plus a manifest.")
-    ap.add_argument("save_dir", help="folder for the wavs and manifest.json; outside any repository, Obsidian or synced folder")
+    ap.add_argument("save_dir", nargs="?", default=DEFAULT_DIR, help=f"folder for the wavs and manifest.json, created at the first recording (default {DEFAULT_DIR}); outside any repository, Obsidian or synced folder")
     ap.add_argument("--test-wav", help="16 kHz mono s16 wav used instead of the mic")
     ap.add_argument("--redo-all", action="store_true", help="ask for every request again, ignoring earlier takes")
     a = ap.parse_args()
 
     refuse_unsafe(a.save_dir)
-    os.makedirs(a.save_dir, mode=0o700, exist_ok=True)
     mpath = os.path.join(a.save_dir, "manifest.json")
     m = load_manifest(mpath)
     src = WavSource(a.test_wav) if a.test_wav else MicSource()
@@ -107,7 +107,8 @@ def main():
             print(f"\n[{i + 1}/{total}] {cat}\n    Say:  {text}")
             cmd = input("    Enter to start (q quits): ").strip().lower()
             if cmd == "q":
-                save_manifest(mpath, m)
+                if m["requests"]:
+                    save_manifest(mpath, m)
                 print(f"stopped; {len(m['requests'])}/{total} saved in {a.save_dir}")
                 return
             src.start()
@@ -116,6 +117,7 @@ def main():
             data = src.stop()
             secs = len(data) / 2 / RATE
             wall = time.time() - t0
+            os.makedirs(a.save_dir, mode=0o700, exist_ok=True)
             write_wav(os.path.join(a.save_dir, fname), data)
             print(f"    {secs:.1f} s captured")
             cmd = input("    Enter keeps it, r redoes: ").strip().lower()
@@ -134,7 +136,6 @@ def main():
         }
         save_manifest(mpath, m)
 
-    save_manifest(mpath, m)
     print(f"\ndone: {len(m['requests'])}/{total} saved in {a.save_dir}")
 
 
