@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const RELAY_NAME: &str = "codex";
+const APP_SERVER: &str = "app-server";
 const THREAD: &str = "stand-in-thread";
 const USER_AGENT: &str = "voyager-stand-in/0.0.0";
 
@@ -25,7 +26,11 @@ pub fn invoked_as_relay() -> bool {
 }
 
 pub fn relay() -> i32 {
-    match relay_lines() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) != Some(APP_SERVER) {
+        return crate::agent::started(RELAY_NAME, &args);
+    }
+    match relay_lines(args) {
         Ok(()) => 0,
         Err(error) => {
             eprintln!("Stand-in relay: {error:#}");
@@ -34,10 +39,9 @@ pub fn relay() -> i32 {
     }
 }
 
-fn relay_lines() -> Result<()> {
+fn relay_lines(args: Vec<String>) -> Result<()> {
     let socket = UnixStream::connect(PROVIDER_SOCKET).context("Stand-in provider socket")?;
     let mut upstream = socket.try_clone()?;
-    let args: Vec<String> = std::env::args().skip(1).collect();
     writeln!(
         upstream,
         "{}",

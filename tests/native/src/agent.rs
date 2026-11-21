@@ -14,6 +14,15 @@ pub fn invoked_as_agent() -> bool {
         .unwrap_or(false)
 }
 
+pub fn started(name: &str, args: &[String]) -> i32 {
+    println!("Stand-in {name} started with: {}", serde_json::json!(args));
+    if std::io::stdin().lock().lines().all(|line| line.is_ok()) {
+        0
+    } else {
+        1
+    }
+}
+
 fn report(state: &str) {
     print!("\x1b]7501;state={state}:app=stand-in\x1b\\");
     let _ = std::io::stdout().flush();
