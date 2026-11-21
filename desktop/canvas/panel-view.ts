@@ -5,6 +5,7 @@ import { agentsView } from "./agents.js";
 import { Notes, Vessel } from "voyager_content_view";
 import { projection } from "voyager_theme";
 import { take_result } from "voyager_avatar";
+import { notice as workspace_notice } from "voyager_workspace";
 import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
@@ -41,25 +42,21 @@ const seenDocks = new WeakMap<Canvas, string>();
 
 export function acceptDockResult(workspace: Canvas, cx: UIContext) {
   const raw = take_result();
-  if (raw === null) return followSnapshotDock(workspace, cx);
-  const result: unknown = JSON.parse(raw);
-  if (!validateResponse(result)) throw Error("Invalid native dock response");
-  if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")
-    return;
-  workspace.dockReceipt = result.requestId;
-  followDock(workspace, result.layout.context, cx);
-}
-
-function followSnapshotDock(workspace: Canvas, cx: UIContext) {
-  if (workspace.busy || !workspace.layout) return;
-  const dock = workspace.layout.context;
+  if (raw !== null) {
+    const result: unknown = JSON.parse(raw);
+    if (!validateResponse(result)) throw Error("Invalid native dock response");
+    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
+      workspace.dockReceipt = result.requestId;
+  }
+  if (workspace.busy) return;
+  const dock = workspace_notice().dockRevision;
   const seen = seenDocks.get(workspace);
-  if (seen === undefined) seenDocks.set(workspace, JSON.stringify(dock));
-  else if (seen !== JSON.stringify(dock)) followDock(workspace, dock, cx);
+  if (seen === undefined) seenDocks.set(workspace, dock);
+  else if (seen !== dock) followDock(workspace, dock, cx);
 }
 
-function followDock(workspace: Canvas, dock: Context, cx: UIContext) {
-  seenDocks.set(workspace, JSON.stringify(dock));
+function followDock(workspace: Canvas, dock: string, cx: UIContext) {
+  seenDocks.set(workspace, dock);
   workspace.run({ operation: "inspect" }, cx, (_result, task) =>
     focusDocked(workspace, task),
   );

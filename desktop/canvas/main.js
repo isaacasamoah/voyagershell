@@ -25,6 +25,7 @@ import {
   changedBesidesRevision,
   errorMessage,
   outcome,
+  startingNotice,
   statusLine,
 } from "./status.js";
 import { composeRegions } from "./regions.js";
@@ -92,13 +93,7 @@ export default class Canvas extends View {
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.refreshRequested = false;
-    this.workspaceNotice = {
-      revision: "0",
-      closeRevision: "0",
-      navigationRevision: "0",
-      packageRevision: "0",
-      activityRevision: "0",
-    };
+    this.workspaceNotice = startingNotice();
     this.automaticRefresh = false;
     this.status = "Opening workspace";
     this.activityRevision = "";

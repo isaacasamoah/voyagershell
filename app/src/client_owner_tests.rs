@@ -661,7 +661,7 @@ fn inspect_reads_the_workspace_that_owner_start_prepared_and_writes_nothing() {
 }
 
 #[test]
-fn a_dock_from_a_vessel_program_moves_the_navigation_notice_and_the_canvas_dock_does_not() {
+fn each_applied_dock_moves_the_dock_notice_and_only_a_vessel_programs_dock_moves_navigation() {
     use voyager_contract::Context;
     for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
@@ -701,11 +701,10 @@ fn a_dock_from_a_vessel_program_moves_the_navigation_notice_and_the_canvas_dock_
             after_canvas.navigation_revision, before.navigation_revision,
             "the canvas follows its own dock through the reply"
         );
+        assert_eq!(after_canvas.dock_revision, before.dock_revision + 1);
+        let fleet_dock = dock(canvas.version, Context::Fleet { id: fleet.id });
         let program = client
-            .program_call(
-                placement.vessel.clone(),
-                dock(canvas.version, Context::Fleet { id: fleet.id }),
-            )
+            .program_call(placement.vessel.clone(), fleet_dock.clone())
             .unwrap();
         assert_eq!(program.status, Outcome::Applied, "{:?}", program.message);
         assert_eq!(
@@ -717,6 +716,32 @@ fn a_dock_from_a_vessel_program_moves_the_navigation_notice_and_the_canvas_dock_
             after_program.navigation_revision,
             before.navigation_revision + 1,
             "a Vessel program's dock tells the canvas to read the layout again"
+        );
+        assert_eq!(after_program.dock_revision, before.dock_revision + 2);
+        let repeated = client
+            .program_call(placement.vessel.clone(), fleet_dock)
+            .unwrap();
+        assert_eq!(repeated.status, Outcome::Applied, "{:?}", repeated.message);
+        assert_eq!(
+            notice().dock_revision,
+            after_program.dock_revision,
+            "a repeated request is answered from its receipt"
+        );
+        let again = client
+            .program_call(
+                placement.vessel.clone(),
+                dock(program.version, program.layout.context.clone()),
+            )
+            .unwrap();
+        assert_eq!(again.status, Outcome::Applied, "{:?}", again.message);
+        assert_eq!(
+            again.version, program.version,
+            "a second dock saves nothing"
+        );
+        assert_eq!(
+            notice().dock_revision,
+            after_program.dock_revision + 1,
+            "a second dock on the same context still moves the dock notice"
         );
     });
     let mut cleanup = Core::connect(&session).unwrap();

@@ -893,18 +893,30 @@ impl Owner {
         }
     }
 
-    fn publish(&mut self, previous: LayoutRevision, scoped: bool, packages: bool, close: u64) {
+    fn publish(
+        &mut self,
+        previous: LayoutRevision,
+        scoped: bool,
+        packages: bool,
+        docked: bool,
+        close: u64,
+    ) {
         if self.version != previous
             && let Some(owner) = self.content.as_mut()
         {
             owner.refresh_views();
         }
-        if self.version != previous || packages || self.closing.revision != close {
+        if self.version != previous || packages || docked || self.closing.revision != close {
             if packages {
                 self.notices.packages.fetch_add(1, Ordering::Relaxed);
             }
-            self.notices
-                .after(previous, self.version, scoped, self.closing.revision);
+            self.notices.after(
+                previous,
+                self.version,
+                scoped,
+                docked,
+                self.closing.revision,
+            );
         }
     }
 }

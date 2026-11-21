@@ -817,7 +817,7 @@ test("context metadata rejects a late different dock and notifies only changed f
   assert.deepEqual(view.contextFacts, facts);
 });
 
-test("a dock follows once from the avatar's reply, or from a snapshot once no request is preparing", () => {
+test("a dock follows once for each dock revision, once no request is preparing", () => {
   const layout = (context, last) => ({
     view: "fleet",
     selectedVoyage: "voyage-1",
@@ -858,11 +858,13 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     layout: layout({ kind: "vessel", id }, id),
   });
   let result = null;
+  let dockRevision = "0";
   const { Canvas, acceptDockResult } = new Function(
     "View",
     "take_result",
     "validateResponse",
     "window",
+    "workspace_notice",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
       "\nreturn { Canvas, acceptDockResult };",
   )(
@@ -874,6 +876,7 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
     },
     () => true,
     { has_active_dialog: () => false },
+    () => ({ dockRevision }),
   );
   const focused = [];
   const view = Object.assign(new Canvas(), {
@@ -908,9 +911,10 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
   const render = () => acceptDockResult(view, cx);
   view.acceptSnapshot(reply("placement-3"), cx);
   render();
-  assert.deepEqual(focused, [], "the first snapshot only records the dock");
+  assert.deepEqual(focused, [], "the first notice only records the dock");
   result = JSON.stringify(reply("placement-11"));
   next = reply("placement-11");
+  dockRevision = "1";
   render();
   render();
   assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
@@ -918,6 +922,7 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
   focused.length = 0;
   next = reply("placement-3");
   view.acceptSnapshot(next, cx);
+  dockRevision = "2";
   view.busy = true;
   render();
   assert.deepEqual(focused, [], "a dock waits while a request prepares");
@@ -927,14 +932,39 @@ test("a dock follows once from the avatar's reply, or from a snapshot once no re
   assert.deepEqual(
     focused,
     ["content-2"],
-    "a dock read from a snapshot follows once",
+    "a dock from another caller follows once",
   );
-  assert.equal(inspects, 2, "a snapshot dock runs one inspect");
+  assert.equal(inspects, 2, "a dock from another caller runs one inspect");
   focused.length = 0;
   view.acceptSnapshot(reply("placement-3"), cx);
   render();
-  assert.deepEqual(focused, [], "a re-read with the same dock does not follow");
-  assert.equal(inspects, 2, "a re-read with the same dock runs no inspect");
+  assert.deepEqual(focused, [], "a re-read with no new dock does not follow");
+  assert.equal(inspects, 2, "a re-read with no new dock runs no inspect");
+  dockRevision = "3";
+  render();
+  render();
+  assert.deepEqual(
+    focused,
+    ["content-2"],
+    "a second dock on the shown Vessel follows once",
+  );
+  assert.equal(
+    inspects,
+    3,
+    "a second dock on the shown Vessel runs one inspect",
+  );
+  focused.length = 0;
+  next = reply("placement-11");
+  dockRevision = "4";
+  render();
+  result = JSON.stringify(reply("placement-11"));
+  render();
+  assert.deepEqual(
+    focused,
+    ["content-10"],
+    "an avatar dock whose notice lands before its reply follows once",
+  );
+  assert.equal(inspects, 4, "that dock runs one inspect");
 });
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {

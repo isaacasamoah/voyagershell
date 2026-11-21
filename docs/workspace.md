@@ -1145,8 +1145,13 @@ moves only when a scoped caller, such as an agent through the administrator, or
 a Vessel program through its socket, changes navigation alone. The canvas
 inspects again when either moves past what it holds. Its own navigation,
 including `focus-vessel`, and the native avatar's dock reach it through their
-replies, so they send it no notice. A dock that changes the selection costs one
-inspect, to prepare the terminals it newly shows.
+replies, so they move no navigation revision. A dock that changes the selection
+costs one inspect, to prepare the terminals it newly shows.
+
+Notices also carry a dock revision. The owner adds one for each applied dock,
+from any caller, including a dock on the context the layout already holds,
+which saves nothing. A repeated request is answered from its receipt and adds
+none.
 
 A Vessel program's call arrives with no scope, so the owner carries the calling
 program through a layout save and counts it as a scoped caller when it
@@ -1187,14 +1192,16 @@ remembered one and gives that terminal keyboard focus unless a chat, a rename or
 a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
 step. It records the dock, runs the inspect and gives the keyboard from that
 request's completion, because a focus asked for while the canvas renders does
-not reach the terminal. `acceptDockResult`, beside it, runs at each render. It runs
-`followDock` for the avatar's reply. Every other dock reaches the canvas as an
-accepted layout whose dock context differs from the last one recorded, and
-when no request is preparing, `acceptDockResult` runs `followDock` for it once. Only
-a dock writes the dock context, so no other change follows. A second dock on the context the canvas already
-holds does not differ, so it does not follow. When the user has clicked another
-Vessel and Voyager docks on the same one again, the keyboard stays where the
-user put it.
+not reach the terminal. `acceptDockResult`, beside it, runs at each render. It
+accepts the avatar's reply as a snapshot. Then, when no request is preparing and
+the notice's dock revision differs from the last one recorded, it runs
+`followDock` once. Every dock follows this one way, from the avatar, an agent or
+the `voyager` command. A second dock on the Vessel the canvas already shows
+follows too, so after the user clicks another Vessel, a dock on the first one
+gives it the keyboard again. A re-read that is not a dock leaves the dock
+revision as it was, so it does not move the keyboard. The first notice a canvas
+reads records its dock revision without following, because that dock happened
+before the canvas existed.
 
 **Agents look without moving the user.** `focus-vessel` is a canvas click
 operation. It is absent from the `voyager_workspace` tool schema, which the

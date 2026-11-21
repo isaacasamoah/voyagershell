@@ -410,6 +410,10 @@ fn load(
                     HostValue::from(notice.navigation_revision.to_string()),
                 ),
                 (
+                    "dockRevision".into(),
+                    HostValue::from(notice.dock_revision.to_string()),
+                ),
+                (
                     "activityRevision".into(),
                     HostValue::from(notice.activity_revision.to_string()),
                 ),
