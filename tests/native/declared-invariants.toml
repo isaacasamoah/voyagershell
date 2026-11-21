@@ -287,8 +287,8 @@ owner = "conversation-provider"
 source = "Isaac, 21 Nov 2026, from live use: voice held its own conversation in a loop whenever he was silent; when he says nothing, nothing should happen"
 features = ["voice"]
 guard = ["type:app/src/audio_io.rs#Gate", "type:app/src/speech.rs#heard_nothing"]
-type_gap = "Speech is told from other sound by its level in the speech band, not by a model of speech, so a loud sound in that band, such as distant talk or a television, can still pass as a turn until a voice activity model gates it."
-check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-room-sound-is-sent", "test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech", "test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech", "test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing"]
+type_gap = "Speech is told from other sound by a voice activity model, the Silero v6 port, so speech that is not the person, such as distant talk or a television, can still pass as a turn."
+check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-room-sound-is-sent", "journey:voice/quiet-voice-is-a-turn", "test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech", "test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech", "test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing"]
 confidence = "stated"
 
 [[invariant]]

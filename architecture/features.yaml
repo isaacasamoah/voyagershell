@@ -988,6 +988,7 @@ features:
         checks:
           - 'journey:voice/room-sound-is-never-a-turn'
           - 'journey:voice/request-in-room-sound-is-sent'
+          - 'journey:voice/quiet-voice-is-a-turn'
           - 'test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech'
           - 'test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech'
           - 'test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing'
