@@ -648,20 +648,7 @@ impl Answered {
     }
 
     fn claims_the_work(&self) -> bool {
-        let lower = self.says().to_lowercase().replace('\u{2019}', "'");
-        let promises = lower
-            .match_indices("i'll ")
-            .chain(lower.match_indices("i will "))
-            .any(|(at, found)| {
-                let rest = &lower[at + found.len()..];
-                !["ask ", "tell ", "pass "]
-                    .iter()
-                    .any(|allowed| rest.starts_with(allowed))
-            });
-        promises
-            || ["i've ", "i have ", "done", "finished"]
-                .iter()
-                .any(|word| lower.contains(word))
+        claims_the_work(self.says())
     }
 
     fn garbles_a_name(&self) -> bool {
@@ -682,6 +669,31 @@ impl Answered {
             name != "voyager" && name != "i" && !heard.contains(&name)
         })
     }
+}
+
+const FINISHED: [&str; 3] = ["done", "finished", "completed"];
+const DID: [&str; 11] = [
+    "made", "did", "set", "put", "found", "sent", "got", "ran", "wrote", "took", "built",
+];
+const PROMISED: [&str; 4] = ["ask", "tell", "pass", "let"];
+
+fn claims_the_work(say: &str) -> bool {
+    let words = words_of(&say.replace('\u{2019}', "'"));
+    let finished = words.iter().any(|word| FINISHED.contains(&word.as_str()));
+    let did_it = words.windows(2).any(|pair| {
+        pair[0] == "i"
+            && (pair[1].len() > 3 && pair[1].ends_with("ed")
+                || DID.contains(&pair[1].as_str())
+                || pair[1] == "have")
+    });
+    let has_done = words.iter().any(|word| word == "i've");
+    let will_do = words
+        .windows(2)
+        .any(|pair| pair[0] == "i'll" && !PROMISED.contains(&pair[1].as_str()))
+        || words.windows(3).any(|trio| {
+            trio[0] == "i" && trio[1] == "will" && !PROMISED.contains(&trio[2].as_str())
+        });
+    finished || did_it || has_done || will_do
 }
 
 fn words_of(text: &str) -> Vec<String> {
@@ -733,4 +745,40 @@ fn write_down(native: &mut Native) -> Result<Vec<Written>> {
     }
     voice::turn_off(native)?;
     Ok(written)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claims_the_work;
+
+    #[test]
+    fn a_reply_that_claims_the_work_is_caught() {
+        for planted in [
+            "Done.",
+            "All finished.",
+            "Sure, I'll make that fleet.",
+            "I will create it now.",
+            "I made a new fleet.",
+            "I renamed the vessel to Logs.",
+            "I've changed the layout.",
+            "I have moved it.",
+        ] {
+            assert!(claims_the_work(planted), "{planted}");
+        }
+    }
+
+    #[test]
+    fn an_acknowledgement_that_only_passes_the_work_on_is_not_caught() {
+        for honest in [
+            "Sure, opening the Billing fleet.",
+            "Sure, I'll ask Voyager what's new.",
+            "Okay, I'll tell Voyager to drop that.",
+            "Let me check whether the tests are passing.",
+            "Sure, Voyager can walk you through that.",
+            "I'm doing well, thanks. What can I do for you?",
+            "I'm Voyager's voice. I pass your workspace requests to Voyager.",
+        ] {
+            assert!(!claims_the_work(honest), "{honest}");
+        }
+    }
 }
