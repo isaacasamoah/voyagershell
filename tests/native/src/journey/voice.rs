@@ -165,6 +165,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("turn", turn)
     })?;
     cases.check(native, Case::ConnectingThenListening, |native| {
+        voice::finish_answers(native)?;
         native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
             label == READY
         })?;

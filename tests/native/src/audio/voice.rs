@@ -357,8 +357,13 @@ fn answers_are_over(native: &Native) -> Result<Option<()>> {
     .then_some(()))
 }
 
-pub fn turn_on(native: &Native) -> Result<()> {
+pub fn finish_answers(native: &Native) -> Result<()> {
     poll(REPLY_WAIT.within(), LOOK, true, || answers_are_over(native))?;
+    Ok(())
+}
+
+pub fn turn_on(native: &Native) -> Result<()> {
+    finish_answers(native)?;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;
