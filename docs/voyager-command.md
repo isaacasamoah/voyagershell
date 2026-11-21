@@ -235,11 +235,14 @@ voyager do workspace '{"requestId":"select-1","expectedVersion":"<version>","act
 ```
 
 Create a Vessel of the type `flag` in a new Fleet. The request is refused
-unless its Voyage is the selected one, so select it first with
-`{"operation":"select-voyage","id":"<voyage id>"}`. Take the id from the
-`voyage` field of a placement in `voyager status`, such as `voyage-1`. A name
-is refused with "Voyage not found". `typeId` is the type's `id`. The reply's
-layout holds the new placement.
+unless its Voyage is the selected one. The layout in every reply lists
+`voyages` with their ids, such as `voyage-1`, and names the `selectedVoyage`.
+Send `{"operation":"inspect"}` to read it. Select a Voyage that is not selected
+with `{"operation":"select-voyage","id":"<voyage id>"}`. Do not take the id from
+`voyager status`, because a Vessel that sits in Home reports an id such as
+`home-voyage-5`, which cannot be selected. A name or a Home id is refused with
+"Voyage not found". `typeId` is the type's `id`. The reply's layout holds the
+new placement.
 
 ```sh
 voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Flags","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<absolute directory>"},"typeId":"flag"}}'
