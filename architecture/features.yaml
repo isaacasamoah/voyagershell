@@ -952,6 +952,7 @@ features:
           - 'journey:voice/no-capture-without-click'
           - 'journey:voice/silence-keeps-voice-on'
           - 'journey:voice/click-turns-voice-off'
+          - 'journey:voice/click-off-keeps-the-microphone-closed'
           - 'journey:voice/rename-is-heard-and-acknowledged'
           - 'journey:voice/words-reach-voyager'
           - 'journey:voice/acknowledgement-is-prompt'

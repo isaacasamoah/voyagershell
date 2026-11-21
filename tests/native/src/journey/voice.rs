@@ -31,6 +31,7 @@ cases! {
     ReplyIsSpoken => "reply-is-spoken",
     TypedReplyIsSilent => "typed-reply-is-silent",
     TwoTurnsWithEcho => "two-turns-with-echo",
+    ClickOffKeepsTheMicrophoneClosed => "click-off-keeps-the-microphone-closed",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
     RefusalIsInTheChat => "refusal-is-in-the-chat",
     RequestsAreWrittenDown => "requests-are-written-down",
@@ -459,6 +460,25 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("first", first)?
             .observed("second", second)
+    })?;
+    cases.check(native, Case::ClickOffKeepsTheMicrophoneClosed, |native| {
+        let off = voice::click_off_during_reply(native, &DOCK_ON_THIS_FLEET, QUIET_MIC)?;
+        Verdict::new()
+            .expect(
+                "the control reads Start voice and the microphone closes at the click",
+                off.label_after_click == READY && off.microphone_closed,
+            )
+            .expect(
+                "after the reply ends the microphone is never opened again and voice stays off",
+                !off.opened_after_click
+                    && off.label_at_end == READY
+                    && off.recorders_after.iter().all(Vec::is_empty),
+            )
+            .expect(
+                "the next click opens the microphone",
+                off.opened_after_next_click,
+            )
+            .observed("clickOff", off)
     })?;
     cases.check(native, Case::AcknowledgementIsPrompt, |native| {
         let mut first_sounds = Vec::new();

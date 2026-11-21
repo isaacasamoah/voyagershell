@@ -252,7 +252,7 @@ source = "Isaac, 17 Nov 2026; declared invariants design, section 3c, agreed by 
 features = ["voice"]
 guard = []
 type_gap = "The microphone is opened only by the voice layer's listener while the switch that a click flips is on. Nothing in the types stops another caller from opening a capture."
-check = ["journey:voice/no-capture-without-click", "journey:voice/silence-keeps-voice-on", "journey:voice/click-turns-voice-off", "journey:voice/rename-is-heard-and-acknowledged", "journey:voice/words-reach-voyager", "journey:voice/acknowledgement-is-prompt", "test:app/src/voice_layer_tests.rs#nothing_is_captured_until_a_click_asks_for_it", "test:app/src/voice_layer_tests.rs#a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again"]
+check = ["journey:voice/no-capture-without-click", "journey:voice/silence-keeps-voice-on", "journey:voice/click-turns-voice-off", "journey:voice/click-off-keeps-the-microphone-closed", "journey:voice/rename-is-heard-and-acknowledged", "journey:voice/words-reach-voyager", "journey:voice/acknowledgement-is-prompt", "test:app/src/voice_layer_tests.rs#nothing_is_captured_until_a_click_asks_for_it", "test:app/src/voice_layer_tests.rs#a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again"]
 confidence = "stated"
 
 [[invariant]]
