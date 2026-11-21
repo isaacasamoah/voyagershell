@@ -126,9 +126,10 @@ stays spoken.
 A reply is spoken only while voice is on. It takes the audio floor from the listener.
 The listener closes the microphone and steps aside only after 1.5 s with no sound, the
 same silence that ends a turn. So a reply never cuts in on a person who has started to
-speak, even between their first words, and plays at the next quiet moment. In a room
-that is never quiet, such as one with music playing, a reply waits at most 3 s and then
-plays, unless a sentence is under way. A sentence ends at its turn or at the 30 s cap. The 3 s is a
+speak, even between their first words, and plays at the next quiet moment. If the room
+is never quiet but the listener does not take the sound as speech, a reply waits 3 s and
+then plays. If the listener takes the sound as speech, such as a steady loud sound, the
+reply waits until that turn ends, which can be as late as the 30 s cap. The 3 s is a
 target. It has not been measured in a real room.
 Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
