@@ -515,8 +515,8 @@ mod tests {
 
     #[test]
     fn speech_without_a_long_pause_stops_at_the_cap() {
-        let talk =
-            (0..CAP_FRAMES / 23 + 1).flat_map(|_| spoken(20).chain(std::iter::repeat_n(quiet(), 3)));
+        let talk = (0..CAP_FRAMES / 23 + 1)
+            .flat_map(|_| spoken(20).chain(std::iter::repeat_n(quiet(), 3)));
         let (heard, _) = run(settled().chain(talk));
         assert_eq!(heard, vec![Heard::Settled, Heard::Ended(End::Cap)]);
     }
