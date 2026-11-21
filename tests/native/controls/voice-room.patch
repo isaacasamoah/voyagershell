@@ -1,16 +1,18 @@
 diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
 --- a/app/src/audio_io.rs
 +++ b/app/src/audio_io.rs
-@@ -16,7 +16,7 @@
+@@ -16,8 +16,8 @@ const LEAD_FRAMES: usize = 50;
  const FLOOR_FRAMES: usize = 100;
  const MIN_THRESHOLD: f32 = 200.0;
  const FLOOR_FACTOR: f32 = 3.0;
 -const EMPHASIS: f32 = 0.97;
+-const MIN_SPREAD: f32 = 1.5;
 +const EMPHASIS: f32 = 0.0;
++const MIN_SPREAD: f32 = 0.0;
  const PLAYING_LOOK: Duration = Duration::from_millis(20);
  
  #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-@@ -67,7 +67,7 @@
+@@ -72,7 +72,7 @@ impl Gate {
              self.floors.pop_front();
          }
          let floor = self.floors.iter().copied().fold(f32::MAX, f32::min);
