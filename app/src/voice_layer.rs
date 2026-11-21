@@ -296,13 +296,13 @@ impl Exchange<'_> {
             Ok(reply) => {
                 self.trace.mark_words(
                     "replied",
-                    &serde_json::json!({"handoff": reply.handoff, "say": reply.say.as_str()})
+                    &serde_json::json!({"handoff": reply.handoff(), "say": reply.say().as_str()})
                         .to_string(),
                 );
-                if !reply.handoff {
-                    (Wording::Say(reply.say), false)
+                if !reply.handoff() {
+                    (Wording::Say(reply.say().clone()), false)
                 } else if held.send {
-                    (Wording::Say(reply.say), true)
+                    (Wording::Say(reply.say().clone()), true)
                 } else {
                     (Wording::Phrase(held.phrase), false)
                 }

@@ -189,8 +189,8 @@ pub trait Hearing: Send + Sync {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Reply {
-    pub say: SpokenText,
-    pub handoff: bool,
+    say: SpokenText,
+    handoff: bool,
 }
 
 #[derive(Deserialize, Eq, PartialEq)]
@@ -207,6 +207,14 @@ struct Answer {
 }
 
 impl Reply {
+    pub fn say(&self) -> &SpokenText {
+        &self.say
+    }
+
+    pub fn handoff(&self) -> bool {
+        self.handoff
+    }
+
     pub fn parse(answer: &str, chat_probability: Option<f64>) -> Option<Self> {
         let Answer { kind, say } = serde_json::from_str(answer).ok()?;
         let sure_it_is_chat = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);

@@ -289,6 +289,16 @@ features = ["voice"]
 guard = ["type:app/src/audio_io.rs#Gate", "type:app/src/speech.rs#heard_nothing"]
 type_gap = "Speech is told from other sound by its level in the speech band, not by a model of speech, so a loud sound in that band, such as distant talk or a television, can still pass as a turn until a voice activity model gates it."
 check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-room-sound-is-sent", "test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech", "test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech", "test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing"]
+
+id = "voice-answers-without-claiming-the-work"
+says = "The voice answers pure chat itself and acknowledges every request for Voyager in its own words, without answering it, saying it is done or changing a name, and Voyager still receives the words."
+kind = "user"
+owner = "conversation-provider"
+source = "Isaac, 21 Nov 2026: real responses, option A, and help, what can you do, never mind and cancel that go to Voyager; the voice experiment's round 7 gate"
+features = ["voice"]
+guard = ["type:app/src/speech.rs#Reply"]
+type_gap = "The model's answer is free text inside a JSON string. Nothing in the types stops a model from saying that it did the work."
+check = ["journey:voice/replies-follow-round-seven", "test:app/src/speech.rs#work_is_always_handed_off_whatever_the_probability", "test:app/src/voice_layer_tests.rs#small_talk_is_answered_by_the_voice_whatever_voyagers_state", "test:app/src/voice_layer_tests.rs#a_workspace_request_while_voyager_is_blocked_or_not_running_gets_the_reason_phrase_and_sends_nothing"]
 confidence = "stated"
 
 [[invariant]]

@@ -124,10 +124,14 @@ impl Brain {
 
     fn says(words: &str, handoff: bool) -> Self {
         Self {
-            reply: Ok(Reply {
-                say: SpokenText::from_say(words).unwrap(),
-                handoff,
-            }),
+            reply: Ok(Reply::parse(
+                &format!(
+                    r#"{{"kind": "{}", "say": "{words}"}}"#,
+                    if handoff { "work" } else { "chat" }
+                ),
+                Some(1.0),
+            )
+            .unwrap()),
             speaks: true,
         }
     }
