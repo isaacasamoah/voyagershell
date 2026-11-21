@@ -4,8 +4,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from record_requests import DEFAULT_DIR, refuse_unsafe
 
 URL = "http://127.0.0.1:8112/v1/chat/completions"
-BASE = "Transcribe the audio exactly as spoken. Output only the words, nothing else."
-HINT = BASE + " The speaker is using a workspace app. Words you may hear: dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core."
+BASE = "Perform ASR in English."
+HINT = BASE + " Words you may hear: dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core."
+
 PRODUCT = {
     "dock": r"dock(s|ed|ing)?",
     "fleet": r"fleets?",
