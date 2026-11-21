@@ -100,8 +100,9 @@ pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();
     let text = format!(
-        "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}",
-        focus.path.join(" > ")
+        "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}\n{}",
+        focus.path.join(" > "),
+        crate::spoken::reply_rule()
     );
     json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
         .to_string()
@@ -210,6 +211,7 @@ mod tests {
         let text = hook["additionalContext"].as_str().unwrap();
         assert!(text.contains("Home > Crew > crew"));
         assert!(text.contains("\"revision\":\"7\""));
+        assert!(text.ends_with(&crate::spoken::reply_rule()));
     }
 
     #[test]

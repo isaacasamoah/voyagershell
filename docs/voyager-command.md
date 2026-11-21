@@ -106,8 +106,11 @@ its instructions name. It asks Voyager to start every reply with `[vy]`, which
 also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
 own instructions leave their personal reply prefix out of Voyager's replies.
 Claude cannot read its own environment, so the identity states the same fact in
-words. The app strips the marker where it stores a reply, so neither the speech
-filter nor the chat note ever sees it.
+words. Claude Code ignores `--append-system-prompt` when it resumes a
+conversation, and the earlier replies in that conversation carry the personal prefix, so the
+focus hook output repeats `spoken::reply_rule` at every prompt. The app strips
+the marker where it stores a reply, so neither the speech filter nor the chat
+note ever sees it.
 
 The hook reads the prompt from the `UserPromptSubmit` input it receives on
 stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
