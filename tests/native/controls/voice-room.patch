@@ -12,12 +12,12 @@ diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
  const PLAYING_LOOK: Duration = Duration::from_millis(20);
  
  #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-@@ -72,7 +72,7 @@ impl Gate {
-             self.floors.pop_front();
-         }
-         let floor = self.floors.iter().copied().fold(f32::MAX, f32::min);
--        let threshold = (floor * FLOOR_FACTOR).max(MIN_THRESHOLD);
-+        let threshold = (floor * FLOOR_FACTOR).clamp(MIN_THRESHOLD, 600.0);
-         let loud = level > threshold;
-         if !matches!(self.stage, Stage::Settling { .. }) {
-             self.since_sound = if loud { 0 } else { self.since_sound + 1 };
+@@ -178,7 +178,7 @@ fn above_floor(floors: &mut VecDeque<f32>, level: f32) -> bool {
+         floors.pop_front();
+     }
+     let floor = floors.iter().copied().fold(f32::MAX, f32::min);
+-    level > (floor * FLOOR_FACTOR).max(MIN_THRESHOLD)
++    level > (floor * FLOOR_FACTOR).clamp(MIN_THRESHOLD, 600.0)
+ }
+ 
+ fn plain_level(frame: &[i16]) -> f32 {
