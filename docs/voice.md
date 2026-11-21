@@ -77,9 +77,10 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 The microphone is closed whenever the app's own audio plays, so the app never hears
 its own voice as a turn. There are no interruptions.
 
-A click turns voice off in any state. It stops listening and any audio that is
-playing at once, and drops a sentence that was still being spoken. A turn that had
-already ended is still sent, Voyager's work is not cancelled, and its reply lands in
+A click turns voice off in any state. It stops listening at once and drops a sentence
+that the person was still speaking. Audio that is already playing, the acknowledgement or
+a reply, finishes, and then voice is off. Only the app quitting cuts audio. A turn that
+had already ended is still sent, Voyager's work is not cancelled, and its reply lands in
 the chat without being spoken.
 
 If the microphone cannot be opened or its stream ends, voice stays on. The control
@@ -96,8 +97,8 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
 | `queued` | "Queued for Voyager." | Voyager is working | Yes |
 | `needs-you` | "Voyager needs you on Home first." | Voyager is blocked, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
-| `not-running` | "I couldn't pass that to Voyager." | Core reports the program ended or gone, or Core refuses a send with a kind not listed in this table, including `conflict` | No |
-| `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
+| `not-running` | "I couldn't pass that to Voyager." | Core refuses a send with a kind not listed in this table, including `conflict` | No |
+| `gone` | "Voyager isn't running." | No Voyager is bound, Core reports the program ended or gone, or Core refuses a send with kind `not_found` or `finished` | No |
 | `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
 | `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
 | `missed` | "I didn't catch that." | Hearing failed | No |
@@ -159,7 +160,7 @@ is never quiet but the listener does not take the sound as speech, a reply waits
 then plays. If the listener takes the sound as speech, such as a steady loud sound, the
 reply waits until that turn ends, which can be as late as the 30 s cap. The 3 s is a
 target. It has not been measured in a real room.
-Listening resumes when it ends. The reply thread and its floor lock are interim. One
+The listener checks the switch again once it holds the floor, so a click-off while a reply plays never opens the microphone again. Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
 
 ### The whole answer, written for the ear
@@ -207,6 +208,9 @@ A send that Core refuses after the acknowledgement is a known refusal. The app p
 one cached clip chosen by Core's refusal kind, adds the refusal as a line in the chat,
 and shows it in the voice control's tooltip. Each clip is true for every kind mapped to
 it, and an unknown kind keeps "I couldn't pass that to Voyager." The table above lists each kind.
+An unconfirmed send stays silent and is shown only in the tooltip. A send is never repeated.
+Audio goes through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
+PulseAudio command line tools, which PipeWire also serves. Linux is the only verified platform.
 
 A stalled engine never delays the canvas. The layer runs on its own thread, reaches
 Core only through the application queue, and the canvas only reads a small snapshot.
