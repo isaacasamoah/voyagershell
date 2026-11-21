@@ -426,13 +426,22 @@ mod tests {
             .collect()
     }
 
-    fn first_voiced_frame(samples: &[i16]) -> usize {
+    fn voiced(samples: &[i16]) -> std::ops::Range<usize> {
         let levels: Vec<f32> = samples.chunks(FRAME).map(plain_level).collect();
         let loudest = levels.iter().copied().fold(0.0, f32::max);
-        levels
-            .iter()
-            .position(|level| *level > loudest * 0.05)
-            .unwrap_or(0)
+        let loud = |level: &f32| *level > loudest * 0.05;
+        let first = levels.iter().position(loud).unwrap_or(0);
+        let last = levels.iter().rposition(loud).unwrap_or(0);
+        first..last + 1
+    }
+
+    fn first_voiced_frame(samples: &[i16]) -> usize {
+        voiced(samples).start
+    }
+
+    fn trimmed(samples: &[i16]) -> &[i16] {
+        let span = voiced(samples);
+        &samples[span.start * FRAME..(span.end * FRAME).min(samples.len())]
     }
 
     fn hiss(count: usize, level: f32) -> Vec<Vec<i16>> {
@@ -588,14 +597,15 @@ mod tests {
         for percent in [100, 6] {
             let first = voice("command-21", percent);
             let second = voice("question-02", percent);
+            let (first, second) = (trimmed(&first), trimmed(&second));
             let mut frames: Vec<Vec<i16>> = settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
             let from = frames.len();
-            frames.extend(framed(&first));
+            frames.extend(framed(first));
             frames.extend(std::iter::repeat_n(quiet(), 70));
-            frames.extend(framed(&second));
+            frames.extend(framed(second));
             let to = frames.len();
             frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES + 25));
-            one_whole_turn(frames, from + first_voiced_frame(&first), to);
+            one_whole_turn(frames, from, to);
         }
     }
 
