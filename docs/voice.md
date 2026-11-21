@@ -28,7 +28,7 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    filter, to keep a door's thud and a fan's rumble from starting turns. Isaac's
    real voice through his microphone then never started a turn, and voice stayed
    green and silent while he spoke. A low voice loses most of its level to that
-   filter: "Dock on this fleet." keeps 0.22 of its level, and at 0.3 of its
+   filter. "Dock on this fleet." keeps 0.22 of its level, and at 0.3 of its
    committed loudness it no longer started a turn. A door, typing or a fan can
    therefore start a turn again. Its acknowledgement plays, and hearing then drops
    a read-back of the hint before anything is sent. A sound that switches on and
@@ -37,7 +37,7 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    percentile of its sounding frames' level is under 1.5 times the 10th
    percentile, the room got louder and nobody spoke. The turn is dropped without
    a word and listening goes on. The bands behind the 1.5 were measured on the
-   speech-band level: a fan switching on measured 1.13 to 1.23 over five seeds,
+   speech-band level. A fan switching on measured 1.13 to 1.23 over five seeds,
    and the 40 committed requests measured at least 3.52 with no fan or a soft fan
    and at least 1.69 over a loud fan. On the plain level they are a target to
    measure. Speech then ends the turn after 1.5 s
