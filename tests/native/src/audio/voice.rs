@@ -727,11 +727,26 @@ mod tests {
 
     #[test]
     fn word_errors_count_substitutions_insertions_and_deletions_as_round_four_did() {
-        assert_eq!(word_errors("Dock on this fleet.", "dock on this Fleet"), (0, 4));
-        assert_eq!(word_errors("Dock on the fleet", "Dock on this fleet."), (1, 4));
-        assert_eq!(word_errors("Dock this fleet now please", "Dock on this fleet."), (3, 4));
-        assert_eq!(word_errors("What is 2 plus 2?", "What is two plus two?"), (0, 5));
-        assert_eq!(word_errors("Open Voyager Shell", "Open voyagershell"), (0, 2));
+        assert_eq!(
+            word_errors("Dock on this fleet.", "dock on this Fleet"),
+            (0, 4)
+        );
+        assert_eq!(
+            word_errors("Dock on the fleet", "Dock on this fleet."),
+            (1, 4)
+        );
+        assert_eq!(
+            word_errors("Dock this fleet now please", "Dock on this fleet."),
+            (3, 4)
+        );
+        assert_eq!(
+            word_errors("What is 2 plus 2?", "What is two plus two?"),
+            (0, 5)
+        );
+        assert_eq!(
+            word_errors("Open Voyager Shell", "Open voyagershell"),
+            (0, 2)
+        );
         assert_eq!(
             word_errors(
                 "The fleet includes a home dock, a fleet of vessels, and voyagershell.",
@@ -756,9 +771,15 @@ mod tests {
         let folder = std::env::temp_dir().join(format!("voice-trace-{}", std::process::id()));
         fs::create_dir_all(&folder)?;
         let path = folder.join("voice-trace.jsonl");
-        fs::write(&path, "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-st")?;
+        fs::write(
+            &path,
+            "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-st",
+        )?;
         let first = marks(&path)?;
-        fs::write(&path, "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-started\",\"atMs\":2}\n")?;
+        fs::write(
+            &path,
+            "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-started\",\"atMs\":2}\n",
+        )?;
         let second = marks(&path)?;
         fs::remove_dir_all(&folder)?;
         assert_eq!(first.len(), 1);

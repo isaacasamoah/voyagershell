@@ -103,7 +103,10 @@ fn requests_from(table: &str, pcm: &[u8]) -> Result<Vec<Request>> {
             _ => bail!("A spoken request has an unknown kind: {kind}"),
         };
         let end = at + samples.parse::<usize>()? * 2;
-        let narrow = Samples::raw(pcm.get(at..end).context("The spoken requests are cut short")?);
+        let narrow = Samples::raw(
+            pcm.get(at..end)
+                .context("The spoken requests are cut short")?,
+        );
         requests.push(Request {
             name: name.to_owned(),
             kind,
@@ -112,7 +115,10 @@ fn requests_from(table: &str, pcm: &[u8]) -> Result<Vec<Request>> {
         });
         at = end;
     }
-    ensure!(at == pcm.len(), "The spoken requests have samples left over");
+    ensure!(
+        at == pcm.len(),
+        "The spoken requests have samples left over"
+    );
     Ok(requests)
 }
 
@@ -308,9 +314,15 @@ mod tests {
     }
 
     #[test]
-    fn the_spoken_requests_are_twenty_questions_and_twenty_commands_at_the_feed_rate() -> Result<()> {
+    fn the_spoken_requests_are_twenty_questions_and_twenty_commands_at_the_feed_rate() -> Result<()>
+    {
         let requests = requests()?;
-        let count = |kind| requests.iter().filter(|request| request.kind == kind).count();
+        let count = |kind| {
+            requests
+                .iter()
+                .filter(|request| request.kind == kind)
+                .count()
+        };
         assert_eq!((count(Kind::Question), count(Kind::Command)), (20, 20));
         for request in &requests {
             assert!(request.samples.0.len() > RATE as usize, "{}", request.name);
