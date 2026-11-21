@@ -24,7 +24,16 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    frame of the last 2 s, and never with less than 200. The threshold has no
    ceiling, so a steady sound, however loud, never counts as speech. A sound
    counts as speech only after 0.2 s without a break, so a click, a thump as the
-   microphone opens or a tap is never a turn. Speech then ends the turn after 1.5 s
+   microphone opens or a tap is never a turn. A sound that switches on and
+   stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
+   turn that ends is also checked for the rise and fall of speech. When the 90th
+   percentile of its sounding frames' level is under 1.5 times the 10th
+   percentile, the room got louder and nobody spoke. The turn is dropped without
+   a word and listening goes on. In a simulation of the gate, a fan switching on
+   measured 1.13 to 1.23 over five seeds. The 40 committed requests measured at
+   least 3.52 with no fan or a soft fan and at least 1.69 over a loud fan. A
+   request that starts 0.3 s after, at the moment of or 0.5 s before a fan
+   switches on, or that ends as it switches on, was kept in all 40 cases each. Speech then ends the turn after 1.5 s
    of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
    is never a turn and never turns voice off. The utterance keeps the 1 s before
    speech started, so its first word is not cut.

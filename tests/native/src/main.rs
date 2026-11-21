@@ -557,6 +557,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/audio.rs", include_bytes!("audio.rs")),
     ("src/audio/exchange.rs", include_bytes!("audio/exchange.rs")),
     ("src/audio/judge.rs", include_bytes!("audio/judge.rs")),
+    ("src/audio/room.rs", include_bytes!("audio/room.rs")),
     ("src/audio/selftest.rs", include_bytes!("audio/selftest.rs")),
     ("src/audio/speech.rs", include_bytes!("audio/speech.rs")),
     ("src/audio/voice.rs", include_bytes!("audio/voice.rs")),

@@ -1,9 +1,10 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+index 446ff870..1298b127 100644
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -298,7 +298,7 @@
-                     self.trace
-                         .mark_words("acknowledgement-started", Phrase::Missed.key());
+@@ -296,7 +296,7 @@ impl Exchange<'_> {
+                 if heard_nothing(&heard, &names) {
+                     self.trace.mark("dropped");
                  } else if send {
 -                    match self.voyager.say(&crate::spoken::prompt(&heard)) {
 +                    match self.voyager.say(&heard) {

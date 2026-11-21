@@ -147,9 +147,24 @@ fn frames(frame: fn() -> Vec<i16>, count: usize) -> Vec<Step> {
     (0..count).map(|_| Step::Frame(frame())).collect()
 }
 
+fn spoken(count: usize) -> Vec<Step> {
+    const SYLLABLES: [f32; 5] = [1.0, 0.7, 0.35, 0.9, 0.3];
+    (0..count)
+        .map(|index| {
+            let strength = SYLLABLES[index % SYLLABLES.len()];
+            Step::Frame(
+                loud()
+                    .into_iter()
+                    .map(|sample| (f32::from(sample) * strength) as i16)
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
 fn sentence() -> Vec<Step> {
     let mut steps = frames(quiet, 20);
-    steps.extend(frames(loud, 20));
+    steps.extend(spoken(20));
     steps.extend(frames(quiet, 80));
     steps
 }
@@ -315,7 +330,7 @@ fn the_phase_is_connecting_until_the_floor_settles_then_listening() {
 #[test]
 fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
     let mut steps = frames(quiet, 20);
-    steps.extend(frames(loud, 20));
+    steps.extend(spoken(20));
     steps.push(Step::Click);
     steps.extend(frames(quiet, 80));
     let rig = Rig::new(vec![Mic::Opens(steps)], Standing::Idle, false);
@@ -430,10 +445,10 @@ fn a_reply_waiting_for_the_floor_closes_the_microphone_before_speech_starts() {
 #[test]
 fn a_reply_waits_through_a_short_gap_after_the_first_word() {
     let mut steps = frames(quiet, 20);
-    steps.extend(frames(loud, 8));
+    steps.extend(spoken(8));
     steps.push(Step::WantFloor);
     steps.extend(frames(quiet, 9));
-    steps.extend(frames(loud, 30));
+    steps.extend(spoken(30));
     steps.extend(frames(quiet, 80));
     let rig = Rig::new(vec![Mic::Opens(steps)], Standing::Idle, false);
     rig.shared.update(|state| state.snapshot.on = true);
@@ -447,7 +462,7 @@ fn a_reply_waits_at_most_three_seconds_in_a_room_that_is_never_quiet() {
     let mut steps = frames(quiet, 20);
     steps.push(Step::WantFloor);
     for _ in 0..60 {
-        steps.extend(frames(loud, 3));
+        steps.extend(spoken(3));
         steps.extend(frames(quiet, 3));
     }
     let rig = Rig::new(vec![Mic::Opens(steps)], Standing::Idle, false);
@@ -460,9 +475,9 @@ fn a_reply_waits_at_most_three_seconds_in_a_room_that_is_never_quiet() {
 #[test]
 fn a_reply_waits_while_the_person_is_mid_sentence() {
     let mut steps = frames(quiet, 20);
-    steps.extend(frames(loud, 12));
+    steps.extend(spoken(12));
     steps.push(Step::WantFloor);
-    steps.extend(frames(loud, 10));
+    steps.extend(spoken(10));
     steps.extend(frames(quiet, 80));
     let rig = Rig::new(vec![Mic::Opens(steps)], Standing::Idle, false);
     rig.shared.update(|state| state.snapshot.on = true);
