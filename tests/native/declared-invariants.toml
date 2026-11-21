@@ -256,6 +256,18 @@ check = ["journey:voice/no-capture-without-click", "journey:voice/silence-keeps-
 confidence = "stated"
 
 [[invariant]]
+id = "voice-mic-stays-off-after-a-click-off"
+says = "After a click turns voice off, the microphone is not opened again until the next click, even when a reply was playing at the click."
+kind = "user"
+owner = "conversation-provider"
+source = "Verify's and the admiral's finding, 21 Nov 2026: a click-off during a reply let the listener open the microphone once more before it read the switch"
+features = ["voice"]
+guard = ["type:app/src/voice_layer.rs#Wanted"]
+type_gap = "The switch is read in two places of the serve loop, and nothing in the types stops a new path from opening the microphone before it reads it."
+check = ["journey:voice/click-off-keeps-the-microphone-closed", "test:app/src/voice_layer_tests.rs#a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again"]
+confidence = "stated"
+
+[[invariant]]
 id = "voice-waits-for-the-speaker"
 says = "After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app's own voice is never a turn."
 kind = "user"
