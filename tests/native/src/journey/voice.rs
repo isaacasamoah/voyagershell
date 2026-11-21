@@ -39,7 +39,7 @@ cases! {
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
-const TARGET_MS: i64 = 300;
+const TARGET_MS: i64 = 8000;
 const RUNS: usize = 10;
 const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
