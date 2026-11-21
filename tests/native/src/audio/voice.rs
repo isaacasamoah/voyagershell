@@ -48,7 +48,8 @@ pub struct Conversation {
 pub fn marks(path: &Path) -> Result<Vec<Mark>> {
     match fs::read_to_string(path) {
         Ok(text) => text
-            .lines()
+            .split_inclusive('\n')
+            .filter_map(|line| line.strip_suffix('\n'))
             .map(|line| serde_json::from_str(line).context("A voice trace line is not JSON"))
             .collect(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
@@ -675,6 +676,21 @@ mod tests {
             "Dock on this fleet",
             "[spoken] Dock on this fleet"
         ));
+    }
+
+    #[test]
+    fn a_trace_line_the_app_is_still_writing_is_read_on_the_next_look() -> Result<()> {
+        let folder = std::env::temp_dir().join(format!("voice-trace-{}", std::process::id()));
+        fs::create_dir_all(&folder)?;
+        let path = folder.join("voice-trace.jsonl");
+        fs::write(&path, "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-st")?;
+        let first = marks(&path)?;
+        fs::write(&path, "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-started\",\"atMs\":2}\n")?;
+        let second = marks(&path)?;
+        fs::remove_dir_all(&folder)?;
+        assert_eq!(first.len(), 1);
+        assert_eq!(second.len(), 2);
+        Ok(())
     }
 
     #[test]
