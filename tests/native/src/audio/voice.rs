@@ -410,6 +410,7 @@ pub struct HeardTurn {
     pub acknowledgements: Vec<String>,
     pub heard: Option<String>,
     pub sent: bool,
+    pub dropped: bool,
     pub spoken: Vec<String>,
 }
 
@@ -423,6 +424,10 @@ pub struct Listened {
 impl Listened {
     pub fn sent(&self) -> usize {
         self.turns.iter().filter(|turn| turn.sent).count()
+    }
+
+    pub fn dropped(&self) -> usize {
+        self.turns.iter().filter(|turn| turn.dropped).count()
     }
 }
 
@@ -446,6 +451,7 @@ fn turns_in(marks: &[Mark], began: u64) -> Vec<HeardTurn> {
             }
             "heard" => turn.heard = mark.words.clone(),
             "sent" => turn.sent = true,
+            "dropped" => turn.dropped = true,
             "speech-started" => turn.spoken.extend(mark.words.clone()),
             _ => {}
         }

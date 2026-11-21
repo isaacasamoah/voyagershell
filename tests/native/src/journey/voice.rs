@@ -256,6 +256,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("turns", listened.turns.len())?
             .observed("sent", listened.sent())?
+            .observed("droppedAfterHearing", listened.dropped())?
             .observed("heard", &heard)?
             .observed("roomSha256", made.sha256())?
             .observed("roomEvents", &made.events)?
