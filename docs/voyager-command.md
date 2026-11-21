@@ -174,8 +174,9 @@ the exit code is 1 and nothing is queued.
 `create-fleet-with-vessel` is offered only to Voyager too. It makes a Fleet
 for the person with a first Vessel. That Vessel is a terminal running the named
 `launch`, or the default terminal when none is named. Select the Voyage first, because the
-request is refused unless its Voyage is the selected one on the Fleet view. A
-Fleet for an agent stays `create-fleet`, which opens empty.
+request is refused unless its Voyage is the selected one on the Fleet view.
+`cwd` is that Voyage's own `cwd` from the layout of an `inspect` reply, not any
+directory. A Fleet for an agent stays `create-fleet`, which opens empty.
 
 ```sh
 voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Review","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<voyage cwd>"},"typeId":"terminal"}}'
@@ -249,8 +250,7 @@ any other, to read it. Select a Voyage that is not selected
 with `{"operation":"select-voyage","id":"<voyage id>"}`. Do not take the id from
 `voyager status`, because a Vessel that sits in Home reports an id such as
 `home-voyage-5`, which cannot be selected. A name or a Home id is refused with
-"Voyage not found". `cwd` is that Voyage's own `cwd` from the layout of an
-`inspect` reply, not any directory. `typeId` is the type's `id`. The reply's layout holds the
+"Voyage not found". `typeId` is the type's `id`. The reply's layout holds the
 new placement.
 
 ```sh
@@ -290,9 +290,7 @@ A Vessel type is one JSON file. No code, build or restart is needed.
    Never edit a profile that you were not given.
 2. Write `<profile>/vessels/<folder>/manifest.json` and an empty file with the
    name that `view.source` gives, in the same folder. Name the folder exactly
-   like the type's `id`. Until a type first passes the check, the app finds it
-   by its folder name, and only after that does a refused create show the
-   problem list. The `id` is what you pass as `typeId`.
+   like the type's `id`. Until a type first passes the check, the app finds it by its folder name, not its id, so a refused create shows the problem list only when the folder is named like the id. The `id` is what you pass as `typeId`.
 3. Create a Vessel of the type, as above. The app checks the manifest then, and
    again whenever the file's modification time or length changes.
 
