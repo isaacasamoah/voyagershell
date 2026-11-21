@@ -1553,6 +1553,17 @@ features:
           - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
         formal: []
         journeys: [adopt-by-label]
+      - id: only-the-bound-voyager-is-offered-voyager-only-operations
+        kind: user
+        says: 'Only the bound Voyager is offered dock, create-fleet-with-vessel, create-vessel and set-placement-maximized through its Vessel socket. Any other Vessel''s call to one of them is refused with nothing queued, and the workspace stays as it was.'
+        owner: application-queue
+        guards: ['type:app/src/voyager_binding.rs#Binding']
+        checks:
+          - 'journey:socket-dock/voyager-creates-and-maximizes'
+          - 'test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal'
+          - 'test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other'
+        formal: []
+        journeys: [socket-dock]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
     sources:
       - contract/src/place.rs
