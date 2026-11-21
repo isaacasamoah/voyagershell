@@ -451,12 +451,14 @@ mod tests {
     fn the_background_env_stays_out_of_argv_so_the_session_is_still_recognised() {
         for command in [None, Some(Path::new("/opt/voyager"))] {
             let words = voyager_arguments("s1", false, command);
-            let at = words.iter().position(|word| word == "--settings").unwrap();
+            let value_of = |flag: &str| words.iter().position(|word| word == flag).unwrap() + 1;
+            let (settings_at, prompt_at) =
+                (value_of("--settings"), value_of("--append-system-prompt"));
             assert!(
                 words
                     .iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != at + 1)
+                    .filter(|(index, _)| *index != settings_at && *index != prompt_at)
                     .all(|(_, word)| !word.contains(BACKGROUND))
             );
             let mut argv = vec![PROGRAM.to_owned()];
