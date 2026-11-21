@@ -21,8 +21,9 @@ pub(crate) const DEFAULT_ARGV: [&str; 5] =
     [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
 
 const BACKGROUND: &str = "VOYAGER_BACKGROUND";
+const SKILL: &str = "Run voyager --skill to learn how to work in the app.";
 
-const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
+const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
 
 fn value<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
     argv.windows(2)
@@ -97,11 +98,20 @@ pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
         && value(&terminal.argv, &["-n"]) == Some(NAME)
 }
 
+fn reminder() -> String {
+    format!(
+        "{} {} {SKILL}",
+        crate::spoken::reply_rule(),
+        crate::spoken::policy_rule()
+    )
+}
+
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();
     let text = format!(
-        "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}",
-        focus.path.join(" > ")
+        "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}\n{}",
+        focus.path.join(" > "),
+        reminder()
     );
     json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
         .to_string()
@@ -210,6 +220,18 @@ mod tests {
         let text = hook["additionalContext"].as_str().unwrap();
         assert!(text.contains("Home > Crew > crew"));
         assert!(text.contains("\"revision\":\"7\""));
+        assert!(text.ends_with(&reminder()));
+    }
+
+    #[test]
+    fn the_per_prompt_reminder_carries_the_marker_rule_the_spoken_rule_and_the_skill_pointer() {
+        let text = reminder();
+        assert!(text.starts_with(&crate::spoken::reply_rule()));
+        assert!(text.contains(&crate::spoken::policy_rule()));
+        assert!(text.ends_with(SKILL));
+        assert!(IDENTITY.contains(SKILL));
+        assert!(!text.to_lowercase().contains("oru"));
+        assert!(text.len() < 700);
     }
 
     #[test]
@@ -451,12 +473,14 @@ mod tests {
     fn the_background_env_stays_out_of_argv_so_the_session_is_still_recognised() {
         for command in [None, Some(Path::new("/opt/voyager"))] {
             let words = voyager_arguments("s1", false, command);
-            let at = words.iter().position(|word| word == "--settings").unwrap();
+            let value_of = |flag: &str| words.iter().position(|word| word == flag).unwrap() + 1;
+            let (settings_at, prompt_at) =
+                (value_of("--settings"), value_of("--append-system-prompt"));
             assert!(
                 words
                     .iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != at + 1)
+                    .filter(|(index, _)| *index != settings_at && *index != prompt_at)
                     .all(|(_, word)| !word.contains(BACKGROUND))
             );
             let mut argv = vec![PROGRAM.to_owned()];
@@ -479,7 +503,23 @@ mod tests {
             .unwrap();
         let prompt = &words[at + 1];
         assert!(prompt.contains("Run voyager --skill to learn how to work in the app."));
-        assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 1);
+        assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 2);
         assert!(prompt.contains(&crate::spoken::reply_rule()));
+    }
+
+    #[test]
+    fn the_identity_names_the_background_session_its_marker_and_that_the_marker_replaces_others() {
+        let words = voyager_arguments("s1", true, None);
+        let at = words
+            .iter()
+            .position(|word| word == "--append-system-prompt")
+            .unwrap();
+        let prompt = &words[at + 1];
+        assert!(prompt.contains(
+            "This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1."
+        ));
+        assert!(prompt.contains("Your reply marker is [vy]"));
+        assert!(prompt.contains("replaces any other reply marker your instructions name"));
+        assert!(!prompt.to_lowercase().contains("oru"));
     }
 }

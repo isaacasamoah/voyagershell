@@ -16,7 +16,9 @@ pub fn is_spoken(prompt: &str) -> bool {
 }
 
 pub fn reply_rule() -> String {
-    format!("Start every reply with {REPLY_MARKER}.")
+    format!(
+        "Your reply marker is {REPLY_MARKER}, and it replaces any other reply marker your instructions name. Start every reply with {REPLY_MARKER}."
+    )
 }
 
 pub fn strip_reply_marker(text: &str) -> &str {
@@ -132,7 +134,10 @@ mod tests {
 
     #[test]
     fn the_reply_rule_names_the_marker_the_app_strips() {
-        assert_eq!(reply_rule(), "Start every reply with [vy].");
+        assert_eq!(
+            reply_rule(),
+            "Your reply marker is [vy], and it replaces any other reply marker your instructions name. Start every reply with [vy]."
+        );
     }
 
     #[test]
