@@ -390,6 +390,26 @@ fn a_shutdown_while_the_acknowledgement_plays_cuts_it() {
 }
 
 #[test]
+fn a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    let held = rig.floor.hold();
+    thread::scope(|scope| {
+        scope.spawn(|| rig.serve("open the roadmap"));
+        thread::sleep(Duration::from_millis(100));
+        click(&rig.shared);
+        drop(held);
+        thread::sleep(Duration::from_millis(150));
+        wait_until(|| {
+            let snapshot = rig.snapshot();
+            !snapshot.on && snapshot.phase == Phase::Ready
+        });
+        rig.shared.update(|state| state.shutdown = true);
+    });
+    assert_eq!(rig.opened(), 0);
+    assert!(rig.said().is_empty());
+}
+
+#[test]
 fn a_microphone_that_cannot_open_is_announced_once_and_retried_until_it_hears() {
     let rig = Rig::new(
         vec![Mic::Refuses, Mic::Refuses, Mic::Opens(sentence())],
