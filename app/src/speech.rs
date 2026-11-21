@@ -338,7 +338,7 @@ pub fn hearing_prompt(names: &[String]) -> String {
         }
     }
     format!(
-        "Transcribe the audio exactly as spoken. Output only the words, nothing else. The speaker is using a workspace app. Words you may hear: {}.",
+        "Perform ASR in English. Words you may hear: {}.",
         words.join(", ")
     )
 }
@@ -584,5 +584,14 @@ mod tests {
         );
         assert!(prompt.ends_with("Core, Harbor."));
         assert_eq!(prompt.matches("Fleet").count(), 1);
+    }
+
+    #[test]
+    fn the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else() {
+        let prompt = hearing_prompt(&[]);
+        assert_eq!(
+            prompt,
+            "Perform ASR in English. Words you may hear: dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core."
+        );
     }
 }

@@ -48,7 +48,8 @@ pub struct Conversation {
 pub fn marks(path: &Path) -> Result<Vec<Mark>> {
     match fs::read_to_string(path) {
         Ok(text) => text
-            .lines()
+            .split_inclusive('\n')
+            .filter_map(|line| line.strip_suffix('\n'))
             .map(|line| serde_json::from_str(line).context("A voice trace line is not JSON"))
             .collect(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
@@ -67,6 +68,54 @@ pub fn words_match(heard: &str, wanted: &str) -> bool {
             .collect::<Vec<_>>()
     };
     plain(heard) == plain(wanted)
+}
+
+const NUMBERS: [&str; 11] = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+];
+
+fn scored_words(text: &str) -> Vec<String> {
+    let joined = text
+        .to_lowercase()
+        .replace("voyager shell", "voyagershell")
+        .replace("voyager-shell", "voyagershell")
+        .replace('-', " ");
+    joined
+        .chars()
+        .map(|c| {
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '\'' {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .map(|word| {
+            word.parse::<usize>()
+                .ok()
+                .and_then(|number| NUMBERS.get(number))
+                .map_or_else(|| word.to_owned(), |name| (*name).to_owned())
+        })
+        .collect()
+}
+
+pub fn word_errors(heard: &str, wanted: &str) -> (usize, usize) {
+    let wanted = scored_words(wanted);
+    let heard = scored_words(heard);
+    let mut row: Vec<usize> = (0..=heard.len()).collect();
+    for (index, word) in wanted.iter().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = index + 1;
+        for (column, other) in heard.iter().enumerate() {
+            let above = row[column + 1];
+            row[column + 1] = (above + 1)
+                .min(row[column] + 1)
+                .min(diagonal + usize::from(word != other));
+            diagonal = above;
+        }
+    }
+    (row[heard.len()], wanted.len())
 }
 
 fn clip(home: &Path, key: &str) -> Result<Samples> {
@@ -310,6 +359,15 @@ pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn>
     super::wait_for_exit(&mut player)?;
     let fed_until_ms = now_millis();
     turn_since(native, before, fed_until_ms, "heard")
+}
+
+pub fn feed_until_listening(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    let stack = stack(native)?;
+    let before = marks(&native.voice_trace())?.len();
+    let mut player = stack.start_feed(&native.system, name, samples)?;
+    super::wait_for_exit(&mut player)?;
+    let fed_until_ms = now_millis();
+    turn_since(native, before, fed_until_ms, "listening")
 }
 
 pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
@@ -668,6 +726,37 @@ mod tests {
     }
 
     #[test]
+    fn word_errors_count_substitutions_insertions_and_deletions_as_round_four_did() {
+        assert_eq!(
+            word_errors("Dock on this fleet.", "dock on this Fleet"),
+            (0, 4)
+        );
+        assert_eq!(
+            word_errors("Dock on the fleet", "Dock on this fleet."),
+            (1, 4)
+        );
+        assert_eq!(
+            word_errors("Dock this fleet now please", "Dock on this fleet."),
+            (3, 4)
+        );
+        assert_eq!(
+            word_errors("What is 2 plus 2?", "What is two plus two?"),
+            (0, 5)
+        );
+        assert_eq!(
+            word_errors("Open Voyager Shell", "Open voyagershell"),
+            (0, 2)
+        );
+        assert_eq!(
+            word_errors(
+                "The fleet includes a home dock, a fleet of vessels, and voyagershell.",
+                "In three short sentences, tell me what this fleet has in it."
+            ),
+            (12, 12)
+        );
+    }
+
+    #[test]
     fn heard_words_match_ignoring_case_and_punctuation_but_not_words() {
         assert!(words_match("Dock on this fleet.", "dock on this fleet"));
         assert!(!words_match("Doc on this fleet.", "Dock on this fleet."));
@@ -675,6 +764,27 @@ mod tests {
             "Dock on this fleet",
             "[spoken] Dock on this fleet"
         ));
+    }
+
+    #[test]
+    fn a_trace_line_the_app_is_still_writing_is_read_on_the_next_look() -> Result<()> {
+        let folder = std::env::temp_dir().join(format!("voice-trace-{}", std::process::id()));
+        fs::create_dir_all(&folder)?;
+        let path = folder.join("voice-trace.jsonl");
+        fs::write(
+            &path,
+            "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-st",
+        )?;
+        let first = marks(&path)?;
+        fs::write(
+            &path,
+            "{\"event\":\"heard\",\"atMs\":1}\n{\"event\":\"refusal-started\",\"atMs\":2}\n",
+        )?;
+        let second = marks(&path)?;
+        fs::remove_dir_all(&folder)?;
+        assert_eq!(first.len(), 1);
+        assert_eq!(second.len(), 2);
+        Ok(())
     }
 
     #[test]

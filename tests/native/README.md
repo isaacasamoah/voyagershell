@@ -1010,6 +1010,7 @@ to the microphone and records the speaker.
 | `two-turns-with-echo` | With the speaker looped into the microphone at 20 ms latency, voice is clicked on once and two requests follow. Each is one turn, heard as spoken, and each reply is spoken. Listening resumes between and after them without a click, and neither the acknowledgement nor the reply becomes a turn. |
 | `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
 | `refusal-is-in-the-chat` | With the Voyager binding pointed at a terminal Core no longer has, the spoken words are heard, the app plays the clip for the reason, "Voyager isn't running.", nothing is sent, and the opened chat draws one line starting with `Not sent` and the reply that was spoken earlier. The binding is restored afterward. |
+| `requests-are-written-down` | Voice is clicked on once and 40 committed Edge requests follow, 20 questions and 20 commands, each fed when the app marks listening again. The Voyager binding points at a removed terminal for the case, so no request reaches the stand-in and each turn ends with the clip for the reason. No request is answered, which means it gives exactly one heard text and its word errors are at most half its words. The word error rate over all 40 is at most 5%, a target to measure. The model card's transcription instruction with the product words scored 0.9% on this set in a CPU sweep, and the voice experiment's round 4 scored 3.9% on 47 real recordings with the same hint. Every heard text, its errors and the exact count are recorded. |
 
 The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
 `VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech
@@ -1027,7 +1028,9 @@ edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
 
-Four more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
+The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds each request's kind, Edge voice and words, and `make.sh WORK_FOLDER` renders them with Edge text to speech and ffmpeg into `hearing.s16`, 16 kHz mono samples one request after another, and `hearing.tsv`, which names each request and its sample count. The verifier widens them to 48 kHz before the feed and refuses a set whose checksum is not the committed one. Word errors are counted as the voice experiment's round 4 counted them. The text is lower-cased, "voyager shell" counts as one word, punctuation is dropped, and the digits for zero to ten count as their words. The count is the edit distance in words.
+
+Five more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling, takes five frames of sound as
 speech and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
 words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
@@ -1035,6 +1038,7 @@ words without the spoken marker, and a candidate built with it must fail `words-
 spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads
 every reply the app spoke in the whole run, fails.
 `tests/native/controls/voice-first-paragraph.patch` speaks only the first line of the reply, as the filter did before it spoke the whole answer, and `reply-is-spoken` fails on it.
+`tests/native/controls/voice-hearing.patch` puts back the hearing instruction from before this rule, which asked in its own words for a transcript. A candidate built with it must fail `requests-are-written-down`.
 
 The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
