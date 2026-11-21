@@ -363,6 +363,12 @@ fn hint_words(names: &[String]) -> Vec<&str> {
         "maximize",
         "Portal",
         "Core",
+        "blocked",
+        "merged",
+        "running",
+        "waiting",
+        "failing",
+        "status",
     ];
     for name in names {
         if !words.contains(&name.as_str()) {
@@ -427,6 +433,8 @@ mod tests {
             "dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
             "dock, Fleet, Vessel.",
             "Voyager, maximize, Core, Home",
+            "dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, blocked, merged, running, waiting, failing, status, Fleet 1, Home.",
+            "blocked, merged, running.",
         ] {
             assert!(heard_nothing(heard, &names), "{heard:?}");
         }
@@ -443,6 +451,11 @@ mod tests {
             "Dock, Fleet.",
             "Home, Core, dock.",
             "dock, Fleet, the Vessel.",
+            "What's blocked?",
+            "Status.",
+            "Blocked, failing.",
+            "Is anything blocked, failing or waiting?",
+            "Status, merged, blocked.",
         ] {
             assert!(!heard_nothing(heard, &names), "{heard:?}");
         }
@@ -639,7 +652,7 @@ mod tests {
         assert!(
             prompt.contains("dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize")
         );
-        assert!(prompt.ends_with("Core, Harbor."));
+        assert!(prompt.ends_with("status, Harbor."));
         assert_eq!(prompt.matches("Fleet").count(), 1);
     }
 
@@ -648,7 +661,7 @@ mod tests {
         let prompt = hearing_prompt(&[]);
         assert_eq!(
             prompt,
-            "Perform ASR in English. Words you may hear: dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core."
+            "Perform ASR in English. Words you may hear: dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, blocked, merged, running, waiting, failing, status."
         );
     }
 }

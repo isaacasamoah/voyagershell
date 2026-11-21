@@ -38,3 +38,4 @@ command	en-GB-SoniaNeural	Close every terminal that has finished.
 command	en-US-AriaNeural	Dock on the roadmap.
 command	en-GB-SoniaNeural	Make the terminal bigger.
 command	en-US-AriaNeural	Restart the core.
+question	en-US-AriaNeural	What's blocked?

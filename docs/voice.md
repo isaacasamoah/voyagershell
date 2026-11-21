@@ -30,7 +30,10 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    green and silent while he spoke. A low voice loses most of its level to that
    filter. "Dock on this fleet." keeps 0.22 of its level, and at 0.3 of its
    committed loudness it no longer started a turn. A door, typing or a fan can
-   therefore start a turn again. Its acknowledgement plays, and hearing then drops
+   therefore start a turn again. In a simulation of the gate, five minutes of
+   room sound gave 11 such turns over a soft fan and 4 over a loud one, and all 40
+   committed requests came through as one turn with no fan, a soft fan or a loud
+   one. Each such turn's acknowledgement plays, and hearing then drops
    a read-back of the hint before anything is sent. A sound that switches on and
    stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
    turn that ends is also checked for the rise and fall of speech. When the 90th
@@ -67,7 +70,13 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    noise, Omni under this prompt wrote back the hint itself, "dock, Fleet, Vessel,
    Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
    on all 10 noise turns of a 5-minute room run on main. A one-word command such as
-   "Maximize." and a sentence such as "Rename this Fleet." are kept. This drop is a
+   "Maximize." and a sentence such as "Rename this Fleet." are kept. The three is
+   a floor between the two sides that were seen, not a measured band. Of 108
+   transcripts recorded by the voice journeys of 21 Nov 2026, the 42 read-backs
+   each had all 12 entries of the hint, and the other 66 had no transcript made
+   only of hint entries. A shorter read-back was never seen. One and two entries
+   stay below the floor so that a spoken "Dock." or "Blocked, failing." is kept.
+   Where a partial read-back falls is a target to measure. This drop is a
    stopgap for 22 Nov 2026. It is removed when the Silero speech detector gates
    turns. It must not grow into a list of words or phrases to drop, because a
    filter over model text drops real requests the list did not foresee.
@@ -230,15 +239,17 @@ or stop that Core does not confirm is reported and never repeated.
 
 Hearing is a chat completion with the audio as the only user content. The system
 message is the model card's transcription task, `Perform ASR in English.`, then
-`Words you may hear` with the product words and the live workspace names. Any
+`Words you may hear` with the product words, the status words blocked, merged,
+running, waiting, failing and status, and the live workspace names. Any
 other system text is a chat instruction, and the model then answers a spoken
 question instead of writing it down. Asked in its own words to "Transcribe the
 audio exactly as spoken", it answered "In three short sentences, tell me what this
 fleet has in it." with "The fleet includes a home dock, a fleet of vessels, and
 voyagershell.", and Voyager received that answer as the request.
 
-The 40 committed Edge requests in `tests/native/fixtures/hearing/` are 20 questions
-and 20 commands. Word error is counted as the voice experiment's round 4 counted
+The 41 committed Edge requests in `tests/native/fixtures/hearing/` are 21 questions
+and 20 commands. The rows below were measured on the first 40. The 41st, "What's
+blocked?", came with the status words in the hint. Word error is counted as the voice experiment's round 4 counted
 it. A request counts as answered when its word errors are more than half its
 words. The first three rows send the app's request straight to a CPU engine. The
 last two feed the same 40 through the microphone in the voice journey's

@@ -58,7 +58,7 @@ pub const ALL: [&Speech; 5] = [
 
 const REQUESTS_TABLE: &str = include_str!("../../fixtures/hearing/hearing.tsv");
 const REQUESTS_PCM: &[u8] = include_bytes!("../../fixtures/hearing/hearing.s16");
-const REQUESTS_SHA256: &str = "6e6ed751c6f762bb5fff4a12ffec4d2d1711c4bc37702d2919a2b5f728a444b6";
+const REQUESTS_SHA256: &str = "a892ae13f178da74d98d81468bbb09a33468654b1a12305e0d570372d0abaa0a";
 const REQUESTS_RATE: u32 = 16_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
