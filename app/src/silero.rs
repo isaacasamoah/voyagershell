@@ -348,6 +348,7 @@ mod tests {
     fn the_port_matches_the_reference_model_on_quiet_and_full_level_voices() {
         let clips = clips();
         let mut worst = 0.0f32;
+        let mut chunks = 0;
         for line in REFERENCE.lines() {
             let fields: Vec<&str> = line.split('\t').collect();
             let gain: i32 = fields[1].parse().unwrap();
@@ -366,7 +367,9 @@ mod tests {
             for (got, expected) in got.iter().zip(&expected) {
                 worst = worst.max((got - expected).abs());
             }
+            chunks += compared;
         }
+        println!("compared {chunks} chunks, worst absolute difference {worst:e}");
         assert!(worst <= TOLERANCE, "worst difference {worst}");
     }
 }
