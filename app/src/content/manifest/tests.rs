@@ -387,3 +387,21 @@ fn a_package_that_was_never_good_is_unavailable_with_every_problem() {
     assert!(registry.describe("nothing").is_none());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn the_guide_example_passes_the_checker() {
+    let guide = include_str!("../../../../docs/voyager-command.md");
+    let section = guide
+        .split("## Make a Vessel type")
+        .nth(1)
+        .expect("the guide has a section on making a Vessel type");
+    let example = section
+        .split("```json\n")
+        .nth(1)
+        .and_then(|block| block.split("```").next())
+        .expect("the section has a JSON example");
+    let loaded = environment(|environment| load(example.as_bytes(), environment));
+    let manifest = loaded.unwrap_or_else(|problems| panic!("{problems:?}"));
+    assert_eq!(manifest.id, "flag");
+    assert!(manifest.actions.contains_key("flip"));
+}

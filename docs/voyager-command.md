@@ -2,8 +2,10 @@
 
 `voyager` is the agent command for VoyagerShell. Run it inside a Vessel, which
 is a terminal that VoyagerShell shows. It covers workspace actions only:
-inspect, create a Fleet, rename, move, remove a placement and select. Herdr Core owns programs and
+inspect, create a Fleet, rename, move, remove a placement, select and, for
+Voyager, dock and create a Fleet with a Vessel. Herdr Core owns programs and
 terminals, so start, read, send to and stop programs with `hc` (`hc --skill`).
+You can also add a Vessel type while the app runs ([Make a Vessel type](#make-a-vessel-type)).
 
 A Voyage is a space. A Fleet is a tab in a Voyage. A Vessel is one piece of
 content placed in a Fleet, or as a Portal across a Voyage.
@@ -188,6 +190,126 @@ socket.
   before you repeat anything.
 - A refusal that says the layout changed means another change landed first.
   Run `voyager status` and use the new `version`.
+
+## Create and navigate Vessels
+
+`voyager do workspace` offers a fixed set of operations. Others, including
+`create-vessel` and `set-placement-maximized`, are refused with exit code 1,
+the message "The voyager command offers only ..." and nothing queued.
+
+| You want to | Use | Who may |
+| --- | --- | --- |
+| Add a terminal or agent Vessel to a Fleet | `hc run --label voyager.place=fleet:<fleet id>` | any Vessel |
+| Open a Fleet or Voyage | `select-fleet`, `select-voyage` | any Vessel |
+| Make a Fleet that holds one new Vessel of any ready type | `create-fleet-with-vessel` | Voyager only |
+| Take the user to a Vessel | `dock` | Voyager only |
+| Add a Vessel to an existing Fleet by type, or maximize or restore a placement | The person, with the Vessel chooser and the placement's corner buttons | the person |
+
+Tell the person when a task needs the last row. Do not try to work round it.
+
+Select a Fleet:
+
+```sh
+voyager do workspace '{"requestId":"select-1","expectedVersion":"<version>","action":{"operation":"select-fleet","id":"<fleet id>"}}'
+```
+
+Create a Vessel of the type `flag` in a new Fleet. Run `select-voyage` first,
+because the request is refused unless its Voyage is the selected one. `typeId`
+is the type's `id`. The reply's layout holds the new placement.
+
+```sh
+voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Flags","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<absolute directory>"},"typeId":"flag"}}'
+```
+
+Dock on that Vessel with the `dock` request above and
+`"context":{"kind":"vessel","id":"<placement id>"}`. `voyager status` lists
+placements of your own Vessel only, so take the new placement's id from the
+reply of the create request.
+
+A type that is unknown, still failing its first check or removed is refused,
+and the message names the reason.
+
+## Make a Vessel type
+
+A Vessel type is one JSON file. No code, build or restart is needed.
+
+1. Find the profile. It is the folder that was passed to `voyager-shell` as
+   `--profile`. Read it from `ps -o args= -C voyager-shell`, or ask the person.
+   Never edit a profile that you were not given.
+2. Write `<profile>/vessels/<folder>/manifest.json` and an empty file with the
+   name that `view.source` gives, in the same folder. The folder name is free.
+   The type's `id` is what you pass as `typeId`.
+3. Create a Vessel of the type, as above. The app checks the manifest then, and
+   again whenever the file's modification time or length changes.
+
+A manifest that works, with one boolean and one action:
+
+```json
+{
+  "contract": 1,
+  "id": "flag",
+  "name": "Flag",
+  "version": 1,
+  "state": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raised"],
+      "properties": { "raised": { "type": "boolean" } }
+    },
+    "initial": { "raised": false }
+  },
+  "actions": {
+    "flip": {
+      "rebase": "always",
+      "effect": [{ "op": "set", "path": "raised", "value": "!raised" }]
+    }
+  },
+  "view": { "source": "view.vx" }
+}
+```
+
+Rules that the check enforces:
+
+- Required: `contract` (always 1), `id`, `name`, `version`, `state`,
+  `actions` (may be `{}`) and `view`. Unknown fields are refused.
+- `id` starts with a lowercase letter or digit, then letters, digits, `.`, `-`
+  or `_`, at most 64 characters. It must not be `terminal`, `agent`, `agents`
+  or `notes`, and no other package may declare it.
+- `state.schema` is JSON Schema for an object. `state.initial` must fit it.
+- An action has `rebase` (`by-key`, `always` or `refuse`) and `effect`, a list
+  of steps. A step is `set`, `push`, `remove` or `move` with a `path` that
+  starts at a state field. Paths may use `.field`, `[0]`, `[*]` and
+  `[id=$id]`. A `value` is an expression. Text in it is single-quoted.
+- `params` maps each parameter name to `string`, `number`, `boolean`, `null`,
+  `any` or a `|` union. An effect reads one as `$name`, and `$uuid` is a fresh id.
+- `view.source` must name a file in the package folder.
+
+Today the Vessel draws the type's name, its state and its revision, and a
+button for each action that takes no parameters. The person presses the
+button. `view.source` is checked and not yet drawn. `docs/content.md`, section
+"Vessel type manifests", has the full grammar, and
+`contract/generated/contentManifest.schema.json` in the repository is the schema.
+
+### See problems and keep the last good version
+
+The check lists every problem, not the first. Each names its place and the
+fix, for example `actions.flip.effect[0]: ...`. A refused request shows the
+list in its message:
+
+```text
+Manifest has 2 problems: <path>: <message>; <path>: <message>
+```
+
+A broken edit does not remove a type that once passed. The previous manifest
+stays in use and new Vessels use it, while the broken file's problems stay in
+the type's catalogue entry. A type that never passed is unavailable with the
+same list as its reason. A Vessel that is already open may keep drawing the
+manifest it opened with. Create a new Vessel to see an edit.
+
+Removing the folder's manifest or moving the package never deletes a Vessel's
+data. Keep each edit to a whole-file rewrite, so the change in modification time or
+length is seen.
 
 ## Authority
 
