@@ -656,27 +656,7 @@ impl Owner {
         self.interrupt = false;
         self.deferred.clear();
         self.callbacks.clear();
-        self.projection.edit(|state| {
-            while state.messages.len() >= 64
-                || state.messages.iter().map(|m| m.text.len()).sum::<usize>() > 192 * 1024
-            {
-                state.messages.remove(0);
-                state.omitted = state.omitted.saturating_add(1);
-            }
-            state.messages.push(Message {
-                id: request.request_id.clone(),
-                request_id: request.request_id.clone(),
-                role: Role::User,
-                text: text.clone(),
-                context: Some(context),
-                tool: None,
-            });
-            state.phase = Phase::Starting;
-            state.turn = None;
-            state.error = None;
-            state.limited = false;
-            true
-        })?;
+        self.projection.accept(&request.request_id, text, context)?;
         if !self.started {
             self.open_provider(events)
         } else {

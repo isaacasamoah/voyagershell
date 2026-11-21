@@ -1,6 +1,6 @@
 use crate::{
     client::{Client, ProgramError, ProgramReply, ProgramRequest},
-    speech::Standing,
+    speech::{Phrase, Standing},
     voice_parts::{SendFailure, Voyager},
     voyager_binding::Binding,
 };
@@ -65,6 +65,10 @@ pub fn failure_of(error: &ProgramError) -> SendFailure {
     SendFailure {
         reason: refusal(error),
         refused: matches!(error, ProgramError::Rejected { .. }),
+        phrase: match error {
+            ProgramError::Rejected { kind, .. } => Phrase::refused(kind),
+            ProgramError::Uncertain(_) => Phrase::NotRunning,
+        },
     }
 }
 
@@ -80,6 +84,7 @@ impl Voyager for Bound {
         let terminal = self.terminal().ok_or_else(|| SendFailure {
             reason: "Not sent. Voyager is not bound to the avatar.".to_owned(),
             refused: true,
+            phrase: Phrase::Gone,
         })?;
         self.client
             .service(ProgramRequest::Send {
