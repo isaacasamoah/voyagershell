@@ -9,10 +9,24 @@ use voyager_contract::{
 
 pub(crate) const VOYAGER_VESSEL: &str = "voyager";
 
-fn launch_defaults(caller: Option<&VesselId>) -> Defaults {
-    match caller {
-        Some(vessel) if vessel.0 != VOYAGER_VESSEL => Defaults::Plain,
-        _ => Defaults::Table,
+pub(crate) fn launch_defaults(
+    layout: &Layout,
+    caller: Option<&VesselId>,
+    binding: &crate::voyager_binding::Binding,
+) -> Defaults {
+    let Some(caller) = caller else {
+        return Defaults::Table;
+    };
+    let is_voyager = layout
+        .vessels
+        .iter()
+        .find(|vessel| &vessel.id == caller)
+        .and_then(|vessel| vessel.backend.as_ref())
+        .is_some_and(|terminal| binding.names(terminal));
+    if is_voyager {
+        Defaults::Table
+    } else {
+        Defaults::Plain
     }
 }
 
@@ -309,6 +323,7 @@ impl Model {
     pub(crate) fn apply_from(
         &mut self,
         program: Option<&VesselId>,
+        defaults: Defaults,
         action: Action,
     ) -> Result<(), String> {
         match action {
@@ -321,7 +336,7 @@ impl Model {
                 type_id,
                 destination,
                 launch,
-            } => self.create_vessel(type_id, destination, launch, launch_defaults(program)),
+            } => self.create_vessel(type_id, destination, launch, defaults),
             action => self.apply(action),
         }
     }

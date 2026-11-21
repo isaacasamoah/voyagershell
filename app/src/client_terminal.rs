@@ -308,6 +308,7 @@ mod tests {
         model
             .apply_from(
                 Some(&VesselId("content-9".into())),
+                crate::agent_programs::Defaults::Plain,
                 Action::CreateVessel {
                     type_id: "terminal".into(),
                     destination: ContentDestination::Placement {

@@ -417,7 +417,11 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
     for (caller, name) in [(None, "By hand"), (Some(&agent_vessel), "Crew")] {
         let (voyage, name) = (a.clone(), name.into());
         model
-            .apply_from(caller, Action::CreateFleet { voyage, name })
+            .apply_from(
+                caller,
+                Defaults::Table,
+                Action::CreateFleet { voyage, name },
+            )
             .unwrap();
     }
     let fleets = &model.layout.voyages[0].fleets;
@@ -477,6 +481,7 @@ fn a_fleet_voyager_makes_for_the_person_opens_a_terminal_and_names_its_program()
         model
             .apply_from(
                 Some(&voyager),
+                Defaults::Table,
                 Action::CreateFleetWithVessel {
                     voyage: a.clone(),
                     name: name.into(),
@@ -562,6 +567,7 @@ fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
 fn create_beside(
     model: &mut Model,
     caller: Option<&VesselId>,
+    defaults: Defaults,
     type_id: &str,
     launch: Option<LaunchSpec>,
 ) -> Result<Option<Launch>, String> {
@@ -572,6 +578,7 @@ fn create_beside(
     let beside = fleet.placements[0].id.clone();
     model.apply_from(
         caller,
+        defaults,
         Action::CreateVessel {
             type_id: type_id.into(),
             destination: ContentDestination::Placement {
@@ -609,13 +616,19 @@ fn an_agent_created_by_another_vessel_starts_plain_unless_it_names_permissions()
     let voyager = VesselId(VOYAGER_VESSEL.into());
     let (mut model, ..) = two_voyages();
     assert_eq!(
-        create_beside(&mut model, Some(&other), "agent", codex(None)),
+        create_beside(
+            &mut model,
+            Some(&other),
+            Defaults::Plain,
+            "agent",
+            codex(None)
+        ),
         Ok(program(&["codex"]))
     );
     let table = crate::agent_programs::argv("codex", None, None, None).unwrap();
     assert!(table.len() > 1);
     for (caller, name) in [(Some(&voyager), "Voyager"), (None, "the person")] {
-        let created = create_beside(&mut model, caller, "agent", codex(None))
+        let created = create_beside(&mut model, caller, Defaults::Table, "agent", codex(None))
             .unwrap()
             .unwrap();
         assert_eq!(crate::launch::argv(&created).unwrap(), table, "{name}");
@@ -626,6 +639,7 @@ fn an_agent_created_by_another_vessel_starts_plain_unless_it_names_permissions()
         create_beside(
             &mut model,
             Some(&other),
+            Defaults::Plain,
             "agent",
             codex(Some(Permissions::ReadOnly))
         ),
@@ -644,9 +658,60 @@ fn a_launch_on_a_type_that_takes_none_is_refused_and_places_nothing() {
         ("notes", Some(LaunchSpec::Terminal)),
     ] {
         assert!(
-            create_beside(&mut model, Some(&other), type_id, launch).is_err(),
+            create_beside(&mut model, Some(&other), Defaults::Plain, type_id, launch).is_err(),
             "{type_id}"
         );
         assert_eq!(model.layout, before, "{type_id}");
     }
+}
+
+#[test]
+fn only_the_vessel_on_the_bound_terminal_keeps_the_table_default() {
+    let (mut model, ..) = two_voyages();
+    let beside = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    let owner = PlacementOwner::Fleet {
+        id: model.layout.voyages[0].fleets[0].id.clone(),
+    };
+    let mut ids = Vec::new();
+    for terminal in ["t1", "t2"] {
+        model
+            .apply(Action::CreateVessel {
+                type_id: "terminal".into(),
+                destination: ContentDestination::Placement {
+                    owner: owner.clone(),
+                    insertion: PlacementInsertion::Beside {
+                        id: beside.clone(),
+                        side: voyager_contract::Side::Right,
+                    },
+                },
+                launch: None,
+            })
+            .unwrap();
+        let vessel = model.layout.vessels.last_mut().unwrap();
+        vessel.backend = Some(CoreTerminalId(terminal.into()));
+        ids.push(vessel.id.clone());
+    }
+    let binding = crate::voyager_binding::Binding::unbound();
+    assert_eq!(
+        launch_defaults(&model.layout, Some(&ids[0]), &binding),
+        Defaults::Plain
+    );
+    binding.bind(CoreTerminalId("t1".into())).unwrap();
+    assert_eq!(
+        launch_defaults(&model.layout, Some(&ids[0]), &binding),
+        Defaults::Table
+    );
+    assert_eq!(
+        launch_defaults(&model.layout, Some(&ids[1]), &binding),
+        Defaults::Plain
+    );
+    assert_eq!(
+        launch_defaults(&model.layout, None, &binding),
+        Defaults::Table
+    );
+    let named_voyager = VesselId(VOYAGER_VESSEL.into());
+    assert_eq!(
+        launch_defaults(&model.layout, Some(&named_voyager), &binding),
+        Defaults::Plain
+    );
 }

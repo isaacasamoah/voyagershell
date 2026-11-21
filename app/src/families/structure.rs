@@ -147,6 +147,7 @@ pub(crate) fn edit(
     calls: &mut impl Calls,
     layout: &Layout,
     program: Option<&VesselId>,
+    binding: &crate::voyager_binding::Binding,
     request: &Request,
     unconfirmed: &HashMap<String, String>,
 ) -> Result<Edit, Error> {
@@ -158,7 +159,10 @@ pub(crate) fn edit(
             vessel_id,
             expected_backend,
         } => candidate.start_new_shell(vessel_id, expected_backend, &request.request_id),
-        _ => candidate.apply_from(program, request.action.clone()),
+        _ => {
+            let defaults = crate::workspace::launch_defaults(layout, program, binding);
+            candidate.apply_from(program, defaults, request.action.clone())
+        }
     }
     .map_err(refused)?;
     calls.closing(&candidate.layout)?;
