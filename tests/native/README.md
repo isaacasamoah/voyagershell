@@ -1175,6 +1175,11 @@ The `agent-split` patch offers `create-vessel` only to Voyager again.
 workspace applied create-vessel beside a placement from that Vessel and exited
 0`. `tests/native/controls/agent-resize.patch` offers `resize-placement-split`
 to every Vessel. A candidate built with it must fail `agent-resize-refused`.
+`tests/native/controls/agent-plain.patch` gives every caller the table default
+again, so a codex agent that another Vessel creates without naming permissions
+starts with the bypass flag. A candidate built with it must fail
+`agent-starts-plain` on the expectation that the started stand-in got no
+arguments and no bypass flag.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
