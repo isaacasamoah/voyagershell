@@ -973,13 +973,14 @@ features:
         journeys: [voice]
       - id: voice-is-click-to-talk
         kind: user
-        says: 'Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges.'
+        says: 'Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges. A click while audio is playing lets that audio finish, and then voice is off.'
         owner: conversation-provider
         guards: []
         checks:
           - 'journey:voice/no-capture-without-click'
           - 'journey:voice/silence-keeps-voice-on'
           - 'journey:voice/click-turns-voice-off'
+          - 'journey:voice/click-off-lets-the-reply-finish'
           - 'journey:voice/rename-is-heard-and-acknowledged'
           - 'journey:voice/words-reach-voyager'
           - 'journey:voice/acknowledgement-is-prompt'

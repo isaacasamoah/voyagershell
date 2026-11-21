@@ -55,9 +55,10 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 The microphone is closed whenever the app's own audio plays, so the app never hears
 its own voice as a turn. There are no interruptions.
 
-A click turns voice off in any state. It stops listening and any audio that is
-playing at once, and drops a sentence that was still being spoken. A turn that had
-already ended is still sent, Voyager's work is not cancelled, and its reply lands in
+A click turns voice off in any state. It stops listening at once and drops a sentence
+that the person was still speaking. Audio that is already playing, the acknowledgement or
+a reply, finishes, and then voice is off. Only the app quitting cuts audio. A turn that
+had already ended is still sent, Voyager's work is not cancelled, and its reply lands in
 the chat without being spoken.
 
 If the microphone cannot be opened or its stream ends, voice stays on. The control

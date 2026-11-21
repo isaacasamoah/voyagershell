@@ -321,6 +321,70 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ClickOff {
+    pub label_after_click: String,
+    pub microphone_closed: bool,
+    pub clicked_ms: u64,
+    pub reply_started_ms: u64,
+    pub reply_ended_ms: Option<u64>,
+    pub label_at_end: String,
+    pub opened_after_click: bool,
+    pub heard: String,
+    pub marks: Vec<Mark>,
+}
+
+pub fn click_off_during_reply(native: &Native, speech: &Speech, name: &str) -> Result<ClickOff> {
+    let stack = stack(native)?;
+    let system = &native.system;
+    let mut capture = stack.capture(system, &format!("{SPEAKER}.monitor"), name)?;
+    capture.began()?;
+    let trace = native.voice_trace();
+    let before = marks(&trace)?.len();
+    turn_on(native)?;
+    stack.feed(system, speech)?;
+    let reply_started_ms = until("the reply to start", || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "speech-started"))
+            .map(|mark| mark.at_ms))
+    })?;
+    native.click(&Target::VOICE_CONTROL)?;
+    let clicked_ms = now_millis();
+    let label_after_click =
+        native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+            label == READY
+        })?;
+    let microphone_closed = until("the microphone to close", || {
+        Ok(recorders(native)?.is_empty().then_some(()))
+    })
+    .is_ok();
+    poll(REPLY_WAIT.within(), LOOK, true, || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, "speech-ended"))
+            .map(|_| ()))
+    })?;
+    let label_at_end =
+        native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
+    capture.finish(stack.folder(), name)?;
+    let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    Ok(ClickOff {
+        label_after_click,
+        microphone_closed,
+        clicked_ms,
+        reply_started_ms,
+        reply_ended_ms: mark_of(&marks, "speech-ended").map(|mark| mark.at_ms),
+        label_at_end,
+        opened_after_click: marks
+            .iter()
+            .any(|mark| mark.event == "capture-open" && mark.at_ms >= clicked_ms),
+        heard: transcribe(native, name)?,
+        marks,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Turn {
     pub fed_until_ms: u64,
     pub ended_ms: Vec<u64>,
