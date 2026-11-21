@@ -289,14 +289,12 @@ impl Exchange<'_> {
             .mark_words("acknowledgement-started", phrase.key());
         self.shared.set(Phase::Hearing, None);
         let mut notice = None;
-        match self.hearing.hear(&utterance, &(self.vocabulary)()) {
+        let names = (self.vocabulary)();
+        match self.hearing.hear(&utterance, &names) {
             Ok(heard) => {
                 self.trace.mark_words("heard", &heard);
-                if heard_nothing(&heard) {
-                    self.finish(finish.take());
-                    finish = self.play(Phrase::Missed, None);
-                    self.trace
-                        .mark_words("acknowledgement-started", Phrase::Missed.key());
+                if heard_nothing(&heard, &names) {
+                    self.trace.mark("dropped");
                 } else if send {
                     match self.voyager.say(&crate::spoken::prompt(&heard)) {
                         Ok(()) => self.trace.mark("sent"),

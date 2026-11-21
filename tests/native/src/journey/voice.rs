@@ -1,8 +1,9 @@
 use super::{Cases, Verdict, cases};
 use crate::agent::{REPLY_MARKER, TYPED_REPLY};
+use crate::audio::room;
 use crate::audio::speech::{
-    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR,
-    Samples,
+    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_THE_FLEET,
+    RENAME_TO_HARBOR, Samples,
 };
 use crate::audio::voice::{
     self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
@@ -23,6 +24,8 @@ cases! {
     ConnectingThenListening => "connecting-then-listening",
     SilenceKeepsVoiceOn => "silence-keeps-voice-on",
     ClickTurnsVoiceOff => "click-turns-voice-off",
+    RoomSoundIsNeverATurn => "room-sound-is-never-a-turn",
+    RequestInRoomSoundIsSent => "request-in-room-sound-is-sent",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
@@ -43,6 +46,8 @@ const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
 const ROOM_SILENCE_MS: u32 = 3000;
 const WORD_ERROR_PERCENT: usize = 5;
+const ROOM_BEFORE_REQUEST_S: u32 = 8;
+const ROOM_AFTER_REQUEST_S: u32 = 4;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -228,6 +233,71 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 fresh == 0 && after.iter().all(Vec::is_empty),
             )
             .observed("freshEvents", fresh)
+    })?;
+    cases.check(native, Case::RoomSoundIsNeverATurn, |native| {
+        let made = room::room(room::ROOM_SECONDS)?;
+        voice::turn_on(native)?;
+        let listened = voice::feed_and_settle(native, "room-sound", &made.samples);
+        voice::turn_off(native)?;
+        let listened = listened?;
+        let heard: Vec<&str> = listened
+            .turns
+            .iter()
+            .filter_map(|turn| turn.heard.as_deref())
+            .collect();
+        Verdict::new()
+            .expect(
+                "five minutes of room tone, fan, keys, a door and a reply's echo is never a turn",
+                listened.turns.is_empty(),
+            )
+            .expect(
+                "nothing heard in the room sound reaches Voyager",
+                listened.sent() == 0,
+            )
+            .observed("turns", listened.turns.len())?
+            .observed("sent", listened.sent())?
+            .observed("droppedAfterHearing", listened.dropped())?
+            .observed("heard", &heard)?
+            .observed("roomSha256", made.sha256())?
+            .observed("roomEvents", &made.events)?
+            .observed("loudFanFromMs", made.loud_fan_from_ms)?
+            .observed("listened", listened)
+    })?;
+    cases.check(native, Case::RequestInRoomSoundIsSent, |native| {
+        let mixed = room::request_in_room(
+            &RENAME_THE_FLEET,
+            ROOM_BEFORE_REQUEST_S,
+            ROOM_AFTER_REQUEST_S,
+        )?;
+        let before = voice::terminal_text(native, &voyager)?;
+        voice::turn_on(native)?;
+        let listened = voice::feed_and_settle(native, "request-in-room-sound", &mixed);
+        voice::turn_off(native)?;
+        let listened = listened?;
+        let after = voice::terminal_text(native, &voyager)?;
+        let heard = listened
+            .turns
+            .first()
+            .and_then(|turn| turn.heard.clone())
+            .unwrap_or_default();
+        let received = |screen: &str| screen.matches(&spoken(&heard)).count();
+        let (errors, words) = word_errors(&heard, RENAME_THE_FLEET.words);
+        Verdict::new()
+            .expect(
+                "the spoken request among room sound is exactly one turn",
+                listened.turns.len() == 1,
+            )
+            .expect(
+                "that turn is sent to Voyager once, and Voyager receives the spoken marker and the words heard",
+                listened.sent() == 1
+                    && !heard.is_empty()
+                    && received(&after) > received(&before),
+            )
+            .observed("spoken", RENAME_THE_FLEET.words)?
+            .observed("heard", &heard)?
+            .observed("wordErrors", errors)?
+            .observed("words", words)?
+            .observed("listened", listened)
     })?;
     cases.check(native, Case::RenameIsHeard, |native| {
         let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;

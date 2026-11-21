@@ -18,10 +18,26 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 1. A click turns voice on. The control turns amber and reads Connecting while the
    microphone opens and the noise floor settles for 0.3 s, then green while it
    listens. Nothing opens the microphone without a click.
-2. The turn rule is in `audio_io::Gate`. It compares each 20 ms frame with three
-   times the quietest frame of the last 2 s, kept between 200 and 600. A sound
-   counts as speech only after 0.2 s without a break, so a click, a thump as the
-   microphone opens or a tap is never a turn. Speech then ends the turn after 1.5 s
+2. The turn rule is in `audio_io::Gate`. It measures each 20 ms frame in the
+   speech band, after a pre-emphasis filter that removes the low rumble of a
+   fan, a hum or a door. It compares that level with three times the quietest
+   frame of the last 2 s, and never with less than 200. The threshold has no
+   ceiling, so a steady sound, however loud, never counts as speech. A sound
+   counts as speech only after 0.2 s without a break in that band, so a click, a
+   thump as the microphone opens or a tap is never a turn. Once a turn has
+   started, it ends on the plain level of the whole band, with the same floor
+   rule. The speech band alone lets the soft edges of words fall under the floor
+   sooner, which stretched the journey's 1.35 s mid-request pause from 69 to 73
+   of the 75 frames that end a turn. A sound that switches on and
+   stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
+   turn that ends is also checked for the rise and fall of speech. When the 90th
+   percentile of its sounding frames' level is under 1.5 times the 10th
+   percentile, the room got louder and nobody spoke. The turn is dropped without
+   a word and listening goes on. In a simulation of the gate, a fan switching on
+   measured 1.13 to 1.23 over five seeds. The 40 committed requests measured at
+   least 3.52 with no fan or a soft fan and at least 1.69 over a loud fan. A
+   request that starts 0.3 s after, at the moment of or 0.5 s before a fan
+   switches on, or that ends as it switches on, was kept in all 40 cases each. Speech then ends the turn after 1.5 s
    of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
    is never a turn and never turns voice off. The utterance keeps the 1 s before
    speech started, so its first word is not cut.
@@ -38,9 +54,20 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    were heard and passed on. It never names an action or claims a result.
 5. Omni turns the samples into words while the clip plays. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
-   state the owner already holds, so hearing adds no inspection call. If hearing
-   finds nothing, or hearing fails, "I didn't catch that." follows and nothing is
-   sent.
+   state the owner already holds, so hearing adds no inspection call. Right
+   after hearing, `speech::heard_nothing` drops a transcript with no letter or
+   digit, and a read-back of the hint. Nothing more is said and nothing is sent.
+   If hearing fails, "I didn't catch that." follows and nothing is sent.
+
+   A read-back of the hint is three or more comma-separated entries that are each
+   an entry of the hint sent with that request, in the hint's own order. On room
+   noise, Omni under this prompt wrote back the hint itself, "dock, Fleet, Vessel,
+   Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
+   on all 10 noise turns of a 5-minute room run on main. A one-word command such as
+   "Maximize." and a sentence such as "Rename this Fleet." are kept. This drop is a
+   stopgap for 22 Nov 2026. It is removed when the Silero speech detector gates
+   turns. It must not grow into a list of words or phrases to drop, because a
+   filter over model text drops real requests the list did not foresee.
 6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
@@ -73,7 +100,7 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
 | `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
 | `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
-| `missed` | "I didn't catch that." | Nothing was heard, or hearing failed | No |
+| `missed` | "I didn't catch that." | Hearing failed | No |
 | `no-microphone` | "I can't hear your microphone." | The microphone cannot be opened or its stream ends, once for each outage | No |
 | `failed` | "That didn't work." | A spoken turn ends in failure | No |
 
@@ -287,5 +314,6 @@ speaker. It checks that nothing records the microphone without a click, that the
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
 appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
-voice on, two turns in a row each get a spoken reply with the speaker echoed into the
-microphone, and a click turns voice off.
+voice on, five minutes of room sound with no speech in it is never a turn, a request
+spoken among that sound is sent word for word, two turns in a row each get a spoken
+reply with the speaker echoed into the microphone, and a click turns voice off.

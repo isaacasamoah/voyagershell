@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, REPLY_WAIT, SEND_WAIT, now_millis};
+use crate::native::{Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,7 @@ const HEADER: usize = 44;
 const ONSET_LEVEL: f64 = 300.0;
 const ONSET_WINDOW: usize = 960;
 const SIGNATURES: [&str; 3] = ["UklGR", "input_audio", "RIFF"];
+const AFTER_FEED_MS: u64 = 2500;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -399,6 +400,97 @@ fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> 
             .filter_map(|mark| mark.words.clone())
             .collect(),
         marks,
+    })
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeardTurn {
+    pub ended_after_feed_began_ms: i64,
+    pub acknowledgements: Vec<String>,
+    pub heard: Option<String>,
+    pub sent: bool,
+    pub dropped: bool,
+    pub spoken: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Listened {
+    pub fed_ms: u64,
+    pub turns: Vec<HeardTurn>,
+}
+
+impl Listened {
+    pub fn sent(&self) -> usize {
+        self.turns.iter().filter(|turn| turn.sent).count()
+    }
+
+    pub fn dropped(&self) -> usize {
+        self.turns.iter().filter(|turn| turn.dropped).count()
+    }
+}
+
+fn turns_in(marks: &[Mark], began: u64) -> Vec<HeardTurn> {
+    let mut turns: Vec<HeardTurn> = Vec::new();
+    for mark in marks {
+        if mark.event == "utterance-ended" {
+            turns.push(HeardTurn {
+                ended_after_feed_began_ms: i64::try_from(mark.at_ms).unwrap_or(i64::MAX)
+                    - i64::try_from(began).unwrap_or(0),
+                ..HeardTurn::default()
+            });
+            continue;
+        }
+        let Some(turn) = turns.last_mut() else {
+            continue;
+        };
+        match mark.event.as_str() {
+            "acknowledgement-started" | "refusal-started" => {
+                turn.acknowledgements.extend(mark.words.clone());
+            }
+            "heard" => turn.heard = mark.words.clone(),
+            "sent" => turn.sent = true,
+            "dropped" => turn.dropped = true,
+            "speech-started" => turn.spoken.extend(mark.words.clone()),
+            _ => {}
+        }
+    }
+    turns
+}
+
+fn settled_since(marks: &[Mark]) -> bool {
+    let open = marks
+        .iter()
+        .rposition(|mark| mark.event == "utterance-ended" || mark.event == "speech-started");
+    let listening = marks.iter().rposition(|mark| mark.event == "listening");
+    match (open, listening) {
+        (None, _) => true,
+        (Some(open), Some(listening)) => listening > open,
+        (Some(_), None) => false,
+    }
+}
+
+pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result<Listened> {
+    let stack = stack(native)?;
+    let trace = native.voice_trace();
+    let before = marks(&trace)?.len();
+    let began = now_millis();
+    let mut player = stack.start_feed(&native.system, name, samples)?;
+    poll(ROOM_FEED.within(), LOOK, false, || {
+        Ok(player.child.try_wait()?.map(|_| ()))
+    })?
+    .context("The room sound feed did not finish")?;
+    let fed = now_millis();
+    poll(ROOM_FEED.within(), LOOK, false, || {
+        let fresh: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+        Ok((now_millis() >= fed + AFTER_FEED_MS && settled_since(&fresh)).then_some(()))
+    })?
+    .context("The app did not settle back to listening after the room sound")?;
+    let fresh: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    Ok(Listened {
+        fed_ms: fed - began,
+        turns: turns_in(&fresh, began),
     })
 }
 

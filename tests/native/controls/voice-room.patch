@@ -1,0 +1,23 @@
+diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
+--- a/app/src/audio_io.rs
++++ b/app/src/audio_io.rs
+@@ -16,8 +16,8 @@ const LEAD_FRAMES: usize = 50;
+ const FLOOR_FRAMES: usize = 100;
+ const MIN_THRESHOLD: f32 = 200.0;
+ const FLOOR_FACTOR: f32 = 3.0;
+-const EMPHASIS: f32 = 0.97;
+-const MIN_SPREAD: f32 = 1.5;
++const EMPHASIS: f32 = 0.0;
++const MIN_SPREAD: f32 = 0.0;
+ const PLAYING_LOOK: Duration = Duration::from_millis(20);
+ 
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+@@ -178,7 +178,7 @@ fn above_floor(floors: &mut VecDeque<f32>, level: f32) -> bool {
+         floors.pop_front();
+     }
+     let floor = floors.iter().copied().fold(f32::MAX, f32::min);
+-    level > (floor * FLOOR_FACTOR).max(MIN_THRESHOLD)
++    level > (floor * FLOOR_FACTOR).clamp(MIN_THRESHOLD, 600.0)
+ }
+ 
+ fn plain_level(frame: &[i16]) -> f32 {
