@@ -128,7 +128,7 @@ probabilities, with fans built as the room fixture builds them.
 | --- | --- |
 | The voice journey's 5-minute room sound | The highest probability of any frame was 0.042, so no turn |
 | A 120 Hz thump as the microphone opens | The highest probability was 0.061 |
-| 100 Edge requests in 6 voices, 3 of them male, each at full, 0.15 and 0.06 of its level, over room tone, the soft fan and the loud fan | Exactly one whole turn with its first word kept in 843 of 900. Every failure was at 0.06 over the loud fan, where 43 of 100 passed. |
+| 100 Edge requests in 8 voices, 4 of them male, each at full, 0.15 and 0.06 of its level, over room tone, the soft fan and the loud fan | Exactly one whole turn with its first word kept in 843 of 900. Every failure was at 0.06 over the loud fan, where 43 of 100 passed. |
 | A 1.38 s pause between two sentences | One turn at every level and fan, except 0.06 over the loud fan |
 
 Edge speech at 0.06 of its level has a voiced level near RMS 210, against the loud
