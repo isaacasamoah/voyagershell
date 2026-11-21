@@ -268,6 +268,18 @@ check = ["journey:voice/turn-waits-for-the-sentence", "journey:voice/start-thump
 confidence = "stated"
 
 [[invariant]]
+id = "voice-hears-verbatim"
+says = "Voice hands Voyager the words the person spoke, never an answer to them."
+kind = "user"
+owner = "conversation-provider"
+source = "Verify's real-Claude finding on PR #349, 21 Nov 2026: a spoken question reached Voyager as the hearing step's own answer; Isaac confirmed the hearing fix the same day"
+features = ["voice"]
+guard = []
+type_gap = "The hearing instruction is one string sent to the model. Nothing in the types stops a free-form instruction that the model reads as a chat prompt."
+check = ["journey:voice/requests-are-written-down", "journey:voice/words-reach-voyager", "test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else"]
+confidence = "stated"
+
+[[invariant]]
 id = "conversation-acts-through-operations"
 says = "The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name."
 kind = "user"

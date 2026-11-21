@@ -972,6 +972,14 @@ features:
           - 'test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it'
         formal: []
         journeys: [voice]
+      - id: voice-hears-verbatim
+        kind: user
+        says: 'Voice hands Voyager the words the person spoke, never an answer to them.'
+        owner: conversation-provider
+        guards: []
+        checks: ['journey:voice/requests-are-written-down', 'journey:voice/words-reach-voyager', 'test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else']
+        formal: []
+        journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
     sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
     code:
