@@ -491,6 +491,7 @@ mod tests {
                 "tests/native/controls/voice-turn.patch".to_owned(),
                 "tests/native/controls/voice-first-paragraph.patch".to_owned(),
                 "tests/native/controls/voice-reply-marker.patch".to_owned(),
+                "tests/native/controls/voice-click-cuts.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")
