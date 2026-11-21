@@ -154,11 +154,23 @@ pub(crate) fn edit(
     let mut candidate = Model {
         layout: layout.clone(),
     };
-    match &request.action {
-        Action::StartNewShell {
-            vessel_id,
-            expected_backend,
-        } => candidate.start_new_shell(vessel_id, expected_backend, &request.request_id),
+    let ended = match &request.action {
+        Action::RemovePlacement { id } => closed_program(layout, id, unconfirmed)
+            .filter(|(_, backend)| ended(calls, backend))
+            .map(|(vessel, _)| vessel),
+        _ => None,
+    };
+    match (&request.action, ended) {
+        (_, Some(vessel)) => {
+            crate::workspace::discard_vessels(&mut candidate.layout, &[vessel]).map(drop)
+        }
+        (
+            Action::StartNewShell {
+                vessel_id,
+                expected_backend,
+            },
+            None,
+        ) => candidate.start_new_shell(vessel_id, expected_backend, &request.request_id),
         _ => candidate.apply_from(program, defaults, request.action.clone()),
     }
     .map_err(refused)?;
@@ -189,6 +201,37 @@ pub(crate) fn edit(
         reopening,
         created_notes,
     })
+}
+
+fn closed_program(
+    layout: &Layout,
+    id: &PlacementId,
+    unconfirmed: &HashMap<String, String>,
+) -> Option<(VesselId, CoreTerminalId)> {
+    let owner = panels::owner_of(layout, id).ok()?;
+    let group = panels::group(layout, &owner).ok()?;
+    if panels::contains(group.root, id) {
+        return None;
+    }
+    let vessel = &group.members.iter().find(|panel| &panel.id == id)?.vessel;
+    let content = layout.vessels.iter().find(|item| &item.id == vessel)?;
+    if !voyager_contract::launch::is_terminal_backed(&content.type_id)
+        || crate::workspace::is_voyager(content)
+        || content.start_pending.is_some()
+        || content.shell_intent.is_some()
+        || unconfirmed.contains_key(&content.id.0)
+    {
+        return None;
+    }
+    Some((vessel.clone(), content.backend.clone()?))
+}
+
+fn ended(calls: &mut impl Calls, backend: &CoreTerminalId) -> bool {
+    match calls.terminal(backend) {
+        Ok(observed) => observed.address == backend.0 && observed.has_ended(),
+        Err(Error::Rejected { kind, .. }) => kind == "not_found",
+        Err(Error::Uncertain(_)) => false,
+    }
 }
 
 pub(crate) fn first_voyage(layout: Layout, cwd: &str) -> Result<Layout, Error> {
@@ -306,5 +349,154 @@ fn refused(message: impl Into<String>) -> Error {
     Error::Rejected {
         kind: "invalid_workspace".into(),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Core(Result<Terminal, Error>, Result<(), Error>);
+
+    impl Calls for Core {
+        fn closing(&self, _: &Layout) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn reopening(&mut self, _: &mut Layout, _: &VoyageId) -> Result<Vec<VesselId>, Error> {
+            self.1.clone().map(|()| Vec::new())
+        }
+
+        fn finished(&mut self, _: &CoreTerminalId) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn terminal(&mut self, _: &CoreTerminalId) -> Result<Terminal, Error> {
+            self.0.clone()
+        }
+
+        fn created(&mut self, _: &Layout, _: &mut Layout) -> Result<bool, Error> {
+            Ok(false)
+        }
+    }
+
+    fn terminal(state: &str, reason: &str) -> Terminal {
+        serde_json::from_value(serde_json::json!({
+            "address": "t9", "labels": {}, "argv": ["bash"], "cwd": "/tmp", "state": state, "reason": reason, "pid": 123,
+            "created_ms":0,"screen":"exact","cols":80,"rows":24,"status": {"state":"unknown", "turn":0, "reported":false}
+        }))
+        .unwrap()
+    }
+
+    fn closed_placement() -> (Layout, PlacementId) {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let placement = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+        let vessel = model.layout.voyages[0].fleets[0].placements[0]
+            .vessel
+            .clone();
+        for content in model.layout.vessels.iter_mut().filter(|c| c.id == vessel) {
+            content.backend = Some(CoreTerminalId("t9".into()));
+            content.adopted = true;
+        }
+        model
+            .apply(Action::RemovePlacement {
+                id: placement.clone(),
+            })
+            .unwrap();
+        (model.layout, placement)
+    }
+
+    fn remove(
+        core: Result<Terminal, Error>,
+        layout: &Layout,
+        id: &PlacementId,
+    ) -> Result<Edit, Error> {
+        let request = Request {
+            request_id: "remove".into(),
+            expected_version: 1,
+            action: Action::RemovePlacement { id: id.clone() },
+        };
+        edit(
+            &mut Core(core, Ok(())),
+            layout,
+            None,
+            Defaults::Plain,
+            &request,
+            &HashMap::new(),
+        )
+    }
+
+    #[test]
+    fn removing_a_closed_placement_whose_program_ended_deletes_it() {
+        let (layout, id) = closed_placement();
+        for ended in [
+            Ok(terminal("finished", "exited")),
+            Err(Error::Rejected {
+                kind: "not_found".into(),
+                message: "no such terminal".into(),
+            }),
+        ] {
+            let edit = remove(ended, &layout, &id).unwrap();
+            assert!(edit.candidate.voyages[0].fleets[0].placements.is_empty());
+            assert!(
+                edit.candidate
+                    .vessels
+                    .iter()
+                    .all(|content| content.backend.as_ref().is_none_or(|b| b.0 != "t9"))
+            );
+            assert_eq!(edit.candidate.vessels.len(), layout.vessels.len() - 1);
+        }
+    }
+
+    #[test]
+    fn removing_a_closed_placement_whose_program_is_live_or_uncertain_stays_refused() {
+        let (layout, id) = closed_placement();
+        for answer in [
+            Ok(terminal("live", "")),
+            Ok(terminal("finished", "spawn_pending")),
+            Err(Error::Uncertain("Core did not answer".into())),
+            Err(Error::Rejected {
+                kind: "internal".into(),
+                message: "busy".into(),
+            }),
+        ] {
+            let error = remove(answer, &layout, &id).err().unwrap();
+            assert!(matches!(
+                error,
+                Error::Rejected { message, .. } if message == "Panel is not in this layout"
+            ));
+        }
+    }
+
+    #[test]
+    fn reopening_a_voyage_while_core_cannot_answer_changes_nothing() {
+        let (mut layout, _) = closed_placement();
+        layout.voyages[0].closed = true;
+        layout.voyages[0].fleets[0].closed = true;
+        let id = layout.voyages[0].id.clone();
+        let request = Request {
+            request_id: "reopen".into(),
+            expected_version: 1,
+            action: Action::ReopenVoyage { id },
+        };
+        let mut core = Core(
+            Ok(terminal("live", "")),
+            Err(Error::Uncertain("Core did not answer".into())),
+        );
+        let error = edit(
+            &mut core,
+            &layout,
+            None,
+            Defaults::Plain,
+            &request,
+            &HashMap::new(),
+        );
+        assert!(matches!(error, Err(Error::Uncertain(_))));
     }
 }

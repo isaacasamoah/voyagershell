@@ -238,7 +238,12 @@ below.
 `remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
 takes that placement off the canvas and nothing else. The Vessel's content,
 name and data stay, and its program keeps running, so check it with `hc ls`
-and stop it with `hc`. A Vessel that removes its last placement closes its own
+and stop it with `hc`. A placement that is already off the canvas stays
+listed, and removing it again is refused with "Panel is not in this layout"
+while its program is live. When Core reports that program ended, or that it
+no longer knows the terminal, the removal deletes the placement and its
+terminal Vessel instead. A Core that does not answer, or an answer that is
+neither, deletes nothing. A Vessel that removes its last placement closes its own
 socket.
 
 - `create-fleet` makes an empty Fleet and opens it. Start your program there

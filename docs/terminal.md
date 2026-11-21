@@ -84,10 +84,17 @@ These definitions describe what each user action does.
   and keeps its backend program running in Core. It never stops a program.
   This is unchanged.
 - **A Vessel's or Portal's program exiting.** When a terminal program that this
-  owner saw live finishes with reason `exited`, the owner removes its placement
-  (`families::terminal::close_exited`). A program that ended while the app was
-  closed, for example after a computer restart, keeps its placement, and the
-  next launch opens a plain shell there (`families::terminal::prepare_reopen`).
+  owner saw live finishes with reason `exited`, the owner deletes its placement,
+  its Vessel and its leaf in saved layouts (`families::terminal::close_exited`),
+  so a typed exit leaves no record. Closing the panel by hand is different: it
+  hides the placement and keeps the Vessel for reopening. A program that ended
+  while the app was closed, for example after a computer restart, leaves a
+  Vessel the user opened with its placement, and the next launch opens a plain
+  shell there (`families::terminal::prepare_reopen`). An adopted Vessel whose
+  program Core reports ended, or no longer lists, is deleted instead, whether it
+  is on the canvas or was closed earlier. Only terminal-backed Vessels are
+  deleted. A Core that cannot answer, or an answer that is not a definite
+  ended or absent, keeps the record.
   A Vessel the app adopted from a `voyager.place` label carries `adopted`; when its
   program ended, the next launch removes its placement and starts no shell.
   Agents are not resumed.
@@ -650,7 +657,7 @@ and its original correction history are unchanged by this cold-attachment path.
 
 The 5 November feedback changes the earlier manual-restart presentation. Recognized agent launches run as children of an interactive Bash process. The executable and its arguments remain separate positional arguments; the command does not interpolate user text. Agent exit returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's `finished` state and `exited` reason before the application removes its placement from the panel tree. Losing a viewer or Core connection does not establish shell exit. The application owner publishes the resulting layout change.
 
-At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
+At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared, except that an adopted one whose program ended is deleted. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
 
 `app/src/families/terminal/lifecycle.rs` holds these small layout decisions. `app/src/client_structure.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
 

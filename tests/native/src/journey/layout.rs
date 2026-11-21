@@ -111,7 +111,7 @@ pub fn without_runtime(layout: &Layout) -> Layout {
     layout
 }
 
-pub fn without_adopted_leaves(layout: &Layout) -> Layout {
+pub fn without_adopted_records(layout: &Layout) -> Layout {
     fn prune(split: Split, drop: &[PlacementId]) -> Option<Split> {
         match split {
             Split::Leaf { placement } => {
@@ -149,8 +149,12 @@ pub fn without_adopted_leaves(layout: &Layout) -> Layout {
                 .map(|placement| placement.id.clone())
                 .collect();
             fleet.root = fleet.root.take().and_then(|root| prune(root, &drop));
+            fleet
+                .placements
+                .retain(|placement| !drop.contains(&placement.id));
         }
     }
+    layout.vessels.retain(|vessel| !vessel.adopted);
     layout
 }
 
