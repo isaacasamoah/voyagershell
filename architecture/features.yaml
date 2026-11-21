@@ -976,7 +976,7 @@ features:
         kind: user
         says: 'Voice hands Voyager the words the person spoke, never an answer to them.'
         owner: conversation-provider
-        guards: ['type:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else']
+        guards: ['type:app/src/speech.rs#hearing_prompt']
         checks: ['journey:voice/requests-are-written-down', 'journey:voice/words-reach-voyager', 'test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else']
         formal: []
         journeys: [voice]
