@@ -26,6 +26,7 @@ cases! {
     ClickTurnsVoiceOff => "click-turns-voice-off",
     RoomSoundIsNeverATurn => "room-sound-is-never-a-turn",
     RequestInRoomSoundIsSent => "request-in-room-sound-is-sent",
+    QuietVoiceIsATurn => "quiet-voice-is-a-turn",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
@@ -48,6 +49,25 @@ const ROOM_SILENCE_MS: u32 = 3000;
 const WORD_ERROR_PERCENT: usize = 5;
 const ROOM_BEFORE_REQUEST_S: u32 = 8;
 const ROOM_AFTER_REQUEST_S: u32 = 4;
+const QUIET_VOICE_AROUND_S: u32 = 3;
+const QUIET_VOICES: [(f64, room::Bed); 4] = [
+    (0.15, room::Bed::Tone),
+    (0.06, room::Bed::Tone),
+    (0.15, room::Bed::SoftFan),
+    (0.15, room::Bed::LoudFan),
+];
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QuietTurn {
+    gain: f64,
+    bed: room::Bed,
+    turns: usize,
+    sent: usize,
+    heard: String,
+    word_errors: usize,
+    words: usize,
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -251,10 +271,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 listened.turns.is_empty(),
             )
             .expect(
+                "nothing in the room sound is acknowledged",
+                listened.acknowledged() == 0,
+            )
+            .expect(
                 "nothing heard in the room sound reaches Voyager",
                 listened.sent() == 0,
             )
             .observed("turns", listened.turns.len())?
+            .observed("acknowledged", listened.acknowledged())?
             .observed("sent", listened.sent())?
             .observed("droppedAfterHearing", listened.dropped())?
             .observed("heard", &heard)?
@@ -298,6 +323,43 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("wordErrors", errors)?
             .observed("words", words)?
             .observed("listened", listened)
+    })?;
+    cases.check(native, Case::QuietVoiceIsATurn, |native| {
+        let mut quiet = Vec::new();
+        for (gain, bed) in QUIET_VOICES {
+            let samples =
+                room::quiet_request(&DOCK_ON_THIS_FLEET, gain, bed, QUIET_VOICE_AROUND_S)?;
+            voice::turn_on(native)?;
+            let listened = voice::feed_and_settle(native, "quiet-voice", &samples);
+            voice::turn_off(native)?;
+            let listened = listened?;
+            let heard = listened
+                .turns
+                .first()
+                .and_then(|turn| turn.heard.clone())
+                .unwrap_or_default();
+            let (word_errors, words) = word_errors(&heard, DOCK_ON_THIS_FLEET.words);
+            quiet.push(QuietTurn {
+                gain,
+                bed,
+                turns: listened.turns.len(),
+                sent: listened.sent(),
+                heard,
+                word_errors,
+                words,
+            });
+        }
+        Verdict::new()
+            .expect(
+                "a request at 0.15 and 0.06 of its level over room tone, and at 0.15 over a soft and a loud fan, is exactly one turn each",
+                quiet.iter().all(|one| one.turns == 1),
+            )
+            .expect(
+                "each of those turns is sent to Voyager once",
+                quiet.iter().all(|one| one.sent == 1),
+            )
+            .observed("spoken", DOCK_ON_THIS_FLEET.words)?
+            .observed("quiet", &quiet)
     })?;
     cases.check(native, Case::RenameIsHeard, |native| {
         let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;

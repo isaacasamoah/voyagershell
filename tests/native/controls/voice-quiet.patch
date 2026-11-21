@@ -1,0 +1,72 @@
+diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
+index 61ff7c69..4276942c 100644
+--- a/app/src/audio_io.rs
++++ b/app/src/audio_io.rs
+@@ -9,7 +9,7 @@ use std::{
+ 
+ pub const FRAME: usize = 320;
+ const SETTLE_FRAMES: usize = 15;
+-const ONSET_FRAMES: usize = 5;
++const ONSET_FRAMES: usize = 10;
+ const PAUSE_FRAMES: usize = 75;
+ const CAP_FRAMES: usize = 1500;
+ const LEAD_FRAMES: usize = 50;
+@@ -18,6 +18,7 @@ const MIN_THRESHOLD: f32 = 200.0;
+ const FLOOR_FACTOR: f32 = 3.0;
+ const START_PROBABILITY: f32 = 0.3;
+ const SPEAKING_PROBABILITY: f32 = 0.15;
++const EMPHASIS: f32 = 0.97;
+ const PLAYING_LOOK: Duration = Duration::from_millis(20);
+ 
+ pub trait SpeechDetector {
+@@ -47,6 +48,8 @@ enum Stage {
+ pub struct Gate {
+     detector: Box<dyn SpeechDetector>,
+     floors: VecDeque<f32>,
++    band_floors: VecDeque<f32>,
++    previous: f32,
+     stage: Stage,
+     kept: VecDeque<Vec<i16>>,
+     since_sound: usize,
+@@ -58,6 +61,8 @@ impl Gate {
+         Self {
+             detector,
+             floors: VecDeque::new(),
++            band_floors: VecDeque::new(),
++            previous: 0.0,
+             stage: Stage::Settling { seen: 0 },
+             kept: VecDeque::new(),
+             since_sound: PAUSE_FRAMES,
+@@ -65,8 +70,10 @@ impl Gate {
+     }
+ 
+     pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
+-        let probability = self.detector.probability(&frame);
+-        let speech = probability >= SPEAKING_PROBABILITY;
++        let level = self.speech_band_level(&frame);
++        let band = above_floor(&mut self.band_floors, level);
++        let speech = self.detector.probability(&frame) >= SPEAKING_PROBABILITY;
++        let probability = if band { 1.0 } else { 0.0 };
+         let sounding = above_floor(&mut self.floors, plain_level(&frame)) || speech;
+         if !matches!(self.stage, Stage::Settling { .. }) {
+             self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
+@@ -114,6 +121,19 @@ impl Gate {
+         }
+     }
+ 
++    fn speech_band_level(&mut self, frame: &[i16]) -> f32 {
++        let sum: f64 = frame
++            .iter()
++            .map(|sample| {
++                let sample = f32::from(*sample);
++                let emphasized = sample - EMPHASIS * self.previous;
++                self.previous = sample;
++                f64::from(emphasized).powi(2)
++            })
++            .sum();
++        (sum / frame.len().max(1) as f64).sqrt() as f32
++    }
++
+     pub fn speaking(&self) -> bool {
+         matches!(self.stage, Stage::Speaking { .. })
+     }
