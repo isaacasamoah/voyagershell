@@ -314,8 +314,8 @@ mod tests {
     }
 
     #[test]
-    fn the_spoken_requests_are_twenty_questions_and_twenty_commands_at_the_feed_rate() -> Result<()>
-    {
+    fn the_spoken_requests_are_twenty_one_questions_and_twenty_commands_at_the_feed_rate()
+    -> Result<()> {
         let requests = requests()?;
         let count = |kind| {
             requests
@@ -323,7 +323,7 @@ mod tests {
                 .filter(|request| request.kind == kind)
                 .count()
         };
-        assert_eq!((count(Kind::Question), count(Kind::Command)), (20, 20));
+        assert_eq!((count(Kind::Question), count(Kind::Command)), (21, 20));
         for request in &requests {
             assert!(request.samples.0.len() > RATE as usize, "{}", request.name);
             assert!(request.samples.peak() > 4000, "{}", request.name);
