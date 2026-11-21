@@ -293,10 +293,7 @@ impl Exchange<'_> {
             Ok(heard) => {
                 self.trace.mark_words("heard", &heard);
                 if heard_nothing(&heard) {
-                    self.finish(finish.take());
-                    finish = self.play(Phrase::Missed, None);
-                    self.trace
-                        .mark_words("acknowledgement-started", Phrase::Missed.key());
+                    self.trace.mark("dropped");
                 } else if send {
                     match self.voyager.say(&crate::spoken::prompt(&heard)) {
                         Ok(()) => self.trace.mark("sent"),

@@ -132,7 +132,10 @@ impl Voyager for Standin {
 
 fn loud() -> Vec<i16> {
     (0..FRAME)
-        .map(|i| if i % 2 == 0 { 4000 } else { -4000 })
+        .map(|i| {
+            let at = i as f32 / crate::speech::SAMPLE_RATE as f32;
+            (4000.0 * (std::f32::consts::TAU * 1000.0 * at).sin()) as i16
+        })
         .collect()
 }
 
@@ -532,14 +535,14 @@ fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
 }
 
 #[test]
-fn empty_heard_text_says_it_did_not_catch_that() {
-    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    rig.serve("  ");
-    assert!(rig.said().is_empty());
-    assert_eq!(
-        rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::Missed)]
-    );
+fn empty_heard_text_says_nothing_more_and_sends_nothing() {
+    for heard in ["", "  ", " ... "] {
+        let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+        rig.serve(heard);
+        assert!(rig.said().is_empty(), "{heard:?}");
+        assert_eq!(rig.played(), vec![mark(Phrase::Asking)], "{heard:?}");
+        assert_eq!(rig.opened(), 2, "{heard:?}");
+    }
 }
 
 struct Watching {
