@@ -1,5 +1,6 @@
 pub mod exchange;
 pub mod judge;
+pub mod room;
 pub mod selftest;
 pub mod speech;
 pub mod voice;
