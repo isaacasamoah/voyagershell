@@ -172,6 +172,23 @@ Fleet for an agent stays `create-fleet`, which opens empty.
 voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Review","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<absolute directory>"},"typeId":"terminal"}}'
 ```
 
+`create-vessel` and `set-placement-maximized` are offered only to Voyager too.
+`create-vessel` adds a Vessel of the named `typeId` to a Fleet. Its
+`destination` names the owner as `{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":...}`,
+and the current Fleet is the one `voyager status` and the focus reply show. A
+destination in the Portals is refused. `set-placement-maximized` takes
+`"id":"<placement id>"` and `"maximized":true` to maximize it, or `false` to
+restore it. The app still decides whether the target and the Fleet are valid,
+as it does for the avatar.
+
+```sh
+voyager do workspace '{"requestId":"vessel-1","expectedVersion":"<version>","action":{"operation":"create-vessel","typeId":"terminal","destination":{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":{"kind":"empty"}}}}'
+voyager do workspace '{"requestId":"max-1","expectedVersion":"<version>","action":{"operation":"set-placement-maximized","id":"<placement id>","maximized":true}}'
+```
+
+From any other Vessel each is refused with "<operation> is offered only to
+Voyager", the exit code is 1 and nothing is queued.
+
 `remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
 takes that placement off the canvas and nothing else. The Vessel's content,
 name and data stay, and its program keeps running, so check it with `hc ls`
