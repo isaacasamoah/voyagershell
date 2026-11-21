@@ -67,7 +67,12 @@ fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Res
     )?)?)
 }
 
-fn from_another_vessel(native: &Native, other: &str, id: &str, action: Action) -> Result<String> {
+pub(super) fn from_another_vessel(
+    native: &Native,
+    other: &str,
+    id: &str,
+    action: Action,
+) -> Result<String> {
     let caller = format!("HC_TERMINAL_ID={other}");
     let request = request_line(native, &caller, id, action)?;
     native.system.execute(
@@ -84,7 +89,7 @@ fn from_another_vessel(native: &Native, other: &str, id: &str, action: Action) -
     )
 }
 
-fn members(layout: &Layout, fleet: &FleetId) -> Vec<PlacementId> {
+pub(super) fn members(layout: &Layout, fleet: &FleetId) -> Vec<PlacementId> {
     fleets(layout)
         .find(|item| &item.id == fleet)
         .map(|item| {

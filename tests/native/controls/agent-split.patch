@@ -1,0 +1,14 @@
+diff --git a/app/src/vessel_socket.rs b/app/src/vessel_socket.rs
+index cd8f7817..b3796d7b 100644
+--- a/app/src/vessel_socket.rs
++++ b/app/src/vessel_socket.rs
+@@ -186,6 +186,9 @@ fn beside_in_fleet(destination: &ContentDestination) -> bool {
+ }
+ 
+ fn offered(action: &Action, bound: bool) -> bool {
++    if let Action::CreateVessel { destination, .. } = action {
++        return bound && in_fleet(destination);
++    }
+     match action {
+         Action::Inspect
+         | Action::CreateFleet { .. }

@@ -577,6 +577,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/adopt_by_label.rs"),
     ),
     (
+        "src/journey/agent_split.rs",
+        include_bytes!("journey/agent_split.rs"),
+    ),
+    (
         "src/journey/arrangement.rs",
         include_bytes!("journey/arrangement.rs"),
     ),

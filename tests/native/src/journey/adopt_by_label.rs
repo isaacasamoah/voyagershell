@@ -152,7 +152,7 @@ fn on_canvas(root: Option<&Split>, placement: &PlacementId) -> bool {
     }
 }
 
-fn typed(terminal: &Terminal, native: &Native, text: &str) -> Result<()> {
+pub(super) fn typed(terminal: &Terminal, native: &Native, text: &str) -> Result<()> {
     terminal.focus(native)?;
     terminal.echoed(native, text)?;
     native.press(Key::Return)
