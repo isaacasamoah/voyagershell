@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     audio_io::FRAME,
-    speech::Standing,
+    speech::{Reply, Standing},
     voice_parts::{Frames, SendFailure},
 };
 use std::{
@@ -107,6 +107,54 @@ impl Hearing for Heard {
     }
 }
 
+const SAY_MARK: usize = 1000;
+
+struct Brain {
+    reply: Result<Reply, Fault>,
+    speaks: bool,
+}
+
+impl Brain {
+    fn offline() -> Self {
+        Self {
+            reply: Err(Fault::Failed("The voice engine did not reply".into())),
+            speaks: true,
+        }
+    }
+
+    fn says(words: &str, handoff: bool) -> Self {
+        Self {
+            reply: Ok(Reply {
+                say: SpokenText::from_say(words).unwrap(),
+                handoff,
+            }),
+            speaks: true,
+        }
+    }
+}
+
+impl Replying for Brain {
+    fn reply(&self, _: &str) -> Result<Reply, Fault> {
+        self.reply.clone()
+    }
+}
+
+impl Speaking for Brain {
+    fn render(&self, _: Phrase) -> Result<Clip, Fault> {
+        Err(Fault::Unavailable("unused".into()))
+    }
+
+    fn speak(&self, text: &SpokenText) -> Result<Clip, Fault> {
+        if !self.speaks {
+            return Err(Fault::Failed("The voice engine did not speak".into()));
+        }
+        Ok(Clip {
+            rate: 24_000,
+            pcm: vec![0; SAY_MARK + text.as_str().len()],
+        })
+    }
+}
+
 struct Standin {
     standing: Standing,
     said: Mutex<Vec<String>>,
@@ -192,6 +240,7 @@ struct Rig {
     audio: Fake,
     voyager: Standin,
     clips: HashMap<Phrase, Clip>,
+    brain: Brain,
     shared: Arc<Shared>,
     floor: Arc<Floor>,
 }
@@ -226,6 +275,7 @@ impl Rig {
                 notes: Mutex::default(),
             },
             clips: clips(),
+            brain: Brain::offline(),
             shared,
             floor,
         }
@@ -238,6 +288,8 @@ impl Rig {
     ) -> Exchange<'a> {
         Exchange {
             hearing,
+            replying: &self.brain,
+            speaking: &self.brain,
             clips: &self.clips,
             audio: &self.audio,
             voyager: &self.voyager,
@@ -253,10 +305,16 @@ impl Rig {
     }
 
     fn serve_with(&self, hearing: &dyn Hearing) {
+        self.serve_brain(hearing, &Brain::offline());
+    }
+
+    fn serve_brain(&self, hearing: &dyn Hearing, brain: &Brain) {
         self.shared.update(|state| state.snapshot.on = true);
         let vocabulary: Vocabulary = Arc::new(|| vec!["Harbor".into()]);
-        self.exchange(hearing, &vocabulary)
-            .serve(Duration::from_millis(5));
+        let mut exchange = self.exchange(hearing, &vocabulary);
+        exchange.replying = brain;
+        exchange.speaking = brain;
+        exchange.serve(Duration::from_millis(5));
     }
 
     fn said(&self) -> Vec<String> {
@@ -350,7 +408,7 @@ fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
 }
 
 #[test]
-fn a_click_while_the_acknowledgement_plays_cuts_it_and_the_request_still_goes() {
+fn a_click_while_hearing_plays_nothing_but_the_request_still_goes() {
     struct Clicking(Arc<Shared>);
     impl Hearing for Clicking {
         fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
@@ -369,8 +427,7 @@ fn a_click_while_the_acknowledgement_plays_cuts_it_and_the_request_still_goes() 
         rig.shared.update(|state| state.shutdown = true);
     });
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
-    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![true]);
+    assert!(rig.played().is_empty());
     assert_eq!(rig.opened(), 1);
 }
 
@@ -419,10 +476,7 @@ fn a_hearing_fault_says_it_did_not_catch_that_and_listening_resumes() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     rig.serve_with(&Down);
     assert!(rig.said().is_empty());
-    assert_eq!(
-        rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::Missed)]
-    );
+    assert_eq!(rig.played(), vec![mark(Phrase::Missed)]);
     assert_eq!(rig.opened(), 2);
     assert_eq!(
         rig.snapshot().notice.as_deref(),
@@ -525,10 +579,7 @@ fn a_refused_send_is_said_aloud_once_and_put_in_the_chat_and_never_retried() {
     let notice = rig.snapshot().notice.unwrap();
     assert_eq!(notice, "Not sent. Voyager needs you on Home");
     assert!(rig.said().is_empty());
-    assert_eq!(
-        rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::NotRunning)]
-    );
+    assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
     assert_eq!(
         rig.voyager.notes.lock().unwrap().clone(),
         vec!["Not sent. Voyager needs you on Home"]
@@ -550,12 +601,13 @@ fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
 }
 
 #[test]
-fn empty_heard_text_says_nothing_more_and_sends_nothing() {
+fn empty_heard_text_is_dropped_with_no_reply_and_nothing_sent() {
     for heard in ["", "  ", " ... "] {
         let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-        rig.serve(heard);
+        let brain = Brain::says("Sure, opening the roadmap.", true);
+        rig.serve_brain(&Heard(heard), &brain);
         assert!(rig.said().is_empty(), "{heard:?}");
-        assert_eq!(rig.played(), vec![mark(Phrase::Asking)], "{heard:?}");
+        assert!(rig.played().is_empty(), "{heard:?}");
         assert_eq!(rig.opened(), 2, "{heard:?}");
     }
 }
@@ -573,7 +625,7 @@ impl Hearing for Watching {
 }
 
 #[test]
-fn the_acknowledgement_has_started_before_hearing_begins() {
+fn nothing_is_played_until_hearing_and_the_reply_have_finished() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     let hearing = Watching {
         played: rig.audio.played.clone(),
@@ -582,9 +634,89 @@ fn the_acknowledgement_has_started_before_hearing_begins() {
     rig.serve_with(&hearing);
     assert_eq!(
         hearing.before_hearing.lock().unwrap().clone(),
-        Some(vec![mark(Phrase::Asking)])
+        Some(Vec::new())
     );
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+}
+
+fn said_clip(words: &str) -> usize {
+    SAY_MARK + SpokenText::from_say(words).unwrap().as_str().len()
+}
+
+const EVERY_STANDING: [Standing; 5] = [
+    Standing::Idle,
+    Standing::Working,
+    Standing::Blocked,
+    Standing::NotRunning,
+    Standing::Unknown,
+];
+
+#[test]
+fn a_workspace_request_is_answered_in_the_voices_own_words_and_sent_once() {
+    for standing in [Standing::Idle, Standing::Working, Standing::Unknown] {
+        let rig = Rig::new(vec![Mic::Opens(sentence())], standing, false);
+        let brain = Brain::says("Sure, opening the Billing fleet.", true);
+        rig.serve_brain(&Heard("open the Billing fleet"), &brain);
+        assert_eq!(rig.said(), vec!["[spoken] open the Billing fleet"]);
+        assert_eq!(
+            rig.played(),
+            vec![said_clip("Sure, opening the Billing fleet.")]
+        );
+    }
+}
+
+#[test]
+fn small_talk_is_answered_by_the_voice_whatever_voyagers_state() {
+    for standing in EVERY_STANDING {
+        let rig = Rig::new(vec![Mic::Opens(sentence())], standing, false);
+        let brain = Brain::says("You're welcome!", false);
+        rig.serve_brain(&Heard("thanks"), &brain);
+        assert!(rig.said().is_empty(), "{standing:?}");
+        assert_eq!(rig.played(), vec![said_clip("You're welcome!")]);
+    }
+}
+
+#[test]
+fn a_workspace_request_while_voyager_is_blocked_or_not_running_gets_the_reason_phrase_and_sends_nothing()
+ {
+    for (standing, phrase) in [
+        (Standing::Blocked, Phrase::NeedsYou),
+        (Standing::NotRunning, Phrase::NotRunning),
+    ] {
+        let rig = Rig::new(vec![Mic::Opens(sentence())], standing, false);
+        let brain = Brain::says("Sure, opening the Billing fleet.", true);
+        rig.serve_brain(&Heard("open the Billing fleet"), &brain);
+        assert!(rig.said().is_empty(), "{standing:?}");
+        assert_eq!(rig.played(), vec![mark(phrase)]);
+    }
+}
+
+#[test]
+fn a_reply_that_fails_falls_back_to_the_plain_acknowledgement_and_still_sends() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.serve_brain(&Heard("open the roadmap"), &Brain::offline());
+    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+}
+
+#[test]
+fn words_that_cannot_be_rendered_fall_back_to_the_acknowledgement_after_the_send() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    let mut brain = Brain::says("Sure, opening the roadmap.", true);
+    brain.speaks = false;
+    rig.serve_brain(&Heard("open the roadmap"), &brain);
+    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+}
+
+#[test]
+fn a_refused_send_replaces_the_voices_words_with_the_reason() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, true);
+    let brain = Brain::says("Sure, opening the roadmap.", true);
+    rig.serve_brain(&Heard("open the roadmap"), &brain);
+    assert!(rig.said().is_empty());
+    assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
 }
 
 #[test]

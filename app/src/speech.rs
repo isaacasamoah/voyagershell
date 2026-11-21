@@ -1,4 +1,7 @@
+use serde::Deserialize;
+
 pub const SAMPLE_RATE: u32 = 16_000;
+pub const CHAT_CONFIDENCE: f64 = 0.99;
 pub const CEILING_WORDS: usize = 120;
 pub const OFFER_MORE: &str = "I can say more if you ask.";
 
@@ -184,6 +187,40 @@ pub trait Hearing: Send + Sync {
     fn hear(&self, utterance: &Utterance, vocabulary: &[String]) -> Result<String, Fault>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Reply {
+    pub say: SpokenText,
+    pub handoff: bool,
+}
+
+#[derive(Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum Kind {
+    Chat,
+    Work,
+}
+
+#[derive(Deserialize)]
+struct Answer {
+    kind: Kind,
+    say: String,
+}
+
+impl Reply {
+    pub fn parse(answer: &str, chat_probability: Option<f64>) -> Option<Self> {
+        let Answer { kind, say } = serde_json::from_str(answer).ok()?;
+        let sure_it_is_chat = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
+        Some(Self {
+            say: SpokenText::from_say(&say)?,
+            handoff: kind == Kind::Work || !sure_it_is_chat,
+        })
+    }
+}
+
+pub trait Replying: Send + Sync {
+    fn reply(&self, heard: &str) -> Result<Reply, Fault>;
+}
+
 pub trait Speaking: Send + Sync {
     fn render(&self, phrase: Phrase) -> Result<Clip, Fault>;
     fn speak(&self, text: &SpokenText) -> Result<Clip, Fault>;
@@ -202,6 +239,18 @@ pub struct SpokenText(String);
 impl SpokenText {
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn from_say(say: &str) -> Option<Self> {
+        let (kept, _) = limit(say.split_whitespace().map(str::to_owned).collect());
+        if kept.is_empty() {
+            return None;
+        }
+        let mut text = kept.join(" ");
+        if !text.ends_with(['.', '!', '?']) {
+            text.push('.');
+        }
+        Some(Self(text))
     }
 
     pub fn from_reply(reply: &str) -> Option<Self> {
@@ -372,6 +421,124 @@ fn hint_words(names: &[String]) -> Vec<&str> {
     words
 }
 
+pub const REPLY_PROMPT: &str = r#"You are Voyager's voice. Voyager is the user's workspace assistant; it does all the work, and you only talk. Reply with JSON {"kind": "chat" or "work", "say": "..."}.
+chat: pure chat that needs no workspace knowledge (greetings, thanks, goodbyes, okay, are you there, compliments, who you are). Say a friendly one-sentence answer.
+work: everything else: any command, any question about the workspace, the build, the crew or progress, any vague "how is it going" or "any news", asking for help or what you can do, cancel or never mind. Say one short acknowledgement of at most twelve words in your own words that repeats the topic and keeps any names exactly as spoken. Never answer the question, never claim anything is done, never state a fact, never say you cannot. Voyager does the work, so say "I'll ask Voyager" or "Let me ask Voyager", never "I'll make", "I'll do" or "I'll create"."#;
+
+pub const REPLY_EXAMPLES: [(&str, &str, &str); 27] = [
+    (
+        "Hi, how are you doing today?",
+        "chat",
+        "I'm doing well, thanks. What can I do for you?",
+    ),
+    (
+        "Open the Billing fleet.",
+        "work",
+        "Sure, opening the Billing fleet.",
+    ),
+    ("Okay, thanks, that's all.", "chat", "You're welcome!"),
+    (
+        "Are the tests passing?",
+        "work",
+        "Let me check whether the tests are passing.",
+    ),
+    ("Can you hear me okay?", "chat", "Yes, loud and clear."),
+    (
+        "Go to the start page.",
+        "work",
+        "Okay, heading to the start page.",
+    ),
+    (
+        "Who is this?",
+        "chat",
+        "I'm Voyager's voice. I pass your workspace requests to Voyager.",
+    ),
+    (
+        "What are you doing right now?",
+        "work",
+        "Let me see what Voyager is up to.",
+    ),
+    ("Cheers.", "chat", "Anytime."),
+    (
+        "Anything new?",
+        "work",
+        "Sure, I'll ask Voyager what's new.",
+    ),
+    ("Nice work.", "chat", "Thank you, that's kind of you."),
+    (
+        "Forget it.",
+        "work",
+        "Okay, I'll tell Voyager to drop that.",
+    ),
+    (
+        "What can you help with?",
+        "work",
+        "Sure, Voyager can walk you through that.",
+    ),
+    (
+        "Rename the third vessel to Logs.",
+        "work",
+        "On it, renaming that vessel.",
+    ),
+    (
+        "Good evening.",
+        "chat",
+        "Good evening! What can I do for you?",
+    ),
+    (
+        "Who is working on the login pull request?",
+        "work",
+        "Let me find out who is on the login pull request.",
+    ),
+    (
+        "Write me a report of what happened this week.",
+        "work",
+        "Sure, I'll ask Voyager for a report.",
+    ),
+    ("Great, that works.", "chat", "Glad to hear it!"),
+    ("You're fast.", "chat", "Thanks, I try to be."),
+    (
+        "How should I talk to you?",
+        "chat",
+        "Just speak normally, and I'll pass your requests to Voyager.",
+    ),
+    (
+        "Fill me in.",
+        "work",
+        "Sure, I'll ask Voyager to fill you in.",
+    ),
+    (
+        "Is there anything I should look at?",
+        "work",
+        "Sure, I'll ask Voyager what needs a look.",
+    ),
+    (
+        "Could you help me with something?",
+        "work",
+        "Sure, Voyager can help with that.",
+    ),
+    (
+        "What else can you do?",
+        "work",
+        "Sure, Voyager can walk you through what it can do.",
+    ),
+    (
+        "What's the latest?",
+        "work",
+        "Let me ask Voyager for the latest.",
+    ),
+    (
+        "Dock me to the Build-3 fleet.",
+        "work",
+        "Sure, I'll ask Voyager to dock you to the Build-3 fleet.",
+    ),
+    (
+        "Never mind.",
+        "work",
+        "Okay, I'll tell Voyager to drop that.",
+    ),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,6 +622,85 @@ mod tests {
             for forbidden in ["done", "opening", "renamed", "opened"] {
                 assert!(!words.contains(forbidden), "{words}");
             }
+        }
+    }
+
+    fn answer(kind: &str, say: &str) -> String {
+        format!(r#"{{"kind": "{kind}", "say": "{say}"}}"#)
+    }
+
+    #[test]
+    fn chat_is_answered_without_a_handoff_only_when_the_model_is_sure() {
+        let chat = answer("chat", "You're welcome!");
+        let sure = Reply::parse(&chat, Some(0.995)).unwrap();
+        assert!(!sure.handoff);
+        assert_eq!(sure.say.as_str(), "You're welcome!");
+        assert!(Reply::parse(&chat, Some(CHAT_CONFIDENCE)).is_some_and(|reply| !reply.handoff));
+        assert!(Reply::parse(&chat, Some(0.98)).unwrap().handoff);
+        assert!(Reply::parse(&chat, None).unwrap().handoff);
+    }
+
+    #[test]
+    fn work_is_always_handed_off_whatever_the_probability() {
+        let work = answer("work", "Sure, opening the Billing fleet.");
+        for chance in [None, Some(0.0), Some(1.0)] {
+            assert!(Reply::parse(&work, chance).unwrap().handoff);
+        }
+    }
+
+    #[test]
+    fn an_answer_that_is_not_the_agreed_shape_is_not_a_reply() {
+        for bad in [
+            "",
+            "Sure.",
+            "{}",
+            r#"{"kind": "chat"}"#,
+            r#"{"kind": "maybe", "say": "Hello."}"#,
+            r#"{"kind": "chat", "say": "  "}"#,
+            r#"{"handoff": false, "say": "Hello."}"#,
+        ] {
+            assert!(Reply::parse(bad, Some(1.0)).is_none(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn names_with_digits_and_hyphens_survive_in_what_is_said() {
+        let said = SpokenText::from_say("Sure, docking you to voyagershell 2 and Build-3").unwrap();
+        assert_eq!(
+            said.as_str(),
+            "Sure, docking you to voyagershell 2 and Build-3."
+        );
+    }
+
+    #[test]
+    fn no_example_or_rule_lets_the_voice_claim_the_work() {
+        let wording = REPLY_EXAMPLES
+            .iter()
+            .filter(|(_, kind, _)| *kind == "work")
+            .map(|(_, _, say)| *say);
+        for say in wording {
+            let lower = say.to_lowercase();
+            for claimed in ["i'll make", "i'll do", "i'll create", "i've", "done"] {
+                assert!(!lower.contains(claimed), "{say}");
+            }
+            assert!(say.split_whitespace().count() <= 12, "{say}");
+        }
+        assert!(REPLY_PROMPT.contains(r#"never "I'll make""#));
+    }
+
+    #[test]
+    fn help_and_cancel_are_handed_to_voyager_in_the_examples() {
+        for asked in [
+            "What can you help with?",
+            "Could you help me with something?",
+            "What else can you do?",
+            "Never mind.",
+        ] {
+            let (_, kind, _) = REPLY_EXAMPLES
+                .iter()
+                .find(|(said, ..)| *said == asked)
+                .unwrap();
+            assert_eq!(*kind, "work", "{asked}");
         }
     }
 

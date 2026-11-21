@@ -44,20 +44,13 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 3. The 1.5 s comes from 94 synthetic requests with a pause of 0.4 to 1.5 s
    mid-sentence. A silence of 0.6 s ended 71 of them early, 1.0 s ended 32, 1.2 s
    ended 23 and 1.5 s ended 10. It is the shortest of those that ends at most 15
-   early. Waiting 1.5 s instead of 0.6 s adds 0.9 s between the end of speech and
-   the acknowledgement. The time from the end of the turn to the clip's first sound is
-   unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
-   with a median of 201 ms. A model that judges the end of a turn and interruptions
-   are later work.
-4. A cached clip answers the moment the turn ends, before hearing finishes. It is
-   chosen from Voyager's standing, so it needs no words. It says only that the words
-   were heard and passed on. It never names an action or claims a result.
-5. Omni turns the samples into words while the clip plays. The prompt names the
-   product words and the user's own Voyage and Fleet names, read from the workspace
-   state the owner already holds, so hearing adds no inspection call. Right
-   after hearing, `speech::heard_nothing` drops a transcript with no letter or
-   digit, and a read-back of the hint. Nothing more is said and nothing is sent.
-   If hearing fails, "I didn't catch that." follows and nothing is sent.
+   early. A model that judges the end of a turn and interruptions are later work.
+4. Omni turns the samples into words. The prompt names the product words and the
+   user's own Voyage and Fleet names, read from the workspace state the owner already
+   holds, so hearing adds no inspection call. Right after hearing, `speech::heard_nothing`
+   drops a transcript with no letter or digit, and a read-back of the hint. Nothing is
+   said and nothing is sent. If hearing fails, "I didn't catch that." plays and nothing
+   is sent.
 
    A read-back of the hint is three or more comma-separated entries that are each
    an entry of the hint sent with that request, in the hint's own order. On room
@@ -68,11 +61,20 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    stopgap for 22 Nov 2026. It is removed when the Silero speech detector gates
    turns. It must not grow into a list of words or phrases to drop, because a
    filter over model text drops real requests the list did not foresee.
+5. A second call to the same engine, on the words alone, returns the voice's own
+   answer. The voice answers pure chat itself, such as a greeting, thanks or a goodbye.
+   It gives a short acknowledgement in its own words for everything else, including
+   every command, every question about the workspace, "help", "what can you do",
+   "never mind" and "cancel that", and the app hands those words to Voyager. The voice
+   never answers a workspace question and never says that anything is done.
 6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
-   same send the chat box uses. The focus hook reads the marker and tells the app that
-   the turn is spoken.
-7. Listening resumes when the clip ends. A new request while Voyager works queues
+   same send the chat box uses, before the voice starts to speak. The focus hook reads the
+   marker and tells the app that the turn is spoken. The voice then speaks its own words.
+7. Listening resumes when the speech ends. A new request while Voyager works queues
    for it.
+
+A person hears the voice only after hearing and the reply call have finished. The
+trace marks `utterance-ended`, `heard`, `replied` and `reply-started` give the times.
 
 The microphone is closed whenever the app's own audio plays, so the app never hears
 its own voice as a turn. There are no interruptions.
@@ -88,15 +90,19 @@ shows "Can't hear the microphone" in a colour that is not green, and the voice s
 and turns green when the microphone is back.
 
 Every fixed phrase the voice says is in this table. A clip is cached, keyed by its key and a
-short hash of its words. The voice speaks as "I" and never as Voyager.
+short hash of its words. The voice speaks as "I" and never as Voyager. `asking`,
+`okay-asking` and `queued` play only when the reply call fails, is slow, is not valid JSON
+or its words cannot be rendered: the plain acknowledgement, with the words still sent. The
+other phrases are the reasons and faults, and they replace the voice's own words when
+they apply.
 
 | Key | Words | Played when | Words sent |
 | --- | --- | --- | --- |
-| `asking` | "Asking Voyager." | Voyager is idle or done, or has no state yet, on even turns | Yes |
-| `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
-| `queued` | "Queued for Voyager." | Voyager is working | Yes |
-| `needs-you` | "Voyager needs you on Home first." | Voyager is blocked, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
-| `not-running` | "I couldn't pass that to Voyager." | Core reports the program ended or gone, or Core refuses a send with a kind not listed in this table, including `conflict` | No |
+| `asking` | "Asking Voyager." | The reply call failed and Voyager is idle or done, or has no state yet, on even turns | Yes |
+| `okay-asking` | "Okay, asking Voyager." | The same on odd turns | Yes |
+| `queued` | "Queued for Voyager." | The reply call failed and Voyager is working | Yes |
+| `needs-you` | "Voyager needs you on Home first." | Voyager is blocked and the words are a request for Voyager, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
+| `not-running` | "I couldn't pass that to Voyager." | Core reports the program ended or gone and the words are a request for Voyager, or Core refuses a send with a kind not listed in this table, including `conflict` | No |
 | `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
 | `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
 | `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
@@ -203,13 +209,42 @@ binding, or a program that Core reports ended or gone, Voyager counts as not run
 nothing is sent. A failed read of Core, or a live program that has not reported a state
 yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
 Speech does the opposite and waits on an unknown standing.
-A send that Core refuses after the acknowledgement is a known refusal. The app plays
-one cached clip chosen by Core's refusal kind, adds the refusal as a line in the chat,
+A send that Core refuses is a known refusal. The send happens before the voice speaks, so the app plays
+one cached clip chosen by Core's refusal kind in place of the voice's words, adds the refusal as a line in the chat,
 and shows it in the voice control's tooltip. Each clip is true for every kind mapped to
 it, and an unknown kind keeps "I couldn't pass that to Voyager." The table above lists each kind.
 
 A stalled engine never delays the canvas. The layer runs on its own thread, reaches
 Core only through the application queue, and the canvas only reads a small snapshot.
+
+## The voice's own answer
+
+The reply is one chat completion on the words alone, with the system prompt `REPLY_PROMPT`
+and 27 example turns, `REPLY_EXAMPLES`, both in `app/src/speech.rs`. The prompt and its
+examples come from the voice experiment's round 7 (prompt v11, call settings unchanged:
+temperature 0, 80 tokens, a JSON schema for `kind` and `say`, and the 8 most likely tokens
+with their log probabilities) with three changes. "Help", "what can you do", "can you
+help me", "never mind" and "cancel that" are work, so the voice acknowledges them and
+Voyager answers, as Isaac decided on 21 Nov. The prompt says that Voyager does the work,
+so an acknowledgement is "I'll ask Voyager" or "Let me ask Voyager" and never "I'll make".
+It also says to keep names as spoken.
+
+`Reply::parse` in `app/src/speech.rs` reads the answer. The words go to Voyager unless the
+model chose `chat` and the probability of `chat` at that token is at least 0.99
+(`CHAT_CONFIDENCE`), which is round 7's gate. Anything the model is unsure about is handed
+off. The words said go through `SpokenText::from_say`, which keeps names, digits and
+hyphens and only adds a final stop.
+
+| Voyager's state | Chat | A request for Voyager |
+| --- | --- | --- |
+| Idle, done, working or no state yet | The voice answers, nothing is sent | The voice's acknowledgement, and the words are sent |
+| Blocked | The voice answers, nothing is sent | "Voyager needs you on Home first.", nothing is sent |
+| Not running | The voice answers, nothing is sent | "I couldn't pass that to Voyager.", nothing is sent |
+
+If Core refuses the send, the reason phrase replaces the voice's words. If the reply call
+fails, takes more than 3 s (a target to measure), returns a body that is not the agreed JSON
+or has an empty `say`, the plain acknowledgement plays and the words are sent. A request
+is never dropped for a bad reply.
 
 ## The Omni engine
 
@@ -275,14 +310,15 @@ voice setting and download step replaces the lookup. The server and layer-count
 settings exist so a test machine can run a local llama.cpp build with a graphics
 card without a code default for it.
 
-### Acknowledgement clips
+### Cached clips
 
 The clips in the table are rendered once through the engine and kept in the user
 cache folder, keyed by the model size and the voice. Each file is named by its key and
 a short hash of its words, so a phrase with new words renders a new clip and the old
 file is never played. The app reads them into
-memory when the engine is ready. A click then costs no model run before the
-clip starts. A fresh cache renders the set once, after the first warm-up.
+memory when the engine is ready. A reason, a fault or a fallback acknowledgement then costs no
+model run before it plays. A fresh cache renders the set once, after the first warm-up. The
+voice's own words are rendered for each turn and never cached.
 
 ## Host requirements
 
@@ -311,8 +347,10 @@ no words.
 The native `voice` journey in [the verification guide](../tests/native/README.md#the-voice-journey)
 clicks the real control, feeds committed synthetic speech to the microphone and records the
 speaker. It checks that nothing records the microphone without a click, that the words come
-back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
-appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
+back exactly as spoken, that the voice's own answer reaches the speaker after hearing and that no audio payload
+appears in any log. Its `replies-follow-round-seven` case feeds 42 committed Edge remarks, the
+round 7 held-out and fresh sets, and fails when the voice keeps a request for Voyager, says
+the work is its own, or changes a name. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
 voice on, five minutes of room sound with no speech in it is never a turn, a request
 spoken among that sound is sent word for word, two turns in a row each get a spoken

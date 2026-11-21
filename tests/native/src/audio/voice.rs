@@ -34,9 +34,10 @@ pub struct Mark {
 pub struct Conversation {
     pub heard: Option<String>,
     pub acknowledgement: Option<String>,
-    pub spoken: Score,
+    pub reply: Option<String>,
+    pub spoken: Option<Score>,
     pub first_sound_after_capture_ms: i64,
-    pub started_before_heard: bool,
+    pub started_after_heard: bool,
     pub sent: bool,
     pub spoken_texts: Vec<String>,
     pub speech_after_capture_ms: Option<i64>,
@@ -243,22 +244,38 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
     let clicked = now_millis();
     turn_on(native)?;
     stack.feed(system, speech)?;
-    let started = until("the acknowledgement to start", || {
+    let started = until("the voice to start its answer", || {
         let now = marks(&trace)?;
-        Ok(now
-            .get(before..)
-            .and_then(|fresh| mark_of(fresh, "acknowledgement-started"))
-            .and_then(|mark| mark.words.clone()))
+        Ok(now.get(before..).and_then(|fresh| {
+            fresh
+                .iter()
+                .find(|mark| {
+                    matches!(
+                        mark.event.as_str(),
+                        "acknowledgement-started" | "reply-started" | "refusal-started"
+                    )
+                })
+                .cloned()
+        }))
     })?;
-    let reference = clip(&system.evidence.join("home"), &started)?;
-    let score = settle(
-        PATIENCE,
-        LOOK,
-        || Ok(Some(judge::score(&reference, &capture.samples()?))),
-        Score::matches,
-    )?
-    .context("The speaker capture never held still")?;
-    let samples = capture.samples()?;
+    let started_words = started.words.clone().unwrap_or_default();
+    let (score, samples) = if started.event != "reply-started" {
+        let reference = clip(&system.evidence.join("home"), &started_words)?;
+        let score = settle(
+            PATIENCE,
+            LOOK,
+            || Ok(Some(judge::score(&reference, &capture.samples()?))),
+            Score::matches,
+        )?
+        .context("The speaker capture never held still")?;
+        (Some(score), capture.samples()?)
+    } else {
+        let samples = until("the reply to reach the speaker", || {
+            let samples = capture.samples()?;
+            Ok(onset_ms(&samples).map(|_| samples))
+        })?;
+        (None, samples)
+    };
     let onset = onset_ms(&samples).context("No sound reached the speaker")?;
     until("the words to be heard", || {
         Ok(marks(&trace)?
@@ -293,16 +310,14 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
         .map(|mark| mark.at_ms)
         .context("The app marked no end of capture")?;
     let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
-    let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
     let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
     Ok(Conversation {
         heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
-        acknowledgement: Some(started),
+        acknowledgement: (started.event != "reply-started").then(|| started_words.clone()),
+        reply: (started.event == "reply-started").then(|| started_words.clone()),
         spoken: score,
         first_sound_after_capture_ms: first_sound,
-        started_before_heard: acknowledged
-            .zip(heard_at)
-            .is_some_and(|(started, heard)| started <= heard),
+        started_after_heard: heard_at.is_some_and(|heard| started.at_ms >= heard),
         sent,
         spoken_texts: marks
             .iter()
