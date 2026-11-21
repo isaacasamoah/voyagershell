@@ -22,7 +22,7 @@ pub(crate) const DEFAULT_ARGV: [&str; 5] =
 
 const BACKGROUND: &str = "VOYAGER_BACKGROUND";
 
-const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
+const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
 
 fn value<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
     argv.windows(2)
@@ -479,7 +479,23 @@ mod tests {
             .unwrap();
         let prompt = &words[at + 1];
         assert!(prompt.contains("Run voyager --skill to learn how to work in the app."));
-        assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 1);
+        assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 2);
         assert!(prompt.contains(&crate::spoken::reply_rule()));
+    }
+
+    #[test]
+    fn the_identity_names_the_background_session_its_marker_and_that_the_marker_replaces_others() {
+        let words = voyager_arguments("s1", true, None);
+        let at = words
+            .iter()
+            .position(|word| word == "--append-system-prompt")
+            .unwrap();
+        let prompt = &words[at + 1];
+        assert!(prompt.contains(
+            "This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1."
+        ));
+        assert!(prompt.contains("Your reply marker is [vy]"));
+        assert!(prompt.contains("replaces any other reply marker your instructions name"));
+        assert!(!prompt.to_lowercase().contains("oru"));
     }
 }
