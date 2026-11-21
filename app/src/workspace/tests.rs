@@ -1,5 +1,12 @@
 use super::*;
 
+fn empty(owner: &PlacementOwner) -> Place {
+    Place {
+        owner: owner.clone(),
+        insertion: PlacementInsertion::Empty,
+    }
+}
+
 fn two_voyages() -> (Model, VoyageId, FleetId, FleetId, VoyageId) {
     let mut model = Model {
         layout: Model::prepare(Layout::default(), "/tmp").unwrap(),
@@ -232,7 +239,7 @@ fn docking_on_a_portal_opens_its_voyage_and_focuses_the_portal() {
     let portal = PlacementOwner::Portals { voyage: a.clone() };
     model
         .adopt(
-            &portal,
+            empty(&portal),
             &CoreTerminalId("t9".into()),
             "/work".into(),
             Launch::Terminal,
@@ -285,11 +292,11 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
     let into_fleet = PlacementOwner::Fleet { id: fleet.clone() };
     let t5 = CoreTerminalId("t5".into());
     assert_eq!(
-        model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
+        model.adopt(empty(&into_fleet), &t5, "/work".into(), agent.clone(), None),
         Ok(true)
     );
     assert_eq!(
-        model.adopt(&into_fleet, &t5, "/work".into(), agent.clone(), None),
+        model.adopt(empty(&into_fleet), &t5, "/work".into(), agent.clone(), None),
         Ok(false)
     );
     let adopted = model.layout.vessels.last().unwrap().clone();
@@ -307,7 +314,7 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
         voyage: voyage.clone(),
     };
     assert_eq!(
-        model.adopt(&portal, &t6, "/work".into(), Launch::Terminal, None),
+        model.adopt(empty(&portal), &t6, "/work".into(), Launch::Terminal, None),
         Ok(true)
     );
     let column = model.layout.voyages[0].portal_layout.as_ref().unwrap();
@@ -319,13 +326,13 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
     let t7 = CoreTerminalId("t7".into());
     assert!(
         model
-            .adopt(&unknown, &t7, "/".into(), Launch::Terminal, None)
+            .adopt(empty(&unknown), &t7, "/".into(), Launch::Terminal, None)
             .is_err()
     );
     model.layout.voyages[0].fleets[0].closed = true;
     assert!(
         model
-            .adopt(&into_fleet, &t7, "/".into(), Launch::Terminal, None)
+            .adopt(empty(&into_fleet), &t7, "/".into(), Launch::Terminal, None)
             .is_err()
     );
     assert!(
@@ -351,7 +358,7 @@ fn an_adopted_terminal_takes_its_core_name_unless_a_neighbour_holds_it() {
     let adopt = |model: &mut Model, address: &str, name: Option<&str>| {
         model
             .adopt(
-                &owner,
+                empty(&owner),
                 &CoreTerminalId(address.into()),
                 "/work".into(),
                 Launch::Terminal,
@@ -430,7 +437,7 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
     };
     assert!(
         model
-            .adopt(&owner, &agent, "/tmp".into(), launch, None)
+            .adopt(empty(&owner), &agent, "/tmp".into(), launch, None)
             .unwrap()
     );
     let crew = &model.layout.voyages[0].fleets[3];
@@ -550,4 +557,96 @@ fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
     let vessel = ended.vessels.iter().find(|item| is_voyager(item)).unwrap();
     assert_eq!(vessel.backend, Some(CoreTerminalId("t1".into())));
     assert_eq!(crate::focus_hook::session(vessel), Some("session-1"));
+}
+
+fn create_beside(
+    model: &mut Model,
+    caller: Option<&VesselId>,
+    type_id: &str,
+    launch: Option<LaunchSpec>,
+) -> Result<Option<Launch>, String> {
+    let fleet = &model.layout.voyages[0].fleets[0];
+    let owner = PlacementOwner::Fleet {
+        id: fleet.id.clone(),
+    };
+    let beside = fleet.placements[0].id.clone();
+    model.apply_from(
+        caller,
+        Action::CreateVessel {
+            type_id: type_id.into(),
+            destination: ContentDestination::Placement {
+                owner,
+                insertion: PlacementInsertion::Beside {
+                    id: beside,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch,
+        },
+    )?;
+    Ok(model.layout.vessels.last().unwrap().launch.clone())
+}
+
+fn codex(permissions: Option<voyager_contract::launch::Permissions>) -> Option<LaunchSpec> {
+    Some(LaunchSpec::Agent {
+        kind: "codex".into(),
+        model: None,
+        effort: None,
+        permissions,
+    })
+}
+
+fn program(argv: &[&str]) -> Option<Launch> {
+    Some(Launch::Program {
+        argv: argv.iter().map(|part| (*part).to_owned()).collect(),
+    })
+}
+
+#[test]
+fn an_agent_created_by_another_vessel_starts_plain_unless_it_names_permissions() {
+    use voyager_contract::launch::Permissions;
+    let other = VesselId("content-9".into());
+    let voyager = VesselId(VOYAGER_VESSEL.into());
+    let (mut model, ..) = two_voyages();
+    assert_eq!(
+        create_beside(&mut model, Some(&other), "agent", codex(None)),
+        Ok(program(&["codex"]))
+    );
+    let table = crate::agent_programs::argv("codex", None, None, None).unwrap();
+    assert!(table.len() > 1);
+    for (caller, name) in [(Some(&voyager), "Voyager"), (None, "the person")] {
+        let created = create_beside(&mut model, caller, "agent", codex(None))
+            .unwrap()
+            .unwrap();
+        assert_eq!(crate::launch::argv(&created).unwrap(), table, "{name}");
+    }
+    let listed =
+        crate::agent_programs::argv("codex", None, None, Some(Permissions::ReadOnly)).unwrap();
+    assert_eq!(
+        create_beside(
+            &mut model,
+            Some(&other),
+            "agent",
+            codex(Some(Permissions::ReadOnly))
+        ),
+        Ok(Some(Launch::Program { argv: listed }))
+    );
+}
+
+#[test]
+fn a_launch_on_a_type_that_takes_none_is_refused_and_places_nothing() {
+    let (mut model, ..) = two_voyages();
+    let before = model.layout.clone();
+    let other = VesselId("content-9".into());
+    for (type_id, launch) in [
+        ("terminal", codex(None)),
+        ("notes", codex(None)),
+        ("notes", Some(LaunchSpec::Terminal)),
+    ] {
+        assert!(
+            create_beside(&mut model, Some(&other), type_id, launch).is_err(),
+            "{type_id}"
+        );
+        assert_eq!(model.layout, before, "{type_id}");
+    }
 }

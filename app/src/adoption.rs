@@ -104,7 +104,7 @@ impl Adoptions {
             let result = labelled.place.clone().and_then(|place| {
                 candidate
                     .adopt(
-                        &place.0,
+                        place,
                         &labelled.terminal,
                         labelled.cwd.clone(),
                         labelled.launch.clone(),
@@ -189,7 +189,10 @@ mod tests {
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
         let labelled = Labelled {
             terminal: CoreTerminalId("t9".into()),
-            place: Ok(Place(voyager_contract::PlacementOwner::Fleet { id: fleet })),
+            place: Ok(Place {
+                owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                insertion: voyager_contract::PlacementInsertion::Empty,
+            }),
             cwd: "/work".into(),
             launch: Launch::Terminal,
             name: None,
@@ -265,7 +268,7 @@ mod tests {
             }
         );
         assert_eq!(
-            found[0].place.as_ref().map(|place| &place.0),
+            found[0].place.as_ref().map(|place| &place.owner),
             Ok(&voyager_contract::PlacementOwner::Fleet {
                 id: voyager_contract::FleetId("fleet-2".into())
             })
@@ -290,5 +293,145 @@ mod tests {
             .map(|labelled| labelled.terminal.0)
             .collect();
         assert_eq!(resynced, vec!["t5".to_owned()]);
+    }
+
+    fn crew() -> (
+        Model,
+        voyager_contract::FleetId,
+        voyager_contract::PlacementId,
+    ) {
+        let mut model = Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let fleet = &model.layout.voyages[0].fleets[0];
+        let ids = (fleet.id.clone(), fleet.placements[0].id.clone());
+        (model, ids.0, ids.1)
+    }
+
+    fn labelled_at(text: &str) -> Labelled {
+        let origin: Origin = serde_json::from_value(json!({
+            "argv": ["bash"],
+            "cwd": "/work",
+            "labels": {LABEL: text}
+        }))
+        .unwrap();
+        Labelled::of("t9", origin).unwrap()
+    }
+
+    fn settled(layout: &Layout, pending: Vec<Labelled>) -> (Layout, Option<String>) {
+        let notice = Arc::new(Mutex::new(None));
+        let mut adoptions = Adoptions::new(notice.clone());
+        let mut shared = Arc::new(layout.clone());
+        let (mut version, mut fresh, mut live): (u64, bool, Vec<CoreTerminalId>) =
+            (1, true, Vec::new());
+        adoptions.found(pending);
+        let save = |_: &Layout, revision: u64| Ok(revision + 1);
+        adoptions.settle(save, (&mut shared, &mut version, &mut fresh), &mut live);
+        let shown = notice.lock().unwrap().clone();
+        (Layout::clone(&shared), shown)
+    }
+
+    #[test]
+    fn a_terminal_labelled_with_a_side_lands_on_that_side_of_the_named_placement() {
+        use voyager_contract::{Axis, Split, SplitShare};
+        let leaf = |id: &voyager_contract::PlacementId| {
+            Box::new(Split::Leaf {
+                placement: id.clone(),
+            })
+        };
+        for (side, axis, new_first) in [
+            ("left", Axis::Horizontal, true),
+            ("right", Axis::Horizontal, false),
+            ("top", Axis::Vertical, true),
+            ("bottom", Axis::Vertical, false),
+        ] {
+            let (model, fleet, target) = crew();
+            let text = format!("fleet:{}:{side}:{}", fleet.0, target.0);
+            let (layout, shown) = settled(&model.layout, vec![labelled_at(&text)]);
+            assert_eq!(shown, None, "{side}");
+            let placed = &layout.voyages[0].fleets[0];
+            assert_eq!(placed.placements.len(), 2, "{side}");
+            let new = placed.placements[1].id.clone();
+            let (first, second) = if new_first {
+                (leaf(&new), leaf(&target))
+            } else {
+                (leaf(&target), leaf(&new))
+            };
+            assert_eq!(
+                placed.root,
+                Some(Split::Branch {
+                    axis,
+                    share: SplitShare::default(),
+                    first,
+                    second,
+                }),
+                "{side}"
+            );
+            let content = layout
+                .vessels
+                .iter()
+                .find(|content| content.id == placed.placements[1].vessel)
+                .unwrap();
+            assert_eq!(content.backend, Some(CoreTerminalId("t9".into())), "{side}");
+            assert_eq!(content.cwd, "/work", "{side}");
+            assert!(content.adopted, "{side}");
+        }
+    }
+
+    #[test]
+    fn a_side_label_naming_no_usable_placement_places_nothing_and_says_so() {
+        let (mut model, fleet, target) = crew();
+        let voyage = model.layout.voyages[0].id.clone();
+        model
+            .apply(voyager_contract::Action::CreateFleet {
+                voyage,
+                name: "Second".into(),
+            })
+            .unwrap();
+        let foreign = model.layout.voyages[0].fleets[1].placements[0].id.clone();
+        let cases = [
+            (
+                "unknown placement",
+                format!("fleet:{}:left:placement-404", fleet.0),
+                "has no visible placement placement-404",
+            ),
+            (
+                "another Fleet's placement",
+                format!("fleet:{}:right:{}", fleet.0, foreign.0),
+                "has no visible placement",
+            ),
+            (
+                "unknown Fleet",
+                format!("fleet:fleet-404:top:{}", target.0),
+                "no open Fleet fleet-404",
+            ),
+            (
+                "bad side",
+                format!("fleet:{}:up:{}", fleet.0, target.0),
+                "invalid side up",
+            ),
+        ];
+        for (name, text, expected) in cases {
+            let (layout, shown) = settled(&model.layout, vec![labelled_at(&text)]);
+            assert_eq!(layout, model.layout, "{name}");
+            let shown = shown.unwrap_or_default();
+            assert!(shown.contains("t9 was not placed"), "{name}: {shown}");
+            assert!(shown.contains(expected), "{name}: {shown}");
+        }
+    }
+
+    #[test]
+    fn a_refused_side_label_leaves_no_stray_content_when_another_terminal_is_placed() {
+        let (model, fleet, target) = crew();
+        let bad = labelled_at(&format!("fleet:{}:left:placement-404", fleet.0));
+        let mut good = labelled_at(&format!("fleet:{}:left:{}", fleet.0, target.0));
+        good.terminal = CoreTerminalId("t10".into());
+        let (layout, _) = settled(&model.layout, vec![bad, good]);
+        assert_eq!(layout.vessels.len(), model.layout.vessels.len() + 1);
+        assert_eq!(layout.voyages[0].fleets[0].placements.len(), 2);
     }
 }

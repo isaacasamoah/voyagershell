@@ -7,8 +7,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use voyager_contract::{
-    Action, ContentDestination, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response,
-    Unanswered, VesselId,
+    Action, ContentDestination, CoreTerminalId, Layout, PlacementInsertion, PlacementOwner, Reply,
+    Request, Response, Unanswered, VesselId,
     reply::ReplyEvent,
     socket::{SocketReply, SocketRequest, VesselPlacement, VesselStatus},
 };
@@ -175,6 +175,16 @@ fn in_fleet(destination: &ContentDestination) -> bool {
     )
 }
 
+fn beside_in_fleet(destination: &ContentDestination) -> bool {
+    matches!(
+        destination,
+        ContentDestination::Placement {
+            owner: PlacementOwner::Fleet { .. },
+            insertion: PlacementInsertion::Beside { .. },
+        }
+    )
+}
+
 fn offered(action: &Action, bound: bool) -> bool {
     match action {
         Action::Inspect
@@ -189,7 +199,9 @@ fn offered(action: &Action, bound: bool) -> bool {
         Action::Dock { .. }
         | Action::CreateFleetWithVessel { .. }
         | Action::SetPlacementMaximized { .. } => bound,
-        Action::CreateVessel { destination, .. } => bound && in_fleet(destination),
+        Action::CreateVessel { destination, .. } => {
+            beside_in_fleet(destination) || (bound && in_fleet(destination))
+        }
         Action::Home
         | Action::UpdateCanvas { .. }
         | Action::SetSidebar { .. }
@@ -225,10 +237,10 @@ const REPLY_NOT_OFFERED: &str = "reply is accepted only from Voyager; nothing wa
 const FLEET_WITH_VESSEL_NOT_OFFERED: &str =
     "create-fleet-with-vessel is offered only to Voyager; nothing was queued";
 
-const VESSEL_NOT_OFFERED: &str = "create-vessel is offered only to Voyager; nothing was queued";
+const VESSEL_NOT_OFFERED: &str = "create-vessel from a Vessel other than Voyager must place beside a placement of a Fleet; nothing was queued";
 
 const VESSEL_NOT_IN_FLEET: &str =
-    "create-vessel from Voyager places a Vessel in a Fleet only; nothing was queued";
+    "create-vessel places a Vessel in a Fleet only; nothing was queued";
 
 const MAXIMIZE_NOT_OFFERED: &str =
     "set-placement-maximized is offered only to Voyager; nothing was queued";
