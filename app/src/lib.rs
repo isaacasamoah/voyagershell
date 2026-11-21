@@ -42,6 +42,7 @@ pub mod provider;
 mod provider_settings;
 
 mod audio_io;
+mod silero;
 mod http1;
 pub mod omni;
 pub mod speech;

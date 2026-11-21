@@ -20,6 +20,11 @@ const EMPHASIS: f32 = 0.97;
 const MIN_SPREAD: f32 = 1.5;
 const PLAYING_LOOK: Duration = Duration::from_millis(20);
 
+pub trait SpeechDetector {
+    fn probability(&mut self, frame: &[i16]) -> f32;
+    fn reset(&mut self);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum End {
     Pause,
