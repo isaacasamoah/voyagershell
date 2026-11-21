@@ -349,7 +349,16 @@ impl Turn {
     }
 }
 
+fn answers_are_over(native: &Native) -> Result<Option<()>> {
+    let seen = marks(&native.voice_trace())?;
+    let count = |event: &str| seen.iter().filter(|mark| mark.event == event).count();
+    Ok((count("utterance-ended") == count("turn-ended")
+        && count("speech-started") == count("speech-ended"))
+    .then_some(()))
+}
+
 pub fn turn_on(native: &Native) -> Result<()> {
+    poll(REPLY_WAIT.within(), LOOK, true, || answers_are_over(native))?;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;

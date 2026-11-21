@@ -391,6 +391,7 @@ impl Exchange<'_> {
         self.shared.set(Phase::Acknowledging, notice.clone());
         self.finish(finish);
         self.shared.set(Phase::Connecting, notice);
+        self.trace.mark("turn-ended");
     }
 
     fn serve(&self, retry: Duration) {
