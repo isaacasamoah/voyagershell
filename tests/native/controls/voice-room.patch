@@ -1,7 +1,16 @@
 diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
-index 61ff7c69..66738cf8 100644
+index 61ff7c69..dfeebe01 100644
 --- a/app/src/audio_io.rs
 +++ b/app/src/audio_io.rs
+@@ -9,7 +9,7 @@ use std::{
+ 
+ pub const FRAME: usize = 320;
+ const SETTLE_FRAMES: usize = 15;
+-const ONSET_FRAMES: usize = 5;
++const ONSET_FRAMES: usize = 10;
+ const PAUSE_FRAMES: usize = 75;
+ const CAP_FRAMES: usize = 1500;
+ const LEAD_FRAMES: usize = 50;
 @@ -65,9 +65,9 @@ impl Gate {
      }
  

@@ -18,29 +18,16 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 1. A click turns voice on. The control turns amber and reads Connecting while the
    microphone opens and the noise floor settles for 0.3 s, then green while it
    listens. Nothing opens the microphone without a click.
-2. The turn rule is in `audio_io::Gate`. It measures each 20 ms frame in the
-   speech band, after a pre-emphasis filter that removes the low rumble of a
-   fan, a hum or a door. It compares that level with three times the quietest
-   frame of the last 2 s, and never with less than 200. The threshold has no
-   ceiling, so a steady sound, however loud, never counts as speech. A sound
-   counts as speech only after 0.2 s without a break in that band, so a click, a
-   thump as the microphone opens or a tap is never a turn. Once a turn has
-   started, it ends on the plain level of the whole band, with the same floor
-   rule. The speech band alone lets the soft edges of words fall under the floor
-   sooner, which stretched the journey's 1.35 s mid-request pause from 69 to 73
-   of the 75 frames that end a turn. A sound that switches on and
-   stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
-   turn that ends is also checked for the rise and fall of speech. When the 90th
-   percentile of its sounding frames' level is under 1.5 times the 10th
-   percentile, the room got louder and nobody spoke. The turn is dropped without
-   a word and listening goes on. In a simulation of the gate, a fan switching on
-   measured 1.13 to 1.23 over five seeds. The 40 committed requests measured at
-   least 3.52 with no fan or a soft fan and at least 1.69 over a loud fan. A
-   request that starts 0.3 s after, at the moment of or 0.5 s before a fan
-   switches on, or that ends as it switches on, was kept in all 40 cases each. Speech then ends the turn after 1.5 s
-   of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
+2. The turn rule is in `audio_io::Gate`. Each 20 ms frame goes to a speech
+   detector, which gives the probability that the frame holds speech. A turn starts
+   after 0.1 s of frames at or above 0.3, so a click, a thump as the microphone
+   opens, a fan, typing or a door is never a turn. It ends after 1.5 s of frames
+   below 0.15. A turn also ends at 30 s of speech, and voice stays on. A silent room
    is never a turn and never turns voice off. The utterance keeps the 1 s before
-   speech started, so its first word is not cut.
+   speech started, so its first word is not cut. The plain level of the whole band,
+   against three times the quietest frame of the last 2 s and never less than 200,
+   only tells a waiting reply whether the room has been quiet. The detector is
+   described in [The speech detector](#the-speech-detector).
 3. The 1.5 s comes from 94 synthetic requests with a pause of 0.4 to 1.5 s
    mid-sentence. A silence of 0.6 s ended 71 of them early, 1.0 s ended 32, 1.2 s
    ended 23 and 1.5 s ended 10. It is the shortest of those that ends at most 15
@@ -56,18 +43,9 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    product words and the user's own Voyage and Fleet names, read from the workspace
    state the owner already holds, so hearing adds no inspection call. Right
    after hearing, `speech::heard_nothing` drops a transcript with no letter or
-   digit, and a read-back of the hint. Nothing more is said and nothing is sent.
-   If hearing fails, "I didn't catch that." follows and nothing is sent.
-
-   A read-back of the hint is three or more comma-separated entries that are each
-   an entry of the hint sent with that request, in the hint's own order. On room
-   noise, Omni under this prompt wrote back the hint itself, "dock, Fleet, Vessel,
-   Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
-   on all 10 noise turns of a 5-minute room run on main. A one-word command such as
-   "Maximize." and a sentence such as "Rename this Fleet." are kept. This drop is a
-   stopgap for 22 Nov 2026. It is removed when the Silero speech detector gates
-   turns. It must not grow into a list of words or phrases to drop, because a
-   filter over model text drops real requests the list did not foresee.
+   digit. Nothing more is said and nothing is sent. If hearing fails, "I didn't
+   catch that." follows and nothing is sent. No filter over the heard words drops
+   a request, because such a filter drops real requests it did not foresee.
 6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
@@ -107,6 +85,73 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 A reply past the ceiling also ends with "I can say more if you ask." That sentence is
 part of the spoken text and not a clip. The words in the table never name an action or claim
 a result, and none points to the chat.
+
+## The speech detector
+
+The detector is a Rust port of the Silero voice activity detector, version 6, in
+`app/src/silero.rs`. `audio_io::SpeechDetector` is the seam. It takes a frame and
+gives a speech probability, and a gate resets it when it starts. The voice layer
+takes its detector from its audio parts, so another model can replace Silero there.
+
+| Fact | Value |
+| --- | --- |
+| Model file | `app/models/silero_vad_v6.onnx`, 1,245,151 bytes, sha256 `4cbf549b8326f60f80f2536d9eefeb450a9abe83365a098031c89719f1be17d2` |
+| Source | The 16 kHz export of Silero VAD v6 that faster-whisper 1.2.1 ships as `faster_whisper/assets/silero_vad_v6.onnx` |
+| Licence | MIT. The model is copyright 2020-present Silero Team, and the export is copyright 2023 SYSTRAN. Both notices are in `app/models/LICENSE-silero-vad`. |
+| Input | 512 new samples at 16 kHz with the last 64 of the chunk before, so one probability every 32 ms |
+| Work | About 0.7 million multiply-adds a chunk, counted from the layer shapes |
+
+The app embeds the file and reads its weights with a small reader for the ONNX
+protobuf, so no inference crate is added. The graph is fixed in code. It is a
+reflect pad of 128 samples each side, then a 258 by 256 convolution that forms a
+short-time Fourier transform whose first frame is dropped, and the magnitude of 129
+bins over 4 frames. Four convolutions with a kernel of 3 follow, each with a ReLU,
+from 129 to 128 channels, 128 to 64 with stride 2, 64 to 64 with stride 2 and 64
+to 128. Then come one LSTM step of 128 units in ONNX gate order (input, output,
+forget, cell), a ReLU, a 128 to 1 convolution and a sigmoid. The LSTM state
+carries from chunk to chunk while the microphone stays open. The microphone
+already records at 16 kHz mono, so the sound server does any resampling and the
+app does none. The detector groups the gate's 320-sample frames into 512-sample
+chunks, scales each sample by 1/32768 and reports the latest chunk's probability
+for each frame.
+
+`silero::tests` feeds Edge requests from the committed hearing set, at full, 0.15
+and 0.06 of their level, through 320-sample frames, and compares each chunk with
+onnxruntime 1.32 on the same samples. Over 717 chunks the worst difference was
+2.0e-6, and the test allows 1e-4. The reference values are in
+`app/models/silero_vad_v6_reference.tsv`.
+
+The thresholds come from a simulation of the gate over the detector's
+probabilities, with fans built as the room fixture builds them.
+
+| Sound | Result |
+| --- | --- |
+| The voice journey's 5-minute room sound | The highest probability of any frame was 0.042, so no turn |
+| A 120 Hz thump as the microphone opens | The highest probability was 0.061 |
+| 100 Edge requests in 6 voices, 3 of them male, each at full, 0.15 and 0.06 of its level, over room tone, the soft fan and the loud fan | Exactly one whole turn with its first word kept in 843 of 900. Every failure was at 0.06 over the loud fan, where 43 of 100 passed. |
+| A 1.38 s pause between two sentences | One turn at every level and fan, except 0.06 over the loud fan |
+
+Edge speech at 0.06 of its level has a voiced level near RMS 210, against the loud
+fan's 700, so it is about 10 dB under the fan. A start threshold of 0.5 kept 18 of
+those 100, against 43 at 0.3, and changed nothing else. Ending the turn on the
+plain level held turns open after speech while the room fixture's keys and door
+sounded, so the end follows the detector instead.
+
+A person's 47 recorded requests, made on a laptop microphone, were checked once
+in place on the development machine. They are not in the repository. A harness
+outside the repository ran the app's own `audio_io.rs` and `silero.rs` over them
+and kept only scores and timings. Each was fed with 1 s of silence before and 3 s
+after, at its natural level and mixed with the room fixture's soft fan and loud
+fan.
+
+| Condition | One turn | Not cut | First syllable kept | Turn end after speech |
+| --- | --- | --- | --- | --- |
+| Natural level | 47 of 47 | 47 of 47 | 47 of 47 | 1.50 to 2.02 s, median 1.72 s |
+| Soft fan | 47 of 47 | 47 of 47 | 47 of 47 | 1.68 to 2.14 s, median 1.88 s |
+| Loud fan | 47 of 47 | 47 of 47 | 47 of 47 | 1.66 to 2.56 s, median 1.94 s |
+
+The same harness ran the 141 feeds, about 1,000 s of audio, in 7.2 s on one core
+of the development laptop, mixing included.
 
 ## Speaking the reply
 
@@ -313,7 +358,7 @@ clicks the real control, feeds committed synthetic speech to the microphone and 
 speaker. It checks that nothing records the microphone without a click, that the words come
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
 appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
-turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
+turn, a quiet request at 0.15 and 0.06 of its level is one turn that is sent, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
 voice on, five minutes of room sound with no speech in it is never a turn, a request
 spoken among that sound is sent word for word, two turns in a row each get a spoken
 reply with the speaker echoed into the microphone, and a click turns voice off.

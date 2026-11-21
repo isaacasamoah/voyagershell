@@ -1,5 +1,5 @@
 diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
-index 61ff7c69..4276942c 100644
+index 61ff7c69..ebd17a0e 100644
 --- a/app/src/audio_io.rs
 +++ b/app/src/audio_io.rs
 @@ -9,7 +9,7 @@ use std::{
@@ -37,20 +37,19 @@ index 61ff7c69..4276942c 100644
              stage: Stage::Settling { seen: 0 },
              kept: VecDeque::new(),
              since_sound: PAUSE_FRAMES,
-@@ -65,8 +70,10 @@ impl Gate {
+@@ -65,8 +70,11 @@ impl Gate {
      }
  
      pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
--        let probability = self.detector.probability(&frame);
--        let speech = probability >= SPEAKING_PROBABILITY;
 +        let level = self.speech_band_level(&frame);
 +        let band = above_floor(&mut self.band_floors, level);
-+        let speech = self.detector.probability(&frame) >= SPEAKING_PROBABILITY;
-+        let probability = if band { 1.0 } else { 0.0 };
+         let probability = self.detector.probability(&frame);
+         let speech = probability >= SPEAKING_PROBABILITY;
++        let probability = if band { probability } else { 0.0 };
          let sounding = above_floor(&mut self.floors, plain_level(&frame)) || speech;
          if !matches!(self.stage, Stage::Settling { .. }) {
              self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
-@@ -114,6 +121,19 @@ impl Gate {
+@@ -114,6 +122,19 @@ impl Gate {
          }
      }
  
