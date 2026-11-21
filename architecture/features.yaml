@@ -980,6 +980,19 @@ features:
         checks: ['journey:voice/requests-are-written-down', 'journey:voice/words-reach-voyager', 'test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else']
         formal: []
         journeys: [voice]
+      - id: voice-silence-makes-no-turn
+        kind: user
+        says: 'When the person says nothing, nothing happens. Room sound with no speech in it, such as a fan, typing, a distant door or the echo of the app''s own reply, is never a turn, is never acknowledged and never reaches Voyager, and a transcript with no words in it is dropped without a word.'
+        owner: conversation-provider
+        guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/speech.rs#heard_nothing']
+        checks:
+          - 'journey:voice/room-sound-is-never-a-turn'
+          - 'journey:voice/request-in-room-sound-is-sent'
+          - 'test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech'
+          - 'test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech'
+          - 'test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing'
+        formal: []
+        journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
     sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
     code:
@@ -1640,6 +1653,7 @@ features:
       - tests/native/src/audio.rs
       - tests/native/src/audio/exchange.rs
       - tests/native/src/audio/judge.rs
+      - tests/native/src/audio/room.rs
       - tests/native/src/audio/selftest.rs
       - tests/native/src/audio/speech.rs
       - tests/native/src/audio/voice.rs
