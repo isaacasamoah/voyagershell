@@ -1,0 +1,20 @@
+diff --git a/app/src/replies.rs b/app/src/replies.rs
+index c5d47cac..524b2698 100644
+--- a/app/src/replies.rs
++++ b/app/src/replies.rs
+@@ -273,13 +273,13 @@ impl Slot {
+             .messages
+             .iter()
+             .map(|message| Message {
+-                text: strip_reply_marker(&message.text).to_owned(),
++                text: message.text.clone(),
+                 ..message.clone()
+             })
+             .collect();
+         let ending = match &self.stop {
+             Some(Stopping::Text(text)) => {
+-                let text = strip_reply_marker(text);
++                let text: &str = text;
+                 Some(Ending::Stopped {
+                     text: text.to_owned(),
+                     matched: self.whole()
