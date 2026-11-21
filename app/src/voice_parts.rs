@@ -6,10 +6,16 @@ use std::{
     fs::OpenOptions,
     io::{self, Write},
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 pub const TRACE_VARIABLE: &str = "VOYAGER_VOICE_TRACE";
+const FLOOR_LOOK: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SendFailure {
@@ -27,7 +33,9 @@ pub trait Voyager: Send + Sync {
 pub enum Phase {
     Starting,
     Ready,
+    Connecting,
     Listening,
+    NoMicrophone,
     Hearing,
     Acknowledging,
     Speaking,
@@ -39,13 +47,46 @@ pub trait Frames {
     fn frame(&mut self) -> io::Result<Vec<i16>>;
 }
 
+pub type Finish = Box<dyn FnOnce(&dyn Fn() -> bool) + Send>;
+
 pub trait Speaker: Send {
-    fn play(self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send>;
+    fn play(self: Box<Self>, clip: &Clip) -> Finish;
 }
 
 pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
+}
+
+#[derive(Default)]
+pub struct Floor {
+    lock: Mutex<()>,
+    pub(crate) wanted: AtomicBool,
+}
+
+impl Floor {
+    pub fn take(&self) -> MutexGuard<'_, ()> {
+        self.wanted.store(true, Ordering::SeqCst);
+        let guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.wanted.store(false, Ordering::SeqCst);
+        guard
+    }
+
+    pub fn hold(&self) -> MutexGuard<'_, ()> {
+        while self.wanted.load(Ordering::SeqCst) {
+            thread::sleep(FLOOR_LOOK);
+        }
+        self.lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn is_wanted(&self) -> bool {
+        self.wanted.load(Ordering::SeqCst)
+    }
 }
 
 pub struct System;
@@ -67,10 +108,10 @@ impl Audio for System {
 }
 
 impl Speaker for Playing {
-    fn play(mut self: Box<Self>, clip: &Clip) -> Box<dyn FnOnce() + Send> {
+    fn play(mut self: Box<Self>, clip: &Clip) -> Finish {
         Playing::play(&mut self, clip.pcm.clone());
-        Box::new(move || {
-            let _ = self.finish();
+        Box::new(move |cut| {
+            let _ = self.finish(cut);
         })
     }
 }

@@ -35,6 +35,8 @@ pub const VESSEL_CLOSED: Owed = Owed::secs(1);
 pub const FLOAT_SPACING: Owed = Owed::millis(90);
 pub const ENGINE_START: Owed = Owed::secs(90);
 pub const QUIET_MIC: Owed = Owed::secs(2);
+pub const LONG_SILENCE: Owed = Owed::secs(12);
+pub const REPLY_WAIT: Owed = Owed::secs(20);
 pub const SEND_WAIT: Owed = Owed::secs(5);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

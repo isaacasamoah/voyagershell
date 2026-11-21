@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, SEND_WAIT};
+use crate::native::{Native, Owed, REPLY_WAIT, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,8 @@ use std::path::Path;
 
 pub const APP_CLIENT: &str = "voyager-voice";
 pub const READY: &str = "Start voice";
-pub const LISTENING: &str = "Stop listening";
+pub const LISTENING: &str = "Listening";
+pub const CONNECTING: &str = "Connecting…";
 const CLIP_RATE: u32 = 24_000;
 const HEADER: usize = 44;
 const ONSET_LEVEL: f64 = 300.0;
@@ -39,6 +40,8 @@ pub struct Conversation {
     pub spoken_texts: Vec<String>,
     pub speech_after_capture_ms: Option<i64>,
     pub microphone_closed: bool,
+    pub opened_after_click: bool,
+    pub listening_resumed: bool,
     pub marks: Vec<Mark>,
 }
 
@@ -172,22 +175,11 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
     Ok(seen)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Reply {
-    Await,
-    Leave,
-}
-
 fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
     marks.iter().find(|mark| mark.event == event)
 }
 
-pub fn converse(
-    native: &Native,
-    speech: &Speech,
-    name: &str,
-    reply: Reply,
-) -> Result<Conversation> {
+pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control ready", |label| {
@@ -198,15 +190,9 @@ pub fn converse(
     let began = capture.began()?;
     let trace = native.voice_trace();
     let before = marks(&trace)?.len();
-    native.click(&Target::VOICE_CONTROL)?;
-    until("the app to open the microphone", || {
-        Ok(recorders(native)?
-            .iter()
-            .any(|who| who == APP_CLIENT)
-            .then_some(()))
-    })?;
+    let clicked = now_millis();
+    turn_on(native)?;
     stack.feed(system, speech)?;
-    native.click(&Target::VOICE_CONTROL)?;
     let started = until("the acknowledgement to start", || {
         let now = marks(&trace)?;
         Ok(now
@@ -237,24 +223,20 @@ pub fn converse(
             .map(|_| ()))
     })?
     .is_some();
-    if reply == Reply::Await {
-        until("the reply to be spoken", || {
+    if sent {
+        poll(REPLY_WAIT.within(), LOOK, true, || {
             Ok(marks(&trace)?
                 .get(before..)
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
                 .map(|_| ()))
-        })
-        .with_context(|| {
-            let screen = bound_terminal(native)
-                .and_then(|terminal| terminal_text(native, &terminal))
-                .unwrap_or_else(|error| format!("unreadable: {error:#}"));
-            format!("Voyager's terminal showed: {}", screen.trim())
         })?;
     }
-    let microphone_closed = until("the microphone to close", || {
-        Ok(recorders(native)?.is_empty().then_some(()))
-    })
-    .is_ok();
+    let listening_resumed = native
+        .drawn_label(&Target::VOICE_CONTROL, "listening again", |label| {
+            label == LISTENING
+        })
+        .is_ok();
+    let microphone_closed = turn_off(native).is_ok();
     capture.finish(stack.folder(), name)?;
     let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     let ended = mark_of(&marks, "utterance-ended")
@@ -280,7 +262,135 @@ pub fn converse(
         speech_after_capture_ms: mark_of(&marks, "speech-started")
             .map(|mark| i64::try_from(mark.at_ms).unwrap_or(0) - i64::try_from(ended).unwrap_or(0)),
         microphone_closed,
+        opened_after_click: mark_of(&marks, "capture-open")
+            .is_some_and(|mark| mark.at_ms >= clicked),
+        listening_resumed,
         marks,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Turn {
+    pub fed_until_ms: u64,
+    pub ended_ms: Vec<u64>,
+    pub heard: Vec<String>,
+    pub marks: Vec<Mark>,
+}
+
+impl Turn {
+    pub fn ended_after_the_feed(&self) -> bool {
+        self.ended_ms.len() == 1 && self.ended_ms[0] >= self.fed_until_ms
+    }
+}
+
+pub fn turn_on(native: &Native) -> Result<()> {
+    native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+        label == READY
+    })?;
+    native.click(&Target::VOICE_CONTROL)?;
+    until("the app to open the microphone", || {
+        Ok(recorders(native)?
+            .iter()
+            .any(|who| who == APP_CLIENT)
+            .then_some(()))
+    })?;
+    native.drawn_label(
+        &Target::VOICE_CONTROL,
+        "the voice control listening",
+        |label| label == LISTENING,
+    )?;
+    Ok(())
+}
+
+pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    let stack = stack(native)?;
+    let before = marks(&native.voice_trace())?.len();
+    let mut player = stack.start_feed(&native.system, name, samples)?;
+    super::wait_for_exit(&mut player)?;
+    let fed_until_ms = now_millis();
+    turn_since(native, before, fed_until_ms, "heard")
+}
+
+pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
+    let before = marks(&native.voice_trace())?.len();
+    feed(native, speech)?;
+    let fed_until_ms = now_millis();
+    turn_since(native, before, fed_until_ms, "speech-ended")
+}
+
+fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> Result<Turn> {
+    let trace = native.voice_trace();
+    until(&format!("the turn's {last} mark"), || {
+        Ok(marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| mark_of(fresh, last))
+            .map(|_| ()))
+    })?;
+    let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    Ok(Turn {
+        fed_until_ms,
+        ended_ms: marks
+            .iter()
+            .filter(|mark| mark.event == "utterance-ended")
+            .map(|mark| mark.at_ms)
+            .collect(),
+        heard: marks
+            .iter()
+            .filter(|mark| mark.event == "heard")
+            .filter_map(|mark| mark.words.clone())
+            .collect(),
+        marks,
+    })
+}
+
+pub fn feed(native: &Native, speech: &Speech) -> Result<()> {
+    stack(native)?.feed(&native.system, speech)
+}
+
+pub fn echo(native: &Native) -> Result<super::Echo> {
+    stack(native)?.echo(&native.system)
+}
+
+pub fn watch_control(native: &Native, during: Owed) -> Result<Vec<(String, Vec<String>)>> {
+    let mut looks = Vec::new();
+    poll(during.within(), LOOK, true, || {
+        let label =
+            native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
+        looks.push((label, recorders(native)?));
+        Ok(None::<()>)
+    })?;
+    Ok(looks)
+}
+
+pub fn spoken_ever(native: &Native) -> Result<Vec<String>> {
+    Ok(marks(&native.voice_trace())?
+        .into_iter()
+        .filter(|mark| mark.event == "speech-started")
+        .filter_map(|mark| mark.words)
+        .collect())
+}
+
+pub fn settle_ms(marks: &[Mark]) -> Option<u64> {
+    let opened = marks
+        .iter()
+        .rposition(|mark| mark.event == "capture-open")?;
+    let listening = marks[opened..]
+        .iter()
+        .find(|mark| mark.event == "listening")?;
+    listening.at_ms.checked_sub(marks[opened].at_ms)
+}
+
+pub fn turn_off(native: &Native) -> Result<()> {
+    let label = native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
+    if label != READY {
+        native.click(&Target::VOICE_CONTROL)?;
+    }
+    native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+        label == READY
+    })?;
+    until("the microphone to close", || {
+        Ok(recorders(native)?.is_empty().then_some(()))
     })
 }
 
@@ -455,14 +565,6 @@ pub fn words_contain(heard: &str, wanted: &str) -> bool {
             .join(" ")
     };
     plain(heard).contains(&plain(wanted))
-}
-
-pub fn bound_terminal(native: &Native) -> Result<String> {
-    let stored = fs::read_to_string(native.profile_path("voyager.json"))?;
-    serde_json::from_str::<Value>(&stored)?["terminal"]
-        .as_str()
-        .map(str::to_owned)
-        .context("voyager.json names no terminal")
 }
 
 pub fn terminal_text(native: &Native, address: &str) -> Result<String> {

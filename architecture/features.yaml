@@ -945,15 +945,31 @@ features:
         journeys: [voice]
       - id: voice-is-click-to-talk
         kind: user
-        says: 'Voice listens only after the user clicks, and it never adds per-use API charges.'
+        says: 'Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges.'
         owner: conversation-provider
         guards: []
         checks:
           - 'journey:voice/no-capture-without-click'
+          - 'journey:voice/silence-keeps-voice-on'
+          - 'journey:voice/click-turns-voice-off'
           - 'journey:voice/rename-is-heard-and-acknowledged'
           - 'journey:voice/words-reach-voyager'
           - 'journey:voice/acknowledgement-is-prompt'
-          - 'test:app/src/voice_layer.rs#nothing_is_captured_until_a_click_asks_for_it'
+          - 'test:app/src/voice_layer_tests.rs#nothing_is_captured_until_a_click_asks_for_it'
+        formal: []
+        journeys: [voice]
+      - id: voice-waits-for-the-speaker
+        kind: user
+        says: 'After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app''s own voice is never a turn.'
+        owner: conversation-provider
+        guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/voice_parts.rs#Floor']
+        checks:
+          - 'journey:voice/turn-waits-for-the-sentence'
+          - 'journey:voice/start-thump-is-not-speech'
+          - 'journey:voice/connecting-then-listening'
+          - 'journey:voice/two-turns-with-echo'
+          - 'test:app/src/audio_io.rs#a_thump_as_the_microphone_opens_is_not_speech'
+          - 'test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it'
         formal: []
         journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
@@ -967,6 +983,7 @@ features:
       - app/src/voice.rs
       - app/src/voice_host.rs
       - app/src/voice_layer.rs
+      - app/src/voice_layer_tests.rs
       - app/src/voice_parts.rs
       - app/src/voice_reply.rs
       - app/src/voice_session.rs

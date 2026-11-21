@@ -12,22 +12,53 @@ reply aloud.
 
 ## One spoken exchange
 
-1. A click on the voice control opens the microphone. Nothing opens it without a
-   click. The same control ends the utterance with a second click.
-2. A pause also ends the utterance. The gate watches frame energy against a
-   noise floor. Speech followed by 0.6 s of quiet ends it, an utterance ends at
-   30 s, and a room with no speech gives up after 8 s. These are targets to
-   measure on real microphones.
-3. A cached clip answers the moment capture ends, before hearing finishes. It is
+Voice is a switch. A click turns it on and only another click turns it off. A
+silent room, the end of a turn, a reply and a fault all leave it on.
+
+1. A click turns voice on. The control turns amber and reads Connecting while the
+   microphone opens and the noise floor settles for 0.3 s, then green while it
+   listens. Nothing opens the microphone without a click.
+2. The turn rule is in `audio_io::Gate`. It compares each 20 ms frame with three
+   times the quietest frame of the last 2 s, kept between 200 and 600. A sound
+   counts as speech only after 0.2 s without a break, so a click, a thump as the
+   microphone opens or a tap is never a turn. Speech then ends the turn after 1.5 s
+   of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
+   is never a turn and never turns voice off. The utterance keeps the 1 s before
+   speech started, so its first word is not cut.
+3. The 1.5 s comes from 94 synthetic requests with a pause of 0.4 to 1.5 s
+   mid-sentence. A silence of 0.6 s ended 71 of them early, 1.0 s ended 32, 1.2 s
+   ended 23 and 1.5 s ended 10. It is the shortest of those that ends at most 15
+   early. Waiting 1.5 s instead of 0.6 s adds 0.9 s between the end of speech and
+   the acknowledgement. The time from the end of the turn to the clip's first sound is
+   unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
+   with a median of 201 ms. A model that judges the end of a turn and interruptions
+   are later work.
+4. A cached clip answers the moment the turn ends, before hearing finishes. It is
    chosen from Voyager's standing, so it needs no words. It says only that the words
    were heard and passed on. It never names an action or claims a result.
-4. Omni turns the samples into words while the clip plays. The prompt names the
+5. Omni turns the samples into words while the clip plays. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
    state the owner already holds, so hearing adds no inspection call. If hearing
-   finds nothing, "I didn't catch that." follows and nothing is sent.
-5. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
+   finds nothing, or hearing fails, "I didn't catch that." follows and nothing is
+   sent.
+6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
+7. Listening resumes when the clip ends. A new request while Voyager works queues
+   for it.
+
+The microphone is closed whenever the app's own audio plays, so the app never hears
+its own voice as a turn. There are no interruptions.
+
+A click turns voice off in any state. It stops listening and any audio that is
+playing at once, and drops a sentence that was still being spoken. A turn that had
+already ended is still sent, Voyager's work is not cancelled, and its reply lands in
+the chat without being spoken.
+
+If the microphone cannot be opened or its stream ends, voice stays on. The control
+shows "Can't hear the microphone" in a colour that is not green, and the voice says
+"I can't hear your microphone." once for that outage. The app tries again every 3 s
+and turns green when the microphone is back.
 
 | Voyager's standing | Clip | Words sent |
 | --- | --- | --- |
@@ -35,10 +66,8 @@ reply aloud.
 | Working | "Queued for Voyager." | Yes |
 | Blocked | "Voyager needs you on Home first." | No |
 | Not running (no binding, or Core reports the program ended or gone) | "I couldn't pass that to Voyager." | No |
-| Nothing heard | "I didn't catch that." | No |
+| Nothing heard, or hearing failed | "I didn't catch that." | No |
 
-A click made while the avatar hears or speaks is dropped. A click while Voyager
-works starts a new utterance, which queues. There is no interrupt and no stop.
 
 ## Speaking the reply
 
@@ -80,9 +109,15 @@ exactly one line for that turn, "spoken reply was partial; turn reopened", and d
 speak again, which keeps the rule "at most once"; the partial reply that was spoken
 stays spoken.
 
-Speech holds the audio floor. A click while Voyager is being read is ignored, and a
-reply that is ready while an utterance is being heard waits for it to finish. There is
-no interrupt and no stop.
+A reply is spoken only while voice is on. It takes the audio floor from the listener.
+The listener closes the microphone and steps aside only after 1.5 s with no sound, the
+same silence that ends a turn. So a reply never cuts in on a person who has started to
+speak, even between their first words, and plays at the next quiet moment. In a room
+that is never quiet, such as one with music playing, a reply waits at most 3 s and then
+plays, unless a sentence is under way. A sentence ends at its turn or at the 30 s cap. The 3 s is a
+target. It has not been measured in a real room.
+Listening resumes when it ends. The reply thread and its floor lock are interim. One
+audio thread that owns the microphone and the speaker is later work.
 
 ## The seam
 
@@ -93,8 +128,9 @@ keeps the first paragraph, drops code, tables, links, paths and long ids, stops 
 two sentences or 30 words, and adds "The rest is in the chat." when it cut
 anything.
 
-`app/src/voice_layer.rs` owns the exchange. One thread takes clicks one at a
-time, so two utterances never overlap. It reaches Voyager through the `Voyager`
+`app/src/voice_layer.rs` owns the exchange. A click flips the switch at once from
+the canvas thread. One listening thread converges on it, so two utterances never
+overlap. It reaches Voyager through the `Voyager`
 trait, which reports its standing and takes the words. `app/src/voice_voyager.rs`
 implements it over the application queue. It reads the terminal that the app wrote
 in its own binding file, asks Core for that terminal's reported status, and sends the
@@ -192,4 +228,7 @@ The native `voice` journey in [the verification guide](../tests/native/README.md
 clicks the real control, feeds committed synthetic speech to the microphone and records the
 speaker. It checks that nothing records the microphone without a click, that the words come
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
-appears in any log. The spoken result and the words reaching Voyager are not covered yet.
+appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
+turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
+voice on, two turns in a row each get a spoken reply with the speaker echoed into the
+microphone, and a click turns voice off.

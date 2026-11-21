@@ -22,10 +22,11 @@ pub enum Phrase {
     Missed,
     Failed,
     Blocked,
+    NoMicrophone,
 }
 
 impl Phrase {
-    pub const ALL: [Phrase; 8] = [
+    pub const ALL: [Phrase; 9] = [
         Phrase::Asking,
         Phrase::OkayAsking,
         Phrase::Queued,
@@ -34,6 +35,7 @@ impl Phrase {
         Phrase::Missed,
         Phrase::Failed,
         Phrase::Blocked,
+        Phrase::NoMicrophone,
     ];
 
     pub fn words(self) -> &'static str {
@@ -46,6 +48,7 @@ impl Phrase {
             Phrase::Missed => "I didn't catch that.",
             Phrase::Failed => "That didn't work. The reason is in the chat.",
             Phrase::Blocked => "I need you on Home.",
+            Phrase::NoMicrophone => "I can't hear your microphone.",
         }
     }
 
@@ -59,6 +62,7 @@ impl Phrase {
             Phrase::Missed => "missed",
             Phrase::Failed => "failed",
             Phrase::Blocked => "blocked",
+            Phrase::NoMicrophone => "no-microphone",
         }
     }
 }

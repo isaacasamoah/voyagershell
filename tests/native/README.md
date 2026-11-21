@@ -998,10 +998,16 @@ to the microphone and records the speaker.
 | `engine-ready` (setup) | The control reads Start voice once the engine has loaded and the acknowledgement clips are kept. |
 | `no-capture-without-click` | The audio server lists no recorder on the microphone while nobody clicks. This is the control case. |
 | `voyager-stands-in` (setup) | A program that echoes what it is sent runs under Core, and the app's own binding file names it, as Voyager's start will. |
-| `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement clip for a running Voyager reaches the speaker and matches the kept clip, it starts before hearing ends, and the microphone closes. |
+| `turn-waits-for-the-sentence` | After 3 s of silence, a request with a 1.35 s pause between its two sentences, just under the 1.5 s end-of-turn silence, is one turn. It ends only after the whole request was fed, and the words come back as spoken. |
+| `start-thump-is-not-speech` | A 0.1 s, 120 Hz thump as the microphone opens, then 3 s of silence and an Edge sentence with natural pauses, gives one turn that ends after the sentence and holds all of it. On main before this rule it ended 0.77 s after the click. |
+| `connecting-then-listening` | A click shows Connecting, then Listening. The app's own trace shows at least 0.28 s between the microphone opening and listening. |
+| `silence-keeps-voice-on` | Through 12 s of silence, longer than the old 8 s give-up, the control reads Listening at every look, the app keeps recording, and no turn is marked. |
+| `click-turns-voice-off` | A click while listening shows Start voice and closes the microphone. Speech fed afterwards is never heard. |
+| `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the acknowledgement clip for a running Voyager reaches the speaker and matches the kept clip, it starts before hearing ends, listening resumes without a click, and the microphone closes when voice is clicked off. |
 | `words-reach-voyager` | The stand-in receives `[spoken] Dock on this fleet.` exactly, through the app's real send. No log, trace or terminal scrollback of the engine holds an audio payload. |
 | `reply-is-spoken` | Voyager's stand-in answers the spoken prompt through the real reply hooks. The first paragraph of its final message, cut to two sentences or 30 words with "The rest is in the chat.", is the text the app speaks. The speaker capture, transcribed by the engine's own hearing, holds that sentence and not another one. A fresh render of the same sentence is not used as the judge, because the engine renders one sentence differently each time and the band correlation against it scored 0.53 for a reply that was heard word for word. |
-| `typed-reply-is-silent` | The typed turn that the stand-in sent first, with its own reply text, was never spoken, and exactly one reply was spoken for the one spoken prompt. |
+| `typed-reply-is-silent` | No typed turn of the stand-in, with its own reply text, was spoken at any point in the run, and exactly one reply was spoken for the one spoken prompt. |
+| `two-turns-with-echo` | With the speaker looped into the microphone at 20 ms latency, voice is clicked on once and two requests follow. Each is one turn, heard as spoken, and each reply is spoken. Listening resumes between and after them without a click, and neither the acknowledgement nor the reply becomes a turn. |
 | `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
 | `refusal-is-in-the-chat` | With the Voyager binding pointed at a terminal Core no longer has, the spoken words are heard, the app plays the refusal clip, nothing is sent, and the opened chat draws one line starting with `Not sent`. The binding is restored afterward. |
 
@@ -1021,10 +1027,13 @@ edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
 
-Two more controls follow the same rule. `tests/native/controls/voice-handoff.patch` sends the
+Three more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
+the turn constants from before this rule. It has no settling, takes five frames of sound as
+speech and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
 words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
 `tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
-spoken or not. The typed turn comes first, so the journey hears it and `reply-is-spoken` fails.
+spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads
+every reply the app spoke in the whole run, fails.
 
 The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
