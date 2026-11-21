@@ -42,6 +42,7 @@ enum Stage {
 #[derive(Debug)]
 pub struct Gate {
     floors: VecDeque<f32>,
+    plain_floors: VecDeque<f32>,
     stage: Stage,
     kept: VecDeque<Vec<i16>>,
     since_sound: usize,
@@ -54,6 +55,7 @@ impl Default for Gate {
     fn default() -> Self {
         Self {
             floors: VecDeque::new(),
+            plain_floors: VecDeque::new(),
             stage: Stage::Settling { seen: 0 },
             kept: VecDeque::new(),
             since_sound: PAUSE_FRAMES,
@@ -67,15 +69,10 @@ impl Default for Gate {
 impl Gate {
     pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
         let level = self.speech_band_level(&frame);
-        self.floors.push_back(level);
-        if self.floors.len() > FLOOR_FRAMES {
-            self.floors.pop_front();
-        }
-        let floor = self.floors.iter().copied().fold(f32::MAX, f32::min);
-        let threshold = (floor * FLOOR_FACTOR).max(MIN_THRESHOLD);
-        let loud = level > threshold;
+        let loud = above_floor(&mut self.floors, level);
+        let sounding = above_floor(&mut self.plain_floors, plain_level(&frame));
         if !matches!(self.stage, Stage::Settling { .. }) {
-            self.since_sound = if loud { 0 } else { self.since_sound + 1 };
+            self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
         }
         match &mut self.stage {
             Stage::Settling { seen } => {
@@ -109,9 +106,9 @@ impl Gate {
             }
             Stage::Speaking { frames, quiet } => {
                 *frames += 1;
-                *quiet = if loud { 0 } else { *quiet + 1 };
+                *quiet = if sounding { 0 } else { *quiet + 1 };
                 self.voiced.push(level);
-                if loud {
+                if sounding {
                     self.voiced_until = self.voiced.len();
                 }
                 let ended = if *quiet >= PAUSE_FRAMES {
@@ -173,6 +170,23 @@ impl Gate {
     pub fn utterance(self) -> Vec<i16> {
         self.kept.into_iter().flatten().collect()
     }
+}
+
+fn above_floor(floors: &mut VecDeque<f32>, level: f32) -> bool {
+    floors.push_back(level);
+    if floors.len() > FLOOR_FRAMES {
+        floors.pop_front();
+    }
+    let floor = floors.iter().copied().fold(f32::MAX, f32::min);
+    level > (floor * FLOOR_FACTOR).max(MIN_THRESHOLD)
+}
+
+fn plain_level(frame: &[i16]) -> f32 {
+    if frame.is_empty() {
+        return 0.0;
+    }
+    let sum: f64 = frame.iter().map(|sample| f64::from(*sample).powi(2)).sum();
+    (sum / frame.len() as f64).sqrt() as f32
 }
 
 pub struct Capture {
@@ -547,6 +561,29 @@ mod tests {
         let mut frames = hiss(quiet_frames, 100.0);
         frames.extend(hiss(loud_frames, 400.0));
         frames
+    }
+
+    fn low_edge() -> Vec<i16> {
+        (0..FRAME)
+            .map(|index| {
+                let at = index as f32 / SAMPLE_RATE as f32;
+                (1500.0 * (std::f32::consts::TAU * 150.0 * at).sin()) as i16
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_soft_low_end_of_a_word_still_counts_toward_the_turn_not_the_pause() {
+        let words = settled()
+            .chain(spoken(20))
+            .chain(std::iter::repeat_n(low_edge(), 4))
+            .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES - 2))
+            .chain(spoken(20))
+            .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES));
+        let (heard, gate) = run(words);
+        assert_eq!(heard, vec![Heard::Settled, Heard::Ended(End::Pause)]);
+        let kept = gate.utterance().len();
+        assert!(kept >= (20 + 4 + PAUSE_FRAMES - 2 + 20) * FRAME, "{kept}");
     }
 
     #[test]

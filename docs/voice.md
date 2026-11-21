@@ -23,8 +23,12 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    fan, a hum or a door. It compares that level with three times the quietest
    frame of the last 2 s, and never with less than 200. The threshold has no
    ceiling, so a steady sound, however loud, never counts as speech. A sound
-   counts as speech only after 0.2 s without a break, so a click, a thump as the
-   microphone opens or a tap is never a turn. A sound that switches on and
+   counts as speech only after 0.2 s without a break in that band, so a click, a
+   thump as the microphone opens or a tap is never a turn. Once a turn has
+   started, it ends on the plain level of the whole band, with the same floor
+   rule. The speech band alone lets the soft edges of words fall under the floor
+   sooner, which stretched the journey's 1.35 s mid-request pause from 69 to 73
+   of the 75 frames that end a turn. A sound that switches on and
    stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
    turn that ends is also checked for the rise and fall of speech. When the 90th
    percentile of its sounding frames' level is under 1.5 times the 10th
