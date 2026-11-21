@@ -115,8 +115,33 @@ pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
     }
 }
 
-pub fn heard_nothing(heard: &str) -> bool {
-    !heard.chars().any(char::is_alphanumeric)
+const READ_BACK_ENTRIES: usize = 3;
+
+pub fn heard_nothing(heard: &str, names: &[String]) -> bool {
+    !heard.chars().any(char::is_alphanumeric) || reads_back_the_hint(heard, &hint_words(names))
+}
+
+fn reads_back_the_hint(heard: &str, hint: &[&str]) -> bool {
+    let entries: Vec<String> = heard
+        .split(',')
+        .map(|entry| {
+            entry
+                .trim()
+                .trim_end_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+        .collect();
+    let mut from = 0;
+    for entry in &entries {
+        match hint[from..]
+            .iter()
+            .position(|word| word.to_lowercase() == *entry)
+        {
+            Some(at) => from += at + 1,
+            None => return false,
+        }
+    }
+    entries.len() >= READ_BACK_ENTRIES
 }
 
 pub fn clean_heard(raw: &str) -> String {
@@ -320,6 +345,13 @@ fn is_abbreviation(word: &str) -> bool {
 }
 
 pub fn hearing_prompt(names: &[String]) -> String {
+    format!(
+        "Perform ASR in English. Words you may hear: {}.",
+        hint_words(names).join(", ")
+    )
+}
+
+fn hint_words(names: &[String]) -> Vec<&str> {
     let mut words: Vec<&str> = vec![
         "dock",
         "Fleet",
@@ -337,10 +369,7 @@ pub fn hearing_prompt(names: &[String]) -> String {
             words.push(name);
         }
     }
-    format!(
-        "Perform ASR in English. Words you may hear: {}.",
-        words.join(", ")
-    )
+    words
 }
 
 #[cfg(test)]
@@ -386,9 +415,37 @@ mod tests {
     #[test]
     fn text_with_no_letter_or_digit_is_nothing_heard() {
         for heard in ["", " ... ", "-- !"] {
-            assert!(heard_nothing(heard), "{heard:?}");
+            assert!(heard_nothing(heard, &[]), "{heard:?}");
         }
-        assert!(!heard_nothing("Rename it"));
+        assert!(!heard_nothing("Rename it", &[]));
+    }
+
+    #[test]
+    fn a_read_back_of_the_hint_in_its_order_is_nothing_heard() {
+        let names: Vec<String> = vec!["Fleet 1".into(), "Home".into()];
+        for heard in [
+            "dock, Fleet, Vessel, Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
+            "dock, Fleet, Vessel.",
+            "Voyager, maximize, Core, Home",
+        ] {
+            assert!(heard_nothing(heard, &names), "{heard:?}");
+        }
+    }
+
+    #[test]
+    fn short_commands_made_of_hint_words_are_kept() {
+        let names: Vec<String> = vec!["Fleet 1".into(), "Home".into()];
+        for heard in [
+            "Maximize.",
+            "Rename this Fleet.",
+            "Dock.",
+            "Maximize Fleet 1.",
+            "Dock, Fleet.",
+            "Home, Core, dock.",
+            "dock, Fleet, the Vessel.",
+        ] {
+            assert!(!heard_nothing(heard, &names), "{heard:?}");
+        }
     }
 
     #[test]

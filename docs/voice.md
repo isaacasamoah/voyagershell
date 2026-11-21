@@ -41,10 +41,20 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    were heard and passed on. It never names an action or claims a result.
 5. Omni turns the samples into words while the clip plays. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
-   state the owner already holds, so hearing adds no inspection call. If hearing
-   finds no letter or digit, `speech::heard_nothing` drops the turn: nothing more
-   is said and nothing is sent. If hearing fails, "I didn't catch that." follows
-   and nothing is sent.
+   state the owner already holds, so hearing adds no inspection call. Right
+   after hearing, `speech::heard_nothing` drops a transcript with no letter or
+   digit, and a read-back of the hint. Nothing more is said and nothing is sent.
+   If hearing fails, "I didn't catch that." follows and nothing is sent.
+
+   A read-back of the hint is three or more comma-separated entries that are each
+   an entry of the hint sent with that request, in the hint's own order. On room
+   noise, Omni under this prompt wrote back the hint itself, "dock, Fleet, Vessel,
+   Voyage, Voyager, voyagershell, rename, maximize, Portal, Core, Fleet 1, Home.",
+   on all 10 noise turns of a 5-minute room run on main. A one-word command such as
+   "Maximize." and a sentence such as "Rename this Fleet." are kept. This drop is a
+   stopgap for 22 Nov 2026. It is removed when the Silero speech detector gates
+   turns. It must not grow into a list of words or phrases to drop, because a
+   filter over model text drops real requests the list did not foresee.
 6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
