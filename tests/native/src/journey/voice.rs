@@ -256,6 +256,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "nothing heard in the room sound reaches Voyager",
                 listened.sent() == 0,
             )
+            .expect(
+                "the voice asks no reply call and says nothing for the room sound",
+                listened.answered() == 0,
+            )
             .observed("turns", listened.turns.len())?
             .observed("sent", listened.sent())?
             .observed("droppedAfterHearing", listened.dropped())?

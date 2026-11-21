@@ -432,6 +432,8 @@ fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> 
 pub struct HeardTurn {
     pub ended_after_feed_began_ms: i64,
     pub acknowledgements: Vec<String>,
+    pub voice_said: Vec<String>,
+    pub replied: bool,
     pub heard: Option<String>,
     pub sent: bool,
     pub dropped: bool,
@@ -452,6 +454,13 @@ impl Listened {
 
     pub fn dropped(&self) -> usize {
         self.turns.iter().filter(|turn| turn.dropped).count()
+    }
+
+    pub fn answered(&self) -> usize {
+        self.turns
+            .iter()
+            .filter(|turn| turn.replied || !turn.voice_said.is_empty())
+            .count()
     }
 }
 
@@ -474,6 +483,8 @@ fn turns_in(marks: &[Mark], began: u64) -> Vec<HeardTurn> {
                 turn.acknowledgements.extend(mark.words.clone());
             }
             "heard" => turn.heard = mark.words.clone(),
+            "replied" => turn.replied = true,
+            "reply-started" => turn.voice_said.extend(mark.words.clone()),
             "sent" => turn.sent = true,
             "dropped" => turn.dropped = true,
             "speech-started" => turn.spoken.extend(mark.words.clone()),
