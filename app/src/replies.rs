@@ -1,3 +1,4 @@
+use crate::spoken::strip_reply_marker;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, Mutex, PoisonError},
@@ -233,15 +234,25 @@ impl Slot {
     }
 
     fn view(&self) -> Turn {
+        let messages: Vec<Message> = self
+            .messages
+            .iter()
+            .map(|message| Message {
+                text: strip_reply_marker(&message.text).to_owned(),
+                ..message.clone()
+            })
+            .collect();
         let ending = match &self.stop {
-            Some(Stopping::Text(text)) => Some(Ending::Stopped {
-                text: text.clone(),
-                matched: self.whole()
-                    && self
-                        .messages
-                        .last()
-                        .is_some_and(|message| message.text.trim_end() == text.trim_end()),
-            }),
+            Some(Stopping::Text(text)) => {
+                let text = strip_reply_marker(text);
+                Some(Ending::Stopped {
+                    text: text.to_owned(),
+                    matched: self.whole()
+                        && messages
+                            .last()
+                            .is_some_and(|message| message.text.trim_end() == text.trim_end()),
+                })
+            }
             Some(Stopping::Failed(error)) => Some(Ending::Failed {
                 error: error.clone(),
             }),
@@ -249,7 +260,7 @@ impl Slot {
         };
         Turn {
             id: self.id.clone(),
-            messages: self.messages.clone(),
+            messages,
             ending,
             truncated: self.truncated,
             spoken: self.spoken,
@@ -335,6 +346,29 @@ mod tests {
         );
         assert_eq!(replies.accept(end("t1", "Done.")), Step::Ended);
         assert_eq!(only(&replies).ending, stopped("Done.", true));
+    }
+
+    #[test]
+    fn the_reply_marker_is_gone_from_the_streamed_message_and_the_stop_text() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, false, "[v"));
+        assert_eq!(only(&replies).messages[0].text, "[v");
+        replies.accept(chunk("t1", "m1", 1, false, "y] Done.\n"));
+        replies.accept(chunk("t1", "m1", 2, true, "More."));
+        replies.accept(end("t1", "[vy] Done.\nMore."));
+        let turn = only(&replies);
+        assert_eq!(turn.messages[0].text, "Done.\nMore.");
+        assert_eq!(turn.ending, stopped("Done.\nMore.", true));
+    }
+
+    #[test]
+    fn a_reply_without_the_marker_reads_unchanged() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, true, "Done."));
+        replies.accept(end("t1", "Done."));
+        let turn = only(&replies);
+        assert_eq!(turn.messages[0].text, "Done.");
+        assert_eq!(turn.ending, stopped("Done.", true));
     }
 
     #[test]
