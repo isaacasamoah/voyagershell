@@ -151,6 +151,10 @@ mod tests {
         fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
             Ok(Box::new(Voice(self.0.clone())))
         }
+
+        fn detector(&self) -> Box<dyn crate::audio_io::SpeechDetector> {
+            Box::new(crate::audio_io::Loudness)
+        }
     }
 
     struct Reader;

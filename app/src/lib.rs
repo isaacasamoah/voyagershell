@@ -44,6 +44,7 @@ mod provider_settings;
 mod audio_io;
 mod http1;
 pub mod omni;
+mod silero;
 pub mod speech;
 mod voice;
 mod voice_host;

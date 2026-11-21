@@ -1,15 +1,15 @@
 diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
+index 61ff7c69..84a7fa1f 100644
 --- a/app/src/audio_io.rs
 +++ b/app/src/audio_io.rs
-@@ -8,9 +8,9 @@
+@@ -8,9 +8,9 @@ use std::{
  };
  
  pub const FRAME: usize = 320;
 -const SETTLE_FRAMES: usize = 15;
--const ONSET_FRAMES: usize = 10;
--const PAUSE_FRAMES: usize = 75;
 +const SETTLE_FRAMES: usize = 1;
-+const ONSET_FRAMES: usize = 5;
+ const ONSET_FRAMES: usize = 5;
+-const PAUSE_FRAMES: usize = 75;
 +const PAUSE_FRAMES: usize = 30;
  const CAP_FRAMES: usize = 1500;
  const LEAD_FRAMES: usize = 50;

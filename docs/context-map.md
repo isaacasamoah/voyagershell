@@ -183,6 +183,7 @@ Owns files:
 - `app/src/speech.rs`
 - `app/src/omni.rs`
 - `app/src/audio_io.rs`
+- `app/src/silero.rs`
 - `app/src/http1.rs`
 - `app/src/voice_layer.rs`
 - `app/src/voice_layer_tests.rs`

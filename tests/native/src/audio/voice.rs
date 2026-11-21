@@ -429,6 +429,13 @@ impl Listened {
     pub fn dropped(&self) -> usize {
         self.turns.iter().filter(|turn| turn.dropped).count()
     }
+
+    pub fn acknowledged(&self) -> usize {
+        self.turns
+            .iter()
+            .filter(|turn| !turn.acknowledgements.is_empty())
+            .count()
+    }
 }
 
 fn turns_in(marks: &[Mark], began: u64) -> Vec<HeardTurn> {

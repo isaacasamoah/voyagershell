@@ -221,7 +221,7 @@ impl Exchange<'_> {
         self.trace.mark("capture-open");
         let rate = self.clips.values().next().map_or(24_000, |clip| clip.rate);
         let speaker = self.audio.speaker(rate).ok();
-        let mut gate = Gate::default();
+        let mut gate = Gate::new(self.audio.detector());
         let mut waited = 0;
         loop {
             match self.shared.wanted() {
@@ -293,7 +293,7 @@ impl Exchange<'_> {
         match self.hearing.hear(&utterance, &names) {
             Ok(heard) => {
                 self.trace.mark_words("heard", &heard);
-                if heard_nothing(&heard, &names) {
+                if heard_nothing(&heard) {
                     self.trace.mark("dropped");
                 } else if send {
                     match self.voyager.say(&crate::spoken::prompt(&heard)) {

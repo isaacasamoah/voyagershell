@@ -988,18 +988,32 @@ features:
         checks:
           - 'journey:voice/room-sound-is-never-a-turn'
           - 'journey:voice/request-in-room-sound-is-sent'
+          - 'journey:voice/quiet-voice-is-a-turn'
           - 'test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech'
           - 'test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech'
           - 'test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing'
         formal: []
         journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
-    sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
+    sources:
+      - desktop/src/speech.rs
+      - app/src/voice.rs
+      - 'app/src/voice_*.rs'
+      - app/src/speech.rs
+      - app/src/omni.rs
+      - app/src/audio_io.rs
+      - app/src/silero.rs
+      - app/models/silero_vad_v6.onnx
+      - app/src/http1.rs
+      - app/src/client_service.rs
+      - docs/voice.md
     code:
+      - app/models/silero_vad_v6.onnx
       - app/src/audio_io.rs
       - app/src/client_service.rs
       - app/src/http1.rs
       - app/src/omni.rs
+      - app/src/silero.rs
       - app/src/speech.rs
       - app/src/voice.rs
       - app/src/voice_host.rs

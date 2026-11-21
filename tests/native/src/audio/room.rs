@@ -262,6 +262,36 @@ pub fn request_in_room(
     Ok(to_samples(&mix))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Bed {
+    Tone,
+    SoftFan,
+    LoudFan,
+}
+
+pub fn quiet_request(speech: &Speech, gain: f64, bed: Bed, around_seconds: u32) -> Result<Samples> {
+    let mut noise = Noise(SEED ^ 0x0000_9e17);
+    let words = speech.samples()?.0;
+    let from = seconds(f64::from(around_seconds));
+    let count = from * 2 + words.len();
+    let mut mix = noise.pink(count, TONE_RMS);
+    let fan_rms = match bed {
+        Bed::Tone => None,
+        Bed::SoftFan => Some(SOFT_FAN_RMS),
+        Bed::LoudFan => Some(LOUD_FAN_RMS),
+    };
+    if let Some(rms) = fan_rms {
+        add(&mut mix, 0, &fan(&mut noise, count, rms));
+    }
+    let spoken: Vec<f64> = words
+        .iter()
+        .map(|sample| f64::from(*sample) * gain)
+        .collect();
+    add(&mut mix, from, &spoken);
+    Ok(to_samples(&mix))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

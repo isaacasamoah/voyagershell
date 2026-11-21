@@ -1,9 +1,9 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
-index 446ff870..1298b127 100644
+index 42a6b638..1dde1fdc 100644
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
 @@ -296,7 +296,7 @@ impl Exchange<'_> {
-                 if heard_nothing(&heard, &names) {
+                 if heard_nothing(&heard) {
                      self.trace.mark("dropped");
                  } else if send {
 -                    match self.voyager.say(&crate::spoken::prompt(&heard)) {
