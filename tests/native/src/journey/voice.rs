@@ -269,32 +269,34 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             ROOM_BEFORE_REQUEST_S,
             ROOM_AFTER_REQUEST_S,
         )?;
-        let wanted = spoken(RENAME_THE_FLEET.words);
-        let before = voice::terminal_text(native, &voyager)?
-            .matches(&wanted)
-            .count();
+        let before = voice::terminal_text(native, &voyager)?;
         voice::turn_on(native)?;
         let listened = voice::feed_and_settle(native, "request-in-room-sound", &mixed);
         voice::turn_off(native)?;
         let listened = listened?;
-        let after = voice::terminal_text(native, &voyager)?
-            .matches(&wanted)
-            .count();
-        let only = listened.turns.first();
+        let after = voice::terminal_text(native, &voyager)?;
+        let heard = listened
+            .turns
+            .first()
+            .and_then(|turn| turn.heard.clone())
+            .unwrap_or_default();
+        let received = |screen: &str| screen.matches(&spoken(&heard)).count();
+        let (errors, words) = word_errors(&heard, RENAME_THE_FLEET.words);
         Verdict::new()
             .expect(
-                "the spoken request among room sound is the one turn",
+                "the spoken request among room sound is exactly one turn",
                 listened.turns.len() == 1,
             )
             .expect(
-                "its words are heard as spoken",
-                only.and_then(|turn| turn.heard.as_deref())
-                    .is_some_and(|heard| words_match(heard, RENAME_THE_FLEET.words)),
+                "that turn is sent to Voyager, with the spoken marker and the words heard, once",
+                listened.sent() == 1
+                    && !heard.is_empty()
+                    && received(&after) == received(&before) + 1,
             )
-            .expect(
-                "Voyager received the spoken marker and the words exactly, once",
-                listened.sent() == 1 && after == before + 1,
-            )
+            .observed("spoken", RENAME_THE_FLEET.words)?
+            .observed("heard", &heard)?
+            .observed("wordErrors", errors)?
+            .observed("words", words)?
             .observed("listened", listened)
     })?;
     cases.check(native, Case::RenameIsHeard, |native| {
