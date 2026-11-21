@@ -3,7 +3,8 @@ use crate::{
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
-        Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance, clean_heard, hearing_prompt,
+        Clip, Fault, Hearing, Phrase, REPLY_EXAMPLES, REPLY_PROMPT, Reply, Replying, Speaking,
+        SpokenText, Utterance, clean_heard, hearing_prompt,
     },
 };
 use serde_json::{Value, json};
@@ -27,6 +28,7 @@ const SNAPSHOTS: &str = "models--LiquidAI--LFM3-Omni-2B-GGUF/snapshots";
 const VOICE: &str = "female";
 const READY_WITHIN: Duration = Duration::from_secs(120);
 const REQUEST_WITHIN: Duration = Duration::from_secs(30);
+const REPLY_WITHIN: Duration = Duration::from_secs(3);
 const HEALTH_WITHIN: Duration = Duration::from_millis(800);
 const WARM_SAMPLES: usize = 8_000;
 const LIVENESS_EVERY: Duration = Duration::from_secs(1);
@@ -254,6 +256,7 @@ impl Omni {
 
     pub fn warm(&self) -> Result<(), Fault> {
         self.speech("Ready.")?;
+        let _ = self.reply("Hello.");
         self.hear(
             &Utterance {
                 samples: vec![0; WARM_SAMPLES],
@@ -300,6 +303,87 @@ impl Hearing for Omni {
                 Fault::Failed("The voice engine heard nothing it could write down".into())
             })?;
         Ok(clean_heard(text))
+    }
+}
+
+fn reply_messages(heard: &str) -> Value {
+    let mut messages = vec![json!({"role": "system", "content": REPLY_PROMPT})];
+    for (said, kind, say) in REPLY_EXAMPLES {
+        let answer = format!("{{\"kind\": \"{kind}\", \"say\": {}}}", Value::from(say));
+        messages.push(json!({"role": "user", "content": said}));
+        messages.push(json!({"role": "assistant", "content": answer}));
+    }
+    messages.push(json!({"role": "user", "content": heard}));
+    Value::Array(messages)
+}
+
+fn chat_probability(reply: &Value) -> Option<f64> {
+    let tokens = reply["choices"][0]["logprobs"]["content"].as_array()?;
+    let kind = tokens.iter().find(|token| {
+        matches!(
+            token["token"]
+                .as_str()
+                .map(|word| word.trim().trim_matches('"')),
+            Some("chat" | "work")
+        )
+    })?;
+    let mut chat = 0.0;
+    let mut work = 0.0;
+    for option in kind["top_logprobs"].as_array()? {
+        let chance = option["logprob"].as_f64()?.exp();
+        match option["token"].as_str()?.trim().trim_matches('"') {
+            "chat" => chat += chance,
+            "work" => work += chance,
+            _ => {}
+        }
+    }
+    (chat + work > 0.0).then(|| chat / (chat + work))
+}
+
+impl Replying for Omni {
+    fn reply(&self, heard: &str) -> Result<Reply, Fault> {
+        let body = json!({
+            "temperature": 0,
+            "max_tokens": 80,
+            "logprobs": true,
+            "top_logprobs": 8,
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": "reply",
+                "strict": true,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string", "enum": ["chat", "work"]},
+                        "say": {"type": "string"}
+                    },
+                    "required": ["kind", "say"],
+                    "additionalProperties": false
+                }
+            }},
+            "messages": reply_messages(heard)
+        })
+        .to_string();
+        let response = http1::request(
+            self.port,
+            "POST",
+            "/v1/chat/completions",
+            body.as_bytes(),
+            REPLY_WITHIN,
+        )
+        .map_err(|error| Fault::Failed(format!("The voice engine did not reply: {error}")))?;
+        if response.status != 200 {
+            return Err(Fault::Failed(format!(
+                "The voice engine refused a reply with status {}",
+                response.status
+            )));
+        }
+        let answer: Value = serde_json::from_slice(&response.body)
+            .map_err(|_| Fault::Failed("The voice engine sent an unreadable reply".into()))?;
+        let content = answer["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or_default();
+        Reply::parse(content, chat_probability(&answer))
+            .ok_or_else(|| Fault::Failed("The voice engine sent a reply it could not use".into()))
     }
 }
 
@@ -390,6 +474,44 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn token(word: &str, others: &[(&str, f64)]) -> Value {
+        json!({"token": word, "logprob": 0.0, "top_logprobs": others
+            .iter()
+            .map(|(other, chance)| json!({"token": other, "logprob": chance.ln()}))
+            .collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn the_chat_probability_is_read_at_the_kind_token_and_not_at_the_words_after_it() {
+        let reply = json!({"choices": [{"logprobs": {"content": [
+            token("{\"", &[]),
+            token("kind", &[]),
+            token("chat", &[("chat", 0.9), ("work", 0.1)]),
+            token("work", &[("work", 1.0)]),
+        ]}}]});
+        let chance = chat_probability(&reply).unwrap();
+        assert!((chance - 0.9).abs() < 1e-9, "{chance}");
+    }
+
+    #[test]
+    fn an_answer_without_logprobs_has_no_probability() {
+        assert_eq!(chat_probability(&json!({"choices": [{}]})), None);
+    }
+
+    #[test]
+    fn the_request_is_the_prompt_then_the_examples_then_the_words() {
+        let messages = reply_messages("Hello.");
+        let list = messages.as_array().unwrap();
+        assert_eq!(list.len(), 2 + 2 * REPLY_EXAMPLES.len());
+        assert_eq!(list[0]["role"], "system");
+        assert_eq!(list[1]["content"], REPLY_EXAMPLES[0].0);
+        assert_eq!(
+            list[2]["content"],
+            r#"{"kind": "chat", "say": "I'm doing well, thanks. What can I do for you?"}"#
+        );
+        assert_eq!(list[list.len() - 1]["content"], "Hello.");
     }
 
     #[test]

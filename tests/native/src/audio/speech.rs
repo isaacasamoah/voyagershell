@@ -80,6 +80,70 @@ pub fn requests() -> Result<Vec<Request>> {
 }
 
 fn requests_from(table: &str, pcm: &[u8]) -> Result<Vec<Request>> {
+    fixture(table, pcm, REQUESTS_SHA256)?
+        .into_iter()
+        .map(|(name, kind, words, samples)| {
+            let kind = match kind.as_str() {
+                "question" => Kind::Question,
+                "command" => Kind::Command,
+                _ => bail!("A spoken request has an unknown kind: {kind}"),
+            };
+            Ok(Request {
+                name,
+                kind,
+                words,
+                samples,
+            })
+        })
+        .collect()
+}
+
+const REPLIES_TABLE: &str = include_str!("../../fixtures/replies/replies.tsv");
+const REPLIES_PCM: &[u8] = include_bytes!("../../fixtures/replies/replies.s16");
+const REPLIES_SHA256: &str = "48fc3c6bf6529fedde5f4cd2fe420dea40a68dc23ca0495f73da87b414a088a2";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Wanted {
+    Chat,
+    Handoff,
+}
+
+pub struct Remark {
+    pub name: String,
+    pub wanted: Wanted,
+    pub words: String,
+    pub samples: Samples,
+}
+
+pub fn remarks() -> Result<Vec<Remark>> {
+    remarks_from(REPLIES_TABLE, REPLIES_PCM)
+}
+
+fn remarks_from(table: &str, pcm: &[u8]) -> Result<Vec<Remark>> {
+    fixture(table, pcm, REPLIES_SHA256)?
+        .into_iter()
+        .map(|(name, kind, words, samples)| {
+            let wanted = match kind.as_str() {
+                "chat" => Wanted::Chat,
+                "handoff" => Wanted::Handoff,
+                _ => bail!("A spoken remark has an unknown kind: {kind}"),
+            };
+            Ok(Remark {
+                name,
+                wanted,
+                words,
+                samples,
+            })
+        })
+        .collect()
+}
+
+fn fixture(
+    table: &str,
+    pcm: &[u8],
+    sha256: &str,
+) -> Result<Vec<(String, String, String, Samples)>> {
     let found = format!(
         "{:x}",
         Sha256::new()
@@ -88,38 +152,33 @@ fn requests_from(table: &str, pcm: &[u8]) -> Result<Vec<Request>> {
             .finalize()
     );
     ensure!(
-        found == REQUESTS_SHA256,
+        found == sha256,
         "The spoken requests are not the synthetic set that was committed: {found}"
     );
     let mut at = 0;
-    let mut requests = Vec::new();
+    let mut spoken = Vec::new();
     for line in table.lines() {
         let [name, kind, samples, words] = line.splitn(4, '\t').collect::<Vec<_>>()[..] else {
             bail!("A spoken request line has the wrong fields: {line}");
-        };
-        let kind = match kind {
-            "question" => Kind::Question,
-            "command" => Kind::Command,
-            _ => bail!("A spoken request has an unknown kind: {kind}"),
         };
         let end = at + samples.parse::<usize>()? * 2;
         let narrow = Samples::raw(
             pcm.get(at..end)
                 .context("The spoken requests are cut short")?,
         );
-        requests.push(Request {
-            name: name.to_owned(),
-            kind,
-            words: words.to_owned(),
-            samples: narrow.widened(),
-        });
+        spoken.push((
+            name.to_owned(),
+            kind.to_owned(),
+            words.to_owned(),
+            narrow.widened(),
+        ));
         at = end;
     }
     ensure!(
         at == pcm.len(),
         "The spoken requests have samples left over"
     );
-    Ok(requests)
+    Ok(spoken)
 }
 
 pub const PAUSED_WORDS: &str = "Open the roadmap. Dock on this fleet.";
@@ -338,6 +397,21 @@ mod tests {
         assert!(requests_from(REQUESTS_TABLE, &pcm).is_err());
         let table = REQUESTS_TABLE.replacen("fleet", "fleat", 1);
         assert!(requests_from(&table, REQUESTS_PCM).is_err());
+    }
+
+    #[test]
+    fn the_spoken_remarks_split_into_chat_and_handoffs_and_a_changed_one_is_refused() -> Result<()>
+    {
+        let all = remarks()?;
+        assert_eq!(all.len(), 42);
+        assert_eq!(
+            all.iter().filter(|one| one.wanted == Wanted::Chat).count(),
+            10
+        );
+        let mut pcm = REPLIES_PCM.to_vec();
+        pcm[1000] ^= 1;
+        assert!(remarks_from(REPLIES_TABLE, &pcm).is_err());
+        Ok(())
     }
 
     #[test]

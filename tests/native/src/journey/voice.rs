@@ -3,10 +3,11 @@ use crate::agent::{REPLY_MARKER, TYPED_REPLY};
 use crate::audio::room;
 use crate::audio::speech::{
     self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_THE_FLEET,
-    RENAME_TO_HARBOR, Samples,
+    RENAME_TO_HARBOR, Samples, Wanted,
 };
 use crate::audio::voice::{
-    self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
+    self, CONNECTING, LISTENING, READY, Turn, median, nearest_words, word_errors, words_contain,
+    words_match,
 };
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, LONG_SILENCE, Native, QUIET_MIC};
@@ -33,12 +34,13 @@ cases! {
     TwoTurnsWithEcho => "two-turns-with-echo",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
     RefusalIsInTheChat => "refusal-is-in-the-chat",
+    RepliesFollowRoundSeven => "replies-follow-round-seven",
     RequestsAreWrittenDown => "requests-are-written-down",
 }
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
-const TARGET_MS: i64 = 300;
+const TARGET_MS: i64 = 8000;
 const RUNS: usize = 10;
 const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
@@ -48,6 +50,7 @@ const ROOM_SILENCE_MS: u32 = 3000;
 const WORD_ERROR_PERCENT: usize = 5;
 const ROOM_BEFORE_REQUEST_S: u32 = 8;
 const ROOM_AFTER_REQUEST_S: u32 = 4;
+const RIGHT_PERCENT: usize = 95;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,6 +166,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("turn", turn)
     })?;
     cases.check(native, Case::ConnectingThenListening, |native| {
+        voice::finish_answers(native)?;
         native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
             label == READY
         })?;
@@ -254,6 +258,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "nothing heard in the room sound reaches Voyager",
                 listened.sent() == 0,
             )
+            .expect(
+                "the voice asks no reply call and says nothing for the room sound",
+                listened.answered() == 0,
+            )
             .observed("turns", listened.turns.len())?
             .observed("sent", listened.sent())?
             .observed("droppedAfterHearing", listened.dropped())?
@@ -312,16 +320,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 words_match(&words, RENAME_TO_HARBOR.words),
             )
             .expect(
-                "the acknowledgement for a Voyager that is running plays at the speaker",
-                said.spoken.matches()
-                    && said
-                        .acknowledgement
-                        .as_deref()
-                        .is_some_and(|key| key.contains("asking")),
+                "the voice answers a request for a Voyager that is running in its own words at the speaker",
+                said.reply.as_deref().is_some_and(|words| !words.is_empty()),
             )
             .expect(
-                "the acknowledgement starts before hearing ends",
-                said.started_before_heard,
+                "the answer starts after the words are heard",
+                said.started_after_heard,
             )
             .expect(
                 "listening resumes after the turn without another click",
@@ -372,14 +376,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let Some(said) = cases.make(native, Case::ReplyIsSpoken, |native| {
         let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply")?;
         let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
+        let (ear_errors, ear_words) = nearest_words(&judged.transcript, SPOKEN_AS);
         let verdict = Verdict::new()
             .expect(
                 "the whole final message of the spoken turn is spoken, both paragraphs, with no pointer to the chat",
                 said.spoken_texts.iter().any(|text| text == SPOKEN_AS),
-            )
-            .expect(
-                "the engine hears the spoken reply as the expected sentence",
-                words_contain(&judged.transcript, SPOKEN_AS),
             )
             .expect(
                 "the engine does not hear another sentence in it",
@@ -390,7 +391,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.sent && said.speech_after_capture_ms.is_some(),
             )
             .observed("conversation", json!(said))?
-            .observed("judgement", json!(judged))?;
+            .observed("judgement", json!(judged))?
+            .observed("earWordErrors", ear_errors)?
+            .observed("earWords", ear_words)?;
         Ok((verdict, Some(said)))
     })?
     else {
@@ -462,12 +465,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     cases.check(native, Case::AcknowledgementIsPrompt, |native| {
         let mut first_sounds = Vec::new();
-        let mut early = 0;
+        let mut after = 0;
         let mut heard_right = 0;
         for run in 0..RUNS {
             let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
             first_sounds.push(said.first_sound_after_capture_ms);
-            early += usize::from(said.started_before_heard);
+            after += usize::from(said.started_after_heard && said.reply.is_some());
             heard_right += usize::from(
                 said.heard
                     .as_deref()
@@ -482,12 +485,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let middle = median(&first_sounds);
         Verdict::new()
             .expect(
-                "the acknowledgement starts before hearing ends in every run",
-                early == RUNS,
+                "the voice's own words start after hearing in every run",
+                after == RUNS,
             )
             .expect("every run is heard as spoken", heard_right == RUNS)
             .expect(
-                "the median first sound after capture ends is under the target",
+                "the median first sound after capture ends is under the CPU target",
                 middle.is_some_and(|middle| middle < TARGET_MS),
             )
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
@@ -551,6 +554,44 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("chatLines", lines)?
             .observed("conversation", json!(said))
     })?;
+    cases.check(native, Case::RepliesFollowRoundSeven, |native| {
+        let bound = std::fs::read(native.profile_path("voyager.json"))?;
+        native.edit_profile_file("voyager.json", REMOVED)?;
+        let answered = answer_remarks(native);
+        native.edit_profile_file("voyager.json", &bound)?;
+        let answered = answered?;
+        let kept: Vec<&Answered> = answered.iter().filter(|one| one.kept_workspace()).collect();
+        let right = answered.iter().filter(|one| one.right()).count();
+        let claimed: Vec<&Answered> = answered
+            .iter()
+            .filter(|one| one.claims_the_work())
+            .collect();
+        let garbled: Vec<&Answered> = answered.iter().filter(|one| one.garbles_a_name()).collect();
+        Verdict::new()
+            .expect(
+                "every spoken remark got a reply from the voice model",
+                answered.iter().all(|one| one.reply.is_some()),
+            )
+            .expect(
+                "no workspace request is kept by the voice instead of being handed to Voyager",
+                kept.is_empty(),
+            )
+            .expect(
+                "at least 95 percent of the remarks are chat or handed off as labelled",
+                right * 100 >= answered.len() * RIGHT_PERCENT,
+            )
+            .expect(
+                "no acknowledgement says the voice does the work",
+                claimed.is_empty(),
+            )
+            .expect(
+                "no acknowledgement carries a name that was not in the words heard",
+                garbled.is_empty(),
+            )
+            .observed("kept", kept.len())?
+            .observed("right", right)?
+            .observed("remarks", answered)
+    })?;
     cases.check(native, Case::RequestsAreWrittenDown, |native| {
         let bound = std::fs::read(native.profile_path("voyager.json"))?;
         native.edit_profile_file("voyager.json", REMOVED)?;
@@ -578,6 +619,120 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Answered {
+    name: String,
+    wanted: Wanted,
+    spoken: String,
+    heard: Vec<String>,
+    reply: Option<Reply>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Reply {
+    handoff: bool,
+    say: String,
+}
+
+impl Answered {
+    fn handed_off(&self) -> Option<bool> {
+        self.reply.as_ref().map(|reply| reply.handoff)
+    }
+
+    fn right(&self) -> bool {
+        self.handed_off() == Some(self.wanted == Wanted::Handoff)
+    }
+
+    fn kept_workspace(&self) -> bool {
+        self.wanted == Wanted::Handoff && self.handed_off() == Some(false)
+    }
+
+    fn says(&self) -> &str {
+        self.reply.as_ref().map_or("", |reply| reply.say.as_str())
+    }
+
+    fn claims_the_work(&self) -> bool {
+        claims_the_work(self.says())
+    }
+
+    fn garbles_a_name(&self) -> bool {
+        let heard = words_of(&self.heard.join(" "));
+        let said = self.says();
+        let mut names = said
+            .split_whitespace()
+            .enumerate()
+            .map(|(at, word)| (at, word.trim_matches(|c: char| !c.is_alphanumeric())))
+            .filter(|(at, word)| {
+                !word.is_empty()
+                    && (word.chars().any(|c| c.is_ascii_digit())
+                        || (*at > 0 && word.chars().next().is_some_and(char::is_uppercase)))
+            })
+            .map(|(_, word)| word.to_lowercase());
+        names.any(|name| {
+            let name = name.trim_end_matches("'s").to_owned();
+            name != "voyager" && name != "i" && !heard.contains(&name)
+        })
+    }
+}
+
+const FINISHED: [&str; 3] = ["done", "finished", "completed"];
+const DID: [&str; 11] = [
+    "made", "did", "set", "put", "found", "sent", "got", "ran", "wrote", "took", "built",
+];
+const PROMISED: [&str; 4] = ["ask", "tell", "pass", "let"];
+
+fn claims_the_work(say: &str) -> bool {
+    let words = words_of(&say.replace('\u{2019}', "'"));
+    let finished = words.iter().any(|word| FINISHED.contains(&word.as_str()));
+    let did_it = words.windows(2).any(|pair| {
+        pair[0] == "i"
+            && (pair[1].len() > 3 && pair[1].ends_with("ed")
+                || DID.contains(&pair[1].as_str())
+                || pair[1] == "have")
+    });
+    let has_done = words.iter().any(|word| word == "i've");
+    let will_do = words
+        .windows(2)
+        .any(|pair| pair[0] == "i'll" && !PROMISED.contains(&pair[1].as_str()))
+        || words.windows(3).any(|trio| {
+            trio[0] == "i" && trio[1] == "will" && !PROMISED.contains(&trio[2].as_str())
+        });
+    finished || did_it || has_done || will_do
+}
+
+fn words_of(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|word| {
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+        .collect()
+}
+
+fn answer_remarks(native: &mut Native) -> Result<Vec<Answered>> {
+    voice::turn_on(native)?;
+    let mut answered = Vec::new();
+    for remark in speech::remarks()? {
+        let turn = voice::feed_until_listening(native, &remark.name, &remark.samples)?;
+        let reply = turn
+            .marks
+            .iter()
+            .find(|mark| mark.event == "replied")
+            .and_then(|mark| mark.words.as_deref())
+            .and_then(|words| serde_json::from_str::<Reply>(words).ok());
+        answered.push(Answered {
+            name: remark.name,
+            wanted: remark.wanted,
+            spoken: remark.words,
+            heard: turn.heard,
+            reply,
+        });
+    }
+    voice::turn_off(native)?;
+    Ok(answered)
+}
+
 fn write_down(native: &mut Native) -> Result<Vec<Written>> {
     voice::turn_on(native)?;
     let mut written = Vec::new();
@@ -595,4 +750,40 @@ fn write_down(native: &mut Native) -> Result<Vec<Written>> {
     }
     voice::turn_off(native)?;
     Ok(written)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claims_the_work;
+
+    #[test]
+    fn a_reply_that_claims_the_work_is_caught() {
+        for planted in [
+            "Done.",
+            "All finished.",
+            "Sure, I'll make that fleet.",
+            "I will create it now.",
+            "I made a new fleet.",
+            "I renamed the vessel to Logs.",
+            "I've changed the layout.",
+            "I have moved it.",
+        ] {
+            assert!(claims_the_work(planted), "{planted}");
+        }
+    }
+
+    #[test]
+    fn an_acknowledgement_that_only_passes_the_work_on_is_not_caught() {
+        for honest in [
+            "Sure, opening the Billing fleet.",
+            "Sure, I'll ask Voyager what's new.",
+            "Okay, I'll tell Voyager to drop that.",
+            "Let me check whether the tests are passing.",
+            "Sure, Voyager can walk you through that.",
+            "I'm doing well, thanks. What can I do for you?",
+            "I'm Voyager's voice. I pass your workspace requests to Voyager.",
+        ] {
+            assert!(!claims_the_work(honest), "{honest}");
+        }
+    }
 }

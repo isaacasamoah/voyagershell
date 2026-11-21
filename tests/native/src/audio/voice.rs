@@ -34,9 +34,10 @@ pub struct Mark {
 pub struct Conversation {
     pub heard: Option<String>,
     pub acknowledgement: Option<String>,
-    pub spoken: Score,
+    pub reply: Option<String>,
+    pub spoken: Option<Score>,
     pub first_sound_after_capture_ms: i64,
-    pub started_before_heard: bool,
+    pub started_after_heard: bool,
     pub sent: bool,
     pub spoken_texts: Vec<String>,
     pub speech_after_capture_ms: Option<i64>,
@@ -243,22 +244,38 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
     let clicked = now_millis();
     turn_on(native)?;
     stack.feed(system, speech)?;
-    let started = until("the acknowledgement to start", || {
+    let started = until("the voice to start its answer", || {
         let now = marks(&trace)?;
-        Ok(now
-            .get(before..)
-            .and_then(|fresh| mark_of(fresh, "acknowledgement-started"))
-            .and_then(|mark| mark.words.clone()))
+        Ok(now.get(before..).and_then(|fresh| {
+            fresh
+                .iter()
+                .find(|mark| {
+                    matches!(
+                        mark.event.as_str(),
+                        "acknowledgement-started" | "reply-started" | "refusal-started"
+                    )
+                })
+                .cloned()
+        }))
     })?;
-    let reference = clip(&system.evidence.join("home"), &started)?;
-    let score = settle(
-        PATIENCE,
-        LOOK,
-        || Ok(Some(judge::score(&reference, &capture.samples()?))),
-        Score::matches,
-    )?
-    .context("The speaker capture never held still")?;
-    let samples = capture.samples()?;
+    let started_words = started.words.clone().unwrap_or_default();
+    let (score, samples) = if started.event != "reply-started" {
+        let reference = clip(&system.evidence.join("home"), &started_words)?;
+        let score = settle(
+            PATIENCE,
+            LOOK,
+            || Ok(Some(judge::score(&reference, &capture.samples()?))),
+            Score::matches,
+        )?
+        .context("The speaker capture never held still")?;
+        (Some(score), capture.samples()?)
+    } else {
+        let samples = until("the reply to reach the speaker", || {
+            let samples = capture.samples()?;
+            Ok(onset_ms(&samples).map(|_| samples))
+        })?;
+        (None, samples)
+    };
     let onset = onset_ms(&samples).context("No sound reached the speaker")?;
     until("the words to be heard", || {
         Ok(marks(&trace)?
@@ -293,16 +310,14 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
         .map(|mark| mark.at_ms)
         .context("The app marked no end of capture")?;
     let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
-    let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
     let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
     Ok(Conversation {
         heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
-        acknowledgement: Some(started),
+        acknowledgement: (started.event != "reply-started").then(|| started_words.clone()),
+        reply: (started.event == "reply-started").then(|| started_words.clone()),
         spoken: score,
         first_sound_after_capture_ms: first_sound,
-        started_before_heard: acknowledged
-            .zip(heard_at)
-            .is_some_and(|(started, heard)| started <= heard),
+        started_after_heard: heard_at.is_some_and(|heard| started.at_ms >= heard),
         sent,
         spoken_texts: marks
             .iter()
@@ -334,7 +349,21 @@ impl Turn {
     }
 }
 
+fn answers_are_over(native: &Native) -> Result<Option<()>> {
+    let seen = marks(&native.voice_trace())?;
+    let count = |event: &str| seen.iter().filter(|mark| mark.event == event).count();
+    Ok((count("utterance-ended") == count("turn-ended")
+        && count("speech-started") == count("speech-ended"))
+    .then_some(()))
+}
+
+pub fn finish_answers(native: &Native) -> Result<()> {
+    poll(REPLY_WAIT.within(), LOOK, true, || answers_are_over(native))?;
+    Ok(())
+}
+
 pub fn turn_on(native: &Native) -> Result<()> {
+    finish_answers(native)?;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;
@@ -380,12 +409,13 @@ pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
 
 fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> Result<Turn> {
     let trace = native.voice_trace();
-    until(&format!("the turn's {last} mark"), || {
+    poll(REPLY_WAIT.within(), LOOK, true, || {
         Ok(marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, last))
             .map(|_| ()))
-    })?;
+    })?
+    .with_context(|| format!("The turn's {last} mark did not come in time"))?;
     let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     Ok(Turn {
         fed_until_ms,
@@ -408,6 +438,8 @@ fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> 
 pub struct HeardTurn {
     pub ended_after_feed_began_ms: i64,
     pub acknowledgements: Vec<String>,
+    pub voice_said: Vec<String>,
+    pub replied: bool,
     pub heard: Option<String>,
     pub sent: bool,
     pub dropped: bool,
@@ -428,6 +460,13 @@ impl Listened {
 
     pub fn dropped(&self) -> usize {
         self.turns.iter().filter(|turn| turn.dropped).count()
+    }
+
+    pub fn answered(&self) -> usize {
+        self.turns
+            .iter()
+            .filter(|turn| turn.replied || !turn.voice_said.is_empty())
+            .count()
     }
 }
 
@@ -450,6 +489,8 @@ fn turns_in(marks: &[Mark], began: u64) -> Vec<HeardTurn> {
                 turn.acknowledgements.extend(mark.words.clone());
             }
             "heard" => turn.heard = mark.words.clone(),
+            "replied" => turn.replied = true,
+            "reply-started" => turn.voice_said.extend(mark.words.clone()),
             "sent" => turn.sent = true,
             "dropped" => turn.dropped = true,
             "speech-started" => turn.spoken.extend(mark.words.clone()),
@@ -717,6 +758,21 @@ pub fn words_contain(heard: &str, wanted: &str) -> bool {
     plain(heard).contains(&plain(wanted))
 }
 
+pub fn nearest_words(heard: &str, wanted: &str) -> (usize, usize) {
+    let words = scored_words(heard);
+    let wanted_length = scored_words(wanted).len();
+    let mut best = word_errors(heard, wanted);
+    for length in 1..=(wanted_length + 2).min(words.len()) {
+        for window in words.windows(length) {
+            let found = word_errors(&window.join(" "), wanted);
+            if found.0 < best.0 {
+                best = found;
+            }
+        }
+    }
+    best
+}
+
 pub fn terminal_text(native: &Native, address: &str) -> Result<String> {
     let read = native
         .system
@@ -801,6 +857,14 @@ mod tests {
             "Docked on this fleet. The Fleet was already open."
         ));
         assert!(!words_contain("Asking Voyager.", "Docked on this fleet."));
+    }
+
+    #[test]
+    fn the_nearest_words_leave_out_what_the_voice_said_before_the_reply() {
+        let heard = "Sure, I'll ask Voyager to dock on this fleet. Dock on this fleet. The fleet was already open.";
+        let wanted = "Docked on this fleet. The Fleet was already open.";
+        assert_eq!(nearest_words(heard, wanted), (1, 9));
+        assert_eq!(nearest_words(&format!("Sure. {wanted}"), wanted), (0, 9));
     }
 
     #[test]

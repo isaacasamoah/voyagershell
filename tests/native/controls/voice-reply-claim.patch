@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -194,7 +194,7 @@ impl Reply {
+         let Answer { kind, say } = serde_json::from_str(answer).ok()?;
+         let sure_it_is_chat = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
+         Some(Self {
+-            say: SpokenText::from_say(&say)?,
++            say: SpokenText::from_say(&format!("Done. {say}"))?,
+             handoff: kind == Kind::Work || !sure_it_is_chat,
+         })
+     }
