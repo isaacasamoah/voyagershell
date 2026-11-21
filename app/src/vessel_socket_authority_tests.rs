@@ -55,6 +55,16 @@ fn beside_in_portals() -> Action {
     })
 }
 
+fn resize() -> Action {
+    Action::ResizePlacementSplit {
+        owner: PlacementOwner::Fleet {
+            id: voyager_contract::FleetId("fleet-2".into()),
+        },
+        path: Vec::new(),
+        share: voyager_contract::SplitShare::try_from(4000).unwrap(),
+    }
+}
+
 fn maximize(maximized: bool) -> Action {
     Action::SetPlacementMaximized {
         id: voyager_contract::PlacementId("placement-3".into()),
@@ -69,6 +79,7 @@ fn creating_a_vessel_with_no_placement_to_sit_beside_and_maximizing_one_are_offe
         ("create-vessel", in_current_fleet(), VESSEL_NOT_OFFERED),
         ("maximize", maximize(true), MAXIMIZE_NOT_OFFERED),
         ("restore", maximize(false), MAXIMIZE_NOT_OFFERED),
+        ("resize", resize(), RESIZE_NOT_OFFERED),
     ];
     for (name, action, refusal) in cases {
         let (call, seen) = recorded();
@@ -119,7 +130,12 @@ fn creating_a_vessel_with_no_placement_to_sit_beside_and_maximizing_one_are_offe
 fn creating_a_vessel_and_maximizing_are_refused_from_every_terminal_while_nothing_is_bound() {
     let (call, seen) = recorded();
     let binding = Binding::unbound();
-    for action in [in_current_fleet(), maximize(true), maximize(false)] {
+    for action in [
+        in_current_fleet(),
+        maximize(true),
+        maximize(false),
+        resize(),
+    ] {
         let line = workspace_line("unbound", action);
         for id in ["t8", "t9"] {
             let reply = answer(

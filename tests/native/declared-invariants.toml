@@ -332,14 +332,14 @@ confidence = "stated"
 
 [[invariant]]
 id = "only-the-bound-voyager-is-offered-voyager-only-operations"
-says = "Only the bound Voyager is offered dock, create-fleet-with-vessel, set-placement-maximized and create-vessel without a beside insertion in a Fleet through its Vessel socket. Any other Vessel's call to one of them is refused with nothing queued, and the workspace stays as it was."
+says = "Only the bound Voyager is offered dock, create-fleet-with-vessel, set-placement-maximized, resize-placement-split and create-vessel without a beside insertion in a Fleet through its Vessel socket. Any other Vessel's call to one of them is refused with nothing queued, and the workspace stays as it was."
 kind = "user"
 owner = "application-queue"
-source = "Isaac, card 52, 21 Nov 2026: 'Let Voyager add a Vessel to the current Fleet and maximize it, as you can, for Sunday's test.' It fits his rule that the avatar always carries his authority; other programs stay refused. Isaac, 22 Nov 2026: 'we need all agents to be able to split terminals vertically or horizontally, not just add one', so create-vessel beside a placement of a Fleet is offered to any Vessel."
+source = "Isaac, card 52, 21 Nov 2026: 'Let Voyager add a Vessel to the current Fleet and maximize it, as you can, for Sunday's test.' It fits his rule that the avatar always carries his authority; other programs stay refused. Isaac, 22 Nov 2026: 'we need all agents to be able to split terminals vertically or horizontally, not just add one', so create-vessel beside a placement of a Fleet is offered to any Vessel. Isaac, 22 Nov 2026: 'voyager should be able to resize vessels/splits', so resize-placement-split is offered to the bound Voyager."
 features = ["adopted-vessels"]
 guard = ["type:app/src/voyager_binding.rs#Binding"]
-check = ["journey:socket-dock/voyager-creates-and-maximizes", "test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal", "test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other"]
-gap = "The journey drives a refused set-placement-maximized only. The refusals of create-vessel without a beside insertion and of a Portal destination are covered by unit tests alone."
+check = ["journey:socket-dock/voyager-creates-and-maximizes", "journey:agent-split/voyager-resizes-a-split", "journey:agent-split/agent-resize-refused", "test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal", "test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other"]
+gap = "The journeys drive a refused set-placement-maximized and a refused resize-placement-split only. The refusals of create-vessel without a beside insertion and of a Portal destination are covered by unit tests alone."
 confidence = "stated"
 
 [[invariant]]

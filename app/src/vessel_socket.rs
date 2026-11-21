@@ -198,7 +198,8 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::SelectFleet { .. } => true,
         Action::Dock { .. }
         | Action::CreateFleetWithVessel { .. }
-        | Action::SetPlacementMaximized { .. } => bound,
+        | Action::SetPlacementMaximized { .. }
+        | Action::ResizePlacementSplit { .. } => bound,
         Action::CreateVessel { destination, .. } => {
             beside_in_fleet(destination) || (bound && in_fleet(destination))
         }
@@ -212,7 +213,6 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::StartNewShell { .. }
         | Action::RemoveVesselPackage { .. }
         | Action::RestoreVesselPackage { .. }
-        | Action::ResizePlacementSplit { .. }
         | Action::CloseVoyage { .. }
         | Action::ConfirmVoyageClose { .. }
         | Action::CancelVoyageClose { .. }
@@ -228,7 +228,7 @@ fn offered(action: &Action, bound: bool) -> bool {
     }
 }
 
-const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet, rename, move-voyage, move-fleet, move-placement, remove-placement, select-voyage and select-fleet; nothing was queued";
+const NOT_OFFERED: &str = "The voyager command offers only inspect, create-fleet, rename, move-voyage, move-fleet, move-placement, remove-placement, select-voyage and select-fleet, and create-vessel beside a placement; nothing was queued";
 
 const DOCK_NOT_OFFERED: &str = "dock is offered only to Voyager; nothing was queued";
 
@@ -245,6 +245,9 @@ const VESSEL_NOT_IN_FLEET: &str =
 const MAXIMIZE_NOT_OFFERED: &str =
     "set-placement-maximized is offered only to Voyager; nothing was queued";
 
+const RESIZE_NOT_OFFERED: &str =
+    "resize-placement-split is offered only to Voyager; nothing was queued";
+
 fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
     if offered(action, bound) {
         None
@@ -254,6 +257,8 @@ fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
         Some(FLEET_WITH_VESSEL_NOT_OFFERED)
     } else if matches!(action, Action::SetPlacementMaximized { .. }) {
         Some(MAXIMIZE_NOT_OFFERED)
+    } else if matches!(action, Action::ResizePlacementSplit { .. }) {
+        Some(RESIZE_NOT_OFFERED)
     } else if matches!(action, Action::CreateVessel { .. }) {
         Some(if bound {
             VESSEL_NOT_IN_FLEET

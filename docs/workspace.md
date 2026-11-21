@@ -177,8 +177,8 @@ It is not a Core label or a Core document, because a Vessel program can write
 both, and it is not part of the layout, so the layout and its wire do not
 change.
 
-A Vessel socket offers `dock`, `create-fleet-with-vessel` and
-`set-placement-maximized` only when its own terminal equals that field. Any
+A Vessel socket offers `dock`, `create-fleet-with-vessel`,
+`set-placement-maximized` and `resize-placement-split` only when its own terminal equals that field. Any
 other socket refuses each with "<operation> is offered only to Voyager; nothing
 was queued" and queues nothing. `create-vessel` with a `beside` insertion in a
 Fleet is offered to every Vessel socket. Any other `create-vessel` is offered
