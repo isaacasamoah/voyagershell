@@ -23,9 +23,9 @@ cases! {
     StartThumpIsNotSpeech => "start-thump-is-not-speech",
     ConnectingThenListening => "connecting-then-listening",
     SilenceKeepsVoiceOn => "silence-keeps-voice-on",
+    ClickTurnsVoiceOff => "click-turns-voice-off",
     RoomSoundIsNeverATurn => "room-sound-is-never-a-turn",
     RequestInRoomSoundIsSent => "request-in-room-sound-is-sent",
-    ClickTurnsVoiceOff => "click-turns-voice-off",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
@@ -210,6 +210,30 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("looks", looks.len())?
             .observed("events", fresh)
     })?;
+    cases.check(native, Case::ClickTurnsVoiceOff, |native| {
+        native.click(&Target::VOICE_CONTROL)?;
+        let label =
+            native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
+                label == READY
+            })?;
+        let closed = until("the microphone to close", || {
+            Ok(voice::recorders(native)?.is_empty().then_some(()))
+        })
+        .is_ok();
+        let trace = native.voice_trace();
+        let before = voice::marks(&trace)?.len();
+        voice::feed(native, &DOCK_ON_THIS_FLEET)?;
+        let after = voice::without_capture(native, QUIET_MIC)?;
+        let fresh = voice::marks(&trace)?.len() - before;
+        Verdict::new()
+            .expect("the control reads Start voice", label == READY)
+            .expect("the microphone closes", closed)
+            .expect(
+                "speech after the click is never heard",
+                fresh == 0 && after.iter().all(Vec::is_empty),
+            )
+            .observed("freshEvents", fresh)
+    })?;
     cases.check(native, Case::RoomSoundIsNeverATurn, |native| {
         let made = room::room(room::ROOM_SECONDS)?;
         voice::turn_on(native)?;
@@ -271,30 +295,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 listened.sent() == 1 && after == before + 1,
             )
             .observed("listened", listened)
-    })?;
-    cases.check(native, Case::ClickTurnsVoiceOff, |native| {
-        native.click(&Target::VOICE_CONTROL)?;
-        let label =
-            native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
-                label == READY
-            })?;
-        let closed = until("the microphone to close", || {
-            Ok(voice::recorders(native)?.is_empty().then_some(()))
-        })
-        .is_ok();
-        let trace = native.voice_trace();
-        let before = voice::marks(&trace)?.len();
-        voice::feed(native, &DOCK_ON_THIS_FLEET)?;
-        let after = voice::without_capture(native, QUIET_MIC)?;
-        let fresh = voice::marks(&trace)?.len() - before;
-        Verdict::new()
-            .expect("the control reads Start voice", label == READY)
-            .expect("the microphone closes", closed)
-            .expect(
-                "speech after the click is never heard",
-                fresh == 0 && after.iter().all(Vec::is_empty),
-            )
-            .observed("freshEvents", fresh)
     })?;
     cases.check(native, Case::RenameIsHeard, |native| {
         let said = voice::converse(native, &RENAME_TO_HARBOR, "rename")?;
