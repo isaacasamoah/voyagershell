@@ -29097,8 +29097,8 @@ return errors === 0;
 }
 
 export const place = validate104;
-const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","pattern":"^(fleet|portal):[A-Za-z0-9._-]{1,128}$","title":"Place","type":"string"};
-const pattern1 = new RegExp("^(fleet|portal):[A-Za-z0-9._-]{1,128}$", "u");
+const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","pattern":"^(fleet:[A-Za-z0-9._-]{1,128}(:(left|right|top|bottom):[A-Za-z0-9._-]{1,128})?|portal:[A-Za-z0-9._-]{1,128})$","title":"Place","type":"string"};
+const pattern1 = new RegExp("^(fleet:[A-Za-z0-9._-]{1,128}(:(left|right|top|bottom):[A-Za-z0-9._-]{1,128})?|portal:[A-Za-z0-9._-]{1,128})$", "u");
 
 function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -29106,7 +29106,7 @@ let errors = 0;
 if(errors === 0){
 if(typeof data === "string"){
 if(!pattern1.test(data)){
-validate104.errors = [{instancePath,schemaPath:"#/pattern",keyword:"pattern",params:{pattern: "^(fleet|portal):[A-Za-z0-9._-]{1,128}$"},message:"must match pattern \""+"^(fleet|portal):[A-Za-z0-9._-]{1,128}$"+"\""}];
+validate104.errors = [{instancePath,schemaPath:"#/pattern",keyword:"pattern",params:{pattern: "^(fleet:[A-Za-z0-9._-]{1,128}(:(left|right|top|bottom):[A-Za-z0-9._-]{1,128})?|portal:[A-Za-z0-9._-]{1,128})$"},message:"must match pattern \""+"^(fleet:[A-Za-z0-9._-]{1,128}(:(left|right|top|bottom):[A-Za-z0-9._-]{1,128})?|portal:[A-Za-z0-9._-]{1,128})$"+"\""}];
 return false;
 }
 }
