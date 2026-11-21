@@ -1036,18 +1036,19 @@ The room sound is made in `src/audio/room.rs` from a fixed seed, so it needs no 
 
 The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds each request's kind, Edge voice and words, and `make.sh WORK_FOLDER` renders them with Edge text to speech and ffmpeg into `hearing.s16`, 16 kHz mono samples one request after another, and `hearing.tsv`, which names each request and its sample count. The verifier widens them to 48 kHz before the feed and refuses a set whose checksum is not the committed one. Word errors are counted as the voice experiment's round 4 counted them. The text is lower-cased, "voyager shell" counts as one word, punctuation is dropped, and the digits for zero to ten count as their words. The count is the edit distance in words.
 
-Eight more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
+Nine more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling, takes five frames of sound as
 speech and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
 words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
 `tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
 spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads
 every reply the app spoke in the whole run, fails.
-`tests/native/controls/voice-first-paragraph.patch` speaks only the first line of the reply, as the filter did before it spoke the whole answer, and `reply-is-spoken` fails on it. `tests/native/controls/voice-mic-reopens.patch` takes out the guard that checks the switch once the listener holds the floor, so the microphone opens again after a click-off during a reply, and a candidate built with it must fail `click-off-keeps-the-microphone-closed`.
+`tests/native/controls/voice-first-paragraph.patch` speaks only the first line of the reply, as the filter did before it spoke the whole answer, and `reply-is-spoken` fails on it.
 `tests/native/controls/voice-hearing.patch` puts back the hearing instruction from before this rule, which asked in its own words for a transcript. A candidate built with it must fail `requests-are-written-down`.
 `tests/native/controls/voice-reply-marker.patch` stops the reply store from removing the reply marker `[vy]` that the stand-in starts every reply with. The marker is then spoken and noted in the chat, so `reply-is-spoken` fails on it.
 `tests/native/controls/voice-room.patch` puts back the turn gate from before the room rule, which measured the whole band and capped the threshold at 600. A candidate built with it must fail `room-sound-is-never-a-turn`.
 `tests/native/controls/voice-click-cuts.patch` cuts the reply's audio at a click again, and a candidate built with it must fail `click-off-lets-the-reply-finish`.
+`tests/native/controls/voice-mic-reopens.patch` takes out the guard that checks the switch once the listener holds the floor, so the microphone opens again after a click-off during a reply, and a candidate built with it must fail `click-off-keeps-the-microphone-closed`.
 
 The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
