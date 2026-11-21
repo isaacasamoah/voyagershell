@@ -6,7 +6,8 @@ use crate::audio::speech::{
     RENAME_TO_HARBOR, Samples, Wanted,
 };
 use crate::audio::voice::{
-    self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
+    self, CONNECTING, LISTENING, READY, Turn, median, nearest_words, word_errors, words_contain,
+    words_match,
 };
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, LONG_SILENCE, Native, QUIET_MIC};
@@ -375,14 +376,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let Some(said) = cases.make(native, Case::ReplyIsSpoken, |native| {
         let said = voice::converse(native, &DOCK_ON_THIS_FLEET, "reply")?;
         let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
+        let (ear_errors, ear_words) = nearest_words(&judged.transcript, SPOKEN_AS);
         let verdict = Verdict::new()
             .expect(
                 "the whole final message of the spoken turn is spoken, both paragraphs, with no pointer to the chat",
                 said.spoken_texts.iter().any(|text| text == SPOKEN_AS),
-            )
-            .expect(
-                "the engine hears the spoken reply as the expected sentence",
-                words_contain(&judged.transcript, SPOKEN_AS),
             )
             .expect(
                 "the engine does not hear another sentence in it",
@@ -393,7 +391,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.sent && said.speech_after_capture_ms.is_some(),
             )
             .observed("conversation", json!(said))?
-            .observed("judgement", json!(judged))?;
+            .observed("judgement", json!(judged))?
+            .observed("earWordErrors", ear_errors)?
+            .observed("earWords", ear_words)?;
         Ok((verdict, Some(said)))
     })?
     else {

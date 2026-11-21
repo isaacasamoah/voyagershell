@@ -758,6 +758,21 @@ pub fn words_contain(heard: &str, wanted: &str) -> bool {
     plain(heard).contains(&plain(wanted))
 }
 
+pub fn nearest_words(heard: &str, wanted: &str) -> (usize, usize) {
+    let words = scored_words(heard);
+    let wanted_length = scored_words(wanted).len();
+    let mut best = word_errors(heard, wanted);
+    for length in 1..=(wanted_length + 2).min(words.len()) {
+        for window in words.windows(length) {
+            let found = word_errors(&window.join(" "), wanted);
+            if found.0 < best.0 {
+                best = found;
+            }
+        }
+    }
+    best
+}
+
 pub fn terminal_text(native: &Native, address: &str) -> Result<String> {
     let read = native
         .system
@@ -842,6 +857,14 @@ mod tests {
             "Docked on this fleet. The Fleet was already open."
         ));
         assert!(!words_contain("Asking Voyager.", "Docked on this fleet."));
+    }
+
+    #[test]
+    fn the_nearest_words_leave_out_what_the_voice_said_before_the_reply() {
+        let heard = "Sure, I'll ask Voyager to dock on this fleet. Dock on this fleet. The fleet was already open.";
+        let wanted = "Docked on this fleet. The Fleet was already open.";
+        assert_eq!(nearest_words(heard, wanted), (1, 9));
+        assert_eq!(nearest_words(&format!("Sure. {wanted}"), wanted), (0, 9));
     }
 
     #[test]
