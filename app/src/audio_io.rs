@@ -16,7 +16,6 @@ const LEAD_FRAMES: usize = 50;
 const FLOOR_FRAMES: usize = 100;
 const MIN_THRESHOLD: f32 = 200.0;
 const FLOOR_FACTOR: f32 = 3.0;
-const EMPHASIS: f32 = 0.97;
 const MIN_SPREAD: f32 = 1.5;
 const PLAYING_LOOK: Duration = Duration::from_millis(20);
 
@@ -42,11 +41,9 @@ enum Stage {
 #[derive(Debug)]
 pub struct Gate {
     floors: VecDeque<f32>,
-    plain_floors: VecDeque<f32>,
     stage: Stage,
     kept: VecDeque<Vec<i16>>,
     since_sound: usize,
-    previous: f32,
     voiced: Vec<f32>,
     voiced_until: usize,
 }
@@ -55,11 +52,9 @@ impl Default for Gate {
     fn default() -> Self {
         Self {
             floors: VecDeque::new(),
-            plain_floors: VecDeque::new(),
             stage: Stage::Settling { seen: 0 },
             kept: VecDeque::new(),
             since_sound: PAUSE_FRAMES,
-            previous: 0.0,
             voiced: Vec::new(),
             voiced_until: 0,
         }
@@ -68,11 +63,10 @@ impl Default for Gate {
 
 impl Gate {
     pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
-        let level = self.speech_band_level(&frame);
+        let level = plain_level(&frame);
         let loud = above_floor(&mut self.floors, level);
-        let sounding = above_floor(&mut self.plain_floors, plain_level(&frame));
         if !matches!(self.stage, Stage::Settling { .. }) {
-            self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
+            self.since_sound = if loud { 0 } else { self.since_sound + 1 };
         }
         match &mut self.stage {
             Stage::Settling { seen } => {
@@ -106,9 +100,9 @@ impl Gate {
             }
             Stage::Speaking { frames, quiet } => {
                 *frames += 1;
-                *quiet = if sounding { 0 } else { *quiet + 1 };
+                *quiet = if loud { 0 } else { *quiet + 1 };
                 self.voiced.push(level);
-                if sounding {
+                if loud {
                     self.voiced_until = self.voiced.len();
                 }
                 let ended = if *quiet >= PAUSE_FRAMES {
@@ -141,22 +135,6 @@ impl Gate {
         sounded.sort_by(f32::total_cmp);
         let at = |share: f32| sounded[((sounded.len() - 1) as f32 * share).round() as usize];
         at(0.9) < MIN_SPREAD * at(0.1)
-    }
-
-    fn speech_band_level(&mut self, frame: &[i16]) -> f32 {
-        if frame.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = frame
-            .iter()
-            .map(|sample| {
-                let sample = f32::from(*sample);
-                let emphasized = sample - EMPHASIS * self.previous;
-                self.previous = sample;
-                f64::from(emphasized).powi(2)
-            })
-            .sum();
-        (sum / frame.len() as f64).sqrt() as f32
     }
 
     pub fn speaking(&self) -> bool {
