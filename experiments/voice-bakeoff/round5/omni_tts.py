@@ -122,4 +122,5 @@ def main():
         print(r["i"], repr(r["reply_text"]), r["audio_bytes"], r.get("heard"))
 
 
-main()
+if __name__ == "__main__":
+    main()
