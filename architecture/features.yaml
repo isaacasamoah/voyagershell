@@ -959,6 +959,14 @@ features:
           - 'test:app/src/voice_layer_tests.rs#nothing_is_captured_until_a_click_asks_for_it'
         formal: []
         journeys: [voice]
+      - id: voice-mic-stays-off-after-a-click-off
+        kind: user
+        says: 'After a click turns voice off, the microphone is not opened again until the next click, even when a reply was playing at the click.'
+        owner: conversation-provider
+        guards: ['type:app/src/voice_layer.rs#Wanted']
+        checks: ['journey:voice/click-off-keeps-the-microphone-closed', 'test:app/src/voice_layer_tests.rs#a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again']
+        formal: []
+        journeys: [voice]
       - id: voice-waits-for-the-speaker
         kind: user
         says: 'After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app''s own voice is never a turn.'
