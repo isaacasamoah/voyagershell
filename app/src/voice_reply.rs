@@ -89,7 +89,7 @@ impl Watcher {
                 None => {
                     if !self.blocked.contains(&turn.id) && ask(false) == Some(Standing::Blocked) {
                         self.blocked.insert(turn.id.clone());
-                        lines.push(Line::Said(Phrase::Blocked));
+                        lines.push(Line::Said(Phrase::NeedsYou));
                     }
                 }
             }
@@ -188,7 +188,7 @@ mod tests {
         spoken(&replies, end("p1", "Renamed the fleet.\n\nMore."));
         assert_eq!(
             tick(&mut watcher, &replies, idle),
-            vec!["Renamed the fleet. The rest is in the chat."]
+            vec!["Renamed the fleet. More."]
         );
         assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_message_that_reopens_the_turn_while_voyager_works_speaks_only_the_final_paragraph() {
+    fn a_new_message_that_reopens_the_turn_while_voyager_works_speaks_only_the_final_message() {
         let (replies, mut watcher) = (Replies::default(), Watcher::default());
         spoken(&replies, text("p1", "m1", 0, true, "Docked it."));
         spoken(&replies, end("p1", "Docked it."));
@@ -245,7 +245,7 @@ mod tests {
         assert!(tick(&mut watcher, &replies, working).is_empty());
         assert_eq!(
             tick(&mut watcher, &replies, idle),
-            vec!["Docked it, then renamed the fleet. The rest is in the chat."]
+            vec!["Docked it, then renamed the fleet. More."]
         );
         assert!(tick(&mut watcher, &replies, idle).is_empty());
     }
@@ -361,7 +361,7 @@ mod tests {
         spoken(&replies, text("p1", "m1", 0, false, "Starting. "));
         assert_eq!(
             tick(&mut watcher, &replies, |_| Some(Standing::Blocked)),
-            vec!["blocked"]
+            vec!["needs-you"]
         );
         assert!(tick(&mut watcher, &replies, |_| Some(Standing::Blocked)).is_empty());
         spoken(&replies, text("p1", "m1", 1, true, "Done."));

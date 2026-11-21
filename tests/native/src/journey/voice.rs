@@ -35,7 +35,7 @@ pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
 const TARGET_MS: i64 = 300;
 const RUNS: usize = 10;
-const SPOKEN_AS: &str = "Docked on this fleet. The rest is in the chat.";
+const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
@@ -284,7 +284,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let judged = voice::judge_reply(native, "reply", SPOKEN_AS, OTHER)?;
         let verdict = Verdict::new()
             .expect(
-                "the first paragraph of the spoken turn's final message is spoken, cut to the limit",
+                "the whole final message of the spoken turn is spoken, both paragraphs, with no pointer to the chat",
                 said.spoken_texts.iter().any(|text| text == SPOKEN_AS),
             )
             .expect(
@@ -420,12 +420,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                         .iter()
                         .filter(|element| element.role == Role::ChatMessage)
                         .filter_map(|element| element.label.clone())
-                        .filter(|label| label.starts_with(REFUSED))
                         .collect::<Vec<_>>(),
                 )
             },
-            |lines| !lines.is_empty(),
+            |lines| lines.iter().any(|label| label.starts_with(REFUSED)),
         )?;
+        let refused: Vec<_> = lines
+            .iter()
+            .filter(|label| label.starts_with(REFUSED))
+            .collect();
         Verdict::new()
             .expect(
                 "the words were not sent to a Voyager that Core no longer has",
@@ -438,8 +441,18 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     .any(|mark| mark.event == "refusal-started"),
             )
             .expect(
+                "the refusal clip names the reason, not a pointer to the chat",
+                said.marks.iter().any(|mark| {
+                    mark.event == "refusal-started" && mark.words.as_deref() == Some("gone")
+                }),
+            )
+            .expect(
                 "the chat shows the refusal once, as a line the user can read",
-                lines.len() == 1,
+                refused.len() == 1,
+            )
+            .expect(
+                "the chat also shows the reply that was spoken, as an assistant line and not as a user turn",
+                lines.iter().any(|label| label.contains(SPOKEN_AS)),
             )
             .observed("chatLines", lines)?
             .observed("conversation", json!(said))

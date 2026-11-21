@@ -1,6 +1,6 @@
 use crate::{
     audio_io::{Capture, Playing},
-    speech::{Clip, Standing},
+    speech::{Clip, Phrase, Standing},
 };
 use std::{
     fs::OpenOptions,
@@ -21,6 +21,7 @@ const FLOOR_LOOK: Duration = Duration::from_millis(10);
 pub struct SendFailure {
     pub reason: String,
     pub refused: bool,
+    pub phrase: Phrase,
 }
 
 pub trait Voyager: Send + Sync {

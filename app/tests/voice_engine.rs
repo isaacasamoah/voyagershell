@@ -43,6 +43,7 @@ impl Voyager for Absent {
         Err(voyager_app::voice_parts::SendFailure {
             reason: "Not sent. Voyager is absent.".into(),
             refused: true,
+            phrase: voyager_app::speech::Phrase::Gone,
         })
     }
 }
