@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use voyager_contract::VesselId;
 
 pub const MARKER: &str = "[spoken]";
+pub const REPLY_MARKER: &str = "[vy]";
 
 pub fn prompt(words: &str) -> String {
     format!("{MARKER} {words}")
@@ -12,6 +13,22 @@ pub fn is_spoken(prompt: &str) -> bool {
         .trim_start()
         .strip_prefix(MARKER)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+}
+
+pub fn reply_rule() -> String {
+    format!("Start every reply with {REPLY_MARKER}.")
+}
+
+pub fn strip_reply_marker(text: &str) -> &str {
+    let trimmed = text.trim_start();
+    match trimmed.strip_prefix(REPLY_MARKER) {
+        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        _ => text,
+    }
+}
+
+pub fn has_reply_marker(text: &str) -> bool {
+    strip_reply_marker(text).len() != text.len()
 }
 
 pub fn policy_rule() -> String {
@@ -90,6 +107,32 @@ mod tests {
         assert!(!is_spoken("please [spoken] rename"));
         assert!(!is_spoken("[spokenly] rename"));
         assert!(!is_spoken("[Spoken] rename"));
+    }
+
+    #[test]
+    fn a_leading_reply_marker_is_removed_and_nothing_else_is() {
+        assert_eq!(strip_reply_marker("[vy] Docked it."), "Docked it.");
+        assert_eq!(strip_reply_marker("  [vy]\nDocked it."), "Docked it.");
+        assert_eq!(strip_reply_marker("[vy]"), "");
+        assert_eq!(strip_reply_marker("Docked it."), "Docked it.");
+        assert_eq!(strip_reply_marker("Docked [vy] it."), "Docked [vy] it.");
+        assert_eq!(strip_reply_marker("[vyx] Docked it."), "[vyx] Docked it.");
+        assert_eq!(strip_reply_marker("[VY] Docked it."), "[VY] Docked it.");
+        assert_eq!(strip_reply_marker("[vy] [vy] Again."), "[vy] Again.");
+    }
+
+    #[test]
+    fn a_reply_has_the_marker_only_when_it_starts_with_it() {
+        assert!(has_reply_marker("[vy] Done."));
+        assert!(has_reply_marker("[vy]"));
+        assert!(!has_reply_marker("Done."));
+        assert!(!has_reply_marker("Done. [vy]"));
+        assert!(!has_reply_marker(""));
+    }
+
+    #[test]
+    fn the_reply_rule_names_the_marker_the_app_strips() {
+        assert_eq!(reply_rule(), "Start every reply with [vy].");
     }
 
     #[test]

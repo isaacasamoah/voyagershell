@@ -802,6 +802,14 @@ terms:
   - term: Uncertain effect
     context: application-queue
     meaning: 'An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically.'
+  - term: Reply marker
+    context: application-queue
+    meaning: 'The token [vy] that Voyager starts every reply with. The app strips it where it stores the reply, before the reply is spoken or noted in the chat.'
+    code: [REPLY_MARKER]
+  - term: VOYAGER_BACKGROUND
+    context: application-queue
+    meaning: 'The environment variable the app sets to 1 in Voyager''s launch settings. It tells the user''s own agent instructions that this session has no human reader, so they skip their personal reply prefix.'
+    code: [BACKGROUND]
   - term: Voyage
     context: placement
     meaning: 'A space for one project. It holds Fleets and a Portal column.'

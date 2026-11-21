@@ -20,7 +20,9 @@ const NAME: &str = "voyager";
 pub(crate) const DEFAULT_ARGV: [&str; 5] =
     [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
 
-const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. You act with their authority through the voyager and hc commands. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
+const BACKGROUND: &str = "VOYAGER_BACKGROUND";
+
+const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
 
 fn value<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
     argv.windows(2)
@@ -45,15 +47,23 @@ fn quoted(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
-fn settings(command: &Path) -> serde_json::Value {
+fn hooks(command: &Path) -> serde_json::Value {
     let command = quoted(command);
     let focus = json!([{"hooks":[{"type":"command","command":format!("{command} focus --hook {PROGRAM}")}]}]);
     let reply = json!([{"hooks":[{"type":"command","async":true,"command":format!("{command} reply --hook {PROGRAM}")}]}]);
-    json!({"hooks":{
+    json!({
         "UserPromptSubmit":focus,
         "MessageDisplay":reply,
         "Stop":reply,
-        "StopFailure":reply}})
+        "StopFailure":reply})
+}
+
+fn settings(command: Option<&Path>) -> serde_json::Value {
+    let mut settings = json!({"env":{BACKGROUND:"1"}});
+    if let Some(command) = command {
+        settings["hooks"] = hooks(command);
+    }
+    settings
 }
 
 pub(crate) fn voyager_arguments(
@@ -61,18 +71,20 @@ pub(crate) fn voyager_arguments(
     resume: bool,
     command: Option<&Path>,
 ) -> Vec<String> {
-    let mut words = vec![
+    vec![
         if resume { RESUME } else { FRESH }.to_owned(),
         session.to_owned(),
         "-n".into(),
         NAME.into(),
         "--append-system-prompt".into(),
-        format!("{IDENTITY} {}", crate::spoken::policy_rule()),
-    ];
-    if let Some(command) = command {
-        words.extend(["--settings".into(), settings(command).to_string()]);
-    }
-    words
+        format!(
+            "{IDENTITY} {} {}",
+            crate::spoken::reply_rule(),
+            crate::spoken::policy_rule()
+        ),
+        "--settings".into(),
+        settings(command).to_string(),
+    ]
 }
 
 pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
@@ -167,7 +179,7 @@ mod tests {
 
     #[test]
     fn the_launch_settings_carry_one_sync_focus_hook_and_three_async_reply_hooks() {
-        let settings = settings(Path::new("/opt/it's/voyager"));
+        let settings = settings(Some(Path::new("/opt/it's/voyager")));
         let hooks = &settings["hooks"];
         assert_eq!(hooks.as_object().unwrap().len(), 4);
         let command = |event: &str| hooks[event][0]["hooks"][0].clone();
@@ -413,5 +425,61 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    fn settings_argument(words: &[String]) -> serde_json::Value {
+        let at = words.iter().position(|word| word == "--settings").unwrap();
+        assert_eq!(words.iter().filter(|word| *word == "--settings").count(), 1);
+        serde_json::from_str(&words[at + 1]).unwrap()
+    }
+
+    #[test]
+    fn the_launch_always_carries_the_background_env_and_adds_hooks_only_with_a_command() {
+        let known = settings_argument(&voyager_arguments(
+            "s1",
+            false,
+            Some(Path::new("/opt/voyager")),
+        ));
+        assert_eq!(known["env"]["VOYAGER_BACKGROUND"], "1");
+        assert_eq!(known["hooks"].as_object().unwrap().len(), 4);
+        let unknown = settings_argument(&voyager_arguments("s1", true, None));
+        assert_eq!(unknown["env"]["VOYAGER_BACKGROUND"], "1");
+        assert!(unknown.get("hooks").is_none());
+    }
+
+    #[test]
+    fn the_background_env_stays_out_of_argv_so_the_session_is_still_recognised() {
+        for command in [None, Some(Path::new("/opt/voyager"))] {
+            let words = voyager_arguments("s1", false, command);
+            let at = words.iter().position(|word| word == "--settings").unwrap();
+            assert!(
+                words
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != at + 1)
+                    .all(|(_, word)| !word.contains(BACKGROUND))
+            );
+            let mut argv = vec![PROGRAM.to_owned()];
+            argv.extend(words);
+            let terminal: Terminal = serde_json::from_value(json!({
+                "address":"t1", "labels":{}, "argv":argv, "cwd":"/work",
+                "state":"live", "created_ms":0, "screen":"exact", "cols":80, "rows":24
+            }))
+            .unwrap();
+            assert!(runs(&terminal, "s1"));
+        }
+    }
+
+    #[test]
+    fn the_identity_sends_voyager_to_its_skill_and_asks_for_the_reply_marker_once() {
+        let words = voyager_arguments("s1", false, None);
+        let at = words
+            .iter()
+            .position(|word| word == "--append-system-prompt")
+            .unwrap();
+        let prompt = &words[at + 1];
+        assert!(prompt.contains("Run voyager --skill to learn how to work in the app."));
+        assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 1);
+        assert!(prompt.contains(&crate::spoken::reply_rule()));
     }
 }

@@ -1,7 +1,9 @@
+use crate::spoken::{has_reply_marker, strip_reply_marker};
 use std::{
     collections::{BTreeMap, VecDeque},
+    io::Write,
     sync::{Arc, Mutex, PoisonError},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use voyager_contract::reply::ReplyEvent;
 
@@ -72,6 +74,7 @@ struct Slot {
     stop: Option<Stopping>,
     lost: bool,
     spoken: bool,
+    miss_noted: bool,
 }
 
 #[derive(Default)]
@@ -105,17 +108,33 @@ impl Replies {
     }
 
     pub fn accept_with(&self, event: ReplyEvent, observe: impl FnOnce(&str) -> bool) -> Step {
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        state.accept(event, observe)
+        let (step, missed) = {
+            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+            state.accept(event, observe)
+        };
+        if missed {
+            note_miss(&mut std::io::stderr(), SystemTime::now());
+        }
+        step
     }
 }
 
+fn note_miss(out: &mut impl Write, now: SystemTime) {
+    let seconds = now
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    let _ = writeln!(
+        out,
+        "Voyager's reply came without the reply marker at unix time {seconds}"
+    );
+}
+
 impl State {
-    fn accept(&mut self, event: ReplyEvent, observe: impl FnOnce(&str) -> bool) -> Step {
+    fn accept(&mut self, event: ReplyEvent, observe: impl FnOnce(&str) -> bool) -> (Step, bool) {
         match event {
             ReplyEvent::Unreadable { event, error } => {
                 self.unreadable = Some(Unreadable { event, error });
-                Step::Streaming
+                (Step::Streaming, false)
             }
             ReplyEvent::Text {
                 turn,
@@ -128,9 +147,9 @@ impl State {
                 slot.take(&message, index, last, text);
                 if started {
                     slot.spoken = observe(&turn);
-                    Step::Started(turn)
+                    (Step::Started(turn), false)
                 } else {
-                    Step::Streaming
+                    (Step::Streaming, false)
                 }
             }
             ReplyEvent::TurnEnd { turn, text } => {
@@ -163,7 +182,7 @@ impl State {
         turn: Option<String>,
         stopping: Stopping,
         observe: impl FnOnce(&str) -> bool,
-    ) -> Step {
+    ) -> (Step, bool) {
         let known = match &turn {
             Some(turn) => self.turns.iter().any(|slot| &slot.id == turn),
             None => !self.turns.is_empty(),
@@ -179,7 +198,8 @@ impl State {
         if !known {
             slot.spoken = observe(&id);
         }
-        if known { Step::Ended } else { Step::Silent }
+        let step = if known { Step::Ended } else { Step::Silent };
+        (step, slot.marker_missed())
     }
 }
 
@@ -194,6 +214,7 @@ impl Slot {
             stop: None,
             lost: false,
             spoken: false,
+            miss_noted: false,
         }
     }
 
@@ -228,20 +249,45 @@ impl Slot {
         }
     }
 
+    fn marker_missed(&mut self) -> bool {
+        let Some(Stopping::Text(text)) = &self.stop else {
+            return false;
+        };
+        let missed = !self.miss_noted
+            && !text.trim().is_empty()
+            && !has_reply_marker(text)
+            && !self
+                .messages
+                .iter()
+                .any(|message| has_reply_marker(&message.text));
+        self.miss_noted |= missed;
+        missed
+    }
+
     fn whole(&self) -> bool {
         !self.truncated && self.messages.iter().all(|message| message.complete)
     }
 
     fn view(&self) -> Turn {
+        let messages: Vec<Message> = self
+            .messages
+            .iter()
+            .map(|message| Message {
+                text: strip_reply_marker(&message.text).to_owned(),
+                ..message.clone()
+            })
+            .collect();
         let ending = match &self.stop {
-            Some(Stopping::Text(text)) => Some(Ending::Stopped {
-                text: text.clone(),
-                matched: self.whole()
-                    && self
-                        .messages
-                        .last()
-                        .is_some_and(|message| message.text.trim_end() == text.trim_end()),
-            }),
+            Some(Stopping::Text(text)) => {
+                let text = strip_reply_marker(text);
+                Some(Ending::Stopped {
+                    text: text.to_owned(),
+                    matched: self.whole()
+                        && messages
+                            .last()
+                            .is_some_and(|message| message.text.trim_end() == text.trim_end()),
+                })
+            }
             Some(Stopping::Failed(error)) => Some(Ending::Failed {
                 error: error.clone(),
             }),
@@ -249,7 +295,7 @@ impl Slot {
         };
         Turn {
             id: self.id.clone(),
-            messages: self.messages.clone(),
+            messages,
             ending,
             truncated: self.truncated,
             spoken: self.spoken,
@@ -335,6 +381,69 @@ mod tests {
         );
         assert_eq!(replies.accept(end("t1", "Done.")), Step::Ended);
         assert_eq!(only(&replies).ending, stopped("Done.", true));
+    }
+
+    #[test]
+    fn the_reply_marker_is_gone_from_the_streamed_message_and_the_stop_text() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, false, "[v"));
+        assert_eq!(only(&replies).messages[0].text, "[v");
+        replies.accept(chunk("t1", "m1", 1, false, "y] Done.\n"));
+        replies.accept(chunk("t1", "m1", 2, true, "More."));
+        replies.accept(end("t1", "[vy] Done.\nMore."));
+        let turn = only(&replies);
+        assert_eq!(turn.messages[0].text, "Done.\nMore.");
+        assert_eq!(turn.ending, stopped("Done.\nMore.", true));
+    }
+
+    fn missed(state: &mut State, event: ReplyEvent) -> bool {
+        state.accept(event, |_| false).1
+    }
+
+    #[test]
+    fn a_stop_without_the_marker_is_a_miss_once_per_turn() {
+        let mut state = State::default();
+        assert!(!missed(&mut state, chunk("t1", "m1", 0, true, "Done.")));
+        assert!(missed(&mut state, end("t1", "Done.")));
+        assert!(!missed(&mut state, end("t1", "Done.")));
+        assert!(missed(&mut state, end("t2", "Again.")));
+    }
+
+    #[test]
+    fn a_marked_reply_an_empty_stop_and_a_failure_are_no_miss() {
+        let mut state = State::default();
+        assert!(!missed(&mut state, end("t1", "[vy] Done.")));
+        assert!(!missed(&mut state, end("t2", "  ")));
+        let failed = ReplyEvent::TurnFailed {
+            turn: Some("t3".into()),
+            error: "rate_limit".into(),
+        };
+        assert!(!missed(&mut state, failed));
+        assert!(!missed(
+            &mut state,
+            chunk("t4", "m1", 0, true, "[vy] First.")
+        ));
+        assert!(!missed(&mut state, end("t4", "Second message.")));
+    }
+
+    #[test]
+    fn the_miss_line_gives_the_time_and_no_reply_text() {
+        let mut out = Vec::new();
+        note_miss(&mut out, UNIX_EPOCH + Duration::from_secs(1_700_000_000));
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "Voyager's reply came without the reply marker at unix time 1700000000\n"
+        );
+    }
+
+    #[test]
+    fn a_reply_without_the_marker_reads_unchanged() {
+        let replies = Replies::default();
+        replies.accept(chunk("t1", "m1", 0, true, "Done."));
+        replies.accept(end("t1", "Done."));
+        let turn = only(&replies);
+        assert_eq!(turn.messages[0].text, "Done.");
+        assert_eq!(turn.ending, stopped("Done.", true));
     }
 
     #[test]

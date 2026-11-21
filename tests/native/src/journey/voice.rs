@@ -1,5 +1,5 @@
 use super::{Cases, Verdict, cases};
-use crate::agent::TYPED_REPLY;
+use crate::agent::{REPLY_MARKER, TYPED_REPLY};
 use crate::audio::speech::{
     self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR,
     Samples,
@@ -473,6 +473,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the chat also shows the reply that was spoken, as an assistant line and not as a user turn",
                 lines.iter().any(|label| label.contains(SPOKEN_AS)),
+            )
+            .expect(
+                "no chat line carries the reply marker",
+                lines.iter().all(|label| !label.contains(REPLY_MARKER)),
             )
             .observed("chatLines", lines)?
             .observed("conversation", json!(said))
