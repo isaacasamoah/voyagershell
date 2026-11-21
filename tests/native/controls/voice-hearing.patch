@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -311,7 +311,7 @@ pub fn hearing_prompt(names: &[String]) -> String {
+         }
+     }
+     format!(
+-        "Perform ASR in English. Words you may hear: {}.",
++        "Transcribe the audio exactly as spoken. Output only the words, nothing else. The speaker is using a workspace app. Words you may hear: {}.",
+         words.join(", ")
+     )
+ }
