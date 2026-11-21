@@ -409,12 +409,13 @@ pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
 
 fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> Result<Turn> {
     let trace = native.voice_trace();
-    until(&format!("the turn's {last} mark"), || {
+    poll(REPLY_WAIT.within(), LOOK, true, || {
         Ok(marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, last))
             .map(|_| ()))
-    })?;
+    })?
+    .with_context(|| format!("The turn's {last} mark did not come in time"))?;
     let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     Ok(Turn {
         fed_until_ms,
