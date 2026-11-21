@@ -1541,10 +1541,10 @@ features:
         journeys: [adopt-by-label, quit-restore, voyage-close]
       - id: dock-gives-the-keyboard
         kind: user
-        says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
+        says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
         owner: desktop-presentation
-        guards: ['type:app/src/client_owner.rs#Flight']
-        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane']
+        guards: ['type:app/src/client_owner.rs#Flight', 'type:app/src/client_core.rs#WorkspaceNotice']
+        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane', 'journey:socket-dock/redock-takes-keyboard']
         formal: []
         journeys: [socket-dock]
       - id: adopted-agents-follow-their-label

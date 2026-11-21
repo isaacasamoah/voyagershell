@@ -534,15 +534,16 @@ impl Owner {
         if let Some(mut release) = resume.rename_release {
             release.rebind = effect.rebind;
         }
+        let docked = matches!(request.action, Action::Dock { .. })
+            && response.status == voyager_contract::Outcome::Applied;
         self.publish(
             previous_version,
             scope.is_some() || resume.program.is_some(),
             effect.packages,
+            docked,
             previous_close,
         );
-        let prepare_dock = matches!(request.action, Action::Dock { .. })
-            && response.status == voyager_contract::Outcome::Applied
-            && self.fresh;
+        let prepare_dock = docked && self.fresh;
         let receipt = Receipt::Workspace(Settled {
             status: response.status.clone(),
             message: response.message.clone(),

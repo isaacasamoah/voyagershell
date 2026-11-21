@@ -81,6 +81,7 @@ pub struct WorkspaceNotice {
     pub activity_revision: u64,
     pub close_revision: u64,
     pub navigation_revision: u64,
+    pub dock_revision: u64,
 }
 
 pub(super) struct Notices {
@@ -88,6 +89,7 @@ pub(super) struct Notices {
     pub(super) packages: Arc<AtomicU64>,
     activity: Arc<Mutex<Activity>>,
     navigation: u64,
+    dock: u64,
 }
 
 impl Notices {
@@ -97,6 +99,7 @@ impl Notices {
             packages,
             activity,
             navigation: 0,
+            dock: 0,
         }
     }
 
@@ -104,6 +107,7 @@ impl Notices {
         WorkspaceNotice {
             revision: revision.structure,
             navigation_revision: self.navigation,
+            dock_revision: self.dock,
             close_revision,
             package_revision: self.packages.load(Ordering::Relaxed),
             activity_revision: self
@@ -119,10 +123,14 @@ impl Notices {
         before: LayoutRevision,
         after: LayoutRevision,
         scoped: bool,
+        docked: bool,
         close_revision: u64,
     ) {
         if scoped && after != before && after.structure == before.structure {
             self.navigation += 1;
+        }
+        if docked {
+            self.dock += 1;
         }
         self.send(after, close_revision);
     }

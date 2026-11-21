@@ -4,6 +4,16 @@ import { take_placement_notice } from "voyager_workspace";
 export function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
+export function startingNotice() {
+  return {
+    revision: "0",
+    closeRevision: "0",
+    navigationRevision: "0",
+    dockRevision: "0",
+    packageRevision: "0",
+    activityRevision: "0",
+  };
+}
 export function changedBesidesRevision(next, seen) {
   return (
     next.closeRevision !== seen.closeRevision ||

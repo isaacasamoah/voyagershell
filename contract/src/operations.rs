@@ -298,6 +298,7 @@ pub const WORKSPACE: Module = Module {
                 field("revision", Ty::Text),
                 field("closeRevision", Ty::Text),
                 field("navigationRevision", Ty::Text),
+                field("dockRevision", Ty::Text),
                 field("packageRevision", Ty::Text),
                 field("activityRevision", Ty::Text),
             ]),

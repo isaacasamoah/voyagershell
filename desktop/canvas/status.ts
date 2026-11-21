@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
-import { take_placement_notice } from "voyager_workspace";
+import { notice, take_placement_notice } from "voyager_workspace";
 import type { NativeElement } from "gpui-kit";
 import type { Reply } from "../../contract/generated/response";
 
@@ -13,6 +13,17 @@ type Notice = {
   navigationRevision: string;
   packageRevision: string;
 };
+
+export function startingNotice(): ReturnType<typeof notice> {
+  return {
+    revision: "0",
+    closeRevision: "0",
+    navigationRevision: "0",
+    dockRevision: "0",
+    packageRevision: "0",
+    activityRevision: "0",
+  };
+}
 
 export function changedBesidesRevision(next: Notice, seen: Notice): boolean {
   return (

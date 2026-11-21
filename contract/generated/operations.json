@@ -265,6 +265,10 @@
                 "ty": "text"
               },
               {
+                "name": "dockRevision",
+                "ty": "text"
+              },
+              {
                 "name": "packageRevision",
                 "ty": "text"
               },

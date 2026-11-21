@@ -183,13 +183,13 @@ confidence = "stated"
 
 [[invariant]]
 id = "dock-gives-the-keyboard"
-says = "A dock on a Vessel, from the avatar or from Voyager's voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it."
+says = "A dock on a Vessel, from the avatar or from Voyager's voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it."
 kind = "user"
 owner = "desktop-presentation"
-source = "Isaac, 17 Nov 2026: a dock onto a Vessel opens its Voyage and Fleet, shows it and gives it keyboard focus; Verify's trial at main 53f6ffab, 21 Nov 2026, where a voyager command dock left the keys in the first shell"
+source = "Isaac, 17 Nov 2026: a dock onto a Vessel opens its Voyage and Fleet, shows it and gives it keyboard focus; Verify's trial at main 53f6ffab, 21 Nov 2026, where a voyager command dock left the keys in the first shell; Isaac's answer to the dock counter card, 21 Nov 2026: add it, so a second dock on the same Vessel gives it the keyboard again"
 features = ["adopted-vessels"]
-guard = ["type:app/src/client_owner.rs#Flight"]
-check = ["journey:socket-dock/socket-dock-takes-keyboard", "journey:socket-dock/reread-keeps-clicked-pane"]
+guard = ["type:app/src/client_owner.rs#Flight", "type:app/src/client_core.rs#WorkspaceNotice"]
+check = ["journey:socket-dock/socket-dock-takes-keyboard", "journey:socket-dock/reread-keeps-clicked-pane", "journey:socket-dock/redock-takes-keyboard"]
 confidence = "stated"
 
 [[invariant]]
