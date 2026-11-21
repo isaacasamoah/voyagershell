@@ -15,10 +15,11 @@ use voyager_contract::{
 cases! {
     SocketDockTakesKeyboard => "socket-dock-takes-keyboard",
     RereadKeepsClickedPane => "reread-keeps-clicked-pane",
+    RedockTakesKeyboard => "redock-takes-keyboard",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
 }
 
-pub const CONTROL: Case = Case::SocketDockTakesKeyboard;
+pub const CONTROL: Case = Case::RedockTakesKeyboard;
 
 const RENAMED: &str = "Renamed by Voyager";
 
@@ -268,6 +269,51 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("marker", &marker)?
             .observed("held", &held)?
+            .observed("first", &first_screen)
+    })?;
+
+    cases.check(native, Case::RedockTakesKeyboard, |native| {
+        let reply = from_voyager(
+            native,
+            &voyager,
+            "socket-dock-2",
+            Action::Dock {
+                context: Context::Vessel { id: placed.clone() },
+            },
+        )?;
+        let followed = native
+            .settle(
+                "the canvas focus back on the docked Vessel",
+                |seen| Some(focused(seen)),
+                |focus| focus.as_ref() == Some(&placed),
+            )
+            .ok()
+            .flatten();
+        let marker = typed_into(native, "socket-redock")?;
+        let arrived = docked.printed(native, &format!("\n{marker}"))?;
+        let docked_screen = docked.screen(native)?;
+        let first_screen = first.screen(native)?;
+        native.keep_window("redock-takes-keyboard")?;
+        Verdict::new()
+            .expect(
+                "voyager do workspace applied the second dock on the same Vessel",
+                reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "the canvas focus returned to the docked Vessel",
+                followed.as_ref() == Some(&placed),
+            )
+            .expect(
+                "the typed line ran in the docked Vessel's shell",
+                arrived && docked_screen.matches(&marker).count() >= 2,
+            )
+            .expect(
+                "the first Vessel's shell received none of the typed keys",
+                !first_screen.contains(&marker),
+            )
+            .observed("marker", &marker)?
+            .observed("followed", &followed)?
+            .observed("docked", &docked_screen)?
             .observed("first", &first_screen)
     })?;
 
