@@ -993,6 +993,18 @@ features:
           - 'test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing'
         formal: []
         journeys: [voice]
+      - id: voice-answers-without-claiming-the-work
+        kind: user
+        says: 'The voice answers pure chat itself and acknowledges every request for Voyager in its own words, without answering it, saying it is done or changing a name, and Voyager still receives the words.'
+        owner: conversation-provider
+        guards: ['type:app/src/speech.rs#Reply']
+        checks:
+          - 'journey:voice/replies-follow-round-seven'
+          - 'test:app/src/speech.rs#work_is_always_handed_off_whatever_the_probability'
+          - 'test:app/src/voice_layer_tests.rs#small_talk_is_answered_by_the_voice_whatever_voyagers_state'
+          - 'test:app/src/voice_layer_tests.rs#a_workspace_request_while_voyager_is_blocked_or_not_running_gets_the_reason_phrase_and_sends_nothing'
+        formal: []
+        journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
     sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
     code:
