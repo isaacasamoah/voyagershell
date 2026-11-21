@@ -1,0 +1,15 @@
+diff --git a/app/src/vessel_socket.rs b/app/src/vessel_socket.rs
+--- a/app/src/vessel_socket.rs
++++ b/app/src/vessel_socket.rs
+@@ -186,9 +186,8 @@ fn offered(action: &Action, bound: bool) -> bool {
+         | Action::RemovePlacement { .. }
+         | Action::SelectVoyage { .. }
+         | Action::SelectFleet { .. } => true,
+-        Action::Dock { .. }
+-        | Action::CreateFleetWithVessel { .. }
+-        | Action::SetPlacementMaximized { .. } => bound,
++        Action::Dock { .. } | Action::CreateFleetWithVessel { .. } => bound,
++        Action::SetPlacementMaximized { .. } => true,
+         Action::CreateVessel { destination, .. } => bound && in_fleet(destination),
+         Action::Home
+         | Action::UpdateCanvas { .. }

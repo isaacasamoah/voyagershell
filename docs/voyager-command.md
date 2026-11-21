@@ -177,8 +177,9 @@ voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","acti
 `destination` names the owner as `{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":...}`.
 `insertion` is `{"kind":"empty"}` for an empty Fleet, or
 `{"kind":"beside","id":"<placement id>","side":"<side>"}` beside a placement.
-The current Fleet is the one `voyager status` and the focus reply show. A
-destination in the Portals is refused. `set-placement-maximized` takes
+The Fleet can be any Fleet that the request names, not only the selected one.
+`voyager status` and the focus reply show the ids. A destination in the
+Portals is refused. `set-placement-maximized` takes
 `"id":"<placement id>"` and `"maximized":true` to maximize it, or `false` to
 restore it. The app still decides whether the target and the Fleet are valid,
 as it does for the avatar.

@@ -1039,6 +1039,7 @@ spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-sile
 every reply the app spoke in the whole run, fails.
 `tests/native/controls/voice-first-paragraph.patch` speaks only the first line of the reply, as the filter did before it spoke the whole answer, and `reply-is-spoken` fails on it.
 `tests/native/controls/voice-hearing.patch` puts back the hearing instruction from before this rule, which asked in its own words for a transcript. A candidate built with it must fail `requests-are-written-down`.
+`tests/native/controls/voyager-only-maximize.patch` offers set-placement-maximized to every Vessel's socket instead of only the bound Voyager. A candidate built with it must fail `voyager-creates-and-maximizes` in the `socket-dock` journey, on the expectation that the maximize from another Vessel's terminal was refused with nothing queued.
 
 The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
 
