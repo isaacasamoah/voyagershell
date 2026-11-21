@@ -2,7 +2,7 @@ use super::adopt_by_label::{address, bound_to};
 use super::layout::{avatar_on_dock, without_adopted_leaves, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Decorations, Native, Seen, Stopwatch, Terminal, voyages};
+use crate::native::{Decorations, Native, Seen, Stopwatch, Terminal, bound_terminal, voyages};
 use crate::system::{Identity, until};
 use crate::x11::{Observed, Request};
 use anyhow::{Context as _, Result};
@@ -699,12 +699,6 @@ fn has_flag<'a>(argv: &'a Value, flag: &str) -> Option<&'a str> {
         .windows(2)
         .find(|pair| pair[0] == flag)
         .and_then(|pair| pair[1].as_str())
-}
-
-fn bound_terminal(native: &Native) -> Option<String> {
-    let stored: Value =
-        serde_json::from_slice(&std::fs::read(native.profile_path("voyager.json")).ok()?).ok()?;
-    stored["terminal"].as_str().map(str::to_owned)
 }
 
 fn at_rest(native: &Native) -> Result<Saved> {

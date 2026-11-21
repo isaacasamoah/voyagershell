@@ -1,8 +1,7 @@
 use super::adopt_by_label::{address, bound_to};
 use super::{Cases, Verdict, cases};
-use crate::audio::voice::bound_terminal;
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, fleets, now_millis};
+use crate::native::{Native, Seen, Terminal, bound_terminal, fleets, now_millis};
 use crate::sandbox::COMMAND;
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
@@ -93,7 +92,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             (focused(seen).as_ref() == Some(first.placement()))
                 .then(|| seen.shows(&Target::CHAT_COMPOSER))
         })?;
-        let voyager = bound_terminal(native)?;
+        let voyager = bound_terminal(native).context("voyager.json names no terminal")?;
         let target = Context::Vessel { id: placed.clone() };
         let reply = from_voyager(
             native,
