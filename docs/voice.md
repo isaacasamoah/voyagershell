@@ -229,14 +229,37 @@ target. It has not been measured in a real room.
 Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
 
-### The whole answer, written for the ear
+### How Voyager talks
 
-Voice is the primary surface, and the chat is an alternative. A spoken reply is the
-whole answer and never says that more is in the chat. The agent's launch policy,
-`spoken::policy_rule`, tells it to answer a spoken prompt aloud in full, brief and
-plain, with no ids, paths or code, to say the reason when something fails, to say only the gist of an answer that would pass about 100 words, such as a list, and
-offer more, and never to point to the chat. Each word
-of the rule is sent on every spoken turn, so it stays short.
+Voice is the primary surface, and the chat is an alternative. Voyager should sound
+like a technical friend who explains things plainly and briefly. One guide,
+`spoken::STYLE`, says how, and every prompt that speaks for Voyager reads it. It
+opens with "Best friend energy, always accurate, always approachable and human." and
+"Accuracy beats warmth.", so a friendly reply that is wrong is still a wrong reply. It
+asks for the answer first, yes or no first for a yes or no question, plain words and
+contractions. It leaves out ids, revision numbers, layout terms and how the app took
+a request unless the person asks, so a finished dock is "Done, you're there." and
+not a report that the app accepted it. `spoken::BRIEF` is the length rule, about
+three short sentences, then an offer of more. The rest comes only if the person asks.
+
+The background Voyager gets both through `spoken::policy_rule`, which adds the voice
+rules for a prompt that starts with `[spoken]`. It answers aloud with no paths or
+code, says why something failed or that it isn't sure it worked, and never
+points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
+prompt on a resumed conversation, so the focus hook repeats the rule at every prompt.
+The whole hook reminder is under 700 characters, and a test holds it there, because it
+is sent on every prompt. The voice model's prompt in `conversation_audio.rs` and the
+in-app text administrator's prompt in `conversation_client.rs` read the same
+`spoken::STYLE`, and the voice model also reads `spoken::BRIEF`.
+
+The guide follows the plain-language rules of pstack's `bro` and `unslop` skills, and
+`deslop`'s rule of cutting what does not serve the reader. Two replies from a trial
+show the direction. "The Voyager Voyage's Portal column holds just the terminal, and
+it is visible. The two admiral Portals exist in the Voyage but aren't in the visible
+layout. Should I dock you to the visible terminal Portal?" becomes "Right, only one of
+them is on screen. The other two are hidden. Want me to dock you to the one you can
+see?", and "I docked you to the terminal Portal in the Voyager Voyage, and the app
+accepted it." becomes "Done, you're there."
 
 The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
 is a target to measure against the engine's render time, which has a 30 s limit per

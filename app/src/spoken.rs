@@ -33,9 +33,13 @@ pub fn has_reply_marker(text: &str) -> bool {
     strip_reply_marker(text).len() != text.len()
 }
 
+pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Accuracy beats warmth. Talk like a technical friend. Lead with the answer, yes or no first. Use plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
+
+pub const BRIEF: &str = "Say about three short sentences, then offer more.";
+
 pub fn policy_rule() -> String {
     format!(
-        "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. If the answer would pass about 100 words, such as a list, say the gist and offer more. Never point to the chat."
+        "{STYLE} A prompt starting with {MARKER} came by voice. Act, then answer aloud with no paths or code. {BRIEF} Say why if it failed or you aren't sure it worked. Never point to the chat."
     )
 }
 
@@ -141,14 +145,29 @@ mod tests {
     }
 
     #[test]
-    fn the_policy_rule_names_the_marker_the_prompt_carries() {
+    fn the_policy_rule_opens_with_the_style_and_names_the_marker_the_prompt_carries() {
         let rule = policy_rule();
-        assert!(rule.starts_with(&format!("A prompt that starts with {MARKER} ")));
-        assert!(rule.contains("answer aloud in full"));
-        assert!(rule.contains("no ids, paths or code"));
-        assert!(rule.contains("Say the reason when something fails."));
+        assert!(rule.starts_with(STYLE));
+        assert!(rule.contains(&format!(" A prompt starting with {MARKER} came by voice.")));
+        assert!(rule.contains(BRIEF));
+        assert!(rule.contains("no paths or code"));
+        assert!(rule.contains("Say why if it failed"));
         assert!(rule.ends_with("Never point to the chat."));
-        assert!(!rule.contains("one short"));
+    }
+
+    #[test]
+    fn the_style_asks_for_the_answer_first_in_plain_words_without_mechanics() {
+        for words in [
+            "Best friend energy, always accurate, always approachable and human.",
+            "Accuracy beats warmth.",
+            "Lead with the answer, yes or no first.",
+            "contractions",
+            "Skip ids, revisions, layout terms",
+            "Done, you're there.",
+        ] {
+            assert!(STYLE.contains(words), "{words}");
+        }
+        assert!(BRIEF.contains("three short sentences"));
     }
 
     #[test]

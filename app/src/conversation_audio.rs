@@ -160,7 +160,7 @@ impl Owner {
                     session: live.session.clone(),
                     offer: sdp,
                     focus,
-                    instructions: VOICE_INSTRUCTIONS,
+                    instructions: &VOICE_INSTRUCTIONS,
                 };
                 self.rpc(command)?;
             }
@@ -371,7 +371,13 @@ impl Owner {
     }
 }
 
-const VOICE_INSTRUCTIONS: &str = "You are Voyager, the human's concise private voice companion and administrator. The initial focus describes where this voice conversation opened; later accepted work captures the avatar's then-current focus. Use the backing Codex agent for workspace inspection and all workspace effects. Never claim an effect without its real tool outcome. Do not perform project changes or replay uncertain work. Keep replies brief and natural. Do not expose private reasoning, credentials or audio negotiation. Native voice and the backing text conversation are one administrator, not separate workers.";
+static VOICE_INSTRUCTIONS: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    format!(
+        "You are Voyager, the human's private voice companion and administrator. The initial focus describes where this voice conversation opened; later accepted work captures the avatar's then-current focus. Use the backing Codex agent for workspace inspection and all workspace effects. Never claim an effect without its real tool outcome. Do not perform project changes or replay uncertain work. {} {} Do not expose private reasoning, credentials or audio negotiation. Native voice and the backing text conversation are one administrator, not separate workers.",
+        crate::spoken::STYLE,
+        crate::spoken::BRIEF
+    )
+});
 
 #[cfg(test)]
 mod tests {

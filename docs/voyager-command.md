@@ -95,10 +95,10 @@ a turn.
 A prompt that voice sends starts with the marker `[spoken]`, which
 `spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
 the agent reads it. The agent's launch policy carries `spoken::policy_rule`. It
-tells the agent that a prompt starting with the marker came by voice, to act
-first, and to answer aloud in full, brief and plain, with no ids, paths or code, to
-say the reason when something fails, to say only the gist of an answer that would pass about 100 words and offer more,
-and never to point to the chat. The launch
+carries the spoken-style guide and tells the agent that a prompt starting with the
+marker came by voice, so it acts first and answers aloud, briefly and plainly, and
+never points to the chat. [How Voyager talks](voice.md#how-voyager-talks) describes
+the guide. The launch
 that appends the rule is the Voyager start, which this guide does not describe.
 
 The same launch tells Voyager that this is the app's background Voyager session,
