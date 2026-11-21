@@ -197,8 +197,32 @@ quitting, its engine program stays until the next launch replaces it or the sess
 label and the server path before it kills, so it ends only that program. A start
 or stop that Core does not confirm is reported and never repeated.
 
-Hearing is a chat completion with the audio attached and the instruction to
-transcribe. Speaking is the speech endpoint with the female voice and no
+Hearing is a chat completion with the audio as the only user content. The system
+message is the model card's transcription task, `Perform ASR in English.`, then
+`Words you may hear` with the product words and the live workspace names. Any
+other system text is a chat instruction, and the model then answers a spoken
+question instead of writing it down. Asked in its own words to "Transcribe the
+audio exactly as spoken", it answered "In three short sentences, tell me what this
+fleet has in it." with "The fleet includes a home dock, a fleet of vessels, and
+voyagershell.", and Voyager received that answer as the request.
+
+The 40 committed Edge requests in `tests/native/fixtures/hearing/` are 20 questions
+and 20 commands. Word error is counted as the voice experiment's round 4 counted
+it. A request counts as answered when its word errors are more than half its
+words. The first three rows send the app's request straight to a CPU engine. The
+last two feed the same 40 through the microphone in the voice journey's
+`requests-are-written-down` case, with the app's own live names. That case fails
+when any request is answered.
+
+| Run | System message | Answered | Word error | Exact |
+| --- | --- | --- | --- | --- |
+| Engine | Before, "Transcribe the audio exactly as spoken. Output only the words, nothing else." with the product words | 7 of 40 | 61.9% | 29 of 40 |
+| Engine | `Perform ASR in English.` with the product words | 0 of 40 | 0.9% | 39 of 40 |
+| Engine | The same with 15 Fleet and Vessel names, including names with digits, hyphens and a seven-word name | 0 of 40 | 0.0% | 40 of 40 |
+| Journey | Before | 11 of 40 | 61.9% | 25 of 40 |
+| Journey | `Perform ASR in English.` with the product words and live names | 0 of 40 | 0.9% | 39 of 40 |
+
+Speaking is the speech endpoint with the female voice and no
 fallback voice. The server binds to the loopback address only.
 
 ### Where the files are found

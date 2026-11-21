@@ -7,11 +7,15 @@ use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde_json::{Value, json};
 use voyager_contract::inspection::Role;
-use voyager_contract::{Action, Context, FleetId, PlacementId, RenameTarget};
+use voyager_contract::{
+    Action, ContentDestination, Context, FleetId, Layout, PlacementId, PlacementInsertion,
+    PlacementOwner, RenameTarget, Side,
+};
 
 cases! {
     SocketDockTakesKeyboard => "socket-dock-takes-keyboard",
     RereadKeepsClickedPane => "reread-keeps-clicked-pane",
+    VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
 }
 
 pub const CONTROL: Case = Case::SocketDockTakesKeyboard;
@@ -24,6 +28,7 @@ struct Docked {
     placed: PlacementId,
     fleet: FleetId,
     voyager: String,
+    other: String,
 }
 
 fn focused(seen: &Seen) -> Option<PlacementId> {
@@ -34,27 +39,73 @@ fn focused(seen: &Seen) -> Option<PlacementId> {
         .map(|element| PlacementId(element.key.clone()))
 }
 
-fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
-    let caller = format!("HC_TERMINAL_ID={voyager}");
+fn request_line(native: &Native, caller: &str, id: &str, action: Action) -> Result<String> {
     let status: Value = serde_json::from_str(&native.system.execute(
         "env",
-        &[&caller, COMMAND, "status"],
+        &[caller, COMMAND, "status"],
         None,
     )?)?;
     let version = status["status"]["version"]
         .as_str()
         .context("voyager status names no version")?;
-    let request = json!({
+    Ok(json!({
         "requestId": id,
         "expectedVersion": version,
         "action": action,
     })
-    .to_string();
+    .to_string())
+}
+
+fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
+    let caller = format!("HC_TERMINAL_ID={voyager}");
+    let request = request_line(native, &caller, id, action)?;
     Ok(serde_json::from_str(&native.system.execute(
         "env",
         &[&caller, COMMAND, "do", "workspace", &request],
         None,
     )?)?)
+}
+
+fn from_another_vessel(native: &Native, other: &str, id: &str, action: Action) -> Result<String> {
+    let caller = format!("HC_TERMINAL_ID={other}");
+    let request = request_line(native, &caller, id, action)?;
+    native.system.execute(
+        "env",
+        &[
+            &caller,
+            "sh",
+            "-c",
+            "\"$0\" do workspace \"$1\" 2>&1; echo exit=$?",
+            COMMAND,
+            &request,
+        ],
+        None,
+    )
+}
+
+fn members(layout: &Layout, fleet: &FleetId) -> Vec<PlacementId> {
+    fleets(layout)
+        .find(|item| &item.id == fleet)
+        .map(|item| {
+            item.placements
+                .iter()
+                .map(|panel| panel.id.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn maximized(layout: &Layout, fleet: &FleetId) -> Option<PlacementId> {
+    fleets(layout)
+        .find(|item| &item.id == fleet)
+        .and_then(|item| item.maximized_placement.clone())
+}
+
+fn set_maximized(placement: &PlacementId, maximized: bool) -> Action {
+    Action::SetPlacementMaximized {
+        id: placement.clone(),
+        maximized,
+    }
 }
 
 fn typed_into(native: &Native, prefix: &str) -> Result<String> {
@@ -150,6 +201,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 placed,
                 fleet,
                 voyager,
+                other: terminal,
             }),
         ))
     })?;
@@ -159,6 +211,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         placed,
         fleet,
         voyager,
+        other,
     }) = setup
     else {
         return Ok(());
@@ -216,5 +269,90 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("marker", &marker)?
             .observed("held", &held)?
             .observed("first", &first_screen)
+    })?;
+
+    cases.check(native, Case::VoyagerCreatesAndMaximizes, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let before = members(&layout, &fleet);
+        let created = from_voyager(
+            native,
+            &voyager,
+            "socket-create-1",
+            Action::CreateVessel {
+                type_id: "terminal".into(),
+                destination: ContentDestination::Placement {
+                    owner: PlacementOwner::Fleet { id: fleet.clone() },
+                    insertion: PlacementInsertion::Beside {
+                        id: first.placement().clone(),
+                        side: Side::Right,
+                    },
+                },
+                launch: None,
+            },
+        )?;
+        let added = native.observe("the new Vessel drawn in the current Fleet", |seen| {
+            let fresh = members(seen.document, &fleet)
+                .into_iter()
+                .find(|id| !before.contains(id))?;
+            seen.shows(&Target::terminal(&fresh)).then_some(fresh)
+        })?;
+        let refused = from_another_vessel(
+            native,
+            &other,
+            "socket-max-refused",
+            set_maximized(&added, true),
+        )?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let after_refusal = maximized(&layout, &fleet);
+        let maximizing = from_voyager(
+            native,
+            &voyager,
+            "socket-max-1",
+            set_maximized(&added, true),
+        )?;
+        let alone = native.observe("the new Vessel maximized in the Fleet", |seen| {
+            (maximized(seen.document, &fleet).as_ref() == Some(&added))
+                .then(|| seen.shows(&Target::terminal(first.placement())))
+        })?;
+        let restoring = from_voyager(
+            native,
+            &voyager,
+            "socket-max-2",
+            set_maximized(&added, false),
+        )?;
+        let restored = native.observe("the Fleet restored with both Vessels drawn", |seen| {
+            (maximized(seen.document, &fleet).is_none()
+                && seen.shows(&Target::terminal(first.placement()))
+                && seen.shows(&Target::terminal(&added)))
+            .then_some(())
+        });
+        native.keep_window("voyager-creates-and-maximizes")?;
+        Verdict::new()
+            .expect(
+                "voyager do workspace applied the create-vessel from Voyager's terminal",
+                created["reply"]["status"] == "applied",
+            )
+            .expect(
+                "the maximize from another Vessel's terminal was refused with nothing queued",
+                refused.contains(
+                    "set-placement-maximized is offered only to Voyager; nothing was queued",
+                ) && refused.contains("exit=1"),
+            )
+            .expect(
+                "the refused maximize left the Fleet unmaximized",
+                after_refusal.is_none(),
+            )
+            .expect(
+                "voyager do workspace applied the maximize",
+                maximizing["reply"]["status"] == "applied",
+            )
+            .expect("the maximized Vessel hid the first Vessel", !alone)
+            .expect(
+                "voyager do workspace applied the restore",
+                restoring["reply"]["status"] == "applied",
+            )
+            .expect("the restore drew both Vessels again", restored.is_ok())
+            .observed("refused", &refused)?
+            .observed("added", &added)
     })
 }

@@ -972,6 +972,14 @@ features:
           - 'test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it'
         formal: []
         journeys: [voice]
+      - id: voice-hears-verbatim
+        kind: user
+        says: 'Voice hands Voyager the words the person spoke, never an answer to them.'
+        owner: conversation-provider
+        guards: ['type:app/src/speech.rs#hearing_prompt']
+        checks: ['journey:voice/requests-are-written-down', 'journey:voice/words-reach-voyager', 'test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else']
+        formal: []
+        journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
     sources: [desktop/src/speech.rs, app/src/voice.rs, 'app/src/voice_*.rs', app/src/speech.rs, app/src/omni.rs, app/src/audio_io.rs, app/src/http1.rs, app/src/client_service.rs, docs/voice.md]
     code:
@@ -1553,6 +1561,17 @@ features:
           - 'journey:adopt-by-label/ended-away-adopted-removed-when-shown'
         formal: []
         journeys: [adopt-by-label]
+      - id: only-the-bound-voyager-is-offered-voyager-only-operations
+        kind: user
+        says: 'Only the bound Voyager is offered dock, create-fleet-with-vessel, create-vessel and set-placement-maximized through its Vessel socket. Any other Vessel''s call to one of them is refused with nothing queued, and the workspace stays as it was.'
+        owner: application-queue
+        guards: ['type:app/src/voyager_binding.rs#Binding']
+        checks:
+          - 'journey:socket-dock/voyager-creates-and-maximizes'
+          - 'test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal'
+          - 'test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other'
+        formal: []
+        journeys: [socket-dock]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
     sources:
       - contract/src/place.rs

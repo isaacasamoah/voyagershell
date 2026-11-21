@@ -268,6 +268,18 @@ check = ["journey:voice/turn-waits-for-the-sentence", "journey:voice/start-thump
 confidence = "stated"
 
 [[invariant]]
+id = "voice-hears-verbatim"
+says = "Voice hands Voyager the words the person spoke, never an answer to them."
+kind = "user"
+owner = "conversation-provider"
+source = "Verify's real-Claude finding on PR #349, 21 Nov 2026: a spoken question reached Voyager as the hearing step's own answer; Isaac confirmed the hearing fix the same day"
+features = ["voice"]
+guard = ["type:app/src/speech.rs#hearing_prompt"]
+type_gap = "The hearing instruction is one string sent to the model. Nothing in the types stops a free-form instruction that the model reads as a chat prompt."
+check = ["journey:voice/requests-are-written-down", "journey:voice/words-reach-voyager", "test:app/src/speech.rs#the_hearing_prompt_is_the_models_transcription_task_and_asks_for_nothing_else"]
+confidence = "stated"
+
+[[invariant]]
 id = "conversation-acts-through-operations"
 says = "The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name."
 kind = "user"
@@ -304,6 +316,18 @@ guard = []
 type_gap = "No Rank or Assignment type exists, so any agent's call is accepted as an Operation and the rule lives in prompt text. A1 adds Assignment and S9a makes the queue require one."
 check = []
 gap = "No Rank or Assignment type exists yet. The authority units build it and add its case."
+confidence = "stated"
+
+[[invariant]]
+id = "only-the-bound-voyager-is-offered-voyager-only-operations"
+says = "Only the bound Voyager is offered dock, create-fleet-with-vessel, create-vessel and set-placement-maximized through its Vessel socket. Any other Vessel's call to one of them is refused with nothing queued, and the workspace stays as it was."
+kind = "user"
+owner = "application-queue"
+source = "Isaac, card 52, 21 Nov 2026: 'Let Voyager add a Vessel to the current Fleet and maximize it, as you can, for Sunday's test.' It fits his rule that the avatar always carries his authority; other programs stay refused."
+features = ["adopted-vessels"]
+guard = ["type:app/src/voyager_binding.rs#Binding"]
+check = ["journey:socket-dock/voyager-creates-and-maximizes", "test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal", "test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other"]
+gap = "The journey drives a refused set-placement-maximized only. The refusals of create-vessel and a Portal destination are covered by unit tests alone."
 confidence = "stated"
 
 [[invariant]]

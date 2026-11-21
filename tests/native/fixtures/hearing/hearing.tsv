@@ -1,0 +1,40 @@
+question-01	question	66432	In three short sentences, tell me what this fleet has in it.
+question-02	question	34176	What is in this fleet?
+question-03	question	48000	How many terminals are open in this fleet?
+question-04	question	42240	Tell me what this fleet has in it.
+question-05	question	38016	Which vessel is docked right now?
+question-06	question	43008	What is the build crew working on?
+question-07	question	34944	Is the roadmap still open?
+question-08	question	40320	Why did the last test fail?
+question-09	question	29952	What time is it?
+question-10	question	45312	Can you explain what a portal is?
+question-11	question	34560	How do I rename a voyage?
+question-12	question	48384	What did Voyager do while I was away?
+question-13	question	37632	Who is the captain of this fleet?
+question-14	question	36096	Where is the notes vessel?
+question-15	question	47232	Summarize this fleet in one sentence.
+question-16	question	36096	What is two plus two?
+question-17	question	37632	Which terminals are still running?
+question-18	question	44928	Describe the layout of this fleet.
+question-19	question	40704	Do I have any cards waiting for me?
+question-20	question	39936	What should I work on next?
+command-21	command	37632	Open a terminal in this fleet.
+command-22	command	43008	Rename this fleet to Harbor.
+command-23	command	29952	Close the roadmap.
+command-24	command	33792	Dock on this fleet.
+command-25	command	29952	Open the roadmap.
+command-26	command	48384	Maximize the terminal on the left.
+command-27	command	44544	Move the notes vessel into a portal.
+command-28	command	46464	Start a new voyage called Garden.
+command-29	command	33408	Switch to the build fleet.
+command-30	command	47616	Stop the program in the second terminal.
+command-31	command	29952	Show me the chat.
+command-32	command	33408	Hide the sidebar.
+command-33	command	38784	Rename this vessel to Logs.
+command-34	command	38784	Put the roadmap on the right.
+command-35	command	38784	Open a new fleet called Review.
+command-36	command	49152	Ask the build crew to run the tests.
+command-37	command	46464	Close every terminal that has finished.
+command-38	command	35328	Dock on the roadmap.
+command-39	command	30720	Make the terminal bigger.
+command-40	command	34176	Restart the core.

@@ -7,7 +7,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use voyager_contract::{
-    Action, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response, Unanswered, VesselId,
+    Action, ContentDestination, CoreTerminalId, Layout, PlacementOwner, Reply, Request, Response,
+    Unanswered, VesselId,
     reply::ReplyEvent,
     socket::{SocketReply, SocketRequest, VesselPlacement, VesselStatus},
 };
@@ -164,6 +165,16 @@ fn owners(
     result
 }
 
+fn in_fleet(destination: &ContentDestination) -> bool {
+    matches!(
+        destination,
+        ContentDestination::Placement {
+            owner: PlacementOwner::Fleet { .. },
+            ..
+        }
+    )
+}
+
 fn offered(action: &Action, bound: bool) -> bool {
     match action {
         Action::Inspect
@@ -175,7 +186,10 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::RemovePlacement { .. }
         | Action::SelectVoyage { .. }
         | Action::SelectFleet { .. } => true,
-        Action::Dock { .. } | Action::CreateFleetWithVessel { .. } => bound,
+        Action::Dock { .. }
+        | Action::CreateFleetWithVessel { .. }
+        | Action::SetPlacementMaximized { .. } => bound,
+        Action::CreateVessel { destination, .. } => bound && in_fleet(destination),
         Action::Home
         | Action::UpdateCanvas { .. }
         | Action::SetSidebar { .. }
@@ -183,7 +197,6 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::LoadArrangement { .. }
         | Action::CreateVoyage { .. }
         | Action::CreateVoyageFromSource { .. }
-        | Action::CreateVessel { .. }
         | Action::StartNewShell { .. }
         | Action::RemoveVesselPackage { .. }
         | Action::RestoreVesselPackage { .. }
@@ -196,7 +209,6 @@ fn offered(action: &Action, bound: bool) -> bool {
         | Action::ReopenFleet { .. }
         | Action::RevealPlacement { .. }
         | Action::ReopenPlacement { .. }
-        | Action::SetPlacementMaximized { .. }
         | Action::SetPlacementHidden { .. }
         | Action::RemoveArrangement { .. }
         | Action::FocusVessel { .. }
@@ -213,6 +225,14 @@ const REPLY_NOT_OFFERED: &str = "reply is accepted only from Voyager; nothing wa
 const FLEET_WITH_VESSEL_NOT_OFFERED: &str =
     "create-fleet-with-vessel is offered only to Voyager; nothing was queued";
 
+const VESSEL_NOT_OFFERED: &str = "create-vessel is offered only to Voyager; nothing was queued";
+
+const VESSEL_NOT_IN_FLEET: &str =
+    "create-vessel from Voyager places a Vessel in a Fleet only; nothing was queued";
+
+const MAXIMIZE_NOT_OFFERED: &str =
+    "set-placement-maximized is offered only to Voyager; nothing was queued";
+
 fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
     if offered(action, bound) {
         None
@@ -220,6 +240,14 @@ fn refusal(action: &Action, bound: bool) -> Option<&'static str> {
         Some(DOCK_NOT_OFFERED)
     } else if matches!(action, Action::CreateFleetWithVessel { .. }) {
         Some(FLEET_WITH_VESSEL_NOT_OFFERED)
+    } else if matches!(action, Action::SetPlacementMaximized { .. }) {
+        Some(MAXIMIZE_NOT_OFFERED)
+    } else if matches!(action, Action::CreateVessel { .. }) {
+        Some(if bound {
+            VESSEL_NOT_IN_FLEET
+        } else {
+            VESSEL_NOT_OFFERED
+        })
     } else {
         Some(NOT_OFFERED)
     }
@@ -514,7 +542,7 @@ mod tests {
         ));
     }
 
-    fn recorded() -> (Call, Arc<std::sync::Mutex<Vec<Action>>>) {
+    pub(super) fn recorded() -> (Call, Arc<std::sync::Mutex<Vec<Action>>>) {
         let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
         let log = seen.clone();
         let call: Call = Arc::new(move |_, request: Request| {
@@ -836,3 +864,7 @@ mod tests {
 #[cfg(test)]
 #[path = "vessel_socket_wiring_tests.rs"]
 mod wiring_tests;
+
+#[cfg(test)]
+#[path = "vessel_socket_authority_tests.rs"]
+mod authority_tests;
