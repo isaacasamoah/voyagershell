@@ -33,8 +33,8 @@ cases! {
     TwoTurnsWithEcho => "two-turns-with-echo",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
     RefusalIsInTheChat => "refusal-is-in-the-chat",
-    RequestsAreWrittenDown => "requests-are-written-down",
     RepliesFollowRoundSeven => "replies-follow-round-seven",
+    RequestsAreWrittenDown => "requests-are-written-down",
 }
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
