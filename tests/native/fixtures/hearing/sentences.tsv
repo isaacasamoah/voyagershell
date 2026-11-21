@@ -1,0 +1,40 @@
+question	en-GB-SoniaNeural	In three short sentences, tell me what this fleet has in it.
+question	en-US-AriaNeural	What is in this fleet?
+question	en-GB-SoniaNeural	How many terminals are open in this fleet?
+question	en-US-AriaNeural	Tell me what this fleet has in it.
+question	en-GB-SoniaNeural	Which vessel is docked right now?
+question	en-US-AriaNeural	What is the build crew working on?
+question	en-GB-SoniaNeural	Is the roadmap still open?
+question	en-US-AriaNeural	Why did the last test fail?
+question	en-GB-SoniaNeural	What time is it?
+question	en-US-AriaNeural	Can you explain what a portal is?
+question	en-GB-SoniaNeural	How do I rename a voyage?
+question	en-US-AriaNeural	What did Voyager do while I was away?
+question	en-GB-SoniaNeural	Who is the captain of this fleet?
+question	en-US-AriaNeural	Where is the notes vessel?
+question	en-GB-SoniaNeural	Summarize this fleet in one sentence.
+question	en-US-AriaNeural	What is two plus two?
+question	en-GB-SoniaNeural	Which terminals are still running?
+question	en-US-AriaNeural	Describe the layout of this fleet.
+question	en-GB-SoniaNeural	Do I have any cards waiting for me?
+question	en-US-AriaNeural	What should I work on next?
+command	en-GB-SoniaNeural	Open a terminal in this fleet.
+command	en-US-AriaNeural	Rename this fleet to Harbor.
+command	en-GB-SoniaNeural	Close the roadmap.
+command	en-US-AriaNeural	Dock on this fleet.
+command	en-GB-SoniaNeural	Open the roadmap.
+command	en-US-AriaNeural	Maximize the terminal on the left.
+command	en-GB-SoniaNeural	Move the notes vessel into a portal.
+command	en-US-AriaNeural	Start a new voyage called Garden.
+command	en-GB-SoniaNeural	Switch to the build fleet.
+command	en-US-AriaNeural	Stop the program in the second terminal.
+command	en-GB-SoniaNeural	Show me the chat.
+command	en-US-AriaNeural	Hide the sidebar.
+command	en-GB-SoniaNeural	Rename this vessel to Logs.
+command	en-US-AriaNeural	Put the roadmap on the right.
+command	en-GB-SoniaNeural	Open a new fleet called Review.
+command	en-US-AriaNeural	Ask the build crew to run the tests.
+command	en-GB-SoniaNeural	Close every terminal that has finished.
+command	en-US-AriaNeural	Dock on the roadmap.
+command	en-GB-SoniaNeural	Make the terminal bigger.
+command	en-US-AriaNeural	Restart the core.

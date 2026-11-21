@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail, ensure};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,6 +55,66 @@ pub const ALL: [&Speech; 5] = [
     &DOCK_ON_THIS_FLEET,
     &OPEN_THEN_DOCK,
 ];
+
+const REQUESTS_TABLE: &str = include_str!("../../fixtures/hearing/hearing.tsv");
+const REQUESTS_PCM: &[u8] = include_bytes!("../../fixtures/hearing/hearing.s16");
+const REQUESTS_SHA256: &str = "6e6ed751c6f762bb5fff4a12ffec4d2d1711c4bc37702d2919a2b5f728a444b6";
+const REQUESTS_RATE: u32 = 16_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    Question,
+    Command,
+}
+
+pub struct Request {
+    pub name: String,
+    pub kind: Kind,
+    pub words: String,
+    pub samples: Samples,
+}
+
+pub fn requests() -> Result<Vec<Request>> {
+    requests_from(REQUESTS_TABLE, REQUESTS_PCM)
+}
+
+fn requests_from(table: &str, pcm: &[u8]) -> Result<Vec<Request>> {
+    let found = format!(
+        "{:x}",
+        Sha256::new()
+            .chain_update(table.as_bytes())
+            .chain_update(pcm)
+            .finalize()
+    );
+    ensure!(
+        found == REQUESTS_SHA256,
+        "The spoken requests are not the synthetic set that was committed: {found}"
+    );
+    let mut at = 0;
+    let mut requests = Vec::new();
+    for line in table.lines() {
+        let [name, kind, samples, words] = line.splitn(4, '\t').collect::<Vec<_>>()[..] else {
+            bail!("A spoken request line has the wrong fields: {line}");
+        };
+        let kind = match kind {
+            "question" => Kind::Question,
+            "command" => Kind::Command,
+            _ => bail!("A spoken request has an unknown kind: {kind}"),
+        };
+        let end = at + samples.parse::<usize>()? * 2;
+        let narrow = Samples::raw(pcm.get(at..end).context("The spoken requests are cut short")?);
+        requests.push(Request {
+            name: name.to_owned(),
+            kind,
+            words: words.to_owned(),
+            samples: narrow.widened(),
+        });
+        at = end;
+    }
+    ensure!(at == pcm.len(), "The spoken requests have samples left over");
+    Ok(requests)
+}
 
 pub const PAUSED_WORDS: &str = "Open the roadmap. Dock on this fleet.";
 const PAUSE_INSERTED_MS: u32 = 810;
@@ -209,6 +270,19 @@ impl Samples {
         u32::try_from(longest * 20).unwrap_or(u32::MAX)
     }
 
+    fn widened(&self) -> Self {
+        let step = (RATE / REQUESTS_RATE) as i32;
+        let mut wide = Vec::with_capacity(self.0.len() * step as usize);
+        for (index, sample) in self.0.iter().enumerate() {
+            let from = i32::from(*sample);
+            let to = i32::from(self.0.get(index + 1).copied().unwrap_or(*sample));
+            for part in 0..step {
+                wide.push((from + (to - from) * part / step) as i16);
+            }
+        }
+        Self(wide)
+    }
+
     pub fn peak(&self) -> i16 {
         self.0
             .iter()
@@ -231,6 +305,27 @@ mod tests {
             assert!(samples.peak() > 4000, "{}", speech.name);
         }
         Ok(())
+    }
+
+    #[test]
+    fn the_spoken_requests_are_twenty_questions_and_twenty_commands_at_the_feed_rate() -> Result<()> {
+        let requests = requests()?;
+        let count = |kind| requests.iter().filter(|request| request.kind == kind).count();
+        assert_eq!((count(Kind::Question), count(Kind::Command)), (20, 20));
+        for request in &requests {
+            assert!(request.samples.0.len() > RATE as usize, "{}", request.name);
+            assert!(request.samples.peak() > 4000, "{}", request.name);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_changed_spoken_request_is_refused() {
+        let mut pcm = REQUESTS_PCM.to_vec();
+        pcm[1000] ^= 1;
+        assert!(requests_from(REQUESTS_TABLE, &pcm).is_err());
+        let table = REQUESTS_TABLE.replacen("fleet", "fleat", 1);
+        assert!(requests_from(&table, REQUESTS_PCM).is_err());
     }
 
     #[test]

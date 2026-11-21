@@ -1,10 +1,11 @@
 use super::{Cases, Verdict, cases};
 use crate::agent::TYPED_REPLY;
 use crate::audio::speech::{
-    DOCK_ON_THIS_FLEET, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR, Samples,
+    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_TO_HARBOR,
+    Samples,
 };
 use crate::audio::voice::{
-    self, CONNECTING, LISTENING, READY, Turn, median, words_contain, words_match,
+    self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
 };
 use crate::inspection::Target;
 use crate::native::{ENGINE_START, LONG_SILENCE, Native, QUIET_MIC};
@@ -29,6 +30,7 @@ cases! {
     TwoTurnsWithEcho => "two-turns-with-echo",
     AcknowledgementIsPrompt => "acknowledgement-is-prompt",
     RefusalIsInTheChat => "refusal-is-in-the-chat",
+    RequestsAreWrittenDown => "requests-are-written-down",
 }
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
@@ -40,6 +42,24 @@ const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
 const ROOM_SILENCE_MS: u32 = 3000;
+const WORD_ERROR_PERCENT: usize = 5;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Written {
+    name: String,
+    kind: Kind,
+    spoken: String,
+    heard: Vec<String>,
+    errors: usize,
+    words: usize,
+}
+
+impl Written {
+    fn answered(&self) -> bool {
+        self.heard.len() != 1 || self.errors * 2 > self.words
+    }
+}
 
 fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
@@ -456,5 +476,49 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("chatLines", lines)?
             .observed("conversation", json!(said))
+    })?;
+    cases.check(native, Case::RequestsAreWrittenDown, |native| {
+        let bound = std::fs::read(native.profile_path("voyager.json"))?;
+        native.edit_profile_file("voyager.json", REMOVED)?;
+        let written = write_down(native);
+        native.edit_profile_file("voyager.json", &bound)?;
+        let written = written?;
+        let answered = written.iter().filter(|one| one.answered()).count();
+        let errors: usize = written.iter().map(|one| one.errors).sum();
+        let words: usize = written.iter().map(|one| one.words).sum();
+        let exact = written.iter().filter(|one| one.errors == 0).count();
+        Verdict::new()
+            .expect(
+                "no spoken question or command comes back as an answer instead of its words",
+                answered == 0,
+            )
+            .expect(
+                "the words heard are the words spoken, within the word error target",
+                errors * 100 <= words * WORD_ERROR_PERCENT,
+            )
+            .observed("answered", answered)?
+            .observed("wordErrors", errors)?
+            .observed("wordsSpoken", words)?
+            .observed("exact", exact)?
+            .observed("requests", written)
     })
+}
+
+fn write_down(native: &mut Native) -> Result<Vec<Written>> {
+    voice::turn_on(native)?;
+    let mut written = Vec::new();
+    for request in speech::requests()? {
+        let turn = voice::feed_until_listening(native, &request.name, &request.samples)?;
+        let (errors, words) = word_errors(&turn.heard.join(" "), &request.words);
+        written.push(Written {
+            name: request.name,
+            kind: request.kind,
+            spoken: request.words,
+            heard: turn.heard,
+            errors,
+            words,
+        });
+    }
+    voice::turn_off(native)?;
+    Ok(written)
 }

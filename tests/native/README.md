@@ -1010,6 +1010,7 @@ to the microphone and records the speaker.
 | `two-turns-with-echo` | With the speaker looped into the microphone at 20 ms latency, voice is clicked on once and two requests follow. Each is one turn, heard as spoken, and each reply is spoken. Listening resumes between and after them without a click, and neither the acknowledgement nor the reply becomes a turn. |
 | `acknowledgement-is-prompt` | Ten more turns. In each the clip starts before hearing ends and the words are heard right. The median of the first sound after the app marks the end of capture is under 300 ms. All ten values are recorded. |
 | `refusal-is-in-the-chat` | With the Voyager binding pointed at a terminal Core no longer has, the spoken words are heard, the app plays the clip for the reason, "Voyager isn't running.", nothing is sent, and the opened chat draws one line starting with `Not sent` and the reply that was spoken earlier. The binding is restored afterward. |
+| `requests-are-written-down` | Voice is clicked on once and 40 committed Edge requests follow, 20 questions and 20 commands, each fed when the app marks listening again. The Voyager binding points at a removed terminal for the case, so no request reaches the stand-in and each turn ends with the clip for the reason. No request is answered, which means it gives exactly one heard text and its word errors are at most half its words. The word error rate over all 40 is at most 5%, a target to measure: the model card's transcription instruction with the product words scored 0.9% on this set in a CPU sweep, and the voice experiment's round 4 scored 3.9% on 47 real recordings with the same hint. Every heard text, its errors and the exact count are recorded. |
 
 The app writes `voice-trace.jsonl` into the evidence folder when the verifier sets
 `VOYAGER_VOICE_TRACE`. It holds event names, times and, for this synthetic speech
@@ -1026,6 +1027,8 @@ ffmpeg -i a.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexa
 edge-tts --voice en-GB-SoniaNeural --text "Dock on this fleet." --write-media b.mp3
 ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact dock-on-this-fleet.wav
 ```
+
+The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds each request's kind, Edge voice and words, and `make.sh WORK_FOLDER` renders them with Edge text to speech and ffmpeg into `hearing.s16`, 16 kHz mono samples one request after another, and `hearing.tsv`, which names each request and its sample count. The verifier widens them to 48 kHz before the feed and refuses a set whose checksum is not the committed one. Word errors are counted as the voice experiment's round 4 counted them: lower case, "voyager shell" read as one word, punctuation dropped, the numbers zero to ten read as words, and the edit distance in words.
 
 Four more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling, takes five frames of sound as
