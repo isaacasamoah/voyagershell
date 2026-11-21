@@ -391,6 +391,22 @@ features:
         checks: []
         formal: []
         journeys: []
+      - id: any-agent-splits-a-placement
+        kind: user
+        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
+        owner: application-queue
+        guards: ['type:contract/src/place.rs#Place']
+        checks: ['journey:agent-split/label-splits-each-side', 'journey:agent-split/create-vessel-splits-beside', 'journey:agent-split/bad-split-places-nothing']
+        formal: []
+        journeys: [agent-split]
+      - id: agents-start-plain-unless-they-name-permissions
+        kind: user
+        says: 'When a Vessel other than Voyager creates an agent and names no permissions, the agent starts in its plain mode, with the arguments a plain hc run of that agent would carry and no bypass flag. Voyager and the person keep the table default.'
+        owner: application-queue
+        guards: ['type:app/src/agent_programs.rs#Defaults']
+        checks: ['journey:agent-split/agent-starts-plain']
+        formal: []
+        journeys: [agent-split]
       - id: typing-feels-immediate
         kind: user
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
@@ -1538,7 +1554,7 @@ features:
     code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/client_owner.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
   - id: adopted-vessels
     name: 'Labelled programs as Vessels'
-    summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook.'
+    summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, split a named placement on any side with the label or with create-vessel, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook.'
     group: content-model
     owner: application-queue
     shared_with: [placement, core-adapter]
@@ -1546,7 +1562,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: [adopt-by-label, socket-dock]
+    native_journeys: [adopt-by-label, socket-dock, agent-split]
     python_journeys: []
     invariants:
       - id: restart-reopens-plain-shells
@@ -1590,15 +1606,33 @@ features:
         journeys: [adopt-by-label]
       - id: only-the-bound-voyager-is-offered-voyager-only-operations
         kind: user
-        says: 'Only the bound Voyager is offered dock, create-fleet-with-vessel, create-vessel and set-placement-maximized through its Vessel socket. Any other Vessel''s call to one of them is refused with nothing queued, and the workspace stays as it was.'
+        says: 'Only the bound Voyager is offered dock, create-fleet-with-vessel, set-placement-maximized, resize-placement-split and create-vessel without a beside insertion in a Fleet through its Vessel socket. Any other Vessel''s call to one of them is refused with nothing queued, and the workspace stays as it was.'
         owner: application-queue
         guards: ['type:app/src/voyager_binding.rs#Binding']
         checks:
           - 'journey:socket-dock/voyager-creates-and-maximizes'
-          - 'test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal'
+          - 'journey:agent-split/voyager-resizes-a-split'
+          - 'journey:agent-split/agent-resize-refused'
+          - 'test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_with_no_placement_to_sit_beside_and_maximizing_one_are_offered_only_to_the_bound_terminal'
           - 'test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other'
         formal: []
-        journeys: [socket-dock]
+        journeys: [agent-split, socket-dock]
+      - id: any-agent-splits-a-placement
+        kind: user
+        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
+        owner: application-queue
+        guards: ['type:contract/src/place.rs#Place']
+        checks: ['journey:agent-split/label-splits-each-side', 'journey:agent-split/create-vessel-splits-beside', 'journey:agent-split/bad-split-places-nothing']
+        formal: []
+        journeys: [agent-split]
+      - id: agents-start-plain-unless-they-name-permissions
+        kind: user
+        says: 'When a Vessel other than Voyager creates an agent and names no permissions, the agent starts in its plain mode, with the arguments a plain hc run of that agent would carry and no bypass flag. Voyager and the person keep the table default.'
+        owner: application-queue
+        guards: ['type:app/src/agent_programs.rs#Defaults']
+        checks: ['journey:agent-split/agent-starts-plain']
+        formal: []
+        journeys: [agent-split]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
     sources:
       - contract/src/place.rs
@@ -1610,11 +1644,13 @@ features:
       - app/src/focus_hook.rs
       - app/src/bin/voyager.rs
       - app/src/workspace.rs
+      - app/src/agent_programs.rs
       - docs/voyager-command.md
       - app/src/client_owner.rs
     code:
       - app/src/activity.rs
       - app/src/adoption.rs
+      - app/src/agent_programs.rs
       - app/src/bin/voyager.rs
       - app/src/client_core.rs
       - app/src/client_owner.rs
@@ -1680,6 +1716,7 @@ features:
       - tests/native/src/inspection.rs
       - tests/native/src/journey.rs
       - tests/native/src/journey/adopt_by_label.rs
+      - tests/native/src/journey/agent_split.rs
       - tests/native/src/journey/arrangement.rs
       - tests/native/src/journey/chat.rs
       - tests/native/src/journey/core_events.rs
