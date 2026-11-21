@@ -59,7 +59,7 @@ mod tests {
             assert_eq!(
                 screen.default,
                 Toggle::Off,
-                "{} reads nothing until Isaac agrees",
+                "{} reads nothing until the user agrees",
                 manifest.id
             );
         }

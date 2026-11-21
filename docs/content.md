@@ -655,6 +655,6 @@ cannot express them. Each type's catalogue name is the manifest's `name`.
 Each declares an orbit that hands an agent the screen to explain. The `agent`
 type adds an entry that asks what the agent is working on. Each declares a dock
 entry `screen` that reads the screen while docked, and it ships `off`. Docking
-an avatar changes focus, not what it reads, so the entry stays off until Isaac
+an avatar changes focus, not what it reads, so the entry stays off until the user
 agrees to the behaviour. Nothing reads orbit or dock entries yet, so the
 declarations are checked data only.
