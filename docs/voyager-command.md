@@ -108,7 +108,9 @@ own instructions leave their personal reply prefix out of Voyager's replies.
 Claude cannot read its own environment, so the identity states the same fact in
 words. Claude Code ignores `--append-system-prompt` when it resumes a
 conversation, and the earlier replies in that conversation carry the personal prefix, so the
-focus hook output repeats `spoken::reply_rule` at every prompt. The app strips
+focus hook output repeats `spoken::reply_rule`, `spoken::policy_rule` and the pointer to
+`voyager --skill` at every prompt. A launch with no hook command path has no such
+repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
 the marker where it stores a reply, so neither the speech filter nor the chat
 note ever sees it.
 

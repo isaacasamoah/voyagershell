@@ -21,6 +21,7 @@ pub(crate) const DEFAULT_ARGV: [&str; 5] =
     [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
 
 const BACKGROUND: &str = "VOYAGER_BACKGROUND";
+const SKILL: &str = "Run voyager --skill to learn how to work in the app.";
 
 const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
 
@@ -97,12 +98,20 @@ pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
         && value(&terminal.argv, &["-n"]) == Some(NAME)
 }
 
+fn reminder() -> String {
+    format!(
+        "{} {} {SKILL}",
+        crate::spoken::reply_rule(),
+        crate::spoken::policy_rule()
+    )
+}
+
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();
     let text = format!(
         "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}\n{}",
         focus.path.join(" > "),
-        crate::spoken::reply_rule()
+        reminder()
     );
     json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
         .to_string()
@@ -211,7 +220,18 @@ mod tests {
         let text = hook["additionalContext"].as_str().unwrap();
         assert!(text.contains("Home > Crew > crew"));
         assert!(text.contains("\"revision\":\"7\""));
-        assert!(text.ends_with(&crate::spoken::reply_rule()));
+        assert!(text.ends_with(&reminder()));
+    }
+
+    #[test]
+    fn the_per_prompt_reminder_carries_the_marker_rule_the_spoken_rule_and_the_skill_pointer() {
+        let text = reminder();
+        assert!(text.starts_with(&crate::spoken::reply_rule()));
+        assert!(text.contains(&crate::spoken::policy_rule()));
+        assert!(text.ends_with(SKILL));
+        assert!(IDENTITY.contains(SKILL));
+        assert!(!text.to_lowercase().contains("oru"));
+        assert!(text.len() < 700);
     }
 
     #[test]
