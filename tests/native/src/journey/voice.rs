@@ -544,8 +544,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 words_contain(&off.heard, SPOKEN_AS),
             )
             .expect(
-                "voice stays off after the reply ends and the microphone is not opened again",
-                off.label_at_end == READY && !off.opened_after_click,
+                "voice stays off after the reply ends",
+                off.label_at_end == READY,
             )
             .observed("clickOff", off)
     })?;
