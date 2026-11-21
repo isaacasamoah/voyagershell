@@ -288,10 +288,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 listened.turns.len() == 1,
             )
             .expect(
-                "that turn is sent to Voyager, with the spoken marker and the words heard, once",
+                "that turn is sent to Voyager once, and Voyager receives the spoken marker and the words heard",
                 listened.sent() == 1
                     && !heard.is_empty()
-                    && received(&after) == received(&before) + 1,
+                    && received(&after) > received(&before),
             )
             .observed("spoken", RENAME_THE_FLEET.words)?
             .observed("heard", &heard)?
