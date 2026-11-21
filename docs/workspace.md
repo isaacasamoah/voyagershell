@@ -170,10 +170,12 @@ It is not a Core label or a Core document, because a Vessel program can write
 both, and it is not part of the layout, so the layout and its wire do not
 change.
 
-A Vessel socket offers `dock` only when its own terminal equals that field. Any
-other socket refuses `dock` with "dock is offered only to Voyager; nothing was
-queued" and queues nothing. The field stands in for the rank record that
-Release 0.2 adds.
+A Vessel socket offers `dock`, `create-fleet-with-vessel`, `create-vessel` and
+`set-placement-maximized` only when its own terminal equals that field. Any
+other socket refuses each with "<operation> is offered only to Voyager; nothing
+was queued" and queues nothing. `create-vessel` from Voyager must name a Fleet
+as its destination, and a Portal destination is refused. The field stands in
+for the rank record that Release 0.2 adds.
 
 The app reads the file once, when it starts. After that it holds the value in
 memory, and only its own write changes it, so an edit to the file while the app
