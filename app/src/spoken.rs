@@ -33,13 +33,13 @@ pub fn has_reply_marker(text: &str) -> bool {
     strip_reply_marker(text).len() != text.len()
 }
 
-pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Accuracy beats warmth. Talk like a technical friend. Lead with the answer, yes or no first. Use plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
+pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Accuracy beats warmth. Talk like a technical friend. Lead with the answer, yes or no first. Plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
 
-pub const BRIEF: &str = "Say about three short sentences, then offer more.";
+pub const BRIEF: &str = "Stop after three short sentences, then offer more.";
 
 pub fn policy_rule() -> String {
     format!(
-        "{STYLE} A prompt starting with {MARKER} came by voice. Act, then answer aloud with no paths or code. {BRIEF} Say why if it failed or you aren't sure it worked. Never point to the chat."
+        "{STYLE} A prompt starting with {MARKER} came by voice. Act, then answer aloud with no paths or code. {BRIEF} If it failed or you're unsure, say so from what you see. Never point to the chat."
     )
 }
 
@@ -151,7 +151,7 @@ mod tests {
         assert!(rule.contains(&format!(" A prompt starting with {MARKER} came by voice.")));
         assert!(rule.contains(BRIEF));
         assert!(rule.contains("no paths or code"));
-        assert!(rule.contains("Say why if it failed"));
+        assert!(rule.contains("If it failed or you're unsure, say so from what you see."));
         assert!(rule.ends_with("Never point to the chat."));
     }
 

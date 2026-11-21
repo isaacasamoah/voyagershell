@@ -239,12 +239,12 @@ opens with "Best friend energy, always accurate, always approachable and human."
 asks for the answer first, yes or no first for a yes or no question, plain words and
 contractions. It leaves out ids, revision numbers, layout terms and how the app took
 a request unless the person asks, so a finished dock is "Done, you're there." and
-not a report that the app accepted it. `spoken::BRIEF` is the length rule, about
-three short sentences, then an offer of more. The rest comes only if the person asks.
+not a report that the app accepted it. `spoken::BRIEF` is the length rule. Voyager stops
+after three short sentences and offers more, and the rest comes only if the person asks.
 
 The background Voyager gets both through `spoken::policy_rule`, which adds the voice
 rules for a prompt that starts with `[spoken]`. It answers aloud with no paths or
-code, says why something failed or that it isn't sure it worked, and never
+code, says from what it sees when something failed or it isn't sure, and never
 points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
 prompt on a resumed conversation, so the focus hook repeats the rule at every prompt.
 The whole hook reminder is under 700 characters, and a test holds it there, because it
