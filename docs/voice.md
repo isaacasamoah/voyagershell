@@ -119,28 +119,50 @@ for each frame.
 and 0.06 of their level, through 320-sample frames, and compares each chunk with
 onnxruntime 1.32 on the same samples. Over 717 chunks the worst difference was
 2.0e-6, and the test allows 1e-4. The reference values are in
-`app/models/silero_vad_v6_reference.tsv`.
+`app/models/silero_vad_v6_reference.tsv`. An independent verifier ran onnxruntime
+1.24.2 itself and found a worst difference of 5.5e-6 over 120 feeds of the hearing
+set and 4.8e-6 over Isaac's 47 recordings.
 
-The thresholds come from a simulation of the gate over the detector's
-probabilities, with fans built as the room fixture builds them.
+The committed coverage is the 40 requests in `tests/native/fixtures/hearing/`,
+20 in `en-GB-SoniaNeural` and 20 in `en-US-AriaNeural`, both female Edge voices.
+An independent verifier fed all 40 through the app's own `silero.rs` and
+`audio_io.rs` in 320-sample frames, with 3 s of silence before and after, over a
+bed from the room fixture's generator. A whole turn is exactly one turn that holds
+the whole voiced span with its first word kept. This is the gate offline, so it
+counts turns, and the voice journey counts the sends.
 
-| Sound | Result |
-| --- | --- |
-| The voice journey's 5-minute room sound | The highest probability of any frame was 0.042, so no turn |
-| A 120 Hz thump as the microphone opens | The highest probability was 0.061 |
-| 100 Edge requests in 8 voices, 4 of them male, each at full, 0.15 and 0.06 of its level, over room tone, the soft fan and the loud fan | Exactly one whole turn with its first word kept in 843 of 900. Every failure was at 0.06 over the loud fan, where 43 of 100 passed. |
-| A 1.38 s pause between two sentences | One turn at every level and fan, except 0.06 over the loud fan |
+| Level | Bed | One turn | Whole turn, first word kept |
+| --- | --- | --- | --- |
+| 1.00 | Room tone | 40 of 40 | 40 of 40 |
+| 1.00 | Soft fan | 40 of 40 | 40 of 40 |
+| 1.00 | Loud fan | 40 of 40 | 40 of 40 |
+| 0.15 | Room tone | 40 of 40 | 40 of 40 |
+| 0.15 | Soft fan | 40 of 40 | 40 of 40 |
+| 0.15 | Loud fan | 40 of 40 | 40 of 40 |
+| 0.06 | Room tone | 40 of 40 | 40 of 40 |
+| 0.06 | Soft fan | 40 of 40 | 40 of 40 |
+| 0.06 | Loud fan | 27 of 40 | 25 of 40 |
 
-Edge speech at 0.06 of its level has a voiced level near RMS 210, against the loud
-fan's 700, so it is about 10 dB under the fan. A start threshold of 0.5 kept 18 of
-those 100, against 43 at 0.3, and changed nothing else. Ending the turn on the
-plain level held turns open after speech while the room fixture's keys and door
-sounded, so the end follows the detector instead.
+335 of 360 feeds were whole turns. Every other condition is complete, and every
+miss was at 0.06 over the loud fan. This is the known gap. A very quiet voice under
+a loud fan can be missed. Edge speech at 0.06 of its level has a voiced level near
+RMS 210, against the loud fan's 700, so it is about 10 dB under the fan.
 
-A person's 47 recorded requests, made on a laptop microphone, were checked once
-in place on the development machine. They are not in the repository. A harness
-outside the repository ran the app's own `audio_io.rs` and `silero.rs` over them
-and kept only scores and timings. Each was fed with 1 s of silence before and 3 s
+The thresholds were chosen in an uncommitted simulation of the gate over the
+detector's probabilities. It is not in the repository, so its figures cannot be
+rerun from it. Over the voice journey's 5-minute room sound the highest probability
+of any frame was 0.042, and over a 120 Hz thump as the microphone opens it was
+0.061. The simulation also used 60 Edge requests that are not in the repository,
+in 6 more voices. With those and the committed 40, a start threshold of 0.5 kept
+18 of 100 requests at 0.06 over the loud fan, against 43 at 0.3, and changed
+nothing else. Ending the turn on the plain level held turns open after speech
+while the room fixture's keys and door sounded, so the end follows the detector
+instead.
+
+The real-voice proof is Isaac's 47 real recordings, used under his terms. They
+were made on a laptop microphone and are not in the repository. They were checked
+once in place on the development machine. A harness outside the repository ran the
+app's own `audio_io.rs` and `silero.rs` over them and kept only scores and timings. Each was fed with 1 s of silence before and 3 s
 after, at its natural level and mixed with the room fixture's soft fan and loud
 fan.
 
