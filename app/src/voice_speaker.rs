@@ -73,13 +73,24 @@ fn clip_of(parts: &Parts, line: &Line) -> Result<(Clip, String), String> {
     }
 }
 
+fn note_unspoken(parts: &Parts, line: &Line) {
+    if let Line::Reply(text) = line {
+        parts.voyager.note(text.as_str());
+    }
+}
+
 fn say(parts: &Parts, line: Line) {
     if !(parts.on)() {
+        note_unspoken(parts, &line);
         return;
     }
     let spoken = clip_of(parts, &line);
     let _floor = parts.floor.take();
-    if (parts.stopped)() || !(parts.on)() {
+    if (parts.stopped)() {
+        return;
+    }
+    if !(parts.on)() {
+        note_unspoken(parts, &line);
         return;
     }
     (parts.status)(Phase::Speaking, None);
@@ -90,9 +101,7 @@ fn say(parts: &Parts, line: Line) {
             Ok(speaker) => {
                 parts.trace.mark_words("speech-started", &label);
                 let finish = speaker.play(&clip);
-                if let Line::Reply(text) = &line {
-                    parts.voyager.note(text.as_str());
-                }
+                note_unspoken(parts, &line);
                 finish(&|| !(parts.on)());
                 parts.trace.mark("speech-ended");
                 None
@@ -284,11 +293,19 @@ mod tests {
     }
 
     #[test]
-    fn a_spoken_reply_after_voice_was_clicked_off_is_not_read_aloud() {
+    fn a_spoken_reply_after_voice_was_clicked_off_is_noted_in_the_chat_and_not_played() {
         let rig = Rig::start(Standing::Idle);
         rig.on.store(false, Ordering::SeqCst);
         rig.say("p1", true, "Renamed it.");
-        thread::sleep(Duration::from_millis(500));
+        let until = Instant::now() + Duration::from_secs(3);
+        while rig.noted.lock().unwrap().is_empty() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(
+            rig.noted.lock().unwrap().clone(),
+            vec![("Renamed it.".to_owned(), 0)]
+        );
         assert!(rig.played.lock().unwrap().is_empty());
     }
 

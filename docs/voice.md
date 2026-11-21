@@ -103,7 +103,7 @@ The turn is marked done, so a repeated `Stop`, a late chunk of the same message 
 later reopen never speak it again. A failed turn plays one fixed clip, "That didn't
 work.". Once the audio has started, the same words are added to the private chat as an
 assistant line through `Client::note`, which never starts a turn. That add never delays
-speech. While a spoken
+speech. A spoken reply that arrives after a click-off is not played, and the same words are still added to the chat. While a spoken
 turn is open and Core reports Voyager blocked, one fixed clip, "Voyager needs you on Home first.",
 plays once.
 
