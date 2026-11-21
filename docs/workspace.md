@@ -284,7 +284,10 @@ reported the terminal done, a grace period that is a target to measure.
 from the `Stop` text when it hands a turn out. The marker is matched only as the
 first word, so a reply without it reads unchanged, and the strip happens once,
 upstream of the speech filter and the chat note. The match test above compares
-the texts after the strip.
+the texts after the strip. When a turn's `Stop` text carries text and neither it
+nor any message of the turn starts with the marker, `Replies` writes one line to
+standard error, once per turn, that gives the unix time and says the marker was
+missing. The line holds no reply text and the miss changes nothing else.
 
 Reply text is display data. It never runs an action and is never sent to an
 agent as an instruction.

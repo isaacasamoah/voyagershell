@@ -27,6 +27,10 @@ pub fn strip_reply_marker(text: &str) -> &str {
     }
 }
 
+pub fn has_reply_marker(text: &str) -> bool {
+    strip_reply_marker(text).len() != text.len()
+}
+
 pub fn policy_rule() -> String {
     format!(
         "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. If the answer would pass about 100 words, such as a list, say the gist and offer more. Never point to the chat."
@@ -115,6 +119,15 @@ mod tests {
         assert_eq!(strip_reply_marker("[vyx] Docked it."), "[vyx] Docked it.");
         assert_eq!(strip_reply_marker("[VY] Docked it."), "[VY] Docked it.");
         assert_eq!(strip_reply_marker("[vy] [vy] Again."), "[vy] Again.");
+    }
+
+    #[test]
+    fn a_reply_has_the_marker_only_when_it_starts_with_it() {
+        assert!(has_reply_marker("[vy] Done."));
+        assert!(has_reply_marker("[vy]"));
+        assert!(!has_reply_marker("Done."));
+        assert!(!has_reply_marker("Done. [vy]"));
+        assert!(!has_reply_marker(""));
     }
 
     #[test]
