@@ -189,6 +189,12 @@ pub fn vessels(layout: &Layout) -> impl Iterator<Item = &Placement> {
     fleets(layout).flat_map(|fleet| &fleet.placements)
 }
 
+pub fn bound_terminal(native: &Native) -> Option<String> {
+    let stored: Value =
+        serde_json::from_slice(&fs::read(native.profile_path("voyager.json")).ok()?).ok()?;
+    stored["terminal"].as_str().map(str::to_owned)
+}
+
 fn placed(layout: &Layout) -> impl Iterator<Item = &Placement> {
     vessels(layout).chain(voyages(layout).flat_map(|voyage| &voyage.portals))
 }
