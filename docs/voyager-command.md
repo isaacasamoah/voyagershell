@@ -101,6 +101,13 @@ say the reason when something fails, to say only the gist of an answer that woul
 and never to point to the chat. The launch
 that appends the rule is the Voyager start, which this guide does not describe.
 
+The same launch asks Voyager to start every reply with the reply marker `[vy]`,
+which `spoken::reply_rule` words and `spoken::strip_reply_marker` removes. The
+launch also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the
+user's own instructions leave their personal reply prefix out of Voyager's
+replies. The app strips the marker where it stores a reply, so neither the
+speech filter nor the chat note ever sees it.
+
 The hook reads the prompt from the `UserPromptSubmit` input it receives on
 stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
 hook. A prompt that has not arrived by then is treated as typed and the dock is

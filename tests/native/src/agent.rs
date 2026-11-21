@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 const AGENT_NAME: &str = "claude";
+pub const REPLY_MARKER: &str = "[vy]";
 pub const SPOKEN_REPLY: &str = "Docked on this fleet.\n\nThe Fleet was already open.";
 pub const TYPED_REPLY: &str = "Typed reply must stay silent.";
 
@@ -66,8 +67,9 @@ pub fn reply_inputs(prompt_id: &str, text: &str) -> [(&'static str, serde_json::
     ]
 }
 
-fn turn(settings: &str, prompt_id: &str, prompt: &str, text: &str) {
-    for (event, mut input) in reply_inputs(prompt_id, text) {
+fn turn(settings: &str, prompt_id: &str, prompt: &str, words: &str) {
+    let text = format!("{REPLY_MARKER} {words}");
+    for (event, mut input) in reply_inputs(prompt_id, &text) {
         if event == "UserPromptSubmit" {
             input["prompt"] = serde_json::json!(prompt);
         }

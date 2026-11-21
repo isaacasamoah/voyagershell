@@ -208,10 +208,15 @@ Core runs Voyager directly, not through the Bash wrapper that worker agents
 use, so Voyager ending ends its Core terminal. The command is the `voyager`
 entry of `launches.json`, or `claude --model claude-sonnet-5-5 --effort low`
 when the profile has none, followed by `--session-id` or `--resume`, `-n
-voyager`, a short identity prompt and a `--settings` value that holds the
-`voyager focus --hook claude` hook and the three `voyager reply --hook claude`
-hooks described in Voyager's replies. The `voyager` entry is read for Voyager
-alone and does not appear in the Create Vessel picker.
+voyager`, a short identity prompt and a `--settings` value. The value always
+sets `env.VOYAGER_BACKGROUND` to `1`, which lets the user's own agent
+instructions skip a personal reply prefix, and it adds the `voyager focus --hook
+claude` hook and the three `voyager reply --hook claude` hooks described in
+Voyager's replies when the app knows the path of the `voyager` command. The
+environment value stays out of argv, so the terminal still matches the test
+below. The identity prompt sends Voyager to `voyager --skill` and asks it to
+start every reply with the reply marker `[vy]`. The `voyager` entry is read for
+Voyager alone and does not appear in the Create Vessel picker.
 
 At launch the app forgets what `voyager.json` held and decides again from two
 records that must agree. They are the `voyager` Vessel's saved terminal and
@@ -276,6 +281,15 @@ and when `StopFailure` carries no `prompt_id` it settles the latest turn. A
 whose `Stop` has not come when the next turn starts reads as lost until it does.
 `Replies::stop_missing` says the latest turn has no `Stop` two seconds after Core
 reported the terminal done, a grace period that is a target to measure.
+
+`Replies` strips a leading reply marker, `[vy]`, from every message text and
+from the `Stop` text when it hands a turn out. The marker is matched only as the
+first word, so a reply without it reads unchanged, and the strip happens once,
+upstream of the speech filter and the chat note. The match test above compares
+the texts after the strip. When a turn's `Stop` text carries text and neither it
+nor any message of the turn starts with the marker, `Replies` writes one line to
+standard error, once per turn, that gives the unix time and says the marker was
+missing. The line holds no reply text and the miss changes nothing else.
 
 Reply text is display data. It never runs an action and is never sent to an
 agent as an instruction.

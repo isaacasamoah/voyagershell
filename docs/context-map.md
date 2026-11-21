@@ -93,7 +93,7 @@ Owns files:
 - `contract/src/observation.rs`
 - `contract/src/operations.rs`
 
-It owns the words Queue, Operation, Refusal, Uncertain effect.
+It owns the words Queue, Operation, Refusal, Uncertain effect, Reply marker, VOYAGER_BACKGROUND.
 
 It uses the words Placement, Vessel, Context, Core terminal, Program.
 
