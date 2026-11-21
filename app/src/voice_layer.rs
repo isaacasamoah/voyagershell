@@ -270,7 +270,7 @@ impl Exchange<'_> {
 
     fn finish(&self, finish: Option<Finish>) {
         if let Some(done) = finish {
-            done(&|| !self.shared.is_on());
+            done(&|| self.shared.wanted() == Wanted::Shutdown);
         }
     }
 
@@ -301,9 +301,7 @@ impl Exchange<'_> {
                         Err(failure) => {
                             if failure.refused {
                                 self.voyager.note(&failure.reason);
-                                if let Some(done) = finish.take() {
-                                    done(&|| !self.shared.is_on());
-                                }
+                                self.finish(finish.take());
                                 finish = self.play(failure.phrase, None);
                                 self.trace
                                     .mark_words("refusal-started", failure.phrase.key());
