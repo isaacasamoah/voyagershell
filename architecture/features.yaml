@@ -957,7 +957,6 @@ features:
           - 'journey:voice/words-reach-voyager'
           - 'journey:voice/acknowledgement-is-prompt'
           - 'test:app/src/voice_layer_tests.rs#nothing_is_captured_until_a_click_asks_for_it'
-          - 'test:app/src/voice_layer_tests.rs#a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again'
         formal: []
         journeys: [voice]
       - id: voice-waits-for-the-speaker
