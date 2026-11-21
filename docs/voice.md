@@ -18,8 +18,11 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 1. A click turns voice on. The control turns amber and reads Connecting while the
    microphone opens and the noise floor settles for 0.3 s, then green while it
    listens. Nothing opens the microphone without a click.
-2. The turn rule is in `audio_io::Gate`. It compares each 20 ms frame with three
-   times the quietest frame of the last 2 s, kept between 200 and 600. A sound
+2. The turn rule is in `audio_io::Gate`. It measures each 20 ms frame in the
+   speech band, after a pre-emphasis filter that removes the low rumble of a
+   fan, a hum or a door. It compares that level with three times the quietest
+   frame of the last 2 s, and never with less than 200. The threshold has no
+   ceiling, so a steady sound, however loud, never counts as speech. A sound
    counts as speech only after 0.2 s without a break, so a click, a thump as the
    microphone opens or a tap is never a turn. Speech then ends the turn after 1.5 s
    of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
@@ -39,8 +42,9 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 5. Omni turns the samples into words while the clip plays. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
    state the owner already holds, so hearing adds no inspection call. If hearing
-   finds nothing, or hearing fails, "I didn't catch that." follows and nothing is
-   sent.
+   finds no letter or digit, `speech::heard_nothing` drops the turn: nothing more
+   is said and nothing is sent. If hearing fails, "I didn't catch that." follows
+   and nothing is sent.
 6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
@@ -73,7 +77,7 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
 | `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
 | `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
-| `missed` | "I didn't catch that." | Nothing was heard, or hearing failed | No |
+| `missed` | "I didn't catch that." | Hearing failed | No |
 | `no-microphone` | "I can't hear your microphone." | The microphone cannot be opened or its stream ends, once for each outage | No |
 | `failed` | "That didn't work." | A spoken turn ends in failure | No |
 
@@ -287,5 +291,6 @@ speaker. It checks that nothing records the microphone without a click, that the
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
 appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
-voice on, two turns in a row each get a spoken reply with the speaker echoed into the
-microphone, and a click turns voice off.
+voice on, five minutes of room sound with no speech in it is never a turn, a request
+spoken among that sound is sent word for word, two turns in a row each get a spoken
+reply with the speaker echoed into the microphone, and a click turns voice off.

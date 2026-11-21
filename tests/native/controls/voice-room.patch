@@ -1,0 +1,21 @@
+diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
+--- a/app/src/audio_io.rs
++++ b/app/src/audio_io.rs
+@@ -16,7 +16,7 @@
+ const FLOOR_FRAMES: usize = 100;
+ const MIN_THRESHOLD: f32 = 200.0;
+ const FLOOR_FACTOR: f32 = 3.0;
+-const EMPHASIS: f32 = 0.97;
++const EMPHASIS: f32 = 0.0;
+ const PLAYING_LOOK: Duration = Duration::from_millis(20);
+ 
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+@@ -67,7 +67,7 @@
+             self.floors.pop_front();
+         }
+         let floor = self.floors.iter().copied().fold(f32::MAX, f32::min);
+-        let threshold = (floor * FLOOR_FACTOR).max(MIN_THRESHOLD);
++        let threshold = (floor * FLOOR_FACTOR).clamp(MIN_THRESHOLD, 600.0);
+         let loud = level > threshold;
+         if !matches!(self.stage, Stage::Settling { .. }) {
+             self.since_sound = if loud { 0 } else { self.since_sound + 1 };
