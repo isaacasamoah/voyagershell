@@ -11,7 +11,9 @@ const HIDDEN: usize = 128;
 const GATES: usize = 4 * HIDDEN;
 const MODEL: &[u8] = include_bytes!("../models/silero_vad_v6.onnx");
 
-static WEIGHTS: LazyLock<Result<Weights, String>> = LazyLock::new(|| Weights::read(MODEL));
+static WEIGHTS: LazyLock<Weights> = LazyLock::new(|| {
+    Weights::read(MODEL).unwrap_or_else(|error| panic!("The embedded speech model is unreadable: {error}"))
+});
 
 struct Conv {
     weight: Vec<f32>,
@@ -63,16 +65,15 @@ impl SpeechDetector for Silero {
 }
 
 impl Silero {
-    pub fn new() -> Result<Self, String> {
-        let weights = WEIGHTS.as_ref().map_err(Clone::clone)?;
-        Ok(Self {
-            weights,
+    pub fn new() -> Self {
+        Self {
+            weights: &WEIGHTS,
             hidden: [0.0; HIDDEN],
             cell: [0.0; HIDDEN],
             context: [0.0; CONTEXT],
             pending: Vec::with_capacity(2 * CHUNK),
             latest: 0.0,
-        })
+        }
     }
 
     fn chunk(&mut self, samples: &[f32; CHUNK]) -> f32 {
@@ -301,35 +302,41 @@ fn skip<'a>(message: &'a [u8], at: &mut usize, size: usize) -> Result<&'a [u8], 
 }
 
 #[cfg(test)]
+pub(crate) fn hearing_clips() -> std::collections::HashMap<String, Vec<i16>> {
+    let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/native/fixtures/hearing");
+    let pcm = std::fs::read(format!("{fixtures}/hearing.s16")).unwrap();
+    let samples: Vec<i16> = pcm
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i16::from_le_bytes(*pair))
+        .collect();
+    let table = std::fs::read_to_string(format!("{fixtures}/hearing.tsv")).unwrap();
+    let mut start = 0;
+    table
+        .lines()
+        .map(|line| {
+            let fields: Vec<&str> = line.split('\t').collect();
+            let length: usize = fields[2].parse().unwrap();
+            let clip = samples[start..start + length].to_vec();
+            start += length;
+            (fields[0].to_owned(), clip)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+pub(crate) fn hearing_clip(name: &str) -> Vec<i16> {
+    hearing_clips().remove(name).unwrap()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::audio_io::FRAME;
 
-    const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/native/fixtures/hearing");
     const REFERENCE: &str = include_str!("../models/silero_vad_v6_reference.tsv");
     const TOLERANCE: f32 = 1e-4;
-
-    fn clips() -> std::collections::HashMap<String, Vec<i16>> {
-        let pcm = std::fs::read(format!("{FIXTURES}/hearing.s16")).unwrap();
-        let samples: Vec<i16> = pcm
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|pair| i16::from_le_bytes(*pair))
-            .collect();
-        let table = std::fs::read_to_string(format!("{FIXTURES}/hearing.tsv")).unwrap();
-        let mut start = 0;
-        table
-            .lines()
-            .map(|line| {
-                let fields: Vec<&str> = line.split('\t').collect();
-                let length: usize = fields[2].parse().unwrap();
-                let clip = samples[start..start + length].to_vec();
-                start += length;
-                (fields[0].to_owned(), clip)
-            })
-            .collect()
-    }
 
     fn through_the_gate_frames(detector: &mut Silero, clip: &[i16]) -> Vec<f32> {
         let mut probabilities = Vec::new();
@@ -346,7 +353,7 @@ mod tests {
 
     #[test]
     fn the_port_matches_the_reference_model_on_quiet_and_full_level_voices() {
-        let clips = clips();
+        let clips = hearing_clips();
         let mut worst = 0.0f32;
         let mut chunks = 0;
         for line in REFERENCE.lines() {
@@ -360,7 +367,7 @@ mod tests {
                 .split(' ')
                 .map(|value| value.parse().unwrap())
                 .collect();
-            let mut detector = Silero::new().unwrap();
+            let mut detector = Silero::new();
             let got = through_the_gate_frames(&mut detector, &clip);
             let compared = got.len().min(expected.len());
             assert!(compared + 1 >= expected.len(), "{} {}", got.len(), expected.len());

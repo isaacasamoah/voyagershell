@@ -1,5 +1,6 @@
 use crate::{
-    audio_io::{Capture, Playing},
+    audio_io::{Capture, Playing, SpeechDetector},
+    silero::Silero,
     speech::{Clip, Phrase, Standing},
 };
 use std::{
@@ -57,6 +58,7 @@ pub trait Speaker: Send {
 pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
+    fn detector(&self) -> Box<dyn SpeechDetector>;
 }
 
 #[derive(Default)]
@@ -105,6 +107,10 @@ impl Audio for System {
 
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>> {
         Playing::open(rate).map(|playing| Box::new(playing) as Box<dyn Speaker>)
+    }
+
+    fn detector(&self) -> Box<dyn SpeechDetector> {
+        Box::new(Silero::new())
     }
 }
 

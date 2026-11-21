@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    audio_io::FRAME,
+    audio_io::{FRAME, SpeechDetector},
     speech::Standing,
     voice_parts::{Frames, SendFailure},
 };
@@ -97,7 +97,12 @@ impl Audio for Fake {
             cut: self.cut.clone(),
         }))
     }
+
+    fn detector(&self) -> Box<dyn SpeechDetector> {
+        Box::new(crate::audio_io::Loudness)
+    }
 }
+
 
 struct Heard(&'static str);
 

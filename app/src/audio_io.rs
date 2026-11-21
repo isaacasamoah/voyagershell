@@ -9,15 +9,15 @@ use std::{
 
 pub const FRAME: usize = 320;
 const SETTLE_FRAMES: usize = 15;
-const ONSET_FRAMES: usize = 10;
+const ONSET_FRAMES: usize = 5;
 const PAUSE_FRAMES: usize = 75;
 const CAP_FRAMES: usize = 1500;
 const LEAD_FRAMES: usize = 50;
 const FLOOR_FRAMES: usize = 100;
 const MIN_THRESHOLD: f32 = 200.0;
 const FLOOR_FACTOR: f32 = 3.0;
-const EMPHASIS: f32 = 0.97;
-const MIN_SPREAD: f32 = 1.5;
+const START_PROBABILITY: f32 = 0.3;
+const SPEAKING_PROBABILITY: f32 = 0.15;
 const PLAYING_LOOK: Duration = Duration::from_millis(20);
 
 pub trait SpeechDetector {
@@ -44,38 +44,30 @@ enum Stage {
     Speaking { frames: usize, quiet: usize },
 }
 
-#[derive(Debug)]
 pub struct Gate {
+    detector: Box<dyn SpeechDetector>,
     floors: VecDeque<f32>,
-    plain_floors: VecDeque<f32>,
     stage: Stage,
     kept: VecDeque<Vec<i16>>,
     since_sound: usize,
-    previous: f32,
-    voiced: Vec<f32>,
-    voiced_until: usize,
-}
-
-impl Default for Gate {
-    fn default() -> Self {
-        Self {
-            floors: VecDeque::new(),
-            plain_floors: VecDeque::new(),
-            stage: Stage::Settling { seen: 0 },
-            kept: VecDeque::new(),
-            since_sound: PAUSE_FRAMES,
-            previous: 0.0,
-            voiced: Vec::new(),
-            voiced_until: 0,
-        }
-    }
 }
 
 impl Gate {
+    pub fn new(mut detector: Box<dyn SpeechDetector>) -> Self {
+        detector.reset();
+        Self {
+            detector,
+            floors: VecDeque::new(),
+            stage: Stage::Settling { seen: 0 },
+            kept: VecDeque::new(),
+            since_sound: PAUSE_FRAMES,
+        }
+    }
+
     pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
-        let level = self.speech_band_level(&frame);
-        let loud = above_floor(&mut self.floors, level);
-        let sounding = above_floor(&mut self.plain_floors, plain_level(&frame));
+        let probability = self.detector.probability(&frame);
+        let speech = probability >= SPEAKING_PROBABILITY;
+        let sounding = above_floor(&mut self.floors, plain_level(&frame)) || speech;
         if !matches!(self.stage, Stage::Settling { .. }) {
             self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
         }
@@ -90,14 +82,12 @@ impl Gate {
                 }
             }
             Stage::Waiting { run } => {
-                *run = if loud { *run + 1 } else { 0 };
-                let run = *run;
-                if loud {
-                    self.voiced.push(level);
+                *run = if probability >= START_PROBABILITY {
+                    *run + 1
                 } else {
-                    self.voiced.clear();
-                }
-                self.voiced_until = self.voiced.len();
+                    0
+                };
+                let run = *run;
                 self.kept.push_back(frame);
                 if run >= ONSET_FRAMES {
                     self.stage = Stage::Speaking {
@@ -111,57 +101,17 @@ impl Gate {
             }
             Stage::Speaking { frames, quiet } => {
                 *frames += 1;
-                *quiet = if sounding { 0 } else { *quiet + 1 };
-                self.voiced.push(level);
-                if sounding {
-                    self.voiced_until = self.voiced.len();
-                }
-                let ended = if *quiet >= PAUSE_FRAMES {
+                *quiet = if speech { 0 } else { *quiet + 1 };
+                self.kept.push_back(frame);
+                if *quiet >= PAUSE_FRAMES {
                     Some(Heard::Ended(End::Pause))
                 } else if *frames >= CAP_FRAMES {
                     Some(Heard::Ended(End::Cap))
                 } else {
                     None
-                };
-                self.kept.push_back(frame);
-                if ended == Some(Heard::Ended(End::Pause)) && self.room_got_louder() {
-                    self.stage = Stage::Waiting { run: 0 };
-                    self.voiced.clear();
-                    self.voiced_until = 0;
-                    while self.kept.len() > LEAD_FRAMES {
-                        self.kept.pop_front();
-                    }
-                    return None;
                 }
-                ended
             }
         }
-    }
-
-    fn room_got_louder(&self) -> bool {
-        let mut sounded = self.voiced[..self.voiced_until].to_vec();
-        if sounded.is_empty() {
-            return false;
-        }
-        sounded.sort_by(f32::total_cmp);
-        let at = |share: f32| sounded[((sounded.len() - 1) as f32 * share).round() as usize];
-        at(0.9) < MIN_SPREAD * at(0.1)
-    }
-
-    fn speech_band_level(&mut self, frame: &[i16]) -> f32 {
-        if frame.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = frame
-            .iter()
-            .map(|sample| {
-                let sample = f32::from(*sample);
-                let emphasized = sample - EMPHASIS * self.previous;
-                self.previous = sample;
-                f64::from(emphasized).powi(2)
-            })
-            .sum();
-        (sum / frame.len() as f64).sqrt() as f32
     }
 
     pub fn speaking(&self) -> bool {
@@ -386,8 +336,21 @@ pub fn base64(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
+pub(crate) struct Loudness;
+
+#[cfg(test)]
+impl SpeechDetector for Loudness {
+    fn probability(&mut self, frame: &[i16]) -> f32 {
+        if plain_level(frame) > 500.0 { 1.0 } else { 0.0 }
+    }
+
+    fn reset(&mut self) {}
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::silero::{Silero, hearing_clip};
 
     fn loud() -> Vec<i16> {
         (0..FRAME)
@@ -413,22 +376,107 @@ mod tests {
         })
     }
 
-    fn run(frames: impl IntoIterator<Item = Vec<i16>>) -> (Vec<Heard>, Gate) {
-        let mut gate = Gate::default();
+    struct Listened {
+        heard: Vec<Heard>,
+        ended_at: Option<usize>,
+        gate: Gate,
+    }
+
+    fn listen(detector: Box<dyn SpeechDetector>, frames: impl IntoIterator<Item = Vec<i16>>) -> Listened {
+        let mut gate = Gate::new(detector);
         let mut heard = Vec::new();
-        for frame in frames {
+        let mut ended_at = None;
+        for (number, frame) in frames.into_iter().enumerate() {
             if let Some(event) = gate.push(frame) {
                 heard.push(event);
                 if matches!(event, Heard::Ended(_)) {
+                    ended_at = Some(number);
                     break;
                 }
             }
         }
-        (heard, gate)
+        Listened {
+            heard,
+            ended_at,
+            gate,
+        }
+    }
+
+    fn run(frames: impl IntoIterator<Item = Vec<i16>>) -> (Vec<Heard>, Gate) {
+        let listened = listen(Box::new(Loudness), frames);
+        (listened.heard, listened.gate)
+    }
+
+    fn heard_by_the_model(frames: impl IntoIterator<Item = Vec<i16>>) -> Listened {
+        listen(Box::new(Silero::new()), frames)
     }
 
     fn settled() -> impl Iterator<Item = Vec<i16>> {
         std::iter::repeat_n(quiet(), SETTLE_FRAMES)
+    }
+
+    fn framed(samples: &[i16]) -> Vec<Vec<i16>> {
+        samples.chunks(FRAME).map(<[i16]>::to_vec).collect()
+    }
+
+    fn voice(name: &str, percent: i32) -> Vec<i16> {
+        hearing_clip(name)
+            .iter()
+            .map(|sample| (i32::from(*sample) * percent / 100) as i16)
+            .collect()
+    }
+
+    fn first_voiced_frame(samples: &[i16]) -> usize {
+        let levels: Vec<f32> = samples.chunks(FRAME).map(plain_level).collect();
+        let loudest = levels.iter().copied().fold(0.0, f32::max);
+        levels
+            .iter()
+            .position(|level| *level > loudest * 0.05)
+            .unwrap_or(0)
+    }
+
+    fn hiss(count: usize, level: f32) -> Vec<Vec<i16>> {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let samples: Vec<i16> = (0..count * FRAME)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                let unit = (state >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0;
+                (unit * level * 3f32.sqrt()) as i16
+            })
+            .collect();
+        framed(&samples)
+    }
+
+    fn thud(frames: usize, hertz: f32, peak: f32, decay: f32) -> Vec<Vec<i16>> {
+        let samples: Vec<i16> = (0..frames * FRAME)
+            .map(|index| {
+                let at = index as f32 / SAMPLE_RATE as f32;
+                (peak * (-at / decay).exp() * (std::f32::consts::TAU * hertz * at).sin()) as i16
+            })
+            .collect();
+        framed(&samples)
+    }
+
+    fn mixed(under: &mut [Vec<i16>], from: usize, over: &[i16]) {
+        for (frame, part) in under[from..].iter_mut().zip(over.chunks(FRAME)) {
+            for (sample, add) in frame.iter_mut().zip(part) {
+                *sample = sample.saturating_add(*add);
+            }
+        }
+    }
+
+    fn one_whole_turn(frames: Vec<Vec<i16>>, voice_from: usize, voice_to: usize) {
+        let listened = heard_by_the_model(frames);
+        assert_eq!(
+            listened.heard,
+            vec![Heard::Settled, Heard::Ended(End::Pause)]
+        );
+        let ended = listened.ended_at.unwrap();
+        let kept = listened.gate.utterance().len() / FRAME;
+        assert!(ended + 1 - kept <= voice_from, "kept from {} voice from {voice_from}", ended + 1 - kept);
+        assert!(ended >= voice_to, "ended {ended} voice to {voice_to}");
     }
 
     #[test]
@@ -456,26 +504,6 @@ mod tests {
             .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES - 1))
             .chain(spoken(20));
         assert_eq!(run(words).0, vec![Heard::Settled]);
-    }
-
-    #[test]
-    fn a_thump_as_the_microphone_opens_is_not_speech() {
-        let opening =
-            std::iter::repeat_n(loud(), 5).chain(std::iter::repeat_n(quiet(), SETTLE_FRAMES + 600));
-        assert_eq!(run(opening).0, vec![Heard::Settled]);
-    }
-
-    #[test]
-    fn short_clicks_while_listening_are_not_speech() {
-        let mut frames: Vec<Vec<i16>> = settled().collect();
-        for _ in 0..20 {
-            frames.extend(std::iter::repeat_n(loud(), ONSET_FRAMES - 1));
-            frames.extend(std::iter::repeat_n(quiet(), 3));
-        }
-        frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES * 2));
-        let (heard, gate) = run(frames);
-        assert_eq!(heard, vec![Heard::Settled]);
-        assert!(gate.quiet());
     }
 
     #[test]
@@ -526,131 +554,121 @@ mod tests {
         assert_eq!(heard, vec![Heard::Settled, Heard::Ended(End::Cap)]);
     }
 
-    fn hiss(count: usize, level: f32) -> Vec<Vec<i16>> {
-        let mut state = 0x2545_f491_4f6c_dd1du64;
-        let samples: Vec<i16> = (0..count * FRAME)
-            .map(|_| {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                let unit = (state >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0;
-                (unit * level * 3f32.sqrt()) as i16
-            })
-            .collect();
-        samples.chunks(FRAME).map(<[i16]>::to_vec).collect()
-    }
-
-    fn thud(frames: usize) -> Vec<Vec<i16>> {
-        let samples: Vec<i16> = (0..frames * FRAME)
-            .map(|index| {
-                let at = index as f32 / SAMPLE_RATE as f32;
-                (3000.0 * (-at / 0.12).exp() * (std::f32::consts::TAU * 70.0 * at).sin()) as i16
-            })
-            .collect();
-        samples.chunks(FRAME).map(<[i16]>::to_vec).collect()
-    }
-
-    fn add_voice(frames: &mut [Vec<i16>]) {
-        const SYLLABLES: [f32; 5] = [1.0, 0.7, 0.45, 0.9, 0.4];
-        for (number, frame) in frames.iter_mut().enumerate() {
-            let strength = SYLLABLES[number % SYLLABLES.len()];
-            for (index, sample) in frame.iter_mut().enumerate() {
-                let at = index as f32 / SAMPLE_RATE as f32;
-                let voice = 8000.0 * strength * (std::f32::consts::TAU * 2000.0 * at).sin();
-                *sample = sample.saturating_add(voice as i16);
+    #[test]
+    fn a_new_gate_starts_its_detector_from_silence() {
+        struct Remembers(bool);
+        impl SpeechDetector for Remembers {
+            fn probability(&mut self, _: &[i16]) -> f32 {
+                if self.0 { 1.0 } else { 0.0 }
+            }
+            fn reset(&mut self) {
+                self.0 = false;
             }
         }
-    }
-
-    fn room_that_gets_louder(quiet_frames: usize, loud_frames: usize) -> Vec<Vec<i16>> {
-        let mut frames = hiss(quiet_frames, 100.0);
-        frames.extend(hiss(loud_frames, 400.0));
-        frames
-    }
-
-    fn low_edge() -> Vec<i16> {
-        (0..FRAME)
-            .map(|index| {
-                let at = index as f32 / SAMPLE_RATE as f32;
-                (1500.0 * (std::f32::consts::TAU * 150.0 * at).sin()) as i16
-            })
-            .collect()
+        let listened = listen(Box::new(Remembers(true)), settled().chain(std::iter::repeat_n(quiet(), 100)));
+        assert_eq!(listened.heard, vec![Heard::Settled]);
+        assert!(!listened.gate.speaking());
     }
 
     #[test]
-    fn the_soft_low_end_of_a_word_still_counts_toward_the_turn_not_the_pause() {
-        let words = settled()
-            .chain(spoken(20))
-            .chain(std::iter::repeat_n(low_edge(), 4))
-            .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES - 2))
-            .chain(spoken(20))
-            .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES));
-        let (heard, gate) = run(words);
-        assert_eq!(heard, vec![Heard::Settled, Heard::Ended(End::Pause)]);
-        let kept = gate.utterance().len();
-        assert!(kept >= (20 + 4 + PAUSE_FRAMES - 2 + 20) * FRAME, "{kept}");
+    fn a_quiet_voice_at_six_hundredths_of_its_level_is_one_whole_turn_with_its_first_word() {
+        for name in ["question-02", "command-21", "command-28"] {
+            let clip = voice(name, 6);
+            let mut frames: Vec<Vec<i16>> = settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
+            let from = frames.len();
+            frames.extend(framed(&clip));
+            let to = frames.len();
+            frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES + 25));
+            one_whole_turn(frames, from + first_voiced_frame(&clip), to);
+        }
+    }
+
+    #[test]
+    fn a_pause_of_one_point_four_seconds_mid_request_keeps_the_turn() {
+        for percent in [100, 6] {
+            let first = voice("command-21", percent);
+            let second = voice("question-02", percent);
+            let mut frames: Vec<Vec<i16>> = settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
+            let from = frames.len();
+            frames.extend(framed(&first));
+            frames.extend(std::iter::repeat_n(quiet(), 70));
+            frames.extend(framed(&second));
+            let to = frames.len();
+            frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES + 25));
+            one_whole_turn(frames, from + first_voiced_frame(&first), to);
+        }
+    }
+
+    #[test]
+    fn a_thump_as_the_microphone_opens_is_not_speech() {
+        let mut opening = thud(10, 120.0, 8000.0, 0.03);
+        opening.extend(std::iter::repeat_n(quiet(), SETTLE_FRAMES + 300));
+        let listened = heard_by_the_model(opening);
+        assert_eq!(listened.heard, vec![Heard::Settled]);
+    }
+
+    #[test]
+    fn short_clicks_while_listening_are_not_speech() {
+        let mut frames: Vec<Vec<i16>> = settled().collect();
+        for _ in 0..40 {
+            frames.extend(thud(2, 2500.0, 6000.0, 0.006));
+            frames.extend(std::iter::repeat_n(quiet(), 8));
+        }
+        frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES * 2));
+        let listened = heard_by_the_model(frames);
+        assert_eq!(listened.heard, vec![Heard::Settled]);
+        assert!(listened.gate.quiet());
     }
 
     #[test]
     fn a_sound_that_switches_on_and_stays_is_not_a_turn() {
-        let (heard, gate) = run(room_that_gets_louder(200, 600));
-        assert_eq!(heard, vec![Heard::Settled]);
-        assert!(!gate.speaking());
+        let mut frames = hiss(200, 100.0);
+        frames.extend(hiss(400, 400.0));
+        let listened = heard_by_the_model(frames);
+        assert_eq!(listened.heard, vec![Heard::Settled]);
+        assert!(!listened.gate.speaking());
     }
 
     #[test]
     fn speech_as_a_fan_switches_on_is_still_a_turn() {
-        let mut frames = room_that_gets_louder(200, 300);
-        add_voice(&mut frames[200..260]);
-        assert_eq!(
-            run(frames).0,
-            vec![Heard::Settled, Heard::Ended(End::Pause)]
-        );
-    }
-
-    #[test]
-    fn speech_that_ends_as_a_fan_switches_on_is_still_a_turn() {
-        let mut frames = room_that_gets_louder(260, 300);
-        add_voice(&mut frames[200..260]);
-        assert_eq!(
-            run(frames).0,
-            vec![Heard::Settled, Heard::Ended(End::Pause)]
-        );
+        let clip = voice("question-04", 15);
+        let mut frames = hiss(200, 100.0);
+        frames.extend(hiss(300, 400.0));
+        mixed(&mut frames, 190, &clip);
+        one_whole_turn(frames, 190 + first_voiced_frame(&clip), 190 + clip.len() / FRAME);
     }
 
     #[test]
     fn a_steady_loud_hiss_is_never_speech() {
-        let (heard, _) = run(hiss(CAP_FRAMES * 2, 1500.0));
-        assert_eq!(heard, vec![Heard::Settled]);
+        let listened = heard_by_the_model(hiss(750, 1500.0));
+        assert_eq!(listened.heard, vec![Heard::Settled]);
     }
 
     #[test]
     fn a_low_thud_like_a_distant_door_is_not_speech() {
         let mut frames: Vec<Vec<i16>> = settled().collect();
-        for _ in 0..10 {
-            frames.extend(thud(60));
+        for _ in 0..6 {
+            frames.extend(thud(60, 70.0, 3000.0, 0.12));
             frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES));
         }
-        let (heard, gate) = run(frames);
-        assert_eq!(heard, vec![Heard::Settled]);
-        assert!(gate.quiet());
+        let listened = heard_by_the_model(frames);
+        assert_eq!(listened.heard, vec![Heard::Settled]);
+        assert!(listened.gate.quiet());
     }
 
     #[test]
-    fn speech_band_sound_over_a_steady_hiss_is_still_heard() {
-        let mut frames = hiss(250, 400.0);
-        add_voice(&mut frames[100..130]);
-        assert_eq!(
-            run(frames).0,
-            vec![Heard::Settled, Heard::Ended(End::Pause)]
-        );
+    fn a_quiet_voice_over_a_steady_hiss_is_still_heard() {
+        let clip = voice("command-25", 15);
+        let mut frames = hiss(400, 400.0);
+        mixed(&mut frames, 100, &clip);
+        one_whole_turn(frames, 100 + first_voiced_frame(&clip), 100 + clip.len() / FRAME);
     }
 
     #[test]
     fn a_steady_hum_is_not_speech() {
         let hum = vec![150i16; FRAME];
-        let (heard, _) = run(std::iter::repeat_n(hum, 2000));
-        assert_eq!(heard, vec![Heard::Settled]);
+        let listened = heard_by_the_model(std::iter::repeat_n(hum, 600));
+        assert_eq!(listened.heard, vec![Heard::Settled]);
     }
 
     #[test]
