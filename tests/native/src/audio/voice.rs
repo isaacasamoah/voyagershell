@@ -328,12 +328,19 @@ pub struct ClickOff {
     pub reply_started_ms: u64,
     pub reply_ended_ms: Option<u64>,
     pub label_at_end: String,
+    pub recorders_after: Vec<Vec<String>>,
     pub opened_after_click: bool,
+    pub opened_after_next_click: bool,
     pub heard: String,
     pub marks: Vec<Mark>,
 }
 
-pub fn click_off_during_reply(native: &Native, speech: &Speech, name: &str) -> Result<ClickOff> {
+pub fn click_off_during_reply(
+    native: &Native,
+    speech: &Speech,
+    name: &str,
+    quiet: Owed,
+) -> Result<ClickOff> {
     let stack = stack(native)?;
     let system = &native.system;
     let mut capture = stack.capture(system, &format!("{SPEAKER}.monitor"), name)?;
@@ -364,22 +371,32 @@ pub fn click_off_during_reply(native: &Native, speech: &Speech, name: &str) -> R
             .and_then(|fresh| mark_of(fresh, "speech-ended"))
             .map(|_| ()))
     })?;
+    capture.finish(stack.folder(), name)?;
+    let recorders_after = without_capture(native, quiet)?;
     let label_at_end =
         native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
-    capture.finish(stack.folder(), name)?;
-    let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    let quiet_marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+    let opened_after_click = quiet_marks
+        .iter()
+        .any(|mark| mark.event == "capture-open" && mark.at_ms >= clicked_ms);
+    let next_click_ms = now_millis();
+    turn_on(native)?;
+    let opened_after_next_click = marks(&trace)?
+        .iter()
+        .any(|mark| mark.event == "capture-open" && mark.at_ms >= next_click_ms);
+    turn_off(native)?;
     Ok(ClickOff {
         label_after_click,
         microphone_closed,
         clicked_ms,
         reply_started_ms,
-        reply_ended_ms: mark_of(&marks, "speech-ended").map(|mark| mark.at_ms),
+        reply_ended_ms: mark_of(&quiet_marks, "speech-ended").map(|mark| mark.at_ms),
         label_at_end,
-        opened_after_click: marks
-            .iter()
-            .any(|mark| mark.event == "capture-open" && mark.at_ms >= clicked_ms),
+        recorders_after,
+        opened_after_click,
+        opened_after_next_click,
         heard: transcribe(native, name)?,
-        marks,
+        marks: quiet_marks,
     })
 }
 

@@ -1,0 +1,13 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -340,9 +340,6 @@ impl Exchange<'_> {
+                 return;
+             }
+             let floor = self.floor.hold();
+-            if self.shared.wanted() != Wanted::On {
+-                continue;
+-            }
+             match self.listen() {
+                 Listened::Off | Listened::StepAside => {}
+                 Listened::Shutdown => return,
