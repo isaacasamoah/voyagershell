@@ -174,8 +174,10 @@ voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","acti
 
 `create-vessel` and `set-placement-maximized` are offered only to Voyager too.
 `create-vessel` adds a Vessel of the named `typeId` to a Fleet. Its
-`destination` names the owner as `{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":...}`,
-and the current Fleet is the one `voyager status` and the focus reply show. A
+`destination` names the owner as `{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":...}`.
+`insertion` is `{"kind":"empty"}` for an empty Fleet, or
+`{"kind":"beside","id":"<placement id>","side":"<side>"}` beside a placement.
+The current Fleet is the one `voyager status` and the focus reply show. A
 destination in the Portals is refused. `set-placement-maximized` takes
 `"id":"<placement id>"` and `"maximized":true` to maximize it, or `false` to
 restore it. The app still decides whether the target and the Fleet are valid,
