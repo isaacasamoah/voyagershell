@@ -207,6 +207,9 @@ A send that Core refuses after the acknowledgement is a known refusal. The app p
 one cached clip chosen by Core's refusal kind, adds the refusal as a line in the chat,
 and shows it in the voice control's tooltip. Each clip is true for every kind mapped to
 it, and an unknown kind keeps "I couldn't pass that to Voyager." The table above lists each kind.
+An unconfirmed send stays silent and is shown only in the tooltip. A send is never repeated.
+Audio goes through the `Audio` trait. `System` implements it with `parec` and `paplay`, the
+PulseAudio command line tools, which PipeWire also serves. Linux is the only verified platform.
 
 A stalled engine never delays the canvas. The layer runs on its own thread, reaches
 Core only through the application queue, and the canvas only reads a small snapshot.
