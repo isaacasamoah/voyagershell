@@ -237,7 +237,8 @@ voyager do workspace '{"requestId":"select-1","expectedVersion":"<version>","act
 Create a Vessel of the type `flag` in a new Fleet. The request is refused
 unless its Voyage is the selected one. The layout in every reply lists
 `voyages` with their ids, such as `voyage-1`, and names the `selectedVoyage`.
-Send `{"operation":"inspect"}` to read it. Select a Voyage that is not selected
+Send an `inspect` request, with a `requestId` and the `expectedVersion` like
+any other, to read it. Select a Voyage that is not selected
 with `{"operation":"select-voyage","id":"<voyage id>"}`. Do not take the id from
 `voyager status`, because a Vessel that sits in Home reports an id such as
 `home-voyage-5`, which cannot be selected. A name or a Home id is refused with
