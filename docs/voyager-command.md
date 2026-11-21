@@ -213,9 +213,12 @@ Select a Fleet:
 voyager do workspace '{"requestId":"select-1","expectedVersion":"<version>","action":{"operation":"select-fleet","id":"<fleet id>"}}'
 ```
 
-Create a Vessel of the type `flag` in a new Fleet. Run `select-voyage` first,
-because the request is refused unless its Voyage is the selected one. `typeId`
-is the type's `id`. The reply's layout holds the new placement.
+Create a Vessel of the type `flag` in a new Fleet. The request is refused
+unless its Voyage is the selected one, so select it first with
+`{"operation":"select-voyage","id":"<voyage id>"}`. Take the id from the
+`voyage` field of a placement in `voyager status`, such as `voyage-1`. A name
+is refused with "Voyage not found". `typeId` is the type's `id`. The reply's
+layout holds the new placement.
 
 ```sh
 voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Flags","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<absolute directory>"},"typeId":"flag"}}'
@@ -224,7 +227,9 @@ voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","actio
 Dock on that Vessel with the `dock` request above and
 `"context":{"kind":"vessel","id":"<placement id>"}`. `voyager status` lists
 placements of your own Vessel only, so take the new placement's id from the
-reply of the create request.
+reply of the create request. An applied reply means the app took the dock.
+Run `voyager focus` to read it back. Its `scope` names the placement you docked
+on.
 
 A type that is unknown, still failing its first check or removed is refused,
 and the message names the reason.
@@ -269,10 +274,10 @@ A manifest that works, with one boolean and one action:
 }
 ```
 
-Rules that the check enforces:
+The check enforces these rules.
 
-- Required: `contract` (always 1), `id`, `name`, `version`, `state`,
-  `actions` (may be `{}`) and `view`. Unknown fields are refused.
+- The required fields are `contract` (always 1), `id`, `name`, `version`,
+  `state`, `actions` (may be `{}`) and `view`. Unknown fields are refused.
 - `id` starts with a lowercase letter or digit, then letters, digits, `.`, `-`
   or `_`, at most 64 characters. It must not be `terminal`, `agent`, `agents`
   or `notes`, and no other package may declare it.
@@ -287,7 +292,8 @@ Rules that the check enforces:
 
 Today the Vessel draws the type's name, its state and its revision, and a
 button for each action that takes no parameters. The person presses the
-button. `view.source` is checked and not yet drawn. `docs/content.md`, section
+button. No `voyager` command runs an action, and an action with parameters has
+no button yet. `view.source` is checked and not yet drawn. `docs/content.md`, section
 "Vessel type manifests", has the full grammar, and
 `contract/generated/contentManifest.schema.json` in the repository is the schema.
 
