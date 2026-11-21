@@ -605,7 +605,7 @@ fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
 }
 
 #[test]
-fn empty_heard_text_is_dropped_with_no_reply_and_nothing_sent() {
+fn empty_heard_text_says_nothing_more_and_sends_nothing() {
     for heard in ["", "  ", " ... "] {
         let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
         let brain = Brain::says("Sure, opening the roadmap.", true);

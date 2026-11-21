@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -195,7 +195,7 @@ impl Reply {
+         let sure_it_is_chat = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
+         Some(Self {
+             say: SpokenText::from_say(&say)?,
+-            handoff: kind == Kind::Work || !sure_it_is_chat,
++            handoff: kind == Kind::Work,
+         })
+     }
+ }
