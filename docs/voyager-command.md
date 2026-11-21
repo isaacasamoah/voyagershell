@@ -213,17 +213,18 @@ socket.
 
 ## Create and navigate Vessels
 
-`voyager do workspace` offers a fixed set of operations. Others, including
-`create-vessel` and `set-placement-maximized`, are refused with exit code 1,
-the message "The voyager command offers only ..." and nothing queued.
+`voyager do workspace` offers a fixed set of operations. Any other is refused
+with exit code 1 and nothing queued, and the message says who may use it.
 
 | You want to | Use | Who may |
 | --- | --- | --- |
 | Add a terminal or agent Vessel to a Fleet | `hc run --label voyager.place=fleet:<fleet id>` | any Vessel |
 | Open a Fleet or Voyage | `select-fleet`, `select-voyage` | any Vessel |
 | Make a Fleet that holds one new Vessel of any ready type | `create-fleet-with-vessel` | Voyager only |
+| Add a Vessel of any ready type to a Fleet | `create-vessel` | Voyager only |
+| Maximize or restore a placement | `set-placement-maximized` | Voyager only |
 | Take the user to a Vessel | `dock` | Voyager only |
-| Add a Vessel to an existing Fleet by type, or maximize or restore a placement | The person, with the Vessel chooser and the placement's corner buttons | the person |
+| Add a Vessel to a Portal column, hide, reveal or resize a placement | The person | the person |
 
 Tell the person when a task needs the last row. Do not try to work round it.
 
@@ -250,6 +251,20 @@ placements of your own Vessel only, so take the new placement's id from the
 reply of the create request. An applied reply means the app took the dock.
 Run `voyager focus` to read it back. Its `scope` names the placement you docked
 on.
+
+Add a Vessel of the type `flag` beside a placement of a Fleet. Take the Fleet
+id and the placement id from the reply of the create request above, or from
+`voyager status`. `side` is `left`, `right`, `top` or `bottom`.
+
+```sh
+voyager do workspace '{"requestId":"vessel-2","expectedVersion":"<version>","action":{"operation":"create-vessel","typeId":"flag","destination":{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":{"kind":"beside","id":"<placement id>","side":"right"}}}}'
+```
+
+Maximize a placement, and restore it with `"maximized":false`:
+
+```sh
+voyager do workspace '{"requestId":"max-1","expectedVersion":"<version>","action":{"operation":"set-placement-maximized","id":"<placement id>","maximized":true}}'
+```
 
 A type that is unknown, still failing its first check or removed is refused,
 and the message names the reason.
