@@ -92,7 +92,7 @@ and turns green when the microphone is back.
 Every fixed phrase the voice says is in this table. A clip is cached, keyed by its key and a
 short hash of its words. The voice speaks as "I" and never as Voyager. `asking`,
 `okay-asking` and `queued` play only when the reply call fails, is slow, is not valid JSON
-or its words cannot be rendered: the plain acknowledgement, with the words still sent. The
+or its words cannot be rendered. Then the plain acknowledgement plays, with the words still sent. The
 other phrases are the reasons and faults, and they replace the voice's own words when
 they apply.
 
