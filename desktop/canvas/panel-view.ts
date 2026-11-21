@@ -37,23 +37,42 @@ function noteFocus(
 
 const VOYAGER_VESSEL = "voyager";
 
+const seenDocks = new WeakMap<Canvas, string>();
+
 export function acceptDockResult(workspace: Canvas, cx: UIContext) {
   const raw = take_result();
-  if (raw === null) return;
+  if (raw === null) return followSnapshotDock(workspace, cx);
   const result: unknown = JSON.parse(raw);
   if (!validateResponse(result)) throw Error("Invalid native dock response");
   if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")
     return;
   workspace.dockReceipt = result.requestId;
-  workspace.run({ operation: "inspect" }, cx, (_result, task) => {
-    moveFocus(workspace, "opening", task);
-    if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
-      return;
-    const target = workspace.layout
-      ? openingPlacement(workspace.layout)
-      : undefined;
-    if (target) workspace.terminals.get(target.vessel)?.focus();
-  });
+  followDock(workspace, result.layout.context, cx);
+}
+
+function followSnapshotDock(workspace: Canvas, cx: UIContext) {
+  if (workspace.busy || !workspace.layout) return;
+  const dock = workspace.layout.context;
+  const seen = seenDocks.get(workspace);
+  if (seen === undefined) seenDocks.set(workspace, JSON.stringify(dock));
+  else if (seen !== JSON.stringify(dock)) followDock(workspace, dock, cx);
+}
+
+function followDock(workspace: Canvas, dock: Context, cx: UIContext) {
+  seenDocks.set(workspace, JSON.stringify(dock));
+  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
+    focusDocked(workspace, task),
+  );
+}
+
+function focusDocked(workspace: Canvas, cx: AsyncContext) {
+  moveFocus(workspace, "opening", cx);
+  if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
+    return;
+  const target = workspace.layout
+    ? openingPlacement(workspace.layout)
+    : undefined;
+  if (target) workspace.terminals.get(target.vessel)?.focus();
 }
 
 const focusedPlacements = new WeakMap<Canvas, string | null>();

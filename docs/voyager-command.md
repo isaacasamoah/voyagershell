@@ -150,7 +150,9 @@ is queued.
 
 `dock` is offered only to Voyager, the Vessel whose terminal `voyager.json`
 names in the profile. It takes `"context"` as the generated `Context` type and
-sets Isaac's dock without moving the canvas.
+works as a dock from the avatar does. It takes the user to the target, and a
+Vessel target gets the keyboard unless a chat, a rename or a dialog is open.
+`docs/workspace.md` describes how the canvas follows it.
 
 ```sh
 voyager do workspace '{"requestId":"dock-1","expectedVersion":"<version>","action":{"operation":"dock","context":{"kind":"vessel","id":"<placement id>"}}}'

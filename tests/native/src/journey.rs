@@ -16,6 +16,7 @@ mod quit_restore;
 mod scrolling;
 mod slow_list;
 mod slow_save;
+mod socket_dock;
 mod voice;
 mod voyage_close;
 mod workspace;
@@ -139,6 +140,7 @@ journeys! {
     CoreEvents => "core-events" in core_events, sidebar: None, window: None;
     SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    SocketDock => "socket-dock" in socket_dock, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));

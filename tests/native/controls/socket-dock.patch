@@ -1,0 +1,24 @@
+diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
+--- a/desktop/canvas/panel-view.ts
++++ b/desktop/canvas/panel-view.ts
+@@ -41,7 +41,7 @@
+ 
+ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+   const raw = take_result();
+-  if (raw === null) return followSnapshotDock(workspace, cx);
++  if (raw === null) return;
+   const result: unknown = JSON.parse(raw);
+   if (!validateResponse(result)) throw Error("Invalid native dock response");
+   if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")
+diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
+--- a/desktop/canvas/panel-view.js
++++ b/desktop/canvas/panel-view.js
+@@ -23,7 +23,7 @@
+ const seenDocks = new WeakMap();
+ export function acceptDockResult(workspace, cx) {
+   const raw = take_result();
+-  if (raw === null) return followSnapshotDock(workspace, cx);
++  if (raw === null) return;
+   const result = JSON.parse(raw);
+   if (!validateResponse(result)) throw Error("Invalid native dock response");
+   if (!workspace.acceptSnapshot(result, cx) || result.status !== "applied")

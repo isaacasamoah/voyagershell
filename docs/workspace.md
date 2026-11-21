@@ -1139,11 +1139,16 @@ with the owner's ignores navigation. The next section narrows each check to the
 parts that a request changes.
 
 Change notices carry the structure revision, and a navigation revision that
-moves only when a scoped caller, such as an agent through the administrator,
-changes navigation alone. The canvas inspects again when either moves past what
-it holds. Its own navigation, including `focus-vessel`, and the native avatar's
-dock reach it through their replies, so they send it no notice. A dock that
-changes the selection costs one inspect, to prepare the terminals it newly shows.
+moves only when a scoped caller, such as an agent through the administrator, or
+a Vessel program through its socket, changes navigation alone. The canvas
+inspects again when either moves past what it holds. Its own navigation,
+including `focus-vessel`, and the native avatar's dock reach it through their
+replies, so they send it no notice. A dock that changes the selection costs one
+inspect, to prepare the terminals it newly shows.
+
+A Vessel program's call arrives with no scope, so the owner carries the calling
+program through a layout save and counts it as a scoped caller when it
+publishes the notice.
 
 **The navigation records.** `navigation` holds one entry per Voyage with its
 last-used Fleet. `lastVessels` holds one entry per Fleet with the Vessel or
@@ -1174,10 +1179,20 @@ A closed Voyage or Fleet refuses the dock with its name and leaves everything
 as it was. A hidden Vessel or Portal, and a Portal column that is not shown, is
 not revealed. The dock lands on the Fleet and records nothing. A dock runs no
 Vessel type actions and starts no model turn, because the Vessel types declare
-no dock behaviour yet. The canvas follows a dock from the avatar with one
-inspect that also prepares the newly shown terminals, then moves its focused
-placement to the remembered one and gives that terminal keyboard focus unless a
-chat, a rename or a dialog is open.
+no dock behaviour yet. The canvas follows a dock with one inspect that also
+prepares the newly shown terminals, then moves its focused placement to the
+remembered one and gives that terminal keyboard focus unless a chat, a rename or
+a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
+step. It records the dock, runs the inspect and gives the keyboard from that
+request's completion, because a focus asked for while the canvas renders does
+not reach the terminal. `acceptDockResult`, beside it, runs at each render. It runs
+`followDock` for the avatar's reply. Every other dock reaches the canvas as an
+accepted layout whose dock context differs from the last one recorded, and
+when no request is preparing, `acceptDockResult` runs `followDock` for it once. Only
+a dock writes the dock context, so no other change follows. A second dock on the context the canvas already
+holds does not differ, so it does not follow. When the user has clicked another
+Vessel and Voyager docks on the same one again, the keyboard stays where the
+user put it.
 
 **Agents look without moving the user.** `focus-vessel` is a canvas click
 operation. It is absent from the `voyager_workspace` tool schema, which the

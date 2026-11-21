@@ -659,3 +659,70 @@ fn inspect_reads_the_workspace_that_owner_start_prepared_and_writes_nothing() {
         std::panic::resume_unwind(error);
     }
 }
+
+#[test]
+fn a_dock_from_a_vessel_program_moves_the_navigation_notice_and_the_canvas_dock_does_not() {
+    use voyager_contract::Context;
+    for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
+        assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
+    }
+    let session = format!("voyager-dock-notice-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = std::panic::catch_unwind(|| {
+        let notice = || {
+            let (reply, receive) = async_channel::bounded(1);
+            client
+                .sender
+                .send_blocking(Message::WorkspaceChanges { after: None, reply })
+                .unwrap();
+            receive.recv_blocking().unwrap().recv_blocking().unwrap()
+        };
+        let first = client.inspect().unwrap();
+        assert_eq!(first.status, Outcome::Applied, "{:?}", first.message);
+        let fleet = first.layout.voyages[0].fleets[0].clone();
+        let placement = fleet.placements[0].clone();
+        let dock = |expected_version, context| Request {
+            request_id: client.request_id(),
+            expected_version,
+            action: Action::Dock { context },
+        };
+        let before = notice();
+        let canvas = client
+            .call(dock(
+                first.version,
+                Context::Vessel {
+                    id: placement.id.clone(),
+                },
+            ))
+            .unwrap();
+        assert_eq!(canvas.status, Outcome::Applied, "{:?}", canvas.message);
+        let after_canvas = notice();
+        assert_eq!(
+            after_canvas.navigation_revision, before.navigation_revision,
+            "the canvas follows its own dock through the reply"
+        );
+        let program = client
+            .program_call(
+                placement.vessel.clone(),
+                dock(canvas.version, Context::Fleet { id: fleet.id }),
+            )
+            .unwrap();
+        assert_eq!(program.status, Outcome::Applied, "{:?}", program.message);
+        assert_eq!(
+            program.version, canvas.version,
+            "a dock changes no structure"
+        );
+        let after_program = notice();
+        assert_eq!(
+            after_program.navigation_revision,
+            before.navigation_revision + 1,
+            "a Vessel program's dock tells the canvas to read the layout again"
+        );
+    });
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.server_stop().unwrap();
+    cleanup.close().unwrap();
+    if let Err(error) = checked {
+        std::panic::resume_unwind(error);
+    }
+}

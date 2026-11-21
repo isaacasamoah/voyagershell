@@ -260,6 +260,7 @@ impl Owner {
         let Some(Flight {
             request,
             scope,
+            program,
             reply,
             departure,
         }) = self.flight.take()
@@ -335,6 +336,7 @@ impl Owner {
             });
         let resume = Resume {
             landed: Some(landed),
+            program,
             ..Resume::default()
         };
         self.decide(request, scope, reply, resume, before);
@@ -479,6 +481,7 @@ impl Owner {
                 self.flight = Some(Flight {
                     request,
                     scope,
+                    program: resume.program,
                     reply,
                     departure,
                 });
@@ -533,7 +536,7 @@ impl Owner {
         }
         self.publish(
             previous_version,
-            scope.is_some(),
+            scope.is_some() || resume.program.is_some(),
             effect.packages,
             previous_close,
         );

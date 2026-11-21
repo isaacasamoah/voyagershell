@@ -1101,6 +1101,11 @@ The `slow-list` patch makes a `finished` event never report an exit.
 shell's Vessel was saved closed in under half of the hold on Core's terminal
 list replies`, because the Vessel closes only when a held list lands.
 
+The `socket-dock` patch stops the canvas following a dock that it reads from
+a snapshot. `socket-dock-takes-keyboard` then fails on the expectation `the
+canvas focus moved to the docked Vessel`, and the typed line runs in the first
+shell.
+
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
 after a journey launches the candidate again.

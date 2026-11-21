@@ -49,6 +49,7 @@ struct Departure {
 struct Flight {
     request: Request,
     scope: Option<Context>,
+    program: Option<VesselId>,
     reply: SyncSender<Response>,
     departure: Box<Departure>,
 }
