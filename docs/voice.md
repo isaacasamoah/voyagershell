@@ -159,7 +159,7 @@ is never quiet but the listener does not take the sound as speech, a reply waits
 then plays. If the listener takes the sound as speech, such as a steady loud sound, the
 reply waits until that turn ends, which can be as late as the 30 s cap. The 3 s is a
 target. It has not been measured in a real room.
-Listening resumes when it ends. The reply thread and its floor lock are interim. One
+The listener checks the switch again once it holds the floor, so a click-off while a reply plays never opens the microphone again. Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
 
 ### The whole answer, written for the ear

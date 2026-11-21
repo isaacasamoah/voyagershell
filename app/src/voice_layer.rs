@@ -338,6 +338,9 @@ impl Exchange<'_> {
                 return;
             }
             let floor = self.floor.hold();
+            if self.shared.wanted() != Wanted::On {
+                continue;
+            }
             match self.listen() {
                 Listened::Off | Listened::StepAside => {}
                 Listened::Shutdown => return,
