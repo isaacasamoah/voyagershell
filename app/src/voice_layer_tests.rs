@@ -507,7 +507,7 @@ fn a_gone_or_ended_voyager_is_told_it_is_not_running_and_receives_nothing() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::NotRunning, false);
     rig.serve("open the roadmap");
     assert!(rig.said().is_empty());
-    assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Gone)]);
 }
 
 #[test]

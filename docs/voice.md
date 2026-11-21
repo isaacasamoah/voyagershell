@@ -96,8 +96,8 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
 | `queued` | "Queued for Voyager." | Voyager is working | Yes |
 | `needs-you` | "Voyager needs you on Home first." | Voyager is blocked, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
-| `not-running` | "I couldn't pass that to Voyager." | Core reports the program ended or gone, or Core refuses a send with a kind not listed in this table, including `conflict` | No |
-| `gone` | "Voyager isn't running." | Core refuses a send with kind `not_found` or `finished`, or no Voyager is bound | No |
+| `not-running` | "I couldn't pass that to Voyager." | Core refuses a send with a kind not listed in this table, including `conflict` | No |
+| `gone` | "Voyager isn't running." | No Voyager is bound, Core reports the program ended or gone, or Core refuses a send with kind `not_found` or `finished` | No |
 | `busy` | "Voyager can't take that right now. Try again in a moment." | Core refuses a send with kind `busy` | No |
 | `disconnected` | "I lost the connection to Voyager." | Core refuses a send with kind `disconnected` | No |
 | `missed` | "I didn't catch that." | Hearing failed | No |

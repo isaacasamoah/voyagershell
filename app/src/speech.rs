@@ -109,7 +109,7 @@ pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
             send: false,
         },
         Standing::NotRunning => Acknowledgement {
-            phrase: Phrase::NotRunning,
+            phrase: Phrase::Gone,
             send: false,
         },
     }
@@ -405,7 +405,7 @@ mod tests {
     fn a_blocked_or_absent_voyager_receives_nothing() {
         for (standing, phrase) in [
             (Standing::Blocked, Phrase::NeedsYou),
-            (Standing::NotRunning, Phrase::NotRunning),
+            (Standing::NotRunning, Phrase::Gone),
         ] {
             let held = acknowledge(standing, 0);
             assert_eq!((held.phrase, held.send), (phrase, false));
