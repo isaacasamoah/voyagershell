@@ -960,7 +960,7 @@ features:
         journeys: [voice]
       - id: voice-waits-for-the-speaker
         kind: user
-        says: 'After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app''s own voice is never a turn.'
+        says: 'After a click, voice shows connecting and then green while it listens. A quiet, low voice is still a turn. A turn ends only after the person stops speaking, and a click, a thump or the app''s own voice is never a turn.'
         owner: conversation-provider
         guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/voice_parts.rs#Floor']
         checks:
@@ -970,6 +970,8 @@ features:
           - 'journey:voice/two-turns-with-echo'
           - 'test:app/src/audio_io.rs#a_thump_as_the_microphone_opens_is_not_speech'
           - 'test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it'
+          - 'journey:voice/quiet-voice-is-a-turn'
+          - 'test:app/src/audio_io.rs#a_quiet_low_voice_is_a_turn'
         formal: []
         journeys: [voice]
       - id: voice-hears-verbatim
@@ -982,14 +984,13 @@ features:
         journeys: [voice]
       - id: voice-silence-makes-no-turn
         kind: user
-        says: 'When the person says nothing, nothing happens. Room sound with no speech in it, such as a fan, typing, a distant door or the echo of the app''s own reply, is never a turn, is never acknowledged and never reaches Voyager, and a transcript with no words in it is dropped without a word.'
+        says: 'When the person says nothing, nothing reaches Voyager. Room sound with no speech in it, such as a fan, typing, a distant door or the echo of the app''s own reply, is never sent and never starts a spoken reply, a sound that switches on and stays is not a turn, and a transcript with no words in it or that reads back the hearing hint is dropped without a word.'
         owner: conversation-provider
         guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/speech.rs#heard_nothing']
         checks:
           - 'journey:voice/room-sound-is-never-a-turn'
           - 'journey:voice/request-in-room-sound-is-sent'
           - 'test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech'
-          - 'test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech'
           - 'test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing'
         formal: []
         journeys: [voice]

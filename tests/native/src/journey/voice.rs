@@ -26,6 +26,7 @@ cases! {
     ClickTurnsVoiceOff => "click-turns-voice-off",
     RoomSoundIsNeverATurn => "room-sound-is-never-a-turn",
     RequestInRoomSoundIsSent => "request-in-room-sound-is-sent",
+    QuietVoiceIsATurn => "quiet-voice-is-a-turn",
     RenameIsHeard => "rename-is-heard-and-acknowledged",
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
@@ -47,6 +48,8 @@ const REFUSED: &str = "Not sent";
 const ROOM_SILENCE_MS: u32 = 3000;
 const WORD_ERROR_PERCENT: usize = 5;
 const ROOM_BEFORE_REQUEST_S: u32 = 8;
+const QUIET_VOICE_GAIN: f64 = 0.15;
+const QUIET_VOICE_AROUND_S: u32 = 3;
 const ROOM_AFTER_REQUEST_S: u32 = 4;
 
 #[derive(serde::Serialize)]
@@ -247,15 +250,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .collect();
         Verdict::new()
             .expect(
-                "five minutes of room tone, fan, keys, a door and a reply's echo is never a turn",
-                listened.turns.is_empty(),
-            )
-            .expect(
-                "nothing heard in the room sound reaches Voyager",
+                "nothing heard in five minutes of room tone, fan, keys, a door and a reply's echo reaches Voyager",
                 listened.sent() == 0,
             )
             .observed("turns", listened.turns.len())?
             .observed("sent", listened.sent())?
+            .observed("acknowledged", listened.acknowledged())?
             .observed("droppedAfterHearing", listened.dropped())?
             .observed("heard", &heard)?
             .observed("roomSha256", made.sha256())?
@@ -294,6 +294,31 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && received(&after) > received(&before),
             )
             .observed("spoken", RENAME_THE_FLEET.words)?
+            .observed("heard", &heard)?
+            .observed("wordErrors", errors)?
+            .observed("words", words)?
+            .observed("listened", listened)
+    })?;
+    cases.check(native, Case::QuietVoiceIsATurn, |native| {
+        let quiet = room::quiet_request(&DOCK_ON_THIS_FLEET, QUIET_VOICE_GAIN, QUIET_VOICE_AROUND_S)?;
+        voice::turn_on(native)?;
+        let listened = voice::feed_and_settle(native, "quiet-voice", &quiet);
+        voice::turn_off(native)?;
+        let listened = listened?;
+        let heard = listened
+            .turns
+            .first()
+            .and_then(|turn| turn.heard.clone())
+            .unwrap_or_default();
+        let (errors, words) = word_errors(&heard, DOCK_ON_THIS_FLEET.words);
+        Verdict::new()
+            .expect(
+                "a request spoken at a sixth of the committed level over room tone is exactly one turn",
+                listened.turns.len() == 1,
+            )
+            .expect("that turn is sent to Voyager", listened.sent() == 1)
+            .observed("gain", QUIET_VOICE_GAIN)?
+            .observed("spoken", DOCK_ON_THIS_FLEET.words)?
             .observed("heard", &heard)?
             .observed("wordErrors", errors)?
             .observed("words", words)?

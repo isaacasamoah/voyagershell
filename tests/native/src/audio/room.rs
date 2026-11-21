@@ -262,6 +262,19 @@ pub fn request_in_room(
     Ok(to_samples(&mix))
 }
 
+pub fn quiet_request(speech: &Speech, gain: f64, around_seconds: u32) -> Result<Samples> {
+    let mut noise = Noise(SEED ^ 0x0000_9e17);
+    let words = speech.samples()?.0;
+    let from = seconds(f64::from(around_seconds));
+    let mut mix = noise.pink(from * 2 + words.len(), TONE_RMS);
+    let spoken: Vec<f64> = words
+        .iter()
+        .map(|sample| f64::from(*sample) * gain)
+        .collect();
+    add(&mut mix, from, &spoken);
+    Ok(to_samples(&mix))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

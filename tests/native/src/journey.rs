@@ -486,7 +486,7 @@ mod tests {
                 "tests/native/controls/frame-stall.patch".to_owned(),
                 "tests/native/controls/voice-handoff.patch".to_owned(),
                 "tests/native/controls/voice-hearing.patch".to_owned(),
-                "tests/native/controls/voice-room.patch".to_owned(),
+                "tests/native/controls/voice-quiet.patch".to_owned(),
                 "tests/native/controls/voice-speak.patch".to_owned(),
                 "tests/native/controls/voice-turn.patch".to_owned(),
                 "tests/native/controls/voice-first-paragraph.patch".to_owned(),

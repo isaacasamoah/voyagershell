@@ -513,14 +513,19 @@ mod tests {
         samples.chunks(FRAME).map(<[i16]>::to_vec).collect()
     }
 
-    fn thud(frames: usize) -> Vec<Vec<i16>> {
-        let samples: Vec<i16> = (0..frames * FRAME)
-            .map(|index| {
-                let at = index as f32 / SAMPLE_RATE as f32;
-                (3000.0 * (-at / 0.12).exp() * (std::f32::consts::TAU * 70.0 * at).sin()) as i16
+    fn low_voice(frames: usize) -> Vec<Vec<i16>> {
+        const SYLLABLES: [f32; 5] = [1.0, 0.7, 0.45, 0.9, 0.4];
+        (0..frames)
+            .map(|number| {
+                let strength = SYLLABLES[number % SYLLABLES.len()];
+                (0..FRAME)
+                    .map(|index| {
+                        let at = index as f32 / SAMPLE_RATE as f32;
+                        (900.0 * strength * (std::f32::consts::TAU * 150.0 * at).sin()) as i16
+                    })
+                    .collect()
             })
-            .collect();
-        samples.chunks(FRAME).map(<[i16]>::to_vec).collect()
+            .collect()
     }
 
     fn add_voice(frames: &mut [Vec<i16>]) {
@@ -598,25 +603,21 @@ mod tests {
     }
 
     #[test]
-    fn a_low_thud_like_a_distant_door_is_not_speech() {
-        let mut frames: Vec<Vec<i16>> = settled().collect();
-        for _ in 0..10 {
-            frames.extend(thud(60));
-            frames.extend(std::iter::repeat_n(quiet(), PAUSE_FRAMES));
-        }
-        let (heard, gate) = run(frames);
-        assert_eq!(heard, vec![Heard::Settled]);
-        assert!(gate.quiet());
-    }
-
-    #[test]
-    fn speech_band_sound_over_a_steady_hiss_is_still_heard() {
+    fn speech_over_a_steady_hiss_is_still_heard() {
         let mut frames = hiss(250, 400.0);
         add_voice(&mut frames[100..130]);
         assert_eq!(
             run(frames).0,
             vec![Heard::Settled, Heard::Ended(End::Pause)]
         );
+    }
+
+    #[test]
+    fn a_quiet_low_voice_is_a_turn() {
+        let words = settled()
+            .chain(low_voice(60))
+            .chain(std::iter::repeat_n(quiet(), PAUSE_FRAMES));
+        assert_eq!(run(words).0, vec![Heard::Settled, Heard::Ended(End::Pause)]);
     }
 
     #[test]

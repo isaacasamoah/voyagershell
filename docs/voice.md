@@ -18,26 +18,29 @@ silent room, the end of a turn, a reply and a fault all leave it on.
 1. A click turns voice on. The control turns amber and reads Connecting while the
    microphone opens and the noise floor settles for 0.3 s, then green while it
    listens. Nothing opens the microphone without a click.
-2. The turn rule is in `audio_io::Gate`. It measures each 20 ms frame in the
-   speech band, after a pre-emphasis filter that removes the low rumble of a
-   fan, a hum or a door. It compares that level with three times the quietest
-   frame of the last 2 s, and never with less than 200. The threshold has no
-   ceiling, so a steady sound, however loud, never counts as speech. A sound
-   counts as speech only after 0.2 s without a break in that band, so a click, a
-   thump as the microphone opens or a tap is never a turn. Once a turn has
-   started, it ends on the plain level of the whole band, with the same floor
-   rule. The speech band alone lets the soft edges of words fall under the floor
-   sooner, which stretched the journey's 1.35 s mid-request pause from 69 to 73
-   of the 75 frames that end a turn. A sound that switches on and
+2. The turn rule is in `audio_io::Gate`. It measures the level of each 20 ms
+   frame over the whole band. It compares that level with three times the
+   quietest frame of the last 2 s, and never with less than 200. The threshold
+   has no ceiling, so a steady sound, however loud, never counts as speech. A
+   sound counts as speech only after 0.2 s without a break, so a click, a thump
+   as the microphone opens or a tap is never a turn. For one build on 21 Nov 2026
+   the start of a turn was measured in the speech band, after a pre-emphasis
+   filter, to keep a door's thud and a fan's rumble from starting turns. Isaac's
+   real voice through his microphone then never started a turn, and voice stayed
+   green and silent while he spoke. A low voice loses most of its level to that
+   filter: "Dock on this fleet." keeps 0.22 of its level, and at 0.3 of its
+   committed loudness it no longer started a turn. A door, typing or a fan can
+   therefore start a turn again. Its acknowledgement plays, and hearing then drops
+   a read-back of the hint before anything is sent. A sound that switches on and
    stays, such as a fan, passes the threshold until the 2 s floor catches up, so a
    turn that ends is also checked for the rise and fall of speech. When the 90th
    percentile of its sounding frames' level is under 1.5 times the 10th
    percentile, the room got louder and nobody spoke. The turn is dropped without
-   a word and listening goes on. In a simulation of the gate, a fan switching on
-   measured 1.13 to 1.23 over five seeds. The 40 committed requests measured at
-   least 3.52 with no fan or a soft fan and at least 1.69 over a loud fan. A
-   request that starts 0.3 s after, at the moment of or 0.5 s before a fan
-   switches on, or that ends as it switches on, was kept in all 40 cases each. Speech then ends the turn after 1.5 s
+   a word and listening goes on. The bands behind the 1.5 were measured on the
+   speech-band level: a fan switching on measured 1.13 to 1.23 over five seeds,
+   and the 40 committed requests measured at least 3.52 with no fan or a soft fan
+   and at least 1.69 over a loud fan. On the plain level they are a target to
+   measure. Speech then ends the turn after 1.5 s
    of quiet. A turn also ends at 30 s of speech, and voice stays on. A silent room
    is never a turn and never turns voice off. The utterance keeps the 1 s before
    speech started, so its first word is not cut.
@@ -314,6 +317,6 @@ speaker. It checks that nothing records the microphone without a click, that the
 back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
 appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
-voice on, five minutes of room sound with no speech in it is never a turn, a request
-spoken among that sound is sent word for word, two turns in a row each get a spoken
+voice on, nothing in five minutes of room sound with no speech in it is sent, a request
+spoken among that sound is sent, a quiet low voice is one turn that is sent, two turns in a row each get a spoken
 reply with the speaker echoed into the microphone, and a click turns voice off.

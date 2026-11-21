@@ -257,14 +257,14 @@ confidence = "stated"
 
 [[invariant]]
 id = "voice-waits-for-the-speaker"
-says = "After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app's own voice is never a turn."
+says = "After a click, voice shows connecting and then green while it listens. A quiet, low voice is still a turn. A turn ends only after the person stops speaking, and a click, a thump or the app's own voice is never a turn."
 kind = "user"
 owner = "conversation-provider"
 source = "Isaac, 21 Nov 2026, after the first live test: he presses voice and sees connecting, it turns green when it is listening, and only after he stops does it acknowledge"
 features = ["voice"]
 guard = ["type:app/src/audio_io.rs#Gate", "type:app/src/voice_parts.rs#Floor"]
 type_gap = "The turn rule is constants in one gate, and the microphone is closed while the app plays by the listener stepping aside. Nothing in the types stops another path from playing audio with the microphone open."
-check = ["journey:voice/turn-waits-for-the-sentence", "journey:voice/start-thump-is-not-speech", "journey:voice/connecting-then-listening", "journey:voice/two-turns-with-echo", "test:app/src/audio_io.rs#a_thump_as_the_microphone_opens_is_not_speech", "test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it"]
+check = ["journey:voice/turn-waits-for-the-sentence", "journey:voice/start-thump-is-not-speech", "journey:voice/connecting-then-listening", "journey:voice/two-turns-with-echo", "test:app/src/audio_io.rs#a_thump_as_the_microphone_opens_is_not_speech", "test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it", "journey:voice/quiet-voice-is-a-turn", "test:app/src/audio_io.rs#a_quiet_low_voice_is_a_turn"]
 confidence = "stated"
 
 [[invariant]]
@@ -281,14 +281,14 @@ confidence = "stated"
 
 [[invariant]]
 id = "voice-silence-makes-no-turn"
-says = "When the person says nothing, nothing happens. Room sound with no speech in it, such as a fan, typing, a distant door or the echo of the app's own reply, is never a turn, is never acknowledged and never reaches Voyager, and a transcript with no words in it is dropped without a word."
+says = "When the person says nothing, nothing reaches Voyager. Room sound with no speech in it, such as a fan, typing, a distant door or the echo of the app's own reply, is never sent and never starts a spoken reply, a sound that switches on and stays is not a turn, and a transcript with no words in it or that reads back the hearing hint is dropped without a word."
 kind = "user"
 owner = "conversation-provider"
 source = "Isaac, 21 Nov 2026, from live use: voice held its own conversation in a loop whenever he was silent; when he says nothing, nothing should happen"
 features = ["voice"]
 guard = ["type:app/src/audio_io.rs#Gate", "type:app/src/speech.rs#heard_nothing"]
-type_gap = "Speech is told from other sound by its level in the speech band, not by a model of speech, so a loud sound in that band, such as distant talk or a television, can still pass as a turn until a voice activity model gates it."
-check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-room-sound-is-sent", "test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech", "test:app/src/audio_io.rs#a_low_thud_like_a_distant_door_is_not_speech", "test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing"]
+type_gap = "Speech is told from other sound by its level and its rise and fall, not by a model of speech, so a door, typing or distant talk can still start a turn and play the acknowledgement before hearing drops it, until a voice activity model gates turns."
+check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-room-sound-is-sent", "test:app/src/audio_io.rs#a_steady_loud_hiss_is_never_speech", "test:app/src/voice_layer_tests.rs#empty_heard_text_says_nothing_more_and_sends_nothing"]
 confidence = "stated"
 
 [[invariant]]
