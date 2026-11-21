@@ -12,7 +12,8 @@ const GATES: usize = 4 * HIDDEN;
 const MODEL: &[u8] = include_bytes!("../models/silero_vad_v6.onnx");
 
 static WEIGHTS: LazyLock<Weights> = LazyLock::new(|| {
-    Weights::read(MODEL).unwrap_or_else(|error| panic!("The embedded speech model is unreadable: {error}"))
+    Weights::read(MODEL)
+        .unwrap_or_else(|error| panic!("The embedded speech model is unreadable: {error}"))
 });
 
 struct Conv {
@@ -105,7 +106,10 @@ impl Silero {
             *gate = weights.gate_bias[row]
                 + weights.gate_bias[GATES + row]
                 + dot(&weights.input_gates[row * HIDDEN..][..HIDDEN], input)
-                + dot(&weights.hidden_gates[row * HIDDEN..][..HIDDEN], &self.hidden);
+                + dot(
+                    &weights.hidden_gates[row * HIDDEN..][..HIDDEN],
+                    &self.hidden,
+                );
         }
         for unit in 0..HIDDEN {
             let keep_in = sigmoid(gates[unit]);
@@ -235,7 +239,10 @@ impl Conv {
 }
 
 fn dot(left: &[f32], right: &[f32]) -> f32 {
-    left.iter().zip(right).map(|(left, right)| left * right).sum()
+    left.iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum()
 }
 
 fn sigmoid(value: f32) -> f32 {
@@ -303,7 +310,10 @@ fn skip<'a>(message: &'a [u8], at: &mut usize, size: usize) -> Result<&'a [u8], 
 
 #[cfg(test)]
 pub(crate) fn hearing_clips() -> std::collections::HashMap<String, Vec<i16>> {
-    let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/native/fixtures/hearing");
+    let fixtures = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../tests/native/fixtures/hearing"
+    );
     let pcm = std::fs::read(format!("{fixtures}/hearing.s16")).unwrap();
     let samples: Vec<i16> = pcm
         .as_chunks::<2>()
@@ -341,7 +351,7 @@ mod tests {
     fn through_the_gate_frames(detector: &mut Silero, clip: &[i16]) -> Vec<f32> {
         let mut probabilities = Vec::new();
         let mut fed = 0;
-        for frame in clip.chunks_exact(FRAME) {
+        for frame in clip.as_chunks::<FRAME>().0 {
             let probability = detector.probability(frame);
             fed += FRAME;
             if fed / CHUNK > probabilities.len() {
@@ -370,7 +380,12 @@ mod tests {
             let mut detector = Silero::new();
             let got = through_the_gate_frames(&mut detector, &clip);
             let compared = got.len().min(expected.len());
-            assert!(compared + 1 >= expected.len(), "{} {}", got.len(), expected.len());
+            assert!(
+                compared + 1 >= expected.len(),
+                "{} {}",
+                got.len(),
+                expected.len()
+            );
             for (got, expected) in got.iter().zip(&expected) {
                 worst = worst.max((got - expected).abs());
             }

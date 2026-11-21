@@ -103,7 +103,6 @@ impl Audio for Fake {
     }
 }
 
-
 struct Heard(&'static str);
 
 impl Hearing for Heard {

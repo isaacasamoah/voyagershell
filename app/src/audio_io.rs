@@ -382,7 +382,10 @@ mod tests {
         gate: Gate,
     }
 
-    fn listen(detector: Box<dyn SpeechDetector>, frames: impl IntoIterator<Item = Vec<i16>>) -> Listened {
+    fn listen(
+        detector: Box<dyn SpeechDetector>,
+        frames: impl IntoIterator<Item = Vec<i16>>,
+    ) -> Listened {
         let mut gate = Gate::new(detector);
         let mut heard = Vec::new();
         let mut ended_at = None;
@@ -484,7 +487,11 @@ mod tests {
         );
         let ended = listened.ended_at.unwrap();
         let kept = listened.gate.utterance().len() / FRAME;
-        assert!(ended + 1 - kept <= voice_from, "kept from {} voice from {voice_from}", ended + 1 - kept);
+        assert!(
+            ended + 1 - kept <= voice_from,
+            "kept from {} voice from {voice_from}",
+            ended + 1 - kept
+        );
         assert!(ended >= voice_to, "ended {ended} voice to {voice_to}");
     }
 
@@ -574,7 +581,10 @@ mod tests {
                 self.0 = false;
             }
         }
-        let listened = listen(Box::new(Remembers(true)), settled().chain(std::iter::repeat_n(quiet(), 100)));
+        let listened = listen(
+            Box::new(Remembers(true)),
+            settled().chain(std::iter::repeat_n(quiet(), 100)),
+        );
         assert_eq!(listened.heard, vec![Heard::Settled]);
         assert!(!listened.gate.speaking());
     }
@@ -583,7 +593,8 @@ mod tests {
     fn a_quiet_voice_at_six_hundredths_of_its_level_is_one_whole_turn_with_its_first_word() {
         for name in ["question-02", "command-21", "command-28"] {
             let clip = voice(name, 6);
-            let mut frames: Vec<Vec<i16>> = settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
+            let mut frames: Vec<Vec<i16>> =
+                settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
             let from = frames.len();
             frames.extend(framed(&clip));
             let to = frames.len();
@@ -598,7 +609,8 @@ mod tests {
             let first = voice("command-21", percent);
             let second = voice("question-02", percent);
             let (first, second) = (trimmed(&first), trimmed(&second));
-            let mut frames: Vec<Vec<i16>> = settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
+            let mut frames: Vec<Vec<i16>> =
+                settled().chain(std::iter::repeat_n(quiet(), 50)).collect();
             let from = frames.len();
             frames.extend(framed(first));
             frames.extend(std::iter::repeat_n(quiet(), 70));
@@ -645,7 +657,11 @@ mod tests {
         let mut frames = hiss(200, 100.0);
         frames.extend(hiss(300, 400.0));
         mixed(&mut frames, 190, &clip);
-        one_whole_turn(frames, 190 + first_voiced_frame(&clip), 190 + clip.len() / FRAME);
+        one_whole_turn(
+            frames,
+            190 + first_voiced_frame(&clip),
+            190 + clip.len() / FRAME,
+        );
     }
 
     #[test]
@@ -671,7 +687,11 @@ mod tests {
         let clip = voice("command-25", 15);
         let mut frames = hiss(400, 400.0);
         mixed(&mut frames, 100, &clip);
-        one_whole_turn(frames, 100 + first_voiced_frame(&clip), 100 + clip.len() / FRAME);
+        one_whole_turn(
+            frames,
+            100 + first_voiced_frame(&clip),
+            100 + clip.len() / FRAME,
+        );
     }
 
     #[test]
