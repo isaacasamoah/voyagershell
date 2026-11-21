@@ -1034,7 +1034,7 @@ The room sound is made in `src/audio/room.rs` from a fixed seed, so it needs no 
 
 The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds each request's kind, Edge voice and words, and `make.sh WORK_FOLDER` renders them with Edge text to speech and ffmpeg into `hearing.s16`, 16 kHz mono samples one request after another, and `hearing.tsv`, which names each request and its sample count. The verifier widens them to 48 kHz before the feed and refuses a set whose checksum is not the committed one. Word errors are counted as the voice experiment's round 4 counted them. The text is lower-cased, "voyager shell" counts as one word, punctuation is dropped, and the digits for zero to ten count as their words. The count is the edit distance in words.
 
-Six more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
+Seven more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling, takes five frames of sound as
 speech and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
 words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
