@@ -70,8 +70,12 @@ next. [The Core adapter](terminal.md#core-adapter) describes the whole path.
 
 Core owns terminals, so an agent starts a program with `hc run` and labels it
 `voyager.place=<value>`. The value is the `Place` contract type in
-`contract/src/place.rs`. It is `fleet:<Fleet id>` or `portal:<Voyage id>`. Its
-generated schema is `contract/generated/place.schema.json`. The owner parses
+`contract/src/place.rs`. It is `fleet:<Fleet id>`, `portal:<Voyage id>` or
+`fleet:<Fleet id>:<side>:<placement id>`, where `<side>` is `left`, `right`,
+`top` or `bottom`. The value holds an owner and the same `PlacementInsertion`
+that `create-vessel` takes, so the label and the operation share one type.
+Ids hold only letters, digits, `.`, `_` and `-`, which the parser enforces, so a
+colon always separates the parts. Its generated schema is `contract/generated/place.schema.json`. The owner parses
 the label where Core's report enters, in `app/src/activity.rs`.
 
 A `created` report for a terminal that no Vessel names is dropped, unless it
@@ -83,7 +87,9 @@ until no request is in flight and the layout is fresh.
 
 Adoption adds one terminal Vessel whose backend is that terminal and places it
 at the end of the Fleet's split, or of the Voyage's Portal column, which it
-shows. The Vessel's launch is the program when the first argument names a
+shows. With a side and a placement it splits that placement and puts the
+Vessel on that side, as `create-vessel` does with a `beside` insertion. Any
+Vessel may use either route, and neither resizes the split. The Vessel's launch is the program when the first argument names a
 known agent program from `app/src/launch.rs`, such as `claude` or `codex`, and
 a terminal otherwise. The placement takes the terminal's Core name and keeps it
 as a deliberate name, so a later folder change does not rename it. When Core
@@ -96,7 +102,8 @@ A terminal that any Vessel already names is skipped, so a repeat report or a
 second snapshot adds nothing. The adopted terminal joins the live bindings, so
 its Vessel closes when its program exits, like any other.
 
-An invalid value, an unknown Fleet or Voyage, or a closed one places nothing.
+An invalid value, a side that is not one of the four, a placement that is not
+in the named Fleet, an unknown Fleet or Voyage, or a closed one places nothing.
 The owner writes the reason, which names the terminal, to the canvas status
 line through `take_placement_notice`. It never guesses another place.
 
@@ -170,11 +177,13 @@ It is not a Core label or a Core document, because a Vessel program can write
 both, and it is not part of the layout, so the layout and its wire do not
 change.
 
-A Vessel socket offers `dock`, `create-fleet-with-vessel`, `create-vessel` and
+A Vessel socket offers `dock`, `create-fleet-with-vessel` and
 `set-placement-maximized` only when its own terminal equals that field. Any
 other socket refuses each with "<operation> is offered only to Voyager; nothing
-was queued" and queues nothing. `create-vessel` from Voyager must name a Fleet
-as its destination, and a Portal destination is refused. The field stands in
+was queued" and queues nothing. `create-vessel` with a `beside` insertion in a
+Fleet is offered to every Vessel socket. Any other `create-vessel` is offered
+only to Voyager, which must name a Fleet as its destination, and a Portal
+destination is refused. The field stands in
 for the rank record that Release 0.2 adds.
 
 The app reads the file once, when it starts. After that it holds the value in

@@ -332,14 +332,38 @@ confidence = "stated"
 
 [[invariant]]
 id = "only-the-bound-voyager-is-offered-voyager-only-operations"
-says = "Only the bound Voyager is offered dock, create-fleet-with-vessel, create-vessel and set-placement-maximized through its Vessel socket. Any other Vessel's call to one of them is refused with nothing queued, and the workspace stays as it was."
+says = "Only the bound Voyager is offered dock, create-fleet-with-vessel, set-placement-maximized and create-vessel without a beside insertion in a Fleet through its Vessel socket. Any other Vessel's call to one of them is refused with nothing queued, and the workspace stays as it was."
 kind = "user"
 owner = "application-queue"
-source = "Isaac, card 52, 21 Nov 2026: 'Let Voyager add a Vessel to the current Fleet and maximize it, as you can, for Sunday's test.' It fits his rule that the avatar always carries his authority; other programs stay refused."
+source = "Isaac, card 52, 21 Nov 2026: 'Let Voyager add a Vessel to the current Fleet and maximize it, as you can, for Sunday's test.' It fits his rule that the avatar always carries his authority; other programs stay refused. Isaac, 22 Nov 2026: 'we need all agents to be able to split terminals vertically or horizontally, not just add one', so create-vessel beside a placement of a Fleet is offered to any Vessel."
 features = ["adopted-vessels"]
 guard = ["type:app/src/voyager_binding.rs#Binding"]
 check = ["journey:socket-dock/voyager-creates-and-maximizes", "test:app/src/vessel_socket_authority_tests.rs#creating_a_vessel_and_maximizing_one_are_offered_only_to_the_bound_terminal", "test:app/src/vessel_socket.rs#dock_is_accepted_from_the_bound_terminal_and_refused_from_any_other"]
-gap = "The journey drives a refused set-placement-maximized only. The refusals of create-vessel and a Portal destination are covered by unit tests alone."
+gap = "The journey drives a refused set-placement-maximized only. The refusals of create-vessel without a beside insertion and of a Portal destination are covered by unit tests alone."
+confidence = "stated"
+
+[[invariant]]
+id = "any-agent-splits-a-placement"
+says = "Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent's hc run could not start, and neither route resizes a split."
+kind = "user"
+owner = "application-queue"
+source = "Isaac, 22 Nov 2026: 'we need all agents to be able to split terminals vertically or horizontally, not just add one, this will vastly improve layouts.'"
+features = ["adopted-vessels", "agent-vessels"]
+guard = ["type:contract/src/place.rs#Place"]
+check = ["journey:agent-split/label-splits-each-side", "journey:agent-split/create-vessel-splits-beside", "journey:agent-split/bad-split-places-nothing"]
+gap = "Only Linux X11 evidence exists."
+confidence = "stated"
+
+[[invariant]]
+id = "agents-start-plain-unless-they-name-permissions"
+says = "When a Vessel other than Voyager creates an agent and names no permissions, the agent starts in its plain mode, with the arguments a plain hc run of that agent would carry and no bypass flag. Voyager and the person keep the table default."
+kind = "user"
+owner = "application-queue"
+source = "Admiral ruling A, 22 Nov 2026, on the any-agent split work: agents get exactly what they can already do through hc run, with no new refusal or prompt."
+features = ["adopted-vessels", "agent-vessels"]
+guard = ["type:app/src/agent_programs.rs#Defaults"]
+check = ["journey:agent-split/agent-starts-plain"]
+gap = "Only Linux X11 evidence exists."
 confidence = "stated"
 
 [[invariant]]
