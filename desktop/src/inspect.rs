@@ -346,6 +346,9 @@ pub fn install(path: Option<PathBuf>, window: &Window, cx: &mut App) {
             let Some(frame) = ledger.borrow_mut().frame() else {
                 continue;
             };
+            crate::diagnostics::redraw::event("inspection_frame", || {
+                serde_json::json!({"sequence": frame.sequence, "elements": frame.elements.len()})
+            });
             let path = path.clone();
             let written = cx
                 .background_spawn(async move { write(&path, &frame) })

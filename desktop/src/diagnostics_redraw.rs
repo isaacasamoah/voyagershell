@@ -8,6 +8,23 @@ use std::{
 static ENABLED: LazyLock<bool> =
     LazyLock::new(|| std::env::var_os("VOYAGER_REDRAW_PROBE").is_some());
 
+pub fn event(stage: &'static str, detail: impl FnOnce() -> serde_json::Value) {
+    if !*ENABLED {
+        return;
+    }
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "event": "voyager_redraw_event",
+            "wall_ns": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| since.as_nanos()),
+            "stage": stage,
+            "detail": detail(),
+        })
+    );
+}
+
 struct Counts {
     started: Instant,
     last: Instant,

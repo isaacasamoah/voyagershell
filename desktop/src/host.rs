@@ -329,9 +329,26 @@ fn load(
             Ok(async move {
                 let request: Request = serde_json::from_str(&request)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                let id = request.request_id.clone();
+                crate::diagnostics::redraw::event("workspace_call", || {
+                    serde_json::json!({
+                        "requestId": id,
+                        "operation": serde_json::to_value(&request.action)
+                            .ok()
+                            .and_then(|action| action.get("operation").cloned()),
+                    })
+                });
                 let reply = voyager_contract::Reply::from(client.call(request));
                 let encoded = serde_json::to_string(&reply)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                crate::diagnostics::redraw::event("workspace_reply", || {
+                    let reply = serde_json::to_value(&reply).unwrap_or_default();
+                    serde_json::json!({
+                        "requestId": id,
+                        "status": reply.get("status"),
+                        "version": reply.get("version"),
+                    })
+                });
                 Ok(HostValue::from(encoded))
             })
         })
@@ -349,6 +366,9 @@ fn load(
             let client = terminal_client.clone();
             let viewers = terminal_viewers.clone();
             Ok(async move {
+                crate::diagnostics::redraw::event("terminal_open", || {
+                    serde_json::json!({"vessel": request.vessel_id.0, "requestId": request.request_id})
+                });
                 let result = client.terminal(
                     request.vessel_id.clone(),
                     request.request_id.clone(),
@@ -367,6 +387,17 @@ fn load(
                     }
                     _ => None,
                 };
+                crate::diagnostics::redraw::event("terminal_opened", || {
+                    serde_json::json!({
+                        "vessel": request.vessel_id.0,
+                        "requestId": request.request_id,
+                        "result": match &result {
+                            Ok(()) => "applied",
+                            Err(voyager_app::core::Error::Rejected { .. }) => "rejected",
+                            Err(voyager_app::core::Error::Uncertain(_)) => "uncertain",
+                        },
+                    })
+                });
                 let (status, message) = match result {
                     Ok(()) => (voyager_contract::Status::Applied, None),
                     Err(voyager_app::core::Error::Rejected { kind, message }) => (
@@ -569,6 +600,15 @@ impl CanvasHost {
                 let updated = this.update(cx, |canvas, cx| {
                     match next {
                         Ok(notice) => {
+                            crate::diagnostics::redraw::event("workspace_notice", || {
+                                serde_json::json!({
+                                    "revision": notice.revision,
+                                    "navigation": notice.navigation_revision,
+                                    "dock": notice.dock_revision,
+                                    "close": notice.close_revision,
+                                    "activity": notice.activity_revision,
+                                })
+                            });
                             after = Some(notice);
                             changed_revision.set(notice);
                             if let Some(activity) = activity {

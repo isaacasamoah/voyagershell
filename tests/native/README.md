@@ -1156,6 +1156,36 @@ before it wrote its end record, as `terminal-scrolling` does when it closes the 
 snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's
 `maxMs` and `p95Ms` then exceed 50 ms, and a build without the patch does not.
 
+### Glance ledger and redraw probe
+
+Every run keeps `glances.jsonl` in the evidence folder. The verifier writes one
+line each time it reads an inspection frame whose launch, frame sequence or saved
+document version differs from the last one that it read. Each line holds the time,
+the launch, the sequence, the document version and the whole frame. The app writes
+a new inspection frame only when what it draws changes, so a document version that
+gets new lines but no new sequence means that the app has not drawn the change.
+The verifier reads at most every 80 ms, so a frame that the app replaced sooner is
+not in the ledger.
+
+`run --probe redraw` sets `VOYAGER_REDRAW_PROBE=1` for the candidate. The app
+then prints a `voyager_redraw_event` line on stderr, which the verifier keeps in
+`native.log`, at each step from a document change to the frame that shows it:
+
+| Stage | Written when |
+| --- | --- |
+| `workspace_notice` | The canvas host receives the owner's workspace notice, with its revisions |
+| `workspace_call` | A canvas request goes to the owner, with its request id and operation |
+| `workspace_reply` | The owner answers that request, with its status and version |
+| `terminal_open` | The canvas asks to open a terminal Vessel |
+| `terminal_opened` | That open finishes, with `applied`, `rejected` or `uncertain` |
+| `inspection_frame` | The app writes an inspection frame, with its sequence |
+
+Each line carries `wall_ns`, the same clock as the `at` of a glance. `checks.json`
+gets a `redraw` entry that counts the lines of each stage. A run with the probe
+whose log holds no such line is `inconclusive` with `firstFailingCheck.check`
+`redraw-probe`, because the candidate does not carry the probe. The probe only
+prints lines, so a journey passes or fails the same with it and without it.
+
 ### Build and inspect
 
 From the selected checkout:

@@ -222,7 +222,8 @@ pub struct Native {
     seeded_at: Option<u128>,
     pub hc: Pinned,
     pub script: Option<Script>,
-    pub probe_frames: bool,
+    pub probe: Option<frames::Probe>,
+    glances: frames::Glances,
     pub audio_requested: bool,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
@@ -278,7 +279,8 @@ impl Native {
             seeded_at: None,
             hc,
             script: None,
-            probe_frames: false,
+            probe: None,
+            glances: frames::Glances::default(),
             audio_requested: false,
             audio: None,
             voice_engine: None,
@@ -619,7 +621,10 @@ impl Native {
         let inspection = self.inspection();
         let stop = self.system.evidence.join(frames::STOP);
         let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
-        if self.probe_frames {
+        if self.probe == Some(frames::Probe::Redraw) {
+            extra_env.push(("VOYAGER_REDRAW_PROBE", "1"));
+        }
+        if self.probe == Some(frames::Probe::Frame) {
             extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
             extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));
             extra_env.push((
@@ -996,6 +1001,15 @@ impl Native {
         let window = self.x11()?.geometry(self.window)?;
         let frame = inspection::read(&self.inspection())?.filter(|frame| drawn_for(frame, window));
         let saved = self.document()?;
+        if let (Some(frame), Some((version, _))) = (&frame, &saved) {
+            self.glances.note(
+                &self.system.evidence,
+                self.launches,
+                frame,
+                *version,
+                stamp(),
+            )?;
+        }
         Ok(glance(frame.as_ref(), saved.as_ref(), read))
     }
 
