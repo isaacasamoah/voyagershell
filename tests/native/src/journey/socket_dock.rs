@@ -740,7 +740,7 @@ fn held_release(native: &Native, arm: &crate::core_relay::Arm) -> Result<Option<
         .find_map(|line| line["releasedAtMs"].as_u64()))
 }
 
-fn show_fleet(native: &mut Native) -> Result<()> {
+pub(super) fn show_fleet(native: &mut Native) -> Result<()> {
     let (_, layout) = native.document()?.context("Missing saved layout")?;
     if layout.view == WorkspaceView::Fleet {
         return Ok(());

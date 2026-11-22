@@ -859,6 +859,11 @@ canvas's own read after the attach.
   `inconclusive`, blamed on the verifier, when the Home click opens no terminal
   through `terminal.attach`, because the case then did not reach the state it
   judges.
+- `created-during-avatar-home-click-is-drawn` docks the avatar at home if it is
+  not there, shows the Fleet view, closes the app and launches it again, so the
+  Home view's terminals are not yet attached. It arms the same hold, clicks the
+  avatar, waits for the held attach and sends the create. It passes and ends
+  inconclusive on the same terms as the first case.
 
 #### Scripted tool calls
 

@@ -194,13 +194,13 @@ confidence = "stated"
 
 [[invariant]]
 id = "created-while-preparing-is-drawn"
-says = "A Vessel that Voyager creates while the canvas is still preparing the view it shows is drawn with its terminal. The canvas opens every Vessel that the owner reports as created in any reply it takes, not only in the reply to its own request."
+says = "A Vessel that Voyager creates while the canvas is still preparing the view it shows is drawn with its terminal, whether the person opened that view from the sidebar or by clicking the avatar at home. The canvas opens every Vessel that the owner reports as created in any reply it takes, not only in the reply to its own request."
 kind = "user"
 owner = "desktop-presentation"
 source = "Docking home crew's socket-dock runs, 22 Nov 2026: a terminal Vessel created in the Home Fleet through the voyager command while the Home view was shown was saved and never drawn, 2 of 5 runs on main; the admiral's order of 22 Nov 2026, relayed by the Build commodore: a Vessel created while the canvas prepares is drawn"
 features = ["adopted-vessels"]
 guard = ["type:desktop/canvas/main.ts#Canvas"]
-check = ["journey:home-create/created-while-preparing-is-drawn"]
+check = ["journey:home-create/created-while-preparing-is-drawn", "journey:home-create/created-during-avatar-home-click-is-drawn"]
 confidence = "stated"
 
 [[invariant]]
