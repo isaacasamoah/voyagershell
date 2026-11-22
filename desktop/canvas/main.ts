@@ -641,6 +641,7 @@ export default class Canvas extends View {
       let prepared = false;
       try {
         result = await invoke(action, expectedVersion);
+        trace("invoked", action.operation);
         accepted = this.acceptSnapshot(result, task);
         trace("accepted", `${action.operation} accepted=${accepted} version=${this.version}`);
         if (
@@ -784,6 +785,7 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
+    trace("accept_layout", result.version);
     this.created = new Set(result.createdVessels);
     if (!this.focused && result.layout.view === "fleet")
       moveFocus(this, "opening", task);
@@ -798,10 +800,12 @@ export default class Canvas extends View {
       moveFocus(this, "opening", task);
       this.focus.focus();
     }
+    trace("accept_focus", "");
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
       if (voyage.cwd)
         this.worktrees?.inspect(voyage.id, voyage.cwd, result.version, task);
+    trace("accept_worktrees", "");
     this.observedPanels = (this.observedPanels || []).filter((panel) =>
       panelGroups(result.layout).some((group) =>
         group.members.some(
@@ -816,6 +820,7 @@ export default class Canvas extends View {
         ),
       ),
     );
+    trace("accept_panels", "");
     task.spawn((cx) => this.readProcesses(cx));
     this.observation = null;
     task.spawn((cx) => this.readObservation(cx));
@@ -828,6 +833,7 @@ export default class Canvas extends View {
       this.contextFacts = null;
       task.spawn((cx) => this.readContext(cx));
     }
+    trace("accept_spawned", "");
     this.fresh = result.fresh;
     this.status = outcome(result);
     const retain = (target: RenameTarget, name: string) => {
@@ -1983,6 +1989,7 @@ export default class Canvas extends View {
       trace("notice_seen", `revision=${ownerNotice.revision} seen=${this.workspaceNotice.revision} busy=${this.busy}`);
       if (!this.busy) this.inspectNotice(cx);
     }
+    trace("render_prelude", "");
     const colors = projection();
     const shell = div()
       .track_focus(this.focus)
@@ -2019,6 +2026,7 @@ export default class Canvas extends View {
       .bg(colors.background)
       .text_color(colors.foreground)
       .child(Prepared.new(!this.busy));
+    trace("render_shell", "");
     const layout = this.layout;
     if (!layout?.canvas || (!layout.voyages.length && !layout.home))
       return shell
@@ -2037,6 +2045,31 @@ export default class Canvas extends View {
       composeRegions(
         canvas,
         (region) => {
+          trace("region_start", region);
+          const built = this.renderRegion(region, layout, voyage, fleet, colors);
+          trace("region_end", region);
+          return built;
+        },
+        (underlay, panels) => {
+          if (!voyage) throw Error("Portal owner is unavailable.");
+          trace("portal_column_start", "");
+          const column = this.portalColumn(underlay, panels, voyage);
+          trace("portal_column_end", "");
+          return column;
+        },
+      ),
+    );
+    trace("render_regions", "");
+    return this.finishRender(shell, layout, colors);
+  }
+
+  renderRegion(
+    region: Parameters<Parameters<typeof composeRegions>[1]>[0],
+    layout: Layout,
+    voyage: Voyage | undefined,
+    fleet: Fleet | undefined,
+    colors: ReturnType<typeof projection>,
+  ): NativeElement | null {
           switch (region) {
             case "sidebar":
               return this.sidebarRegion(layout, voyage);
@@ -2066,13 +2099,14 @@ export default class Canvas extends View {
                 );
             }
           }
-        },
-        (underlay, panels) => {
-          if (!voyage) throw Error("Portal owner is unavailable.");
-          return this.portalColumn(underlay, panels, voyage);
-        },
-      ),
-    );
+          return null;
+  }
+
+  finishRender(
+    shell: NativeElement,
+    layout: Layout,
+    colors: ReturnType<typeof projection>,
+  ): NativeElement {
     if (!this.sidebar && this.chat.present) {
       const chat = this.chat.render(colors, layout.context, true);
       if (chat)
@@ -2093,6 +2127,8 @@ export default class Canvas extends View {
           else this.finishDrag(x, y, task);
         }),
       );
-    return this.layer(shell, layout);
+    const layered = this.layer(shell, layout);
+    trace("render_layered", "");
+    return layered;
   }
 }
