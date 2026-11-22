@@ -193,8 +193,9 @@ answer for a live program that carries no state word and a state word the app ca
 read are all unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
 final message, drops code, tables, paths, hex runs of seven or more
 characters with a digit and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25`
-and `terminal-34`, and gives each list item, heading and paragraph a sentence end. The
-engine reads all of what is left. Plain words and numbers such as "3 files" are kept.
+and `terminal-34`, and gives each list item, heading and paragraph a sentence end. It
+says plain numbers as words, and the engine reads what is left one piece at a time, as
+[One piece at a time](#one-piece-at-a-time) describes.
 The turn is marked done, so a repeated `Stop`, a late chunk of the same message and a
 later reopen never speak it again. A failed turn plays one fixed clip, "That didn't
 work.". Once the audio has started, the same words are added to the private chat as an
@@ -230,6 +231,54 @@ target. It has not been measured in a real room.
 The listener checks the switch again once it holds the floor, so a click-off while a reply plays never opens the microphone again. Listening resumes when it ends. The reply thread and its floor lock are interim. One
 audio thread that owns the microphone and the speaker is later work.
 
+### One piece at a time
+
+The engine garbles a long synthesis. Six long replies of 67 to 119 words were sent to
+the engine as the app sends one, three runs each on the CPU engine and one on a GPU
+engine like the trial's, and a local Whisper model heard each clip back. As one
+synthesis, five of the six garbled in every run, with 18 to 67% of their words wrong
+on the CPU and 21 to 60% on the GPU. The engine repeated, skipped and blurred words from
+about the 35th to 45th word of prose and the 13th to 28th of a dense list. The same text
+sent one sentence a request had 0 to 7% wrong, and the 67-word reply of three sentences
+did not garble either way. A hearing request beside the render and the 30 s request
+limit made no difference, and the server logged no truncation. One synthesis also
+stops at 40.96 s of audio, which 6 of the 24 single renders reached, so a longer
+reply lost its end. The same numbers reply had "1,200", "50%" and "6.5" heard as "one
+tuum tuv", "fifty perms" and "six-fived" even one sentence a request.
+
+So `SpokenText` holds the reply as pieces, and `Speaking::speak` takes one `Piece`,
+which only the filter builds. Each sentence is a piece. A sentence of more than
+`PIECE_WORDS`, 25 words, splits after its last comma, semicolon or colon within the
+first 25 words, and again for the rest. A sentence with none there is cut at the 25th
+word, and the app logs "A spoken sentence had no comma within the piece limit, so it
+was cut at the limit." once for that reply. The pieces hold every word of the spoken
+text in order. The longest sentence in the runs was 23 words and 9.8 s of audio, and the
+slowest rate seen was 0.94 s a word, so 25 words is at most about 23.5 s, far under the
+40.96 s stop. The offer of more is its own piece.
+
+The filter says a whole number, a number with thousands commas, a decimal and a percent
+as words, so "1,200" is "one thousand two hundred", "6.5" is "six point five" and "50%"
+is "fifty percent". It leaves other text with digits as it is, such as a time like
+"4:20", an ordinal like "3rd" or a list of numbers like "1,2,3".
+
+The reply thread renders the first piece before it takes the floor, as it did the whole
+reply before. While a piece plays, a second thread renders the next one, so only the
+first render comes before the first sound. Each piece plays through its own speaker
+stream, and the floor stays taken until the last one ends. A click-off stops the piece
+that is playing at once and plays no more. A piece that fails to render ends the reply
+there and reports its reason, as a failed render did before. The reply is added to the
+chat once, when its first piece starts. The trace marks `speech-started` with the whole
+spoken text once and `piece-started` with each piece's words.
+
+First audio is the wait for the render of what plays first. With one synthesis it was
+the whole render: 11.9 to 28.2 s, median 17.1 s, on the CPU engine of
+a machine at a load of 17 to 22 on 24 cores, and 2.2 to 4.5 s, median 3.9 s, on the GPU.
+One piece at a time it was the first piece's render: 0.86 to 12.0 s, median 3.5 s, on
+that CPU, and 0.20 to 0.81 s, median 0.57 s, on the GPU. On the GPU no piece waited for
+the next render. On the loaded CPU 15 of 18 runs had no wait, and the other three waited
+at most 1.2, 3.9 and 8.6 s once, when one 13-word sentence took 10.2 s to render 4.8 s
+of audio.
+
 ### The whole answer, written for the ear
 
 Voice is the primary surface, and the chat is an alternative. A spoken reply is the
@@ -240,8 +289,8 @@ offer more, and never to point to the chat. Each word
 of the rule is sent on every spoken turn, so it stays short.
 
 The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
-is a target to measure against the engine's render time, which has a 30 s limit per
-request, and not a measured limit. Past it the filter cuts at the last sentence end in
+is a target to measure, and not a measured limit. The engine's 30 s limit per request
+now applies to one piece. Past it the filter cuts at the last sentence end in
 the second half of the kept words, or at the ceiling when there is none, and adds "I can
 say more if you ask." It adds no pointer to the chat.
 
@@ -255,10 +304,10 @@ trim but never trim out the accepted message.
 ## The seam
 
 `app/src/speech.rs` holds the traits `Hearing` and `Speaking`, the `Engine`
-that pairs them, the clip table and the speech filter. `SpokenText` can only be
-built by the filter, so unfiltered reply text never reaches an engine. The filter
-keeps every paragraph, drops code, tables, links, paths and long ids, and stops only at
-the safety ceiling.
+that pairs them, the clip table and the speech filter. `SpokenText` and its `Piece`s can
+only be built by the filter, so unfiltered reply text never reaches an engine. The
+filter keeps every paragraph, drops code, tables, links, paths and long ids, says plain
+numbers as words, and stops only at the safety ceiling.
 
 `app/src/voice_layer.rs` owns the exchange. A click flips the switch at once from
 the canvas thread. One listening thread converges on it, so two utterances never
@@ -387,4 +436,7 @@ appears in any log. It also checks the turn rule. A thump as the microphone open
 turn, a quiet request at 0.15 and 0.06 of its level is one turn that is sent, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
 voice on, five minutes of room sound with no speech in it is never a turn, a request
 spoken among that sound is sent word for word, two turns in a row each get a spoken
-reply with the speaker echoed into the microphone, and a click turns voice off.
+reply with the speaker echoed into the microphone, and a click turns voice off. A long
+reply of 117 words is heard back by the engine with at most a tenth of its words wrong,
+its long sentences split at a comma or at the limit, and its numbers are spoken as
+words.

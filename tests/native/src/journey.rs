@@ -499,6 +499,10 @@ mod tests {
                 "tests/native/controls/agent-person-plain.patch".to_owned(),
                 "tests/native/controls/voice-click-cuts.patch".to_owned(),
                 "tests/native/controls/voice-mic-reopens.patch".to_owned(),
+                "tests/native/controls/voice-sentences.patch".to_owned(),
+                "tests/native/controls/voice-comma.patch".to_owned(),
+                "tests/native/controls/voice-limit.patch".to_owned(),
+                "tests/native/controls/voice-numbers.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

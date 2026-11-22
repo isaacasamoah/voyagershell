@@ -971,6 +971,21 @@ features:
         checks: ['manual:an agent proof where one exists, otherwise Isaac by ear', 'journey:voice/reply-is-spoken', 'journey:voice/typed-reply-is-silent']
         formal: []
         journeys: [voice]
+      - id: voice-long-reply-is-clear
+        kind: user
+        says: 'A long spoken reply is heard clearly from its first word to its last, with its numbers said as words, and it starts playing before the rest of it has been made.'
+        owner: conversation-provider
+        guards: ['type:app/src/speech.rs#Piece']
+        checks:
+          - 'journey:voice/long-reply-is-clear'
+          - 'journey:voice/long-sentence-splits-at-a-comma'
+          - 'journey:voice/long-sentence-is-cut-at-the-limit'
+          - 'journey:voice/numbers-are-spoken-as-words'
+          - 'test:app/src/speech.rs#a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit'
+          - 'test:app/src/speech.rs#a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so'
+          - 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order'
+        formal: []
+        journeys: [voice]
       - id: voice-is-click-to-talk
         kind: user
         says: 'Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges. A click while audio is playing lets that audio finish, and then voice is off.'

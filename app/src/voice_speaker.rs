@@ -1,12 +1,15 @@
 use crate::{
     replies::Replies,
-    speech::{Clip, Phrase, Speaking},
+    speech::{CUT_AT_LIMIT, Clip, Phrase, Speaking},
     voice_parts::{Audio, Floor, Phase, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
 };
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{
+        Arc,
+        mpsc::{self, Receiver},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -56,13 +59,21 @@ pub(crate) fn spawn(parts: Parts) {
     });
 }
 
-fn clip_of(parts: &Parts, line: &Line) -> Result<(Clip, String), String> {
+type Rendered = Result<(Clip, String), String>;
+
+fn clip_of(parts: &Parts, line: &Line) -> Rendered {
     match line {
-        Line::Reply(text) => parts
-            .speaking
-            .speak(text)
-            .map(|clip| (clip, text.as_str().to_owned()))
-            .map_err(|fault| fault.to_string()),
+        Line::Reply(text) => {
+            let piece = text
+                .pieces()
+                .next()
+                .ok_or_else(|| "The reply has nothing to speak".to_owned())?;
+            parts
+                .speaking
+                .speak(piece)
+                .map(|clip| (clip, piece.as_str().to_owned()))
+                .map_err(|fault| fault.to_string())
+        }
         Line::Said(phrase) => parts
             .clips
             .get(phrase)
@@ -73,9 +84,40 @@ fn clip_of(parts: &Parts, line: &Line) -> Result<(Clip, String), String> {
     }
 }
 
+fn rest_of(parts: &Parts, line: &Line) -> Receiver<Rendered> {
+    let (send, receive) = mpsc::channel();
+    if let Line::Reply(text) = line {
+        let text = text.clone();
+        let speaking = parts.speaking.clone();
+        let stopped = parts.stopped.clone();
+        thread::spawn(move || {
+            for piece in text.pieces().skip(1) {
+                if stopped() {
+                    break;
+                }
+                let rendered = speaking
+                    .speak(piece)
+                    .map(|clip| (clip, piece.as_str().to_owned()))
+                    .map_err(|fault| fault.to_string());
+                if send.send(rendered).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    receive
+}
+
 fn note_unspoken(parts: &Parts, line: &Line) {
     if let Line::Reply(text) = line {
         parts.voyager.note(text.as_str());
+    }
+}
+
+fn label_of(line: &Line, first: &str) -> String {
+    match line {
+        Line::Reply(text) => text.as_str().to_owned(),
+        Line::Said(_) | Line::Partial => first.to_owned(),
     }
 }
 
@@ -84,7 +126,12 @@ fn say(parts: &Parts, line: Line) {
         note_unspoken(parts, &line);
         return;
     }
-    let spoken = clip_of(parts, &line);
+    if let Line::Reply(text) = &line
+        && text.cut_at_limit()
+    {
+        eprintln!("{CUT_AT_LIMIT}");
+    }
+    let first = clip_of(parts, &line);
     let _floor = parts.floor.take();
     if (parts.stopped)() {
         return;
@@ -94,19 +141,9 @@ fn say(parts: &Parts, line: Line) {
         return;
     }
     (parts.status)(Phase::Speaking, None);
-    let notice = match spoken {
+    let notice = match first {
         Err(reason) => Some(reason),
-        Ok((clip, label)) => match parts.audio.speaker(clip.rate) {
-            Err(error) => Some(format!("The speaker could not be opened: {error}")),
-            Ok(speaker) => {
-                parts.trace.mark_words("speech-started", &label);
-                let finish = speaker.play(&clip);
-                note_unspoken(parts, &line);
-                finish(&|| (parts.stopped)());
-                parts.trace.mark("speech-ended");
-                None
-            }
-        },
+        Ok(first) => play_all(parts, &line, first, &rest_of(parts, &line)),
     };
     let after = if (parts.on)() {
         Phase::Connecting
@@ -116,11 +153,54 @@ fn say(parts: &Parts, line: Line) {
     (parts.status)(after, notice);
 }
 
+fn play_all(
+    parts: &Parts,
+    line: &Line,
+    (first, words): (Clip, String),
+    rest: &Receiver<Rendered>,
+) -> Option<String> {
+    let mut playing = (first, words);
+    let mut started = false;
+    let notice = loop {
+        let (clip, words) = &playing;
+        let speaker = match parts.audio.speaker(clip.rate) {
+            Err(error) => break Some(format!("The speaker could not be opened: {error}")),
+            Ok(speaker) => speaker,
+        };
+        if !started {
+            parts
+                .trace
+                .mark_words("speech-started", &label_of(line, words));
+        }
+        if matches!(line, Line::Reply(_)) {
+            parts.trace.mark_words("piece-started", words);
+        }
+        let finish = speaker.play(clip);
+        if !started {
+            note_unspoken(parts, line);
+            started = true;
+        }
+        finish(&|| (parts.stopped)());
+        if (parts.stopped)() {
+            break None;
+        }
+        match rest.recv() {
+            Err(_) => break None,
+            Ok(Err(reason)) => break Some(reason),
+            Ok(Ok(next)) => playing = next,
+        }
+    };
+    if started {
+        parts.trace.mark("speech-ended");
+    }
+    notice
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        speech::{Fault, SpokenText, Standing},
+        speech::{Fault, Piece, SpokenText, Standing},
         voice_parts::{Frames, Speaker},
     };
     use std::{
@@ -181,10 +261,10 @@ mod tests {
             Err(Fault::Unavailable("unused".into()))
         }
 
-        fn speak(&self, text: &SpokenText) -> Result<Clip, Fault> {
+        fn speak(&self, piece: Piece<'_>) -> Result<Clip, Fault> {
             Ok(Clip {
                 rate: 24_000,
-                pcm: vec![0; text.as_str().len()],
+                pcm: vec![0; piece.as_str().len()],
             })
         }
     }
@@ -309,10 +389,26 @@ mod tests {
     fn a_spoken_reply_is_read_aloud_and_listening_resumes() {
         let rig = Rig::start(Standing::Idle);
         rig.say("p1", true, "Renamed it.\n\nMore.");
-        rig.wait_for(1);
-        let heard = "Renamed it. More.".len();
-        assert_eq!(rig.played.lock().unwrap().clone(), vec![heard]);
+        rig.wait_for(2);
+        let heard = vec!["Renamed it.".len(), "More.".len()];
+        assert_eq!(rig.played.lock().unwrap().clone(), heard);
         thread::sleep(Duration::from_millis(250));
+        assert_eq!(
+            rig.phases.lock().unwrap().clone(),
+            vec![Phase::Speaking, Phase::Connecting]
+        );
+    }
+
+    #[test]
+    fn a_long_reply_is_played_one_piece_at_a_time_in_order() {
+        let rig = Rig::start(Standing::Idle);
+        rig.say("p1", true, "One two. Three four five!\n\nSix?");
+        rig.wait_for(3);
+        thread::sleep(Duration::from_millis(250));
+        let pieces = ["One two.", "Three four five!", "Six?"]
+            .map(str::len)
+            .to_vec();
+        assert_eq!(rig.played.lock().unwrap().clone(), pieces);
         assert_eq!(
             rig.phases.lock().unwrap().clone(),
             vec![Phase::Speaking, Phase::Connecting]

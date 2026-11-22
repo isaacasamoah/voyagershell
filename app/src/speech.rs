@@ -1,6 +1,9 @@
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const CEILING_WORDS: usize = 120;
 pub const OFFER_MORE: &str = "I can say more if you ask.";
+pub const PIECE_WORDS: usize = 25;
+pub const CUT_AT_LIMIT: &str =
+    "A spoken sentence had no comma within the piece limit, so it was cut at the limit.";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Standing {
@@ -161,7 +164,7 @@ pub trait Hearing: Send + Sync {
 
 pub trait Speaking: Send + Sync {
     fn render(&self, phrase: Phrase) -> Result<Clip, Fault>;
-    fn speak(&self, text: &SpokenText) -> Result<Clip, Fault>;
+    fn speak(&self, piece: Piece<'_>) -> Result<Clip, Fault>;
 }
 
 pub enum Engine {
@@ -172,11 +175,32 @@ pub enum Engine {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SpokenText(String);
+pub struct SpokenText {
+    text: String,
+    pieces: Vec<String>,
+    cut_at_limit: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Piece<'a>(&'a str);
+
+impl Piece<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
 
 impl SpokenText {
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.text
+    }
+
+    pub fn pieces(&self) -> impl Iterator<Item = Piece<'_>> {
+        self.pieces.iter().map(|piece| Piece(piece))
+    }
+
+    pub fn cut_at_limit(&self) -> bool {
+        self.cut_at_limit
     }
 
     pub fn from_reply(reply: &str) -> Option<Self> {
@@ -185,7 +209,7 @@ impl SpokenText {
             let first = words.len();
             for raw in line.split_whitespace() {
                 match plain_word(raw) {
-                    Some(word) => words.push(word),
+                    Some(word) => words.extend(spoken_numbers(&word)),
                     None => {
                         let end = raw
                             .trim_end_matches(['"', '\'', ')'])
@@ -210,20 +234,174 @@ impl SpokenText {
                 last.push('.');
             }
         }
-        let (kept, cut) = limit(words);
-        if kept.is_empty() {
-            return None;
-        }
-        let mut text = kept.join(" ");
-        if !text.ends_with(['.', '!', '?']) {
-            text.push('.');
+        let (mut kept, cut) = limit(words);
+        let last = kept.last_mut()?;
+        if !last.ends_with(['.', '!', '?']) {
+            last.push('.');
         }
         if cut {
-            text.push(' ');
-            text.push_str(OFFER_MORE);
+            kept.extend(OFFER_MORE.split_whitespace().map(str::to_owned));
         }
-        Some(Self(text))
+        let mut cut_at_limit = false;
+        let pieces = sentences(&kept)
+            .flat_map(|sentence| split_long(sentence, &mut cut_at_limit))
+            .collect();
+        Some(Self {
+            text: kept.join(" "),
+            pieces,
+            cut_at_limit,
+        })
     }
+}
+
+fn sentences(words: &[String]) -> impl Iterator<Item = &[String]> {
+    words.split_inclusive(|word| word.ends_with(['.', '!', '?']) && !is_abbreviation(word))
+}
+
+fn split_long(mut words: &[String], cut_at_limit: &mut bool) -> Vec<String> {
+    let mut pieces = Vec::new();
+    while words.len() > PIECE_WORDS {
+        let at = words[..PIECE_WORDS]
+            .iter()
+            .rposition(|word| word.ends_with([',', ';', ':']))
+            .map_or_else(
+                || {
+                    *cut_at_limit = true;
+                    PIECE_WORDS
+                },
+                |comma| comma + 1,
+            );
+        pieces.push(words[..at].join(" "));
+        words = &words[at..];
+    }
+    if !words.is_empty() {
+        pieces.push(words.join(" "));
+    }
+    pieces
+}
+
+fn spoken_numbers(word: &str) -> Vec<String> {
+    let start = word.len() - word.trim_start_matches(['(', '"', '\'']).len();
+    let end = word
+        .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', '"', '\''])
+        .len()
+        .max(start);
+    let (lead, core, tail) = (&word[..start], &word[start..end], &word[end..]);
+    let (number, percent) = match core.strip_suffix('%') {
+        Some(number) => (number, true),
+        None => (core, false),
+    };
+    let Some(mut spoken) = number_words(number) else {
+        return vec![word.to_owned()];
+    };
+    if percent {
+        spoken.push("percent".to_owned());
+    }
+    if let Some(first) = spoken.first_mut() {
+        first.insert_str(0, lead);
+    }
+    if let Some(last) = spoken.last_mut() {
+        last.push_str(tail);
+    }
+    spoken
+}
+
+fn number_words(number: &str) -> Option<Vec<String>> {
+    let (whole, fraction) = match number.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (number, None),
+    };
+    let grouped = whole.split(',').enumerate().all(|(index, group)| {
+        let digits = !group.is_empty() && group.chars().all(|character| character.is_ascii_digit());
+        digits && (index == 0 && group.len() <= 3 || group.len() == 3)
+    });
+    let plain = !whole.is_empty() && whole.chars().all(|character| character.is_ascii_digit());
+    if !(plain || whole.contains(',') && grouped) {
+        return None;
+    }
+    let value: u64 = whole.replace(',', "").parse().ok()?;
+    if value >= 1_000_000_000_000 {
+        return None;
+    }
+    let mut words = integer_words(value);
+    if let Some(fraction) = fraction {
+        if fraction.is_empty() || !fraction.chars().all(|character| character.is_ascii_digit()) {
+            return None;
+        }
+        words.push("point".to_owned());
+        words.extend(
+            fraction
+                .chars()
+                .filter_map(|digit| digit.to_digit(10))
+                .map(|digit| ONES[digit as usize].to_owned()),
+        );
+    }
+    Some(words)
+}
+
+const ONES: [&str; 20] = [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+];
+const TENS: [&str; 10] = [
+    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+];
+const SCALES: [(u64, &str); 3] = [
+    (1_000_000_000, "billion"),
+    (1_000_000, "million"),
+    (1_000, "thousand"),
+];
+
+fn integer_words(value: u64) -> Vec<String> {
+    if value == 0 {
+        return vec![ONES[0].to_owned()];
+    }
+    let mut words = Vec::new();
+    let mut rest = value;
+    for (scale, name) in SCALES {
+        if rest >= scale {
+            words.extend(below_thousand(rest / scale));
+            words.push(name.to_owned());
+            rest %= scale;
+        }
+    }
+    words.extend(below_thousand(rest));
+    words
+}
+
+fn below_thousand(value: u64) -> Vec<String> {
+    let mut words = Vec::new();
+    let hundreds = value / 100;
+    let rest = (value % 100) as usize;
+    if hundreds > 0 {
+        words.push(ONES[hundreds as usize].to_owned());
+        words.push("hundred".to_owned());
+    }
+    match rest {
+        0 => {}
+        1..20 => words.push(ONES[rest].to_owned()),
+        _ if rest % 10 == 0 => words.push(TENS[rest / 10].to_owned()),
+        _ => words.push(format!("{}-{}", TENS[rest / 10], ONES[rest % 10])),
+    }
+    words
 }
 
 fn speakable_lines(reply: &str) -> Vec<(String, bool)> {
@@ -436,7 +614,7 @@ mod tests {
     #[test]
     fn list_items_and_headings_each_end_as_a_sentence() {
         let text = SpokenText::from_reply("## Fleets\n- Build\n- Review\n1. Home").unwrap();
-        assert_eq!(text.as_str(), "Fleets. Build. Review. 1. Home.");
+        assert_eq!(text.as_str(), "Fleets. Build. Review. one. Home.");
     }
 
     #[test]
@@ -549,14 +727,113 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_words_and_plain_numbers_are_kept() {
+    fn ordinary_words_are_kept_and_numbers_are_spoken_as_words() {
         let text = SpokenText::from_reply(
             "Changed 3 files on the 3rd try with 1,200 lines, 50% done, in defaced mode.",
         )
         .unwrap();
         assert_eq!(
             text.as_str(),
-            "Changed 3 files on the 3rd try with 1,200 lines, 50% done, in defaced mode."
+            "Changed three files on the 3rd try with one thousand two hundred lines, fifty percent done, in defaced mode."
+        );
+    }
+
+    #[test]
+    fn decimals_large_numbers_and_numbers_in_brackets_are_spoken_as_words() {
+        let text = SpokenText::from_reply(
+            "Memory peaked at 6.5 gigabytes (38 checks), after 2,026,105 rows and 0.25 of the time.",
+        )
+        .unwrap();
+        assert_eq!(
+            text.as_str(),
+            "Memory peaked at six point five gigabytes (thirty-eight checks), after two million twenty-six thousand one hundred five rows and zero point two five of the time."
+        );
+    }
+
+    #[test]
+    fn digits_that_are_not_a_plain_number_are_left_alone() {
+        for word in ["4:20", "1,2,3", "12,34", "1.2.3", "3rd", "1a2b3c"] {
+            let text = SpokenText::from_reply(&format!("Then {word} came.")).unwrap();
+            assert_eq!(text.as_str(), format!("Then {word} came."), "{word}");
+        }
+    }
+
+    fn piece_texts(text: &SpokenText) -> Vec<String> {
+        text.pieces()
+            .map(|piece| piece.as_str().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn each_sentence_is_its_own_piece_and_the_pieces_hold_every_word_in_order() {
+        let text = SpokenText::from_reply(
+            "The build passed. Two tests were slow!\n\n- Review\nWant the rest?",
+        )
+        .unwrap();
+        assert_eq!(
+            piece_texts(&text),
+            [
+                "The build passed.",
+                "Two tests were slow!",
+                "Review.",
+                "Want the rest?"
+            ]
+        );
+        assert_eq!(piece_texts(&text).join(" "), text.as_str());
+        assert!(!text.cut_at_limit());
+    }
+
+    #[test]
+    fn an_abbreviation_does_not_end_a_piece() {
+        let text =
+            SpokenText::from_reply("Use a short name, e.g. Build, for it. Then dock.").unwrap();
+        assert_eq!(
+            piece_texts(&text),
+            ["Use a short name, e.g. Build, for it.", "Then dock."]
+        );
+    }
+
+    #[test]
+    fn a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit() {
+        let first = vec!["word"; 18].join(" ");
+        let second = vec!["more"; 14].join(" ");
+        let reply = format!("{first}, then {second}.");
+        let text = SpokenText::from_reply(&reply).unwrap();
+        let pieces = piece_texts(&text);
+        assert_eq!(pieces, [format!("{first},"), format!("then {second}.")]);
+        assert!(
+            pieces
+                .iter()
+                .all(|piece| piece.split_whitespace().count() <= PIECE_WORDS)
+        );
+        assert_eq!(pieces.join(" "), text.as_str());
+        assert!(!text.cut_at_limit());
+    }
+
+    #[test]
+    fn a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so() {
+        let reply = format!("{}.", vec!["word"; 60].join(" "));
+        let text = SpokenText::from_reply(&reply).unwrap();
+        let counts: Vec<usize> = text
+            .pieces()
+            .map(|piece| piece.as_str().split_whitespace().count())
+            .collect();
+        assert_eq!(counts, [PIECE_WORDS, PIECE_WORDS, 10]);
+        assert_eq!(piece_texts(&text).join(" "), text.as_str());
+        assert!(text.cut_at_limit());
+    }
+
+    #[test]
+    fn the_offer_of_more_is_its_own_piece() {
+        let long = format!("{}.", vec!["word"; 500].join(" "));
+        let text = SpokenText::from_reply(&long).unwrap();
+        assert_eq!(
+            text.pieces().last().map(|piece| piece.as_str().to_owned()),
+            Some(OFFER_MORE.to_owned())
+        );
+        assert!(
+            text.pieces()
+                .all(|piece| piece.as_str().split_whitespace().count() <= PIECE_WORDS)
         );
     }
 

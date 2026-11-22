@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -209,7 +209,7 @@
+             let first = words.len();
+             for raw in line.split_whitespace() {
+                 match plain_word(raw) {
+-                    Some(word) => words.extend(spoken_numbers(&word)),
++                    Some(word) => words.push(word),
+                     None => {
+                         let end = raw
+                             .trim_end_matches(['"', '\'', ')'])

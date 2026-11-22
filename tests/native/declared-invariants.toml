@@ -244,6 +244,18 @@ check = ["manual:an agent proof where one exists, otherwise Isaac by ear", "jour
 confidence = "stated"
 
 [[invariant]]
+id = "voice-long-reply-is-clear"
+says = "A long spoken reply is heard clearly from its first word to its last, with its numbers said as words, and it starts playing before the rest of it has been made."
+kind = "user"
+owner = "conversation-provider"
+source = "Isaac, 22 Nov 2026, after the Sunday user test: sometimes in long responses the audio gets garbled and confused; if a longer response is needed we break it up"
+features = ["voice"]
+guard = ["type:app/src/speech.rs#Piece"]
+type_gap = "Only the speech filter builds a Piece, one sentence or part of one of at most 25 words, so the engine is never asked to read a whole reply at once. Nothing in the types stops another path from sending the engine long text, and how clearly a piece is read depends on the engine."
+check = ["journey:voice/long-reply-is-clear", "journey:voice/long-sentence-splits-at-a-comma", "journey:voice/long-sentence-is-cut-at-the-limit", "journey:voice/numbers-are-spoken-as-words", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order"]
+confidence = "stated"
+
+[[invariant]]
 id = "voice-is-click-to-talk"
 says = "Voice listens only after the user clicks, stays on until the user clicks again, and never adds per-use API charges. A click while audio is playing lets that audio finish, and then voice is off."
 kind = "user"

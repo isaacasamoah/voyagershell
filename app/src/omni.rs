@@ -3,7 +3,7 @@ use crate::{
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
-        Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance, clean_heard, hearing_prompt,
+        Clip, Fault, Hearing, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
     },
 };
 use serde_json::{Value, json};
@@ -308,8 +308,8 @@ impl Speaking for Omni {
         self.speech(phrase.words())
     }
 
-    fn speak(&self, text: &SpokenText) -> Result<Clip, Fault> {
-        self.speech(text.as_str())
+    fn speak(&self, piece: Piece<'_>) -> Result<Clip, Fault> {
+        self.speech(piece.as_str())
     }
 }
 
@@ -470,7 +470,7 @@ mod tests {
                     pcm: vec![1, 0, 2, 0],
                 })
             }
-            fn speak(&self, _: &SpokenText) -> Result<Clip, Fault> {
+            fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
                 Err(Fault::Unavailable("unused".into()))
             }
         }
@@ -511,7 +511,7 @@ mod tests {
                     pcm: vec![1, 0, 2, 0],
                 })
             }
-            fn speak(&self, _: &SpokenText) -> Result<Clip, Fault> {
+            fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
                 Err(Fault::Unavailable("unused".into()))
             }
         }
@@ -538,7 +538,7 @@ mod tests {
             fn render(&self, _: Phrase) -> Result<Clip, Fault> {
                 Err(Fault::Failed("engine gone".into()))
             }
-            fn speak(&self, _: &SpokenText) -> Result<Clip, Fault> {
+            fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
                 Err(Fault::Failed("engine gone".into()))
             }
         }
