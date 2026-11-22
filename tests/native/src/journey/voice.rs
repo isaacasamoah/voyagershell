@@ -214,7 +214,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("targetMs", TARGET_MS)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {
-        let said = voice::converse(native, &OPEN_THE_ROADMAP, "no-chat-reply")?;
+        let said = voice::converse(native, &RENAME_TO_HARBOR, "no-chat-reply")?;
         let chatted = said.marks.iter().any(|mark| mark.event == "chat-started");
         Verdict::new()
             .expect(
