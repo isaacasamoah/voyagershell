@@ -265,7 +265,7 @@ impl Exchange<'_> {
         }
         let clip = self.clips.get(&phrase)?;
         let speaker = ready.or_else(|| self.audio.speaker(clip.rate).ok())?;
-        Some(speaker.play(clip))
+        Some(speaker.play(Box::new(std::iter::once(clip.clone()))))
     }
 
     fn finish(&self, finish: Option<Finish>) {

@@ -6,6 +6,7 @@ const AGENT_NAME: &str = "claude";
 pub const REPLY_MARKER: &str = "[vy]";
 pub const SPOKEN_REPLY: &str = "Docked on this fleet.\n\nThe Fleet was already open.";
 pub const TYPED_REPLY: &str = "Typed reply must stay silent.";
+pub const LONG_REPLY: &str = "Here's where things stand.\n\nThe canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed 1,200 lines in 4 minutes, about 50% faster than yesterday, and memory peaked at 6.5 gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today.\n\nWant me to walk through any of it?";
 
 pub fn invoked_as_agent() -> bool {
     std::env::args_os()
@@ -98,6 +99,27 @@ fn turn(settings: &str, prompt_id: &str, prompt: &str, words: &str) {
     }
 }
 
+fn plain_words(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn spoken_reply(line: &str) -> &'static str {
+    let asked = plain_words(line);
+    let has = |wanted: &str| asked.iter().any(|word| word == wanted);
+    let roadmap = has("roadmap") || (has("road") && has("map"));
+    if roadmap && !has("dock") {
+        LONG_REPLY
+    } else {
+        SPOKEN_REPLY
+    }
+}
+
 fn context_of(command: &str, prompt: &str) -> Option<String> {
     let input = serde_json::json!({"hook_event_name":"UserPromptSubmit","prompt":prompt});
     let output = feed(command, &input)?;
@@ -134,7 +156,12 @@ pub fn run() -> i32 {
                         "A typed question",
                         TYPED_REPLY,
                     );
-                    turn(&settings, &format!("spoken-{number}"), &line, SPOKEN_REPLY);
+                    turn(
+                        &settings,
+                        &format!("spoken-{number}"),
+                        &line,
+                        spoken_reply(&line),
+                    );
                     println!("Stand-in {AGENT_NAME} heard: {line}");
                     report("idle");
                     continue;
@@ -176,6 +203,22 @@ mod tests {
         assert_eq!(display["final"], true);
         assert_eq!(display["delta"], "Done.");
         assert_eq!(stop["last_assistant_message"], "Done.");
+    }
+
+    #[test]
+    fn a_request_heard_with_the_roadmap_and_no_dock_gets_the_long_reply() {
+        let asked = format!("[spoken] {}", crate::audio::speech::OPEN_THE_ROADMAP.words);
+        assert_eq!(spoken_reply(&asked), LONG_REPLY);
+        for heard in ["Oh, and the roadmap.", "open the road map"] {
+            assert_eq!(
+                spoken_reply(&format!("[spoken] {heard}")),
+                LONG_REPLY,
+                "{heard}"
+            );
+        }
+        let both = format!("[spoken] {}", crate::audio::speech::OPEN_THEN_DOCK.words);
+        assert_eq!(spoken_reply(&both), SPOKEN_REPLY);
+        assert_eq!(spoken_reply("[spoken] Dock on this fleet."), SPOKEN_REPLY);
     }
 
     #[test]

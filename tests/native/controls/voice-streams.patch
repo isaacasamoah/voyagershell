@@ -1,0 +1,24 @@
+diff --git a/app/src/voice_speaker.rs b/app/src/voice_speaker.rs
+--- a/app/src/voice_speaker.rs
++++ b/app/src/voice_speaker.rs
+@@ -194,9 +194,18 @@
+         *reported.lock().unwrap_or_else(PoisonError::into_inner) = Some(reason);
+         None
+     });
+-    let finish = speaker.play(Box::new(std::iter::once(first).chain(next)));
++    speaker.play(Box::new(std::iter::once(first)))(&|| (parts.stopped)());
+     note_unspoken(parts, line);
+-    finish(&|| (parts.stopped)());
++    for clip in next {
++        if (parts.stopped)() {
++            break;
++        }
++        let Ok(speaker) = parts.audio.speaker(clip.rate) else {
++            break;
++        };
++        parts.trace.mark("speaker-opened");
++        speaker.play(Box::new(std::iter::once(clip)))(&|| (parts.stopped)());
++    }
+     parts.trace.mark("speech-ended");
+     failure
+         .lock()

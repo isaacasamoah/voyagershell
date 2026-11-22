@@ -1,0 +1,18 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -264,13 +264,7 @@
+         let at = words[..PIECE_WORDS]
+             .iter()
+             .rposition(|word| word.ends_with([',', ';', ':']))
+-            .map_or_else(
+-                || {
+-                    *cut_at_limit = true;
+-                    PIECE_WORDS
+-                },
+-                |comma| comma + 1,
+-            );
++            .map_or(words.len(), |comma| comma + 1);
+         pieces.push(words[..at].join(" "));
+         words = &words[at..];
+     }

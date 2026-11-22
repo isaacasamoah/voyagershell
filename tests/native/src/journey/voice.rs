@@ -2,8 +2,8 @@ use super::{Cases, Verdict, cases};
 use crate::agent::{REPLY_MARKER, TYPED_REPLY};
 use crate::audio::room;
 use crate::audio::speech::{
-    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_THE_FLEET,
-    RENAME_TO_HARBOR, Samples,
+    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THE_ROADMAP, OPEN_THEN_DOCK, PAUSED_WORDS,
+    RENAME_THE_FLEET, RENAME_TO_HARBOR, Samples,
 };
 use crate::audio::voice::{
     self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
@@ -31,6 +31,11 @@ cases! {
     WordsReachVoyager => "words-reach-voyager",
     ReplyIsSpoken => "reply-is-spoken",
     TypedReplyIsSilent => "typed-reply-is-silent",
+    LongReplyIsClear => "long-reply-is-clear",
+    LongSentenceSplitsAtAComma => "long-sentence-splits-at-a-comma",
+    LongSentenceIsCutAtTheLimit => "long-sentence-is-cut-at-the-limit",
+    NumbersAreSpokenAsWords => "numbers-are-spoken-as-words",
+    LongReplyWaitsOnlyForRendering => "long-reply-waits-only-for-rendering",
     TwoTurnsWithEcho => "two-turns-with-echo",
     ClickOffLetsTheReplyFinish => "click-off-lets-the-reply-finish",
     ClickOffKeepsTheMicrophoneClosed => "click-off-keeps-the-microphone-closed",
@@ -47,6 +52,23 @@ const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
+const LONG_SPOKEN: &str = "Here's where things stand. The canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today. Want me to walk through any of it?";
+const LONG_START: &str = "Here's where things stand.";
+const LONG_ERROR_PERCENT: usize = 10;
+const PAUSE_FLOOR_MS: u64 = 150;
+const OWN_PAUSE_MS: u64 = 700;
+const PIECE_WORDS: usize = 25;
+const COMMA_PIECES: [&str; 2] = [
+    "The voice work is split into three pieces, and the first one is in review, the second is being tested right now,",
+    "and the third is waiting for a build slot that should free up soon.",
+];
+const LIMIT_PIECES: [&str; 2] = [
+    "Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you",
+    "to do anything at all today.",
+];
+const NUMBERS_SPOKEN: &str = "The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes.";
+const CUT_AT_LIMIT: &str =
+    "A spoken sentence had no comma within the piece limit, so it was cut at the limit.";
 const ROOM_SILENCE_MS: u32 = 3000;
 const WORD_ERROR_PERCENT: usize = 5;
 const ROOM_BEFORE_REQUEST_S: u32 = 8;
@@ -474,6 +496,128 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("spokenTexts", &said.spoken_texts)?
             .observed("spokenEver", ever)
     })?;
+    let Some(long) = cases.make(native, Case::LongReplyIsClear, |native| {
+        let said = voice::converse_long(native, &OPEN_THE_ROADMAP, "long-reply")?;
+        anyhow::ensure!(
+            said.spoken_texts.iter().any(|text| text.starts_with(LONG_START)),
+            "Inconclusive, blame on hearing: the request was heard as {:?}, so the stand-in gave its short reply and the long reply was never spoken",
+            said.heard
+        );
+        let heard = voice::transcribe_long(native, "long-reply", &said)?;
+        let (errors, words) = word_errors(&voice::digits_as_words(&heard.join(" ")), LONG_SPOKEN);
+        let verdict = Verdict::new()
+            .expect(
+                "the long reply is spoken after the words were sent",
+                said.sent && said.speech_after_capture_ms.is_some(),
+            )
+            .expect(
+                "the engine hears the whole long reply with at most a tenth of its words wrong",
+                words > 0 && errors * 100 <= words * LONG_ERROR_PERCENT,
+            )
+            .observed("firstAudioAfterCaptureMs", said.speech_after_capture_ms)?
+            .observed("wordErrors", json!({"errors": errors, "words": words}))?
+            .observed("heardWindows", &heard)?
+            .observed("pieceStartsMs", piece_starts(&said.marks))?
+            .observed("conversation", json!(said))?;
+        Ok((verdict, Some(said)))
+    })?
+    else {
+        return Ok(());
+    };
+    let pieces = pieces_of(&long.marks);
+    cases.check(native, Case::LongSentenceSplitsAtAComma, |_| {
+        Verdict::new()
+            .expect(
+                "the long sentence with commas is spoken as two pieces split at its last comma within the limit",
+                in_order(&pieces, &COMMA_PIECES),
+            )
+            .observed("pieces", &pieces)
+    })?;
+    cases.check(native, Case::LongSentenceIsCutAtTheLimit, |native| {
+        let log = std::fs::read_to_string(native.system.evidence.join("native.log"))?;
+        let logged = log.matches(CUT_AT_LIMIT).count();
+        Verdict::new()
+            .expect(
+                "the long sentence with no comma is spoken as its first words up to the limit and then the rest",
+                in_order(&pieces, &LIMIT_PIECES),
+            )
+            .expect(
+                "the app logged once that it cut a sentence at the limit",
+                logged == 1,
+            )
+            .expect(
+                "no piece of the reply is longer than the limit",
+                !pieces.is_empty()
+                    && pieces
+                        .iter()
+                        .all(|piece| piece.split_whitespace().count() <= PIECE_WORDS),
+            )
+            .observed("pieces", &pieces)?
+            .observed("loggedCuts", logged)
+    })?;
+    cases.check(native, Case::NumbersAreSpokenAsWords, |_| {
+        Verdict::new()
+            .expect(
+                "the reply's numbers, percent and decimal are spoken as words",
+                long.spoken_texts
+                    .iter()
+                    .any(|text| text.contains(NUMBERS_SPOKEN)),
+            )
+            .expect(
+                "the whole spoken reply is the stand-in's reply as the filter says it",
+                long.spoken_texts.iter().any(|text| text == LONG_SPOKEN),
+            )
+            .expect(
+                "no digit reaches the engine",
+                !long.spoken_texts.is_empty()
+                    && long
+                        .spoken_texts
+                        .iter()
+                        .all(|text| !text.chars().any(|c| c.is_ascii_digit())),
+            )
+            .observed("spokenTexts", &long.spoken_texts)
+    })?;
+    cases.check(native, Case::LongReplyWaitsOnlyForRendering, |native| {
+        let opened = voice::marks_between(
+            &long.marks,
+            "speaker-opened",
+            "speech-started",
+            "speech-ended",
+        );
+        let pauses = voice::pauses(native, "long-reply", &long, PAUSE_FLOOR_MS)?;
+        let rendered: Vec<u64> = long
+            .marks
+            .iter()
+            .filter(|mark| mark.event == "piece-rendered")
+            .map(|mark| mark.at_ms)
+            .collect();
+        let judged: Vec<serde_json::Value> = pauses
+            .iter()
+            .map(|pause| {
+                let waited = rendered
+                    .iter()
+                    .any(|at| (pause.from_ms..=pause.to_ms).contains(at));
+                json!({"fromMs": pause.from_ms, "toMs": pause.to_ms, "pauseMs": pause.to_ms - pause.from_ms, "renderWait": waited})
+            })
+            .collect();
+        let ready_pauses_held = pauses.iter().all(|pause| {
+            pause.to_ms - pause.from_ms <= OWN_PAUSE_MS
+                || rendered
+                    .iter()
+                    .any(|at| (pause.from_ms..=pause.to_ms).contains(at))
+        });
+        Verdict::new()
+            .expect(
+                "the whole long reply plays through one speaker stream",
+                opened == 1,
+            )
+            .expect(
+                "every pause over 150 ms is no longer than the speech's own 700 ms, unless a sentence finished rendering during it",
+                !rendered.is_empty() && ready_pauses_held,
+            )
+            .observed("speakerStreams", opened)?
+            .observed("pauses", judged)
+    })?;
     cases.check(native, Case::TwoTurnsWithEcho, |native| {
         let echo = voice::echo(native)?;
         voice::turn_on(native)?;
@@ -708,4 +852,26 @@ fn write_down(native: &mut Native) -> Result<Vec<Written>> {
     }
     voice::turn_off(native)?;
     Ok(written)
+}
+
+fn pieces_of(marks: &[voice::Mark]) -> Vec<String> {
+    marks
+        .iter()
+        .filter(|mark| mark.event == "piece-started")
+        .filter_map(|mark| mark.words.clone())
+        .collect()
+}
+
+fn piece_starts(marks: &[voice::Mark]) -> Vec<u64> {
+    marks
+        .iter()
+        .filter(|mark| mark.event == "piece-started")
+        .map(|mark| mark.at_ms)
+        .collect()
+}
+
+fn in_order(pieces: &[String], wanted: &[&str]) -> bool {
+    pieces
+        .windows(wanted.len())
+        .any(|run| run.iter().zip(wanted).all(|(piece, want)| piece == want))
 }

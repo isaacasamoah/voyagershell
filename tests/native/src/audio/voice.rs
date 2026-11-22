@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
+use crate::native::{LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,7 @@ pub struct Conversation {
     pub acknowledgement: Option<String>,
     pub spoken: Score,
     pub first_sound_after_capture_ms: i64,
+    pub capture_began_ms: u64,
     pub started_before_heard: bool,
     pub sent: bool,
     pub spoken_texts: Vec<String>,
@@ -99,6 +100,86 @@ fn scored_words(text: &str) -> Vec<String> {
                 .map_or_else(|| word.to_owned(), |name| (*name).to_owned())
         })
         .collect()
+}
+
+pub fn digits_as_words(heard: &str) -> String {
+    heard
+        .split_whitespace()
+        .map(|word| {
+            let core = word.trim_end_matches(['.', ',', ';', ':', '!', '?']);
+            let (number, percent) = core
+                .strip_suffix('%')
+                .map_or((core, false), |number| (number, true));
+            let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+            let digits = whole.replace(',', "");
+            let plain = |text: &str| text.chars().all(|c| c.is_ascii_digit());
+            match digits.parse::<u64>() {
+                Ok(value) if plain(&digits) && plain(fraction) && value < 1_000_000 => {
+                    let mut words = integer_words(value);
+                    if !fraction.is_empty() {
+                        words.push("point");
+                        words.extend(fraction.chars().filter_map(|c| {
+                            c.to_digit(10)
+                                .and_then(|d| NUMBERS.get(d as usize).copied())
+                        }));
+                    }
+                    if percent {
+                        words.push("percent");
+                    }
+                    words.join(" ")
+                }
+                _ => word.to_owned(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn integer_words(value: u64) -> Vec<&'static str> {
+    const TEENS: [&str; 10] = [
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+    ];
+    const TENS: [&str; 10] = [
+        "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    ];
+    let below_thousand = |value: u64| {
+        let mut words = Vec::new();
+        let (hundreds, rest) = (value / 100, value % 100);
+        if hundreds > 0 {
+            words.extend([NUMBERS[hundreds as usize], "hundred"]);
+        }
+        match rest {
+            0 => {}
+            1..10 => words.push(NUMBERS[rest as usize]),
+            10..20 => words.push(TEENS[(rest - 10) as usize]),
+            _ => {
+                words.push(TENS[(rest / 10) as usize]);
+                if rest % 10 > 0 {
+                    words.push(NUMBERS[(rest % 10) as usize]);
+                }
+            }
+        }
+        words
+    };
+    if value == 0 {
+        return vec![NUMBERS[0]];
+    }
+    let mut words = Vec::new();
+    if value >= 1000 {
+        words.extend(below_thousand(value / 1000));
+        words.push("thousand");
+    }
+    words.extend(below_thousand(value % 1000));
+    words
 }
 
 pub fn word_errors(heard: &str, wanted: &str) -> (usize, usize) {
@@ -230,6 +311,19 @@ fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
 }
 
 pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+    converse_within(native, speech, name, REPLY_WAIT)
+}
+
+pub fn converse_long(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+    converse_within(native, speech, name, LONG_REPLY_WAIT)
+}
+
+fn converse_within(
+    native: &Native,
+    speech: &Speech,
+    name: &str,
+    reply_wait: Owed,
+) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control ready", |label| {
@@ -274,7 +368,7 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
     })?
     .is_some();
     if sent {
-        poll(REPLY_WAIT.within(), LOOK, true, || {
+        poll(reply_wait.within(), LOOK, true, || {
             Ok(marks(&trace)?
                 .get(before..)
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
@@ -300,6 +394,7 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
         acknowledgement: Some(started),
         spoken: score,
         first_sound_after_capture_ms: first_sound,
+        capture_began_ms: began,
         started_before_heard: acknowledged
             .zip(heard_at)
             .is_some_and(|(started, heard)| started <= heard),
@@ -744,6 +839,162 @@ fn wav_16k(narrow: &[i16]) -> Vec<u8> {
     wav
 }
 
+fn hear_16k(native: &Native, narrow: &[i16]) -> Result<String> {
+    let body = json!({
+        "temperature": 0,
+        "max_tokens": 200,
+        "messages": [
+            {"role": "system", "content": "Perform ASR in English."},
+            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav_16k(narrow)), "format": "wav"}}]}
+        ]
+    })
+    .to_string();
+    let response = post(native, "/v1/chat/completions", &body)?;
+    let at = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .context("The engine sent no header")?;
+    let reply: Value = serde_json::from_slice(&response[at + 4..])?;
+    Ok(reply["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .replace("<|im_end|>", " ")
+        .trim()
+        .to_owned())
+}
+
+const WINDOW_FRAMES: usize = 400;
+const LONGEST_FRAMES: usize = 750;
+const PAUSE_FRAMES: usize = 15;
+const QUIET_RMS: f64 = 100.0;
+
+pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
+    let frame = 320;
+    let loud: Vec<bool> = narrow
+        .chunks(frame)
+        .map(|chunk| {
+            let energy: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (energy / chunk.len() as f64).sqrt() >= QUIET_RMS
+        })
+        .collect();
+    let mut cuts = vec![0];
+    let (mut start, mut quiet) = (0, 0);
+    for (index, is_loud) in loud.iter().enumerate() {
+        quiet = if *is_loud { 0 } else { quiet + 1 };
+        let length = index + 1 - start;
+        if (quiet >= PAUSE_FRAMES && length >= WINDOW_FRAMES) || length >= LONGEST_FRAMES {
+            start = index + 1;
+            cuts.push(start * frame);
+        }
+    }
+    cuts.push(narrow.len());
+    cuts.windows(2)
+        .map(|pair| &narrow[pair[0].min(narrow.len())..pair[1]])
+        .filter(|window| window.iter().any(|s| s.unsigned_abs() >= 1000))
+        .collect()
+}
+
+pub fn marks_between(marks: &[Mark], event: &str, from: &str, to: &str) -> usize {
+    let start = marks.iter().position(|mark| mark.event == from);
+    let end = marks.iter().position(|mark| mark.event == to);
+    match (start, end) {
+        (Some(start), Some(end)) if start <= end => marks[start..=end]
+            .iter()
+            .filter(|mark| mark.event == event)
+            .count(),
+        _ => 0,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Pause {
+    pub from_ms: u64,
+    pub to_ms: u64,
+}
+
+pub fn pauses(
+    native: &Native,
+    name: &str,
+    said: &Conversation,
+    floor_ms: u64,
+) -> Result<Vec<Pause>> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    let offset = |event: &str| {
+        mark_of(&said.marks, event)
+            .map(|mark| mark.at_ms.saturating_sub(said.capture_began_ms))
+            .with_context(|| format!("The app marked no {event}"))
+    };
+    let per_ms = (super::speech::RATE / 1000) as usize;
+    let start_ms = offset("speech-started")?;
+    let from = usize::try_from(start_ms)?.saturating_mul(per_ms);
+    let to = usize::try_from(offset("speech-ended")?)?
+        .saturating_mul(per_ms)
+        .min(heard.0.len());
+    let base = said.capture_began_ms + start_ms;
+    Ok(
+        quiet_runs(heard.0.get(from..to).unwrap_or_default(), per_ms * 20)
+            .into_iter()
+            .map(|(first, frames)| Pause {
+                from_ms: base + first as u64 * 20,
+                to_ms: base + (first + frames) as u64 * 20,
+            })
+            .filter(|pause| pause.to_ms - pause.from_ms > floor_ms)
+            .collect(),
+    )
+}
+
+fn quiet_runs(samples: &[i16], frame: usize) -> Vec<(usize, usize)> {
+    let loud: Vec<bool> = samples
+        .chunks(frame)
+        .map(|chunk| {
+            let energy: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (energy / chunk.len() as f64).sqrt() >= QUIET_RMS
+        })
+        .collect();
+    let (Some(first), Some(last)) = (
+        loud.iter().position(|is_loud| *is_loud),
+        loud.iter().rposition(|is_loud| *is_loud),
+    ) else {
+        return Vec::new();
+    };
+    let mut runs = Vec::new();
+    let mut start = None;
+    for (index, is_loud) in loud.iter().enumerate().take(last + 1).skip(first) {
+        match (is_loud, start) {
+            (false, None) => start = Some(index),
+            (true, Some(began)) => {
+                runs.push((began, index - began));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    runs
+}
+
+pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Result<Vec<String>> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    let narrow: Vec<i16> = heard
+        .0
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|trio| ((i32::from(trio[0]) + i32::from(trio[1]) + i32::from(trio[2])) / 3) as i16)
+        .collect();
+    let reply_from_ms = mark_of(&said.marks, "speech-started")
+        .map(|mark| mark.at_ms.saturating_sub(said.capture_began_ms))
+        .context("The app marked no start of the spoken reply")?;
+    let reply_from = usize::try_from(reply_from_ms)?
+        .saturating_mul(16)
+        .min(narrow.len());
+    windows(&narrow[reply_from..])
+        .into_iter()
+        .map(|window| hear_16k(native, window))
+        .collect()
+}
+
 pub fn transcribe(native: &Native, name: &str) -> Result<String> {
     let stack = stack(native)?;
     let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
@@ -881,6 +1132,75 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heard_digits_count_as_the_same_number_said_in_words() {
+        let heard =
+            "The run changed 1,200 lines in 4 minutes, about 50% faster, and peaked at 6.5 GB.";
+        let wanted = "The run changed one thousand two hundred lines in four minutes, about fifty percent faster, and peaked at six point five gigabytes.";
+        assert_eq!(word_errors(&digits_as_words(heard), wanted), (1, 22));
+        assert_eq!(
+            digits_as_words("38 checks, 0.25 and 4:20."),
+            "thirty eight checks, zero point two five and 4:20."
+        );
+    }
+
+    #[test]
+    fn pauses_are_only_the_quiet_between_sounds() {
+        let frame = 960;
+        let sound = vec![3000i16; frame * 10];
+        let samples: Vec<i16> = [
+            vec![0; frame * 30],
+            sound.clone(),
+            vec![0; frame * 12],
+            sound.clone(),
+            vec![0; frame * 5],
+            sound,
+            vec![0; frame * 40],
+        ]
+        .concat();
+        assert_eq!(quiet_runs(&samples, frame), vec![(40, 12), (62, 5)]);
+        assert!(quiet_runs(&[0; 9600], frame).is_empty());
+    }
+
+    #[test]
+    fn marks_are_counted_only_between_their_bounds() {
+        let mark = |event: &str| Mark {
+            event: event.to_owned(),
+            at_ms: 0,
+            words: None,
+        };
+        let marks = [
+            mark("speaker-opened"),
+            mark("speech-started"),
+            mark("speaker-opened"),
+            mark("speech-ended"),
+            mark("speaker-opened"),
+        ];
+        assert_eq!(
+            marks_between(&marks, "speaker-opened", "speech-started", "speech-ended"),
+            1
+        );
+        assert_eq!(
+            marks_between(
+                &marks[..2],
+                "speaker-opened",
+                "speech-started",
+                "speech-ended"
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn the_capture_is_cut_into_windows_at_its_pauses() {
+        let voiced = vec![3000i16; 16_000 * 9];
+        let pause = vec![0i16; 16_000];
+        let narrow: Vec<i16> = [voiced.clone(), pause.clone(), voiced, pause].concat();
+        let cut = windows(&narrow);
+        assert_eq!(cut.len(), 2);
+        assert!(cut.iter().all(|window| window.len() <= 16_000 * 15));
+    }
 
     #[test]
     fn words_are_found_inside_a_longer_transcript_ignoring_case_and_punctuation() {

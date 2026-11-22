@@ -1,12 +1,12 @@
 diff --git a/app/src/voice_speaker.rs b/app/src/voice_speaker.rs
 --- a/app/src/voice_speaker.rs
 +++ b/app/src/voice_speaker.rs
-@@ -102,7 +102,7 @@ fn say(parts: &Parts, line: Line) {
-                 parts.trace.mark_words("speech-started", &label);
-                 let finish = speaker.play(&clip);
-                 note_unspoken(parts, &line);
--                finish(&|| (parts.stopped)());
-+                finish(&|| !(parts.on)());
-                 parts.trace.mark("speech-ended");
-                 None
-             }
+@@ -196,7 +196,7 @@
+     });
+     let finish = speaker.play(Box::new(std::iter::once(first).chain(next)));
+     note_unspoken(parts, line);
+-    finish(&|| (parts.stopped)());
++    finish(&|| !(parts.on)());
+     parts.trace.mark("speech-ended");
+     failure
+         .lock()

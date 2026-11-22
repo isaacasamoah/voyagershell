@@ -1,0 +1,14 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -245,7 +245,9 @@
+         let mut cut_at_limit = false;
+         let pieces = sentences(&kept)
+             .flat_map(|sentence| split_long(sentence, &mut cut_at_limit))
+-            .collect();
++            .collect::<Vec<_>>()
++            .join(" ");
++        let pieces = vec![pieces];
+         Some(Self {
+             text: kept.join(" "),
+             pieces,

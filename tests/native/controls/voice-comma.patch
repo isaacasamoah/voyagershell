@@ -1,0 +1,12 @@
+diff --git a/app/src/speech.rs b/app/src/speech.rs
+--- a/app/src/speech.rs
++++ b/app/src/speech.rs
+@@ -263,7 +263,7 @@
+     while words.len() > PIECE_WORDS {
+         let at = words[..PIECE_WORDS]
+             .iter()
+-            .rposition(|word| word.ends_with([',', ';', ':']))
++            .rposition(|_| false)
+             .map_or_else(
+                 || {
+                     *cut_at_limit = true;
