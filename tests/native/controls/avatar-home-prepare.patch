@@ -1,5 +1,5 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index 6c1c2d29..2c395d0c 100644
+index 2de9095d..2c395d0c 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
@@ -16,7 +16,7 @@ index 6c1c2d29..2c395d0c 100644
    workspace.automaticRefresh = true;
    try {
      workspace.run({ operation: "inspect" }, cx);
-@@ -65,19 +60,8 @@ export function acceptDockResult(workspace, cx) {
+@@ -65,22 +60,8 @@ export function acceptDockResult(workspace, cx) {
    if (raw !== null) {
      const result = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -27,8 +27,11 @@ index 6c1c2d29..2c395d0c 100644
 -        if (
 -          workspace.acceptSnapshot(result, task) &&
 -          result.status === "applied"
--        )
+-        ) {
 -          workspace.dockReceipt = result.requestId;
+-          workspace.refreshRequested = true;
+-          if (!workspace.busy) inspectNotice(workspace, task);
+-        }
 -        task.notify();
 -      });
 -      return;
@@ -39,24 +42,20 @@ index 6c1c2d29..2c395d0c 100644
    if (workspace.busy) return;
    const dock = workspace_notice().dockRevision;
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index fc38cd4d..39d63799 100644
+index 9bdeb011..11b91455 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -70,12 +70,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
-   const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
-   workspace.workspaceNotice = notice;
+@@ -72,8 +72,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
    workspace.refreshRequested = false;
--  if (
--    !changed &&
+   if (
+     !changed &&
 -    BigInt(notice.revision) <= BigInt(workspace.version) &&
 -    !unopened(workspace)
--  )
--    return;
-+  if (!changed && BigInt(notice.revision) <= BigInt(workspace.version)) return;
++    BigInt(notice.revision) <= BigInt(workspace.version)
+   )
+     return;
    workspace.automaticRefresh = true;
-   try {
-     workspace.run({ operation: "inspect" }, cx);
-@@ -89,19 +84,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -89,22 +88,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    if (raw !== null) {
      const result: unknown = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -67,8 +66,11 @@ index fc38cd4d..39d63799 100644
 -        if (
 -          workspace.acceptSnapshot(result, task) &&
 -          result.status === "applied"
--        )
+-        ) {
 -          workspace.dockReceipt = result.requestId;
+-          workspace.refreshRequested = true;
+-          if (!workspace.busy) inspectNotice(workspace, task);
+-        }
 -        task.notify();
 -      });
 -      return;
