@@ -29,7 +29,7 @@ impl Route {
     }
 }
 
-const OFFER_WORDS: &str = "what would you like|want me to|do you want me|would you like me|shall i|should i|i could|i'll|i will|let me|let's|can i help|i can help|i'm here to help|happy to help";
+const OFFER_WORDS: &str = "what would you like|want me to|do you want me|would you like me|shall i|should i|i could|i'll|i will|let me|let's|can i help|i can help|i'm here to help|happy to help|can i get|can i do|what can i do|i can show|i can get|anything i can";
 
 const ACTION_WORDS: &str = "i'm going|going to|on it|i've|i have|i did|done|will do|right away|working on|voyager|ask|asking|check|checking|open|opening|look|looking|find|finding|move|moving|rename|renaming|dock|docking|switch|switching|start|stop|cancel|canceling|cancelling|drop|fleet|vessel|voyage|build|terminal|portal|workspace|opened|moved|renamed|docked|checked|started|stopped|canceled|cancelled|switched|found|dropped|fleets|vessels|voyages|builds|terminals|portals";
 
@@ -236,6 +236,11 @@ mod tests {
             "Would you like me to find it?",
             "Shall I take you there?",
             "Should I keep going?",
+            "I can show you what's new.",
+            "Can I get you anything?",
+            "What can I do for you?",
+            "Is there anything I can do?",
+            "I can get that for you.",
             "I can help with that.",
             "Can I help with anything?",
             "I'm here to help.",

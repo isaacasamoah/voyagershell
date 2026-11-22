@@ -113,10 +113,11 @@ The model's kind and its confidence decide. The answer is `Chat` only when the m
 says chat and the probability of chat at the kind token is at least 0.99, the gate from
 the voice experiment's round 7. Three word lists stand behind the gate as belts. None
 decides on its own, and each can only move a turn to Voyager. A chat reply that offers
-to do something, such as "want me to", "shall I", "I can help", "I'm here to help",
-"what would you like", "I'll" or "let me", goes to Voyager. A bare "I can" is not an
-offer, so "Yes, I can hear you." stays small talk. So does a chat reply that holds an action word, such as "on it", "done",
-"opening" or "ask", or a workspace word such as "Fleet" or "build". Heard words that hold
+to do something, such as "want me to", "shall I", "I can help", "I can show", "can I
+get", "what can I do", "I'm here to help", "what would you like", "I'll" or "let me",
+goes to Voyager. A chat reply that holds an action word, such as "on it", "done",
+"opening" or "ask", or a workspace word such as "Fleet" or "build", goes to Voyager too.
+A bare "I can" is not an offer, so "Yes, I can hear you." stays small talk. Heard words that hold
 "help", "can you do", "never mind" or "cancel" go to Voyager, whatever the model said,
 because Isaac chose that these go to Voyager.
 
