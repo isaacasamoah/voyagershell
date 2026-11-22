@@ -33,10 +33,12 @@ pub fn has_reply_marker(text: &str) -> bool {
     strip_reply_marker(text).len() != text.len()
 }
 
-pub fn policy_rule() -> String {
-    format!(
-        "A prompt that starts with {MARKER} came by voice. Act first, then answer aloud in full, brief and plain, with no ids, paths or code. Say the reason when something fails. If the answer would pass about 100 words, such as a list, say the gist and offer more. Never point to the chat."
-    )
+pub const WHO: &str = include_str!("spoken_who.md");
+
+pub const TALK: &str = include_str!("spoken_talk.md");
+
+pub fn guide() -> String {
+    format!("{WHO}\n\n{TALK}")
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -141,14 +143,39 @@ mod tests {
     }
 
     #[test]
-    fn the_policy_rule_names_the_marker_the_prompt_carries() {
-        let rule = policy_rule();
-        assert!(rule.starts_with(&format!("A prompt that starts with {MARKER} ")));
-        assert!(rule.contains("answer aloud in full"));
-        assert!(rule.contains("no ids, paths or code"));
-        assert!(rule.contains("Say the reason when something fails."));
-        assert!(rule.ends_with("Never point to the chat."));
-        assert!(!rule.contains("one short"));
+    fn the_guide_is_who_voyager_is_then_how_it_talks() {
+        let guide = guide();
+        assert!(guide.starts_with("## Who you are\nYou are Voyager."));
+        assert!(guide.contains("\n\n## How you talk\n"));
+        assert!(guide.ends_with(TALK));
+        assert!(TALK.starts_with("## How you talk"));
+        assert!(!TALK.contains("Who you are"));
+    }
+
+    #[test]
+    fn the_guide_is_the_approved_text_byte_for_byte() {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(guide().as_bytes());
+        let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        assert_eq!(guide().len(), 2927);
+        assert_eq!(
+            hex,
+            "47cf14519485844caf77f671e12c7396b1a08d17804bd608accbe687b8576195"
+        );
+    }
+
+    #[test]
+    fn the_guide_carries_the_rules_a_spoken_reply_depends_on() {
+        for words in [
+            "When something fails, say in one sentence what failed and why",
+            "Never say an id, revision number, file path, command, or layout term",
+            "Do only what was asked.",
+            "Claim only what a tool's output showed, and say it as what changed for them",
+            &format!("A {MARKER} prompt came by voice"),
+            "never point to the chat",
+        ] {
+            assert!(guide().contains(words), "{words}");
+        }
     }
 
     #[test]

@@ -1,9 +1,10 @@
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const CEILING_WORDS: usize = 120;
-pub const OFFER_MORE: &str = "I can say more if you ask.";
 pub const PIECE_WORDS: usize = 25;
 pub const CUT_AT_LIMIT: &str =
     "A spoken sentence had no comma within the piece limit, so it was cut at the limit.";
+pub const CEILING_CUT: &str =
+    "spoken reply passed the word ceiling and was cut at its last whole sentence";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Standing {
@@ -240,7 +241,7 @@ impl SpokenText {
             last.push('.');
         }
         if cut {
-            kept.extend(OFFER_MORE.split_whitespace().map(str::to_owned));
+            eprintln!("{CEILING_CUT}");
         }
         let mut cut_at_limit = false;
         let pieces = sentences(&kept)
@@ -641,7 +642,7 @@ mod tests {
         assert!(text.contains("Here they are by group. Declaring things: let, fn,"));
         assert!(text.contains("Other: async, await, dyn, unsafe, where, true, false."));
         assert!(text.ends_with("Do you want me to go through each one and say what it does?"));
-        assert!(!text.contains('*') && !text.contains("chat") && !text.contains(OFFER_MORE));
+        assert!(!text.contains('*') && !text.contains("chat") && !text.contains("say more"));
     }
 
     #[test]
@@ -652,24 +653,21 @@ mod tests {
     }
 
     #[test]
-    fn past_the_ceiling_the_reply_is_cut_at_a_sentence_end_and_offers_more_not_the_chat() {
+    fn past_the_ceiling_the_reply_is_cut_at_its_last_whole_sentence_and_adds_nothing() {
         let sentence = format!("{}.", vec!["word"; 29].join(" "));
         let sentence = format!("word {sentence}");
         let long = [sentence.as_str(); 6].join(" ");
         let text = SpokenText::from_reply(&long).unwrap();
-        let spoken = text.as_str().strip_suffix(OFFER_MORE).unwrap().trim_end();
-        assert_eq!(spoken.split_whitespace().count(), 120);
-        assert!(spoken.ends_with("word."));
-        assert!(!text.as_str().contains("chat"));
+        assert_eq!(text.as_str(), [sentence.as_str(); 4].join(" "));
+        assert!(!text.as_str().contains("chat") && !text.as_str().contains("say more"));
     }
 
     #[test]
     fn runaway_text_with_no_sentence_end_is_cut_at_the_ceiling() {
         let long = vec!["word"; 500].join(" ");
         let text = SpokenText::from_reply(&long).unwrap();
-        let spoken = text.as_str().strip_suffix(OFFER_MORE).unwrap().trim_end();
-        assert_eq!(spoken.split_whitespace().count(), CEILING_WORDS);
-        assert!(spoken.ends_with("word."));
+        assert_eq!(text.as_str().split_whitespace().count(), CEILING_WORDS);
+        assert!(text.as_str().ends_with("word."));
     }
 
     #[test]
@@ -824,17 +822,15 @@ mod tests {
     }
 
     #[test]
-    fn the_offer_of_more_is_its_own_piece() {
-        let long = format!("{}.", vec!["word"; 500].join(" "));
-        let text = SpokenText::from_reply(&long).unwrap();
-        assert_eq!(
-            text.pieces().last().map(|piece| piece.as_str().to_owned()),
-            Some(OFFER_MORE.to_owned())
-        );
-        assert!(
-            text.pieces()
-                .all(|piece| piece.as_str().split_whitespace().count() <= PIECE_WORDS)
-        );
+    fn the_ceiling_cuts_the_whole_reply_before_it_is_split_and_no_piece_is_cut_mid_sentence() {
+        let sentences: Vec<String> = (1..=8)
+            .map(|number| format!("{} end{number}.", vec!["word"; 19].join(" ")))
+            .collect();
+        let text = SpokenText::from_reply(&sentences.join(" ")).unwrap();
+        assert_eq!(piece_texts(&text), sentences[..6]);
+        assert_eq!(text.as_str(), sentences[..6].join(" "));
+        assert!(!text.cut_at_limit());
+        assert!(!text.as_str().contains("say more"));
     }
 
     #[test]

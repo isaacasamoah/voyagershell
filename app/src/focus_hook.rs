@@ -21,9 +21,15 @@ pub(crate) const DEFAULT_ARGV: [&str; 5] =
     [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
 
 const BACKGROUND: &str = "VOYAGER_BACKGROUND";
-const SKILL: &str = "Run voyager --skill to learn how to work in the app.";
-
-const IDENTITY: &str = "You are Voyager, the private administrator of this person's VoyagerShell workspace. This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1. You act with their authority through the voyager and hc commands. Run voyager --skill to learn how to work in the app. Run voyager status before you change the workspace, and report what actually happened, including refusals and uncertain results. Working Vessels make project, source and configuration changes. You inspect, arrange, delegate and verify. The person's dock arrives with each prompt and says what they are looking at. Keep replies brief and factual.";
+const SESSION_LINE: &str =
+    "This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1.";
+pub(crate) fn rules() -> String {
+    format!(
+        "{SESSION_LINE} {}\n{}",
+        crate::spoken::reply_rule(),
+        crate::spoken::guide()
+    )
+}
 
 fn value<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
     argv.windows(2)
@@ -78,11 +84,7 @@ pub(crate) fn voyager_arguments(
         "-n".into(),
         NAME.into(),
         "--append-system-prompt".into(),
-        format!(
-            "{IDENTITY} {} {}",
-            crate::spoken::reply_rule(),
-            crate::spoken::policy_rule()
-        ),
+        rules(),
         "--settings".into(),
         settings(command).to_string(),
     ]
@@ -98,20 +100,12 @@ pub(crate) fn runs(terminal: &Terminal, session: &str) -> bool {
         && value(&terminal.argv, &["-n"]) == Some(NAME)
 }
 
-fn reminder() -> String {
-    format!(
-        "{} {} {SKILL}",
-        crate::spoken::reply_rule(),
-        crate::spoken::policy_rule()
-    )
-}
-
 pub fn claude_output(focus: &Focus) -> String {
     let record = serde_json::to_string(focus).unwrap_or_default();
     let text = format!(
         "VoyagerShell focus at this prompt: The user is docked on {}. This is the app's dock context now, so no tool call is needed to learn it.\n{record}\n{}",
         focus.path.join(" > "),
-        reminder()
+        rules()
     );
     json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
         .to_string()
@@ -175,6 +169,8 @@ pub fn hook(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const REMINDER_BOUND: usize = 3200;
     use voyager_contract::Context;
 
     fn focus() -> Focus {
@@ -220,18 +216,18 @@ mod tests {
         let text = hook["additionalContext"].as_str().unwrap();
         assert!(text.contains("Home > Crew > crew"));
         assert!(text.contains("\"revision\":\"7\""));
-        assert!(text.ends_with(&reminder()));
+        assert!(text.ends_with(&rules()));
     }
 
     #[test]
-    fn the_per_prompt_reminder_carries_the_marker_rule_the_spoken_rule_and_the_skill_pointer() {
-        let text = reminder();
-        assert!(text.starts_with(&crate::spoken::reply_rule()));
-        assert!(text.contains(&crate::spoken::policy_rule()));
-        assert!(text.ends_with(SKILL));
-        assert!(IDENTITY.contains(SKILL));
+    fn the_per_prompt_rules_carry_the_session_line_the_marker_rule_and_the_guide() {
+        let text = rules();
+        assert!(text.starts_with(SESSION_LINE));
+        assert!(text.contains(&crate::spoken::reply_rule()));
+        assert!(text.ends_with(&crate::spoken::guide()));
+        assert!(text.contains("Run voyager --skill"));
         assert!(!text.to_lowercase().contains("oru"));
-        assert!(text.len() < 700);
+        assert!(text.len() < REMINDER_BOUND);
     }
 
     #[test]
@@ -438,8 +434,7 @@ mod tests {
             .iter()
             .position(|word| word == "--append-system-prompt")
             .unwrap();
-        assert!(words[at + 1].starts_with(IDENTITY));
-        assert!(words[at + 1].ends_with(&crate::spoken::policy_rule()));
+        assert_eq!(words[at + 1], rules());
         assert_eq!(
             words
                 .iter()
@@ -502,7 +497,7 @@ mod tests {
             .position(|word| word == "--append-system-prompt")
             .unwrap();
         let prompt = &words[at + 1];
-        assert!(prompt.contains("Run voyager --skill to learn how to work in the app."));
+        assert!(prompt.contains("Run voyager --skill to learn the commands"));
         assert_eq!(prompt.matches(crate::spoken::REPLY_MARKER).count(), 2);
         assert!(prompt.contains(&crate::spoken::reply_rule()));
     }

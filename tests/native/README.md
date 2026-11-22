@@ -234,7 +234,12 @@ types into the first terminal, as an agent in that Vessel would.
   hook that runs `voyager focus --hook claude`. The stand-in has no tools and
   runs the hook as Claude does, with the prompt as JSON on stdin. It passes when
   a prompt after docking the avatar on that Vessel is given its name, and a
-  later prompt after docking on the first Vessel is given that name.
+  later prompt after docking on the first Vessel is given that name. Each name
+  must end the first line of the context the stand-in prints for that prompt.
+  The case reads the stand-in's scrollback, with whitespace ignored, not only
+  its visible screen. The spoken guide follows the dock line in the same
+  context and is long enough to scroll it out of a narrow pane, so the result
+  no longer depends on the pane's height.
 - `focus-hook-fails-quietly` runs the hook with an unknown terminal and with no
   Core session. It passes when each exits 0 and prints no bytes, and an unknown
   agent name exits 1.

@@ -112,11 +112,9 @@ a turn.
 
 A prompt that voice sends starts with the marker `[spoken]`, which
 `spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
-the agent reads it. The agent's launch policy carries `spoken::policy_rule`. It
-tells the agent that a prompt starting with the marker came by voice, to act
-first, and to answer aloud in full, brief and plain, with no ids, paths or code, to
-say the reason when something fails, to say only the gist of an answer that would pass about 100 words and offer more,
-and never to point to the chat. The launch
+the agent reads it. The agent's launch prompt carries the spoken guide, which tells
+the agent that a prompt starting with the marker came by voice and how to answer it
+aloud. [How Voyager talks](voice.md#how-voyager-talks) describes the guide. The launch
 that appends the rule is the Voyager start, which this guide does not describe.
 
 The same launch tells Voyager that this is the app's background Voyager session,
@@ -125,11 +123,11 @@ its instructions name. It asks Voyager to start every reply with `[vy]`, which
 `spoken::reply_rule` words and `spoken::strip_reply_marker` removes. The launch
 also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
 own instructions leave their personal reply prefix out of Voyager's replies.
-Claude cannot read its own environment, so the identity states the same fact in
+Claude cannot read its own environment, so the background-session line states the same fact in
 words. Claude Code ignores `--append-system-prompt` when it resumes a
 conversation, and the earlier replies in that conversation carry the personal prefix, so the
-focus hook output repeats `spoken::reply_rule`, `spoken::policy_rule` and the pointer to
-`voyager --skill` at every prompt. A launch with no hook command path has no such
+focus hook output repeats the background-session line, `spoken::reply_rule` and the guide,
+which points to `voyager --skill`, at every prompt. A launch with no hook command path has no such
 repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
 the marker where it stores a reply, so neither the speech filter nor the chat
 note ever sees it.

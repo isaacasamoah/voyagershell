@@ -220,7 +220,10 @@ mod tests {
         assert!(
             resumed
                 .iter()
-                .any(|word| word.starts_with("You are Voyager"))
+                .any(|word| *word == crate::focus_hook::rules())
+        );
+        assert!(
+            crate::focus_hook::rules().starts_with("This is the app's background Voyager session")
         );
         std::fs::write(
             &launches,
