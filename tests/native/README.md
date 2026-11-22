@@ -220,6 +220,9 @@ types into the first terminal, as an agent in that Vessel would.
   with a `create-fleet` request at the saved layout version. It passes when
   the status names the first Vessel, the new Fleet is saved and drawn as a tab,
   and the command exits 0, its applied code.
+  `voyager status` also prints a `picture` of the whole workspace beside the
+  status fields. This journey reads only the status fields, so the picture's
+  content is covered by the unit tests and the replays, not by a journey.
 - `command-removes-placement` runs `voyager do workspace` with a
   `remove-placement` request for the stand-in agent's placement. It passes when
   the placement leaves the saved layout and the canvas, the command exits 0, the
@@ -246,6 +249,7 @@ placement on a chosen side, through the `voyager.place` label or through
 split. The label cases type into the first terminal, as an agent in that Vessel
 would. The `create-vessel` and resize cases send `voyager do workspace` with
 that terminal's `HC_TERMINAL_ID`, which is not Voyager's.
+No case runs `voyager status`, so the status picture does not reach this journey.
 
 - `label-splits-each-side` moves the first shell to the second project folder
   and starts `bash` with `voyager.place=fleet:<id>:<side>:<placement id>` for

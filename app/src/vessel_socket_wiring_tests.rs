@@ -1,4 +1,4 @@
-use super::tests::{answering, terminal, workspace};
+use super::tests::{answering, services, terminal, workspace};
 use super::*;
 use crate::spoken::Kind;
 
@@ -54,7 +54,7 @@ impl Wiring {
 
     fn from(&self, id: &str, vessel: &str, line: &str) -> SocketReply {
         answer(
-            &self.call,
+            &services(&self.call),
             &self.binding,
             &self.turns,
             &self.replies,

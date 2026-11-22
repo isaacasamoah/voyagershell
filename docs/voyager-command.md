@@ -27,6 +27,17 @@ The reply names your Vessel, your Core terminal, the workspace `version` and
 each of your placements with its Voyage and its Fleet or Portal owner. Use the
 `version` as `expectedVersion` in your next change.
 
+Its `picture` lists the whole workspace, one line per item with the name first
+and the id after. It covers each Voyage, its Fleets and its Portals, and every
+piece in them. A piece line gives its Vessel type, its Core terminal and the program's
+latest `activity` (`working`, `blocked`, `idle`, `done`, `error` or `unknown`),
+then `on screen` when it is drawn now and `you` for your own piece. A Voyage or
+Fleet marked `open` is the one shown. `Portals visible` says the column is
+shown, which says nothing about whether its Voyage is open, so check the
+pieces' `on screen`. A piece that is not placed is listed without `on screen`.
+Any Vessel gets the same picture, because `inspect` already shows every Vessel
+the whole layout.
+
 ## Start a program as a Vessel
 
 Start it with `hc run` and label it with the place it belongs:
@@ -297,9 +308,8 @@ voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","actio
 ```
 
 Dock on that Vessel with the `dock` request above and
-`"context":{"kind":"vessel","id":"<placement id>"}`. `voyager status` lists
-placements of your own Vessel only, so take the new placement's id from the
-reply of the create request. The sentence says whether the dock happened.
+`"context":{"kind":"vessel","id":"<placement id>"}`. Take the new placement's id from the
+reply of the create request or from the `picture` of `voyager status`. The sentence says whether the dock happened.
 Run `voyager focus` to read it back. Its `scope` names the placement you docked
 on.
 

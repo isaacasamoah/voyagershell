@@ -15,7 +15,7 @@ Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
 
 fn parse(arguments: &[String]) -> Result<SocketRequest, String> {
     match arguments {
-        [command] if command == "status" => Ok(SocketRequest::Status),
+        [command] if command == "status" => Ok(SocketRequest::Overview),
         [command] if command == "focus" => Ok(SocketRequest::Focus {
             spoken: false,
             prompt: None,
@@ -84,9 +84,10 @@ fn read_stdin() -> String {
 
 fn code(reply: &SocketReply) -> ExitCode {
     let outcome = match reply {
-        SocketReply::Status { .. } | SocketReply::Focus { .. } | SocketReply::Noted => {
-            Outcome::Applied
-        }
+        SocketReply::Status { .. }
+        | SocketReply::Overview { .. }
+        | SocketReply::Focus { .. }
+        | SocketReply::Noted => Outcome::Applied,
         SocketReply::Refused { .. } => Outcome::Refused,
         SocketReply::Workspace {
             reply: Reply::Answered(response),
@@ -145,7 +146,13 @@ fn main() -> ExitCode {
             {
                 eprintln!("{sentence}");
             }
-            match serde_json::to_string_pretty(&reply) {
+            let text = match &reply {
+                SocketReply::Overview { overview } => {
+                    serde_json::to_string_pretty(&voyager_app::vessel_overview::printed(overview))
+                }
+                other => serde_json::to_string_pretty(other),
+            };
+            match text {
                 Ok(text) => println!("{text}"),
                 Err(error) => eprintln!("{error}"),
             }

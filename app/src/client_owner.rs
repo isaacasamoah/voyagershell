@@ -165,6 +165,9 @@ impl Owner {
         subscription.begin(&mut core, false, &sender);
         let caller = client.clone();
         let call: Call = Arc::new(move |vessel, request| caller.program_call(vessel, request));
+        let observer = client.clone();
+        let activities: crate::vessel_socket::Activities =
+            Arc::new(move || observer.reported_activity().terminals);
         let binding = profile
             .as_deref()
             .map_or_else(Binding::unbound, Binding::load);
@@ -173,7 +176,12 @@ impl Owner {
             launches: profile.map(|profile| profile.join("launches.json")),
             content,
             adoptions: Adoptions::new(client.placement_notice.clone()),
-            sockets: Sockets::new(&session, call, binding, client.replies()),
+            sockets: Sockets::new(
+                &session,
+                crate::vessel_socket::Services { call, activities },
+                binding,
+                client.replies(),
+            ),
             notices: Notices::new(client.activity.clone(), packages),
             client,
             sender,

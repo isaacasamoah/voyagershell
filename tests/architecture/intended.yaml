@@ -173,6 +173,8 @@ edges:
   - {from: 'rs:voyager_app::provider_settings::codex', to: 'rs:voyager_app::content', from_owner: conversation-provider, to_owner: content}
   - {from: 'rs:voyager_app::reply_hook', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::spoken', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::vessel_overview', to: 'rs:voyager_app::panels', from_owner: application-queue, to_owner: placement}
+  - {from: 'rs:voyager_app::vessel_overview', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::context', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::core_endpoint', from_owner: application-queue, to_owner: core-adapter}
   - {from: 'rs:voyager_app::vessel_socket', to: 'rs:voyager_app::panels', from_owner: application-queue, to_owner: placement}

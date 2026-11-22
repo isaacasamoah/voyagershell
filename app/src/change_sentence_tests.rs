@@ -410,6 +410,18 @@ fn an_inspect_and_a_plain_read_say_nothing() {
         sentence(&request(Action::Inspect), &SocketReply::Noted),
         None
     );
+    let overview = SocketReply::Overview {
+        overview: voyager_contract::socket::Overview {
+            status: voyager_contract::socket::VesselStatus {
+                vessel: voyager_contract::VesselId("vessel-1".into()),
+                terminal: voyager_contract::CoreTerminalId("t1".into()),
+                version: 1,
+                placements: Vec::new(),
+            },
+            voyages: Vec::new(),
+        },
+    };
+    assert_eq!(sentence(&request(Action::Inspect), &overview), None);
     assert_eq!(
         sentence(
             &request(Action::SelectFleet {

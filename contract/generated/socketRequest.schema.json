@@ -1537,6 +1537,19 @@
       "additionalProperties": false,
       "properties": {
         "command": {
+          "const": "overview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
           "const": "focus",
           "type": "string"
         },
