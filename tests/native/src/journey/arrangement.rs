@@ -800,7 +800,7 @@ fn overlaps_across(a: &Rect, b: &Rect) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width
 }
 
-fn union(terminals: &[(String, Rect)]) -> Option<Rect> {
+pub(super) fn union(terminals: &[(String, Rect)]) -> Option<Rect> {
     let mut rects = terminals.iter().map(|(_, rect)| *rect);
     let first = rects.next()?;
     Some(rects.fold(first, |all, rect| {
@@ -815,7 +815,7 @@ fn union(terminals: &[(String, Rect)]) -> Option<Rect> {
     }))
 }
 
-fn same_rect(a: &Rect, b: &Rect) -> bool {
+pub(super) fn same_rect(a: &Rect, b: &Rect) -> bool {
     (a.x - b.x).abs() <= LOGICAL_TOLERANCE
         && (a.y - b.y).abs() <= LOGICAL_TOLERANCE
         && (a.width - b.width).abs() <= LOGICAL_TOLERANCE
