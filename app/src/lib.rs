@@ -23,6 +23,7 @@ pub mod replies;
 pub mod reply_hook;
 mod scope;
 pub mod spoken;
+pub mod vessel_overview;
 pub mod vessel_socket;
 pub mod vessel_type;
 pub mod voyager_binding;

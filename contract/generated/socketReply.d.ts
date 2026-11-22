@@ -4,6 +4,10 @@ export type SocketReply =
       status: VesselStatus;
     }
   | {
+      kind: "overview";
+      overview: Overview;
+    }
+  | {
       focus: Focus;
       kind: "focus";
     }
@@ -27,6 +31,7 @@ export type PlacementOwner =
       kind: "portals";
       voyage: string;
     };
+export type ActivityState = "unknown" | "working" | "blocked" | "idle" | "done" | "error";
 export type Context =
   | {
       kind: "workspace";
@@ -122,6 +127,36 @@ export interface VesselPlacement {
   owner: PlacementOwner;
   placement: string;
   voyage: string;
+}
+export interface Overview {
+  status: VesselStatus;
+  voyages: VoyageOverview[];
+}
+export interface VoyageOverview {
+  fleets: FleetOverview[];
+  id: string;
+  name: string;
+  portals: PortalsOverview;
+  selected: boolean;
+}
+export interface FleetOverview {
+  id: string;
+  name: string;
+  onScreen: boolean;
+  pieces: PieceOverview[];
+}
+export interface PieceOverview {
+  activity?: ActivityState | null;
+  name: string;
+  onScreen: boolean;
+  placement: string;
+  terminal?: string | null;
+  typeId: string;
+  you?: boolean;
+}
+export interface PortalsOverview {
+  pieces: PieceOverview[];
+  visible: boolean;
 }
 export interface Focus {
   cwd?: string | null;

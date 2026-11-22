@@ -9,8 +9,9 @@ use std::{
 use voyager_contract::{
     Action, ContentDestination, CoreTerminalId, Layout, PlacementInsertion, PlacementOwner, Reply,
     Request, Response, Unanswered, VesselId,
+    activity::ReportedActivity,
     reply::ReplyEvent,
-    socket::{SocketReply, SocketRequest, VesselPlacement, VesselStatus},
+    socket::{Overview, SocketReply, SocketRequest, VesselPlacement, VesselStatus},
 };
 
 const ADDRESS_LIMIT: usize = 128;
@@ -18,6 +19,15 @@ const ADDRESS_LIMIT: usize = 128;
 static STATUS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(crate) type Call = Arc<dyn Fn(VesselId, Request) -> Result<Response, Unanswered> + Send + Sync>;
+
+pub(crate) type Activities =
+    Arc<dyn Fn() -> std::collections::BTreeMap<String, ReportedActivity> + Send + Sync>;
+
+#[derive(Clone)]
+pub(crate) struct Services {
+    pub(crate) call: Call,
+    pub(crate) activities: Activities,
+}
 
 pub fn directory(session: &str) -> Option<PathBuf> {
     let valid = session.starts_with("voyager-")
@@ -43,7 +53,7 @@ pub fn path(session: &str, terminal: &str) -> Option<PathBuf> {
 
 pub(crate) struct Sockets {
     session: String,
-    call: Call,
+    services: Services,
     binding: Binding,
     synced: Option<Arc<Layout>>,
     open: HashMap<String, Listener>,
@@ -56,10 +66,15 @@ impl Sockets {
         &self.binding
     }
 
-    pub(crate) fn new(session: &str, call: Call, binding: Binding, replies: Replies) -> Self {
+    pub(crate) fn new(
+        session: &str,
+        services: Services,
+        binding: Binding,
+        replies: Replies,
+    ) -> Self {
         Self {
             session: session.into(),
-            call,
+            services,
             binding,
             synced: None,
             open: HashMap::new(),
@@ -88,7 +103,7 @@ impl Sockets {
             if !self.open.contains_key(&terminal)
                 && let Some(listener) = Listener::bind(
                     &self.session,
-                    &self.call,
+                    &self.services,
                     &self.binding,
                     &self.turns,
                     &self.replies,
@@ -288,24 +303,62 @@ fn status(call: &Call, vessel: &VesselId, terminal: &CoreTerminalId) -> SocketRe
             reply: Reply::Unanswered(unanswered),
         },
         Ok(response) => SocketReply::Status {
-            status: VesselStatus {
-                vessel: vessel.clone(),
-                terminal: terminal.clone(),
-                version: response.version,
-                placements: owners(&response.layout)
+            status: vessel_status(&response, vessel, terminal),
+        },
+    }
+}
+
+fn vessel_status(
+    response: &Response,
+    vessel: &VesselId,
+    terminal: &CoreTerminalId,
+) -> VesselStatus {
+    VesselStatus {
+        vessel: vessel.clone(),
+        terminal: terminal.clone(),
+        version: response.version,
+        placements: owners(&response.layout)
+            .into_iter()
+            .flat_map(|(voyage, owner, placements)| {
+                placements
                     .into_iter()
-                    .flat_map(|(voyage, owner, placements)| {
-                        placements
-                            .into_iter()
-                            .filter(|placement| &placement.vessel == vessel)
-                            .map(move |placement| VesselPlacement {
-                                placement: placement.id.clone(),
-                                voyage: voyage.clone(),
-                                owner: owner.clone(),
-                                name: placement.name.clone(),
-                            })
+                    .filter(|placement| &placement.vessel == vessel)
+                    .map(move |placement| VesselPlacement {
+                        placement: placement.id.clone(),
+                        voyage: voyage.clone(),
+                        owner: owner.clone(),
+                        name: placement.name.clone(),
                     })
-                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+fn overview(services: &Services, vessel: &VesselId, terminal: &CoreTerminalId) -> SocketReply {
+    let inspected = (services.call)(
+        vessel.clone(),
+        Request {
+            request_id: format!(
+                "voyager-overview-{}-{}",
+                std::process::id(),
+                STATUS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ),
+            expected_version: 0,
+            action: Action::Inspect,
+        },
+    );
+    match inspected {
+        Err(unanswered) => SocketReply::Workspace {
+            reply: Reply::Unanswered(unanswered),
+        },
+        Ok(response) => SocketReply::Overview {
+            overview: Overview {
+                status: vessel_status(&response, vessel, terminal),
+                voyages: crate::vessel_overview::voyages(
+                    &response.layout,
+                    vessel,
+                    &(services.activities)(),
+                ),
             },
         },
     }
@@ -336,7 +389,7 @@ fn focus(call: &Call, vessel: &VesselId) -> SocketReply {
 }
 
 fn answer(
-    call: &Call,
+    services: &Services,
     binding: &Binding,
     turns: &Mutex<TurnLedger>,
     replies: &Replies,
@@ -348,9 +401,10 @@ fn answer(
         Err(error) => SocketReply::Refused {
             message: format!("Invalid voyager request: {error}; nothing was queued"),
         },
-        Ok(SocketRequest::Status) => status(call, vessel, terminal),
+        Ok(SocketRequest::Status) => status(&services.call, vessel, terminal),
+        Ok(SocketRequest::Overview) => overview(services, vessel, terminal),
         Ok(SocketRequest::Focus { spoken, prompt }) => {
-            let reply = focus(call, vessel);
+            let reply = focus(&services.call, vessel);
             if spoken && binding.names(terminal) && matches!(reply, SocketReply::Focus { .. }) {
                 match prompt {
                     Some(prompt) => turns
@@ -386,7 +440,7 @@ fn answer(
                     message: message.into(),
                 },
                 None => SocketReply::Workspace {
-                    reply: call(vessel.clone(), *request).into(),
+                    reply: (services.call)(vessel.clone(), *request).into(),
                 },
             }
         }
@@ -404,7 +458,7 @@ struct Listener {
 impl Listener {
     fn bind(
         session: &str,
-        call: &Call,
+        services: &Services,
         binding: &Binding,
         turns: &Arc<Mutex<TurnLedger>>,
         replies: &Replies,
@@ -435,8 +489,8 @@ impl Listener {
         };
         let closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stopped = closed.clone();
-        let (call, binding, turns, replies) = (
-            call.clone(),
+        let (services, binding, turns, replies) = (
+            services.clone(),
             binding.clone(),
             turns.clone(),
             replies.clone(),
@@ -450,8 +504,8 @@ impl Listener {
                 let Ok(mut stream) = stream else {
                     continue;
                 };
-                let (call, binding, turns, replies) = (
-                    call.clone(),
+                let (services, binding, turns, replies) = (
+                    services.clone(),
                     binding.clone(),
                     turns.clone(),
                     replies.clone(),
@@ -460,16 +514,17 @@ impl Listener {
                 std::thread::spawn(move || {
                     let mut line = String::new();
                     let limit = u64::try_from(crate::activity::LINE_LIMIT).unwrap_or(u64::MAX);
-                    let reply = match std::io::BufReader::new((&stream).take(limit))
-                        .read_line(&mut line)
-                    {
-                        Ok(_) => answer(&call, &binding, &turns, &replies, &owner, &address, &line),
-                        Err(error) => SocketReply::Refused {
-                            message: format!(
-                                "Unreadable voyager request: {error}; nothing was queued"
+                    let reply =
+                        match std::io::BufReader::new((&stream).take(limit)).read_line(&mut line) {
+                            Ok(_) => answer(
+                                &services, &binding, &turns, &replies, &owner, &address, &line,
                             ),
-                        },
-                    };
+                            Err(error) => SocketReply::Refused {
+                                message: format!(
+                                    "Unreadable voyager request: {error}; nothing was queued"
+                                ),
+                            },
+                        };
                     if let Ok(mut encoded) = serde_json::to_vec(&reply) {
                         encoded.push(b'\n');
                         let _ = stream.write_all(&encoded);
@@ -503,7 +558,7 @@ struct Listener {
 impl Listener {
     fn bind(
         _: &str,
-        _: &Call,
+        _: &Services,
         _: &Binding,
         _: &Arc<Mutex<TurnLedger>>,
         _: &Replies,
@@ -592,6 +647,13 @@ mod tests {
         .unwrap()
     }
 
+    pub(super) fn services(call: &Call) -> Services {
+        Services {
+            call: call.clone(),
+            activities: Arc::new(Default::default),
+        }
+    }
+
     pub(super) fn terminal(id: &str) -> CoreTerminalId {
         CoreTerminalId(id.into())
     }
@@ -604,7 +666,7 @@ mod tests {
         let vessel = VesselId("vessel-1".into());
 
         let refused = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -621,7 +683,7 @@ mod tests {
         assert!(seen.lock().unwrap().is_empty());
 
         let accepted = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -648,7 +710,7 @@ mod tests {
         let vessel = VesselId("vessel-1".into());
         for id in ["t8", "t9"] {
             let reply = answer(
-                &call,
+                &services(&call),
                 &binding,
                 &Mutex::default(),
                 &Replies::default(),
@@ -668,7 +730,7 @@ mod tests {
         binding.bind(terminal("t8")).unwrap();
         binding.bind(terminal("t12")).unwrap();
         let reply = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -704,7 +766,7 @@ mod tests {
         .unwrap();
         let vessel = VesselId("vessel-1".into());
         let refused = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -720,7 +782,7 @@ mod tests {
         );
         assert!(seen.lock().unwrap().is_empty());
         let accepted = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -747,7 +809,7 @@ mod tests {
         })
         .unwrap();
         let reply = answer(
-            &call,
+            &services(&call),
             &Binding::unbound(),
             &Mutex::default(),
             &Replies::default(),
@@ -791,7 +853,7 @@ mod tests {
         let binding = Binding::unbound();
         binding.bind(CoreTerminalId("t1".into())).unwrap();
         answer(
-            call,
+            &services(call),
             &binding,
             turns,
             &Replies::default(),

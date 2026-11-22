@@ -1,4 +1,4 @@
-use super::tests::{recorded, terminal};
+use super::tests::{recorded, services, terminal};
 use super::*;
 
 fn workspace_line(id: &str, action: Action) -> String {
@@ -88,7 +88,7 @@ fn creating_a_vessel_with_no_placement_to_sit_beside_and_maximizing_one_are_offe
         let line = workspace_line(name, action.clone());
         let vessel = VesselId("vessel-1".into());
         let refused = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -105,7 +105,7 @@ fn creating_a_vessel_with_no_placement_to_sit_beside_and_maximizing_one_are_offe
         );
         assert!(seen.lock().unwrap().is_empty(), "{name}");
         let accepted = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -139,7 +139,7 @@ fn creating_a_vessel_and_maximizing_are_refused_from_every_terminal_while_nothin
         let line = workspace_line("unbound", action);
         for id in ["t8", "t9"] {
             let reply = answer(
-                &call,
+                &services(&call),
                 &binding,
                 &Mutex::default(),
                 &Replies::default(),
@@ -162,7 +162,7 @@ fn voyager_creates_a_vessel_in_a_fleet_and_not_as_a_portal() {
         voyage: voyager_contract::VoyageId("voyage-1".into()),
     });
     let reply = answer(
-        &call,
+        &services(&call),
         &binding,
         &Mutex::default(),
         &Replies::default(),
@@ -192,7 +192,7 @@ fn any_vessel_may_create_a_vessel_beside_a_placement_of_a_fleet() {
             binding.bind(terminal("t8")).unwrap();
         }
         let reply = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -228,7 +228,7 @@ fn a_vessel_other_than_voyager_creating_with_no_placement_to_sit_beside_is_told_
         ("portal beside", portal_beside.clone()),
     ] {
         let reply = answer(
-            &call,
+            &services(&call),
             &binding,
             &Mutex::default(),
             &Replies::default(),
@@ -246,7 +246,7 @@ fn a_vessel_other_than_voyager_creating_with_no_placement_to_sit_beside_is_told_
     }
     assert!(VESSEL_NOT_OFFERED.contains("beside a placement of a Fleet"));
     let reply = answer(
-        &call,
+        &services(&call),
         &binding,
         &Mutex::default(),
         &Replies::default(),
@@ -261,4 +261,63 @@ fn a_vessel_other_than_voyager_creating_with_no_placement_to_sit_beside_is_told_
         }
     );
     assert!(seen.lock().unwrap().is_empty());
+}
+
+#[test]
+fn overview_shows_the_whole_layout_to_voyager_and_to_any_other_caller_alike_and_status_is_unchanged()
+ {
+    use super::tests::{answering, workspace};
+    use voyager_contract::socket::Overview;
+    let layout = workspace();
+    let own = layout.voyages[0].fleets[0].placements[0].vessel.clone();
+    let call = answering(layout);
+    let binding = Binding::unbound();
+    binding.bind(terminal("t8")).unwrap();
+    let ask = |vessel: &VesselId, address: &str, command: &str| {
+        answer(
+            &services(&call),
+            &binding,
+            &Mutex::default(),
+            &Replies::default(),
+            vessel,
+            &terminal(address),
+            command,
+        )
+    };
+    let overview = |vessel: &VesselId, address: &str| -> Overview {
+        match ask(vessel, address, r#"{"command":"overview"}"#) {
+            SocketReply::Overview { overview } => overview,
+            other => panic!("overview was not answered: {other:?}"),
+        }
+    };
+    let voyager = overview(&own, "t8");
+    let other = overview(&VesselId("another".into()), "t9");
+    let pieces = |overview: &Overview| {
+        overview
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .flat_map(|fleet| &fleet.pieces)
+            .map(|piece| (piece.placement.clone(), piece.you))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        pieces(&voyager)
+            .iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        pieces(&other).iter().map(|(id, _)| id).collect::<Vec<_>>()
+    );
+    assert!(pieces(&voyager).iter().any(|(_, you)| *you));
+    assert!(pieces(&other).iter().all(|(_, you)| !*you));
+    let SocketReply::Status { status } = ask(&own, "t8", r#"{"command":"status"}"#) else {
+        panic!("status was not answered");
+    };
+    assert_eq!(voyager.status, status);
+    assert!(
+        status
+            .placements
+            .iter()
+            .all(|placement| placement.name == "Terminal 1")
+    );
 }

@@ -1,6 +1,17 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "ActivityState": {
+      "enum": [
+        "unknown",
+        "working",
+        "blocked",
+        "idle",
+        "done",
+        "error"
+      ],
+      "type": "string"
+    },
     "Arrangement": {
       "additionalProperties": false,
       "properties": {
@@ -216,6 +227,33 @@
         "id",
         "name",
         "placements"
+      ],
+      "type": "object"
+    },
+    "FleetOverview": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "onScreen": {
+          "type": "boolean"
+        },
+        "pieces": {
+          "items": {
+            "$ref": "#/definitions/PieceOverview"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "onScreen",
+        "pieces"
       ],
       "type": "object"
     },
@@ -618,6 +656,25 @@
       ],
       "type": "string"
     },
+    "Overview": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/VesselStatus"
+        },
+        "voyages": {
+          "items": {
+            "$ref": "#/definitions/VoyageOverview"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "voyages"
+      ],
+      "type": "object"
+    },
     "Phase": {
       "enum": [
         "ready",
@@ -626,6 +683,49 @@
         "closed"
       ],
       "type": "string"
+    },
+    "PieceOverview": {
+      "additionalProperties": false,
+      "properties": {
+        "activity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ActivityState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "onScreen": {
+          "type": "boolean"
+        },
+        "placement": {
+          "type": "string"
+        },
+        "terminal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "typeId": {
+          "type": "string"
+        },
+        "you": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "placement",
+        "name",
+        "typeId",
+        "onScreen"
+      ],
+      "type": "object"
     },
     "Placement": {
       "additionalProperties": false,
@@ -785,6 +885,25 @@
         "make-room"
       ],
       "type": "string"
+    },
+    "PortalsOverview": {
+      "additionalProperties": false,
+      "properties": {
+        "pieces": {
+          "items": {
+            "$ref": "#/definitions/PieceOverview"
+          },
+          "type": "array"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "visible",
+        "pieces"
+      ],
+      "type": "object"
     },
     "Region": {
       "enum": [
@@ -1172,6 +1291,37 @@
       ],
       "type": "object"
     },
+    "VoyageOverview": {
+      "additionalProperties": false,
+      "properties": {
+        "fleets": {
+          "items": {
+            "$ref": "#/definitions/FleetOverview"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "portals": {
+          "$ref": "#/definitions/PortalsOverview"
+        },
+        "selected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "selected",
+        "fleets",
+        "portals"
+      ],
+      "type": "object"
+    },
     "WorkspaceView": {
       "enum": [
         "home",
@@ -1195,6 +1345,23 @@
       "required": [
         "kind",
         "status"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "overview",
+          "type": "string"
+        },
+        "overview": {
+          "$ref": "#/definitions/Overview"
+        }
+      },
+      "required": [
+        "kind",
+        "overview"
       ],
       "type": "object"
     },

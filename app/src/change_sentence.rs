@@ -264,7 +264,10 @@ fn refused(intent: &Intent, message: Option<&str>) -> String {
 
 pub fn sentence(request: &Request, reply: &SocketReply) -> Option<String> {
     let (outcome, layout, message) = match reply {
-        SocketReply::Status { .. } | SocketReply::Focus { .. } | SocketReply::Noted => return None,
+        SocketReply::Status { .. }
+        | SocketReply::Overview { .. }
+        | SocketReply::Focus { .. }
+        | SocketReply::Noted => return None,
         SocketReply::Refused { message } => (Outcome::Refused, None, Some(message.as_str())),
         SocketReply::Workspace {
             reply: Reply::Answered(response),

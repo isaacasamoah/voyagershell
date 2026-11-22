@@ -250,3 +250,73 @@ test("a workspace reply says applied, refused or uncertain, with or without the 
   const { requestId: _requestId, ...withoutRequest } = unanswered;
   assert.equal(response(withoutRequest), false);
 });
+
+test("the status reply keeps its shape and the overview reply and request are added beside it", async () => {
+  const { socketReply, socketRequest } =
+    await import("./generated/validate.js");
+  const status = {
+    vessel: "vessel-1",
+    terminal: "t1",
+    version: "412",
+    placements: [
+      {
+        placement: "placement-1",
+        voyage: "voyage-1",
+        owner: { kind: "fleet", id: "fleet-1" },
+        name: "voyager",
+      },
+    ],
+  };
+  assert.equal(socketReply({ kind: "status", status }), true);
+  assert.equal(
+    socketReply({ kind: "status", status: { ...status, voyages: [] } }),
+    false,
+  );
+  assert.equal(
+    socketReply({
+      kind: "status",
+      status: { ...status, placements: undefined },
+    }),
+    false,
+  );
+  assert.equal(socketReply({ kind: "noted" }), true);
+  assert.equal(socketReply({ kind: "refused", message: "no" }), true);
+  const piece = {
+    placement: "placement-1",
+    name: "voyager",
+    typeId: "terminal",
+    onScreen: true,
+    you: true,
+    terminal: "t1",
+    activity: "working",
+  };
+  const overview = {
+    status,
+    voyages: [
+      {
+        id: "voyage-1",
+        name: "Voyager",
+        selected: true,
+        fleets: [
+          { id: "fleet-1", name: "Voyager", onScreen: true, pieces: [piece] },
+        ],
+        portals: { visible: false, pieces: [] },
+      },
+    ],
+  };
+  assert.equal(socketReply({ kind: "overview", overview }), true);
+  assert.equal(
+    socketReply({ kind: "overview", overview: { ...overview, extra: 1 } }),
+    false,
+  );
+  assert.equal(
+    socketReply({
+      kind: "overview",
+      overview: { ...overview, status: { ...status, version: 412 } },
+    }),
+    false,
+  );
+  assert.equal(socketRequest({ command: "status" }), true);
+  assert.equal(socketRequest({ command: "overview" }), true);
+  assert.equal(socketRequest({ command: "overview", extra: true }), false);
+});
