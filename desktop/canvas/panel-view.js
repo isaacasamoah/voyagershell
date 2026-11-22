@@ -72,8 +72,11 @@ export function acceptDockResult(workspace, cx) {
         if (
           workspace.acceptSnapshot(result, task) &&
           result.status === "applied"
-        )
+        ) {
           workspace.dockReceipt = result.requestId;
+          workspace.refreshRequested = true;
+          if (!workspace.busy) inspectNotice(workspace, task);
+        }
         task.notify();
       });
       return;

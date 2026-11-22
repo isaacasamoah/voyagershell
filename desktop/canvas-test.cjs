@@ -865,14 +865,14 @@ test("a dock follows once for each dock revision, once no request is preparing",
   let result = null;
   let dockRevision = "0";
   let noticeRevision = "0";
-  const { Canvas, acceptDockResult } = new Function(
+  const { Canvas, acceptDockResult, inspectNotice } = new Function(
     "View",
     "take_result",
     "validateResponse",
     "window",
     "workspace_notice",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
-      "\nreturn { Canvas, acceptDockResult };",
+      "\nreturn { Canvas, acceptDockResult, inspectNotice };",
   )(
     class {},
     () => {
@@ -1002,13 +1002,18 @@ test("a dock follows once for each dock revision, once no request is preparing",
   );
   assert.equal(inspects, 4, "that dock runs one inspect");
   await settle();
-  result = JSON.stringify({
-    ...reply("placement-11"),
-    requestId: "avatar-home",
-  });
-  accepted.length = 0;
-  render();
-  render();
+  const open = (...ids) =>
+    new Map(ids.map((id) => [id, { status: "applied" }]));
+  const avatarReply = (requestId) => {
+    result = JSON.stringify({ ...reply("placement-11"), requestId });
+    accepted.length = 0;
+    inspects = 0;
+    render();
+  };
+  noticeRevision = view.version;
+  view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
+  view.openings = open("content-2");
+  avatarReply("avatar-home");
   assert.deepEqual(
     accepted,
     [],
@@ -1021,41 +1026,49 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "an avatar reply is accepted in a task, where focus may move, and not in render",
   );
   assert.equal(view.dockReceipt, "avatar-home");
-  assert.equal(prepared.length, 0, "an avatar reply prepares nothing itself");
-  const quiet = () => {
-    view.openings = new Map(
-      ["content-2", "content-10"].map((id) => [id, { status: "applied" }]),
-    );
-    noticeRevision = String(Number(view.version) + 1);
-    view.version = noticeRevision;
-    view.workspaceNotice = { ...view.workspaceNotice, revision: "0" };
-    inspects = 0;
-  };
-  quiet();
-  view.inspectNotice(cx);
+  assert.equal(
+    inspects,
+    1,
+    "an avatar reply that shows a Vessel not yet open reads and prepares once, though the notice did not change",
+  );
+  assert.equal(view.refreshRequested, false);
+  view.openings = open("content-2", "content-10");
+  avatarReply("avatar-home-open");
+  await settle();
   assert.equal(
     inspects,
     0,
-    "a notice already accepted, with every Vessel open, reads nothing",
+    "an avatar reply that shows only open Vessels reads nothing",
   );
-  view.openings = new Map([["content-2", { status: "applied" }]]);
-  noticeRevision = view.version;
-  view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
-  view.inspectNotice(cx);
+  view.openings = open("content-2");
+  view.busy = true;
+  avatarReply("avatar-home-busy");
+  await settle();
+  assert.deepEqual(
+    accepted,
+    ["task"],
+    "an avatar reply during another request is accepted at once",
+  );
+  assert.equal(inspects, 0, "it reads nothing while the other request runs");
+  assert.equal(
+    view.refreshRequested,
+    true,
+    "it leaves the refresh wanted for the end of the other request",
+  );
+  Canvas.prototype.run.call(view, { operation: "inspect" }, cx);
+  assert.equal(
+    view.refreshRequested,
+    true,
+    "an inspect refused while busy does not clear the wanted refresh",
+  );
+  view.busy = false;
+  inspectNotice(view, cx);
   assert.equal(
     inspects,
     1,
-    "a notice already accepted, with a shown Vessel not yet opened, still reads and prepares",
+    "when the request ends the wanted refresh opens the Vessels once",
   );
-  view.openings = new Map(
-    ["content-2", "content-10"].map((id) => [id, { status: "applied" }]),
-  );
-  view.inspectNotice(cx);
-  assert.equal(
-    inspects,
-    1,
-    "once every Vessel is open the notice reads nothing more",
-  );
+  assert.equal(view.refreshRequested, false);
   next = reply("placement-3");
   result = JSON.stringify(reply("placement-3"));
   dockRevision = "5";
