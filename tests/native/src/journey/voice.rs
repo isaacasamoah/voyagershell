@@ -531,13 +531,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the long sentence with commas is spoken as two pieces split at its last comma within the limit",
                 in_order(&pieces, &COMMA_PIECES),
             )
-            .expect(
-                "no piece of the reply is longer than the limit",
-                !pieces.is_empty()
-                    && pieces
-                        .iter()
-                        .all(|piece| piece.split_whitespace().count() <= PIECE_WORDS),
-            )
             .observed("pieces", &pieces)
     })?;
     cases.check(native, Case::LongSentenceIsCutAtTheLimit, |native| {
@@ -551,6 +544,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the app logged once that it cut a sentence at the limit",
                 logged == 1,
+            )
+            .expect(
+                "no piece of the reply is longer than the limit",
+                !pieces.is_empty()
+                    && pieces
+                        .iter()
+                        .all(|piece| piece.split_whitespace().count() <= PIECE_WORDS),
             )
             .observed("pieces", &pieces)?
             .observed("loggedCuts", logged)
