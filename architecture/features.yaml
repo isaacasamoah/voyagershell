@@ -334,7 +334,7 @@ features:
       - desktop/canvas/panel-view.ts
   - id: agent-vessels
     name: 'Agent Vessels'
-    summary: 'Launch an agent Vessel and see it and its processes in the arrangement.'
+    summary: 'Launch an agent Vessel and see it and its processes in the arrangement. An agent that another Vessel creates, without naming its permissions, starts in its plain mode.'
     group: agents
     owner: desktop-presentation
     shared_with: [application-queue]

@@ -53,7 +53,7 @@ debug = "covered"
 [[feature]]
 id = "agent-vessels"
 name = "Agent Vessels"
-path = "Launch an agent Vessel and see it and its processes in the arrangement."
+path = "Launch an agent Vessel and see it and its processes in the arrangement. An agent that another Vessel creates, without naming its permissions, starts in its plain mode."
 sources = ["app/src/launch.rs", "desktop/canvas/agents.ts", "desktop/canvas/processes.ts"]
 journeys = []
 platforms = ["linux"]
