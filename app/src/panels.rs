@@ -635,10 +635,10 @@ pub(crate) fn insert(
 }
 
 pub(crate) fn default_name(members: &[Placement], type_id: &str) -> String {
-    let base = match type_id {
-        crate::vessel_type::NOTES_TYPE => "Notes",
-        "agents" => "Agents",
-        _ => "Terminal",
+    let base = if type_id == crate::vessel_type::AGENTS_TYPE {
+        "Agents"
+    } else {
+        "Terminal"
     };
     let mut suffix = 1_u64;
     loop {

@@ -1,4 +1,4 @@
-use crate::panels;
+use crate::{panels, vessel_type::AGENTS_TYPE};
 use voyager_contract::{
     Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, LastVessel,
     Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget,
@@ -45,7 +45,7 @@ impl Model {
     fn ensure_home(&mut self, cwd: &str) -> Result<(), String> {
         if self.layout.home.is_none() {
             let id = VoyageId(self.id("home-voyage")?);
-            let panel = self.placement(cwd.into(), "agents".into(), "Agents 1".into(), None)?;
+            let panel = self.placement(cwd.into(), AGENTS_TYPE.into(), "Agents 1".into(), None)?;
             let fleet = Fleet {
                 id: FleetId(self.id("home-fleet")?),
                 name: "Home".into(),

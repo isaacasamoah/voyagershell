@@ -13,7 +13,7 @@ mod linux {
     use voyager_contract::{
         Action, Context, CoreTerminalId, Outcome, Request, Response, Status,
         administrator::{ProcessAction, ProcessInput, ProcessRequest},
-        content::{Notes, Request as Content, Response as ContentResponse, Version},
+        content::{Request as Content, Response as ContentResponse, Version},
         layout_document::DOCUMENT,
         worktree,
     };
@@ -218,26 +218,24 @@ mod linux {
                 Some("Voyager is quitting; no process effect was dispatched")
             );
 
-            let updated = client
+            let invoked = client
                 .content(
                     Access::Agent {
                         scope: Context::Workspace,
                         expected_version: before.version,
                     },
-                    Content::Update {
+                    Content::Invoke {
                         version: Version::V1,
                         request_id: client.request_id(),
                         vessel_id: vessel,
                         expected_revision: "revision".into(),
-                        data: Notes {
-                            title: "title".into(),
-                            text: "text".into(),
-                        },
+                        action: "add".into(),
+                        args: serde_json::json!({"text": "text"}),
                     },
                 )
                 .unwrap();
             assert!(matches!(
-                &*updated,
+                &*invoked,
                 ContentResponse::Rejected { message, .. }
                     if message == "Voyager is quitting; no content was changed"
             ));

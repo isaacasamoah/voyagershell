@@ -7,27 +7,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "configuration": {
-              "$ref": "#/definitions/NotesConfiguration"
-            },
-            "operation": {
-              "const": "configure",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "configuration"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
             "operation": {
               "const": "describe",
               "type": "string"
@@ -62,107 +41,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "operation": {
-              "const": "migrate-note",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "const": "list-notes",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "const": "new-note",
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "title"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "filename": {
-              "type": "string"
-            },
-            "operation": {
-              "const": "open-note",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "filename"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "data": {
-              "$ref": "#/definitions/Notes"
-            },
-            "expectedRevision": {
-              "type": "string"
-            },
-            "operation": {
-              "const": "update",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "expectedRevision",
-            "data"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
             "action": {
               "type": "string"
             },
@@ -188,60 +66,6 @@
           "type": "object"
         }
       ]
-    },
-    "Notes": {
-      "additionalProperties": false,
-      "properties": {
-        "text": {
-          "type": "string"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "title",
-        "text"
-      ],
-      "type": "object"
-    },
-    "NotesConfiguration": {
-      "additionalProperties": false,
-      "properties": {
-        "notesFile": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/NotesFile"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "showHeading": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "showHeading"
-      ],
-      "type": "object"
-    },
-    "NotesFile": {
-      "additionalProperties": false,
-      "properties": {
-        "directory": {
-          "type": "string"
-        },
-        "filename": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "directory",
-        "filename"
-      ],
-      "type": "object"
     }
   },
   "properties": {

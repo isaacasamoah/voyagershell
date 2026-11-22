@@ -18,7 +18,6 @@ pub struct Description {
     pub host: NativeHost,
     pub view: NativeView,
     pub placements: Vec<Placement>,
-    pub configuration: Option<DataDescription>,
     pub state: Option<DataDescription>,
     pub actions: Option<Actions>,
     pub backend: Option<Backend>,
@@ -78,46 +77,6 @@ pub enum Backend {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Notes {
-    pub title: String,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NotesConfiguration {
-    pub show_heading: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub notes_file: Option<NotesFile>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NotesFile {
-    pub directory: String,
-    pub filename: String,
-}
-
-impl Default for NotesConfiguration {
-    fn default() -> Self {
-        Self {
-            show_heading: true,
-            notes_file: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ConfigurationSnapshot {
-    pub configuration: NotesConfiguration,
-    #[serde(with = "crate::decimal")]
-    #[schemars(with = "String")]
-    pub workspace_version: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "operation",
     rename_all = "kebab-case",
@@ -125,34 +84,11 @@ pub struct ConfigurationSnapshot {
     deny_unknown_fields
 )]
 pub enum Action {
-    Configure {
-        vessel_id: VesselId,
-        configuration: NotesConfiguration,
-    },
     Describe {
         vessel_id: VesselId,
     },
     Inspect {
         vessel_id: VesselId,
-    },
-    MigrateNote {
-        vessel_id: VesselId,
-    },
-    ListNotes {
-        vessel_id: VesselId,
-    },
-    NewNote {
-        vessel_id: VesselId,
-        title: String,
-    },
-    OpenNote {
-        vessel_id: VesselId,
-        filename: String,
-    },
-    Update {
-        vessel_id: VesselId,
-        expected_revision: String,
-        data: Notes,
     },
     Invoke {
         vessel_id: VesselId,
@@ -170,32 +106,11 @@ pub enum Action {
     deny_unknown_fields
 )]
 pub enum Receipt {
-    Configure {
-        vessel_id: VesselId,
-    },
     Describe {
         vessel_id: VesselId,
     },
     Inspect {
         vessel_id: VesselId,
-    },
-    MigrateNote {
-        vessel_id: VesselId,
-    },
-    ListNotes {
-        vessel_id: VesselId,
-    },
-    NewNote {
-        vessel_id: VesselId,
-        title: String,
-    },
-    OpenNote {
-        vessel_id: VesselId,
-        filename: String,
-    },
-    Update {
-        vessel_id: VesselId,
-        expected_revision: String,
     },
     Invoke {
         vessel_id: VesselId,
@@ -220,16 +135,6 @@ pub struct Input {
     deny_unknown_fields
 )]
 pub enum Request {
-    #[serde(rename = "content.configure")]
-    Configure {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        expected_version: u64,
-        configuration: NotesConfiguration,
-    },
     #[serde(rename = "content.describe")]
     Describe {
         version: Version,
@@ -241,49 +146,6 @@ pub enum Request {
         version: Version,
         request_id: String,
         vessel_id: VesselId,
-    },
-    #[serde(rename = "content.migrate-note")]
-    MigrateNote {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        expected_version: u64,
-    },
-    #[serde(rename = "content.list-notes")]
-    ListNotes {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-    },
-    #[serde(rename = "content.new-note")]
-    NewNote {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        expected_version: u64,
-        title: String,
-    },
-    #[serde(rename = "content.open-note")]
-    OpenNote {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        expected_version: u64,
-        filename: String,
-    },
-    #[serde(rename = "content.update")]
-    Update {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        expected_revision: String,
-        data: Notes,
     },
     #[serde(rename = "content.invoke")]
     Invoke {
@@ -299,39 +161,11 @@ pub enum Request {
 impl Action {
     pub fn receipt(&self) -> Receipt {
         match self {
-            Self::Configure { vessel_id, .. } => Receipt::Configure {
-                vessel_id: vessel_id.clone(),
-            },
             Self::Describe { vessel_id } => Receipt::Describe {
                 vessel_id: vessel_id.clone(),
             },
             Self::Inspect { vessel_id } => Receipt::Inspect {
                 vessel_id: vessel_id.clone(),
-            },
-            Self::MigrateNote { vessel_id } => Receipt::MigrateNote {
-                vessel_id: vessel_id.clone(),
-            },
-            Self::ListNotes { vessel_id } => Receipt::ListNotes {
-                vessel_id: vessel_id.clone(),
-            },
-            Self::NewNote { vessel_id, title } => Receipt::NewNote {
-                vessel_id: vessel_id.clone(),
-                title: title.clone(),
-            },
-            Self::OpenNote {
-                vessel_id,
-                filename,
-            } => Receipt::OpenNote {
-                vessel_id: vessel_id.clone(),
-                filename: filename.clone(),
-            },
-            Self::Update {
-                vessel_id,
-                expected_revision,
-                ..
-            } => Receipt::Update {
-                vessel_id: vessel_id.clone(),
-                expected_revision: expected_revision.clone(),
             },
             Self::Invoke {
                 vessel_id,
@@ -348,19 +182,9 @@ impl Action {
 }
 
 impl Action {
-    pub fn into_request(self, request_id: String, expected_version: u64) -> Request {
+    pub fn into_request(self, request_id: String) -> Request {
         let version = Version::V1;
         match self {
-            Self::Configure {
-                vessel_id,
-                configuration,
-            } => Request::Configure {
-                version,
-                request_id,
-                vessel_id,
-                expected_version,
-                configuration,
-            },
             Self::Describe { vessel_id } => Request::Describe {
                 version,
                 request_id,
@@ -370,45 +194,6 @@ impl Action {
                 version,
                 request_id,
                 vessel_id,
-            },
-            Self::MigrateNote { vessel_id } => Request::MigrateNote {
-                version,
-                request_id,
-                vessel_id,
-                expected_version,
-            },
-            Self::ListNotes { vessel_id } => Request::ListNotes {
-                version,
-                request_id,
-                vessel_id,
-            },
-            Self::NewNote { vessel_id, title } => Request::NewNote {
-                version,
-                request_id,
-                vessel_id,
-                expected_version,
-                title,
-            },
-            Self::OpenNote {
-                vessel_id,
-                filename,
-            } => Request::OpenNote {
-                version,
-                request_id,
-                vessel_id,
-                expected_version,
-                filename,
-            },
-            Self::Update {
-                vessel_id,
-                expected_revision,
-                data,
-            } => Request::Update {
-                version,
-                request_id,
-                vessel_id,
-                expected_revision,
-                data,
             },
             Self::Invoke {
                 vessel_id,
@@ -431,16 +216,6 @@ impl Action {
 pub enum Version {
     #[serde(rename = "1")]
     V1,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Snapshot {
-    pub vessel_id: VesselId,
-    pub revision: String,
-    pub data: Notes,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub warning: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -470,52 +245,6 @@ pub enum Response {
         vessel_id: VesselId,
         schema_declared: bool,
         state_schema: Option<serde_json::Value>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        configuration: Option<DataDescription>,
-    },
-    #[serde(rename = "snapshot")]
-    Snapshot {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        snapshot: Snapshot,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        configuration: Option<ConfigurationSnapshot>,
-    },
-    #[serde(rename = "notes-list")]
-    NotesList {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        filenames: Vec<String>,
-    },
-    #[serde(rename = "note-opened")]
-    NoteOpened {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        snapshot: Snapshot,
-        configuration: NotesConfiguration,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        workspace_version: u64,
-    },
-    #[serde(rename = "configured")]
-    Configured {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        configuration: NotesConfiguration,
-        #[serde(with = "crate::decimal")]
-        #[schemars(with = "String")]
-        workspace_version: u64,
-    },
-    #[serde(rename = "applied")]
-    Applied {
-        version: Version,
-        request_id: String,
-        vessel_id: VesselId,
-        snapshot: Snapshot,
     },
     #[serde(rename = "state")]
     State {
@@ -820,21 +549,4 @@ pub struct BackendDecl {
 pub enum BackendKind {
     CoreDocument,
     CoreTerminal,
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn configuration_request_requires_a_boolean_and_rejects_unknown_fields() {
-        let request = serde_json::json!({"operation":"content.configure", "version":"1", "requestId":"configure", "vesselId":"note", "expectedVersion":"3", "configuration":{"showHeading":false}});
-        assert!(serde_json::from_value::<super::Request>(request.clone()).is_ok());
-        for configuration in [
-            serde_json::json!({"showHeading":"false"}),
-            serde_json::json!({"showHeading":false,"extra":true}),
-        ] {
-            let mut invalid = request.clone();
-            invalid["configuration"] = configuration;
-            assert!(serde_json::from_value::<super::Request>(invalid).is_err());
-        }
-    }
 }

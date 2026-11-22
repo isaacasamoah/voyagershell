@@ -19,19 +19,17 @@ impl Host {
     }
 
     pub fn module(&self) -> Result<HostModule, HostError> {
-        let packages = self.packages.clone();
-        let registry = Arc::new(voyager_app::content::open_registry(packages.clone()));
+        let registry = Arc::new(voyager_app::content::open_registry(self.packages.clone()));
         let manifests = registry.clone();
         let client = self.client.clone();
         let opened: Rc<RefCell<HashMap<String, Entity<ManifestView>>>> =
             Rc::new(RefCell::new(HashMap::new()));
         Bridge::new(&operations::CONTENT_VIEW)
             .async_function("descriptions", move |_| {
-                let packages = packages.clone();
                 let registry = registry.clone();
                 Ok(async move {
-                    let catalog = voyager_app::content::discover_all(&packages, &registry)
-                        .map_err(HostError::new)?;
+                    let catalog =
+                        voyager_app::content::discover_all(&registry).map_err(HostError::new)?;
                     let raw = serde_json::to_string(&catalog)
                         .map_err(|error| HostError::new(error.to_string()))?;
                     if raw.len() > voyager_app::content::ENVELOPE_LIMIT {

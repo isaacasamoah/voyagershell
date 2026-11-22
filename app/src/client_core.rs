@@ -445,7 +445,7 @@ mod activity_notice_tests {
     fn reports_behind_a_full_mailbox_are_applied_and_a_refused_report_changes_nothing() {
         let (sender, _receiver) = async_channel::bounded(8);
         for _ in 0..8 {
-            sender.try_send(Message::RefreshContentViews).unwrap();
+            sender.try_send(Message::Subscribed).unwrap();
         }
         let activity = Arc::new(Mutex::new(Activity::default()));
         let mut model = Model::default();

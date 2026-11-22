@@ -10,8 +10,6 @@ export function conversationReply(data: unknown): data is import("./conversation
 export function conversationRequest(data: unknown): data is import("./conversationRequest").Request;
 export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;
 export function launchCatalog(data: unknown): data is import("./launchCatalog").Catalog;
-export function notes(data: unknown): data is import("./notes").Notes;
-export function notesConfiguration(data: unknown): data is import("./notesConfiguration").NotesConfiguration;
 export function peekTool(data: unknown): data is import("./peekTool").PeekInput;
 export function place(data: unknown): data is import("./place").Place;
 export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;

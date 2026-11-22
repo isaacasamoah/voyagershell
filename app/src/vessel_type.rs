@@ -1,1 +1,1 @@
-pub const NOTES_TYPE: &str = "notes";
+pub const AGENTS_TYPE: &str = "agents";

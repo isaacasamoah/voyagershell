@@ -346,18 +346,6 @@
     "name": "voyager_content_view",
     "entries": [
       {
-        "name": "Notes",
-        "shape": {
-          "kind": "component",
-          "props": [
-            {
-              "name": "vesselId",
-              "ty": "text"
-            }
-          ]
-        }
-      },
-      {
         "name": "Vessel",
         "shape": {
           "kind": "component",
@@ -429,75 +417,6 @@
             }
           ],
           "returns": "text"
-        }
-      }
-    ]
-  },
-  {
-    "name": "voyager_vessel",
-    "entries": [
-      {
-        "name": "identity",
-        "shape": {
-          "kind": "sync",
-          "parameters": [],
-          "returns": "text"
-        }
-      },
-      {
-        "name": "request_id",
-        "shape": {
-          "kind": "sync",
-          "parameters": [],
-          "returns": "text"
-        }
-      },
-      {
-        "name": "changed",
-        "shape": {
-          "kind": "async",
-          "parameters": [
-            {
-              "name": "after",
-              "ty": {
-                "nullable": "decimal"
-              },
-              "maxBytes": null
-            }
-          ],
-          "returns": "text"
-        }
-      },
-      {
-        "name": "invoke",
-        "shape": {
-          "kind": "async",
-          "parameters": [
-            {
-              "name": "request",
-              "ty": "text",
-              "maxBytes": null
-            },
-            {
-              "name": "requestId",
-              "ty": "text",
-              "maxBytes": null
-            },
-            {
-              "name": "expectedRevision",
-              "ty": "text",
-              "maxBytes": null
-            }
-          ],
-          "returns": "text"
-        }
-      },
-      {
-        "name": "theme",
-        "shape": {
-          "kind": "sync",
-          "parameters": [],
-          "returns": "palette"
         }
       }
     ]

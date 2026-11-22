@@ -19,7 +19,6 @@ export interface Description {
   actions?: Actions | null;
   availability: Availability;
   backend?: Backend | null;
-  configuration?: DataDescription | null;
   host: NativeHost;
   name: string;
   placements: Placement[];
@@ -34,13 +33,13 @@ export interface Actions {
   resultSchema: unknown;
   tool: string;
 }
-export interface DataDescription {
-  defaults: unknown;
-  schema?: unknown;
-}
 export interface NativeHost {
   runtime: string;
   version: string;
+}
+export interface DataDescription {
+  defaults: unknown;
+  schema?: unknown;
 }
 export interface NativeView {
   component: string;

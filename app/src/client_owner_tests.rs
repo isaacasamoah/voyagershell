@@ -462,7 +462,7 @@ fn a_create_is_listed_while_its_save_flies_and_kept_only_when_it_lands_applied()
 }
 
 #[test]
-fn automatic_terminal_eligibility_excludes_notes() {
+fn automatic_terminal_eligibility_excludes_other_vessel_types() {
     let mut model = Model::default();
     model
         .apply(Action::CreateVoyage {
@@ -477,7 +477,7 @@ fn automatic_terminal_eligibility_excludes_notes() {
     model
         .apply(Action::CreateVessel {
             launch: None,
-            type_id: crate::vessel_type::NOTES_TYPE.into(),
+            type_id: "dashboard".into(),
             destination: voyager_contract::ContentDestination::Placement {
                 owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
                 insertion: voyager_contract::PlacementInsertion::Beside {
@@ -487,7 +487,7 @@ fn automatic_terminal_eligibility_excludes_notes() {
             },
         })
         .unwrap();
-    let notes = model.layout.vessels.last().unwrap().id.clone();
+    let dashboard = model.layout.vessels.last().unwrap().id.clone();
     let record = |id| CreatedTerminal {
         id,
         launch: Default::default(),
@@ -523,7 +523,7 @@ fn automatic_terminal_eligibility_excludes_notes() {
         vec![record(terminal.clone()), record(new_terminal.clone())]
     );
     let mut layout = Arc::new(model.layout);
-    pending.push(record(notes));
+    pending.push(record(dashboard));
     assert_eq!(
         eligible_contents(&layout, None, &pending),
         vec![terminal.clone(), new_terminal.clone()]

@@ -201,10 +201,7 @@ impl Envelope {
             },
             target: Target::Vessel(vessel.clone()),
             expected: expected.map(|revision| Revision::Vessel(revision.into())),
-            effect: !matches!(
-                request,
-                Content::Inspect { .. } | Content::Describe { .. } | Content::ListNotes { .. }
-            ),
+            effect: !matches!(request, Content::Inspect { .. } | Content::Describe { .. }),
         }
     }
 
@@ -541,7 +538,7 @@ impl<R> FrontDoor<R> {
 mod tests {
     use super::*;
     use voyager_contract::administrator::ProcessInput;
-    use voyager_contract::content::{Notes, Request as Content, Version};
+    use voyager_contract::content::{Request as Content, Version};
     use voyager_contract::worktree;
 
     type Door = FrontDoor<&'static str>;
@@ -587,16 +584,14 @@ mod tests {
         serde_json::to_value(value).unwrap()
     }
 
-    fn update(id: &str, revision: &str) -> (Envelope, Content) {
-        let content = Content::Update {
+    fn invoke(id: &str, revision: &str) -> (Envelope, Content) {
+        let content = Content::Invoke {
             version: Version::V1,
             request_id: id.into(),
             vessel_id: VesselId("vessel-1".into()),
             expected_revision: revision.into(),
-            data: Notes {
-                title: "title".into(),
-                text: "text".into(),
-            },
+            action: "add".into(),
+            args: serde_json::json!({"text": "text"}),
         };
         let access = Access::Agent {
             scope: Context::Workspace,
@@ -631,10 +626,10 @@ mod tests {
             expected_version: 7,
         };
         let (workspace, request) = create(id, "one");
-        let (content, update) = update(id, "revision-1");
+        let (content, invoke) = invoke(id, "revision-1");
         vec![
             (workspace, json(&request)),
-            (content, json(&update)),
+            (content, json(&invoke)),
             (Envelope::worktree(Some(&scope), &worktree), json(&worktree)),
             (Envelope::process(&scope, &process), json(&process)),
             (Envelope::terminal(&terminal), json(&terminal)),
@@ -707,7 +702,7 @@ mod tests {
         let _ = admitted(&door, &create(&limit, "one"));
         for revision in ["", long.as_str()] {
             assert_eq!(
-                refusal(&door, &update("request-1", revision)),
+                refusal(&door, &invoke("request-1", revision)),
                 "Invalid content request identity"
             );
         }

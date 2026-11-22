@@ -140,9 +140,7 @@ fn back_up(core: &mut Core, name: &str) -> Result<(), Error> {
 
 fn prepared(layout: Layout, cwd: &str) -> Result<Layout, String> {
     crate::canvas::validate(&layout.canvas)?;
-    let mut layout = Model::prepare(layout, cwd)?;
-    crate::content::rename::synchronize_labels(&mut layout);
-    Ok(layout)
+    Model::prepare(layout, cwd)
 }
 
 pub(crate) fn load(

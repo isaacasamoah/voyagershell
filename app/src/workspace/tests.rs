@@ -694,8 +694,8 @@ fn a_launch_on_a_type_that_takes_none_is_refused_and_places_nothing() {
     let other = VesselId("content-9".into());
     for (type_id, launch) in [
         ("terminal", codex(None)),
-        ("notes", codex(None)),
-        ("notes", Some(LaunchSpec::Terminal)),
+        ("dashboard", codex(None)),
+        ("dashboard", Some(LaunchSpec::Terminal)),
     ] {
         assert!(
             create_beside(&mut model, Some(&other), Caller::Agent, type_id, launch).is_err(),

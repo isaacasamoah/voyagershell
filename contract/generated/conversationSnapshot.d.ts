@@ -345,38 +345,11 @@ export type ProcessAction =
     };
 export type Receipt =
   | {
-      operation: "configure";
-      vesselId: string;
-    }
-  | {
       operation: "describe";
       vesselId: string;
     }
   | {
       operation: "inspect";
-      vesselId: string;
-    }
-  | {
-      operation: "migrate-note";
-      vesselId: string;
-    }
-  | {
-      operation: "list-notes";
-      vesselId: string;
-    }
-  | {
-      operation: "new-note";
-      title: string;
-      vesselId: string;
-    }
-  | {
-      filename: string;
-      operation: "open-note";
-      vesselId: string;
-    }
-  | {
-      expectedRevision: string;
-      operation: "update";
       vesselId: string;
     }
   | {

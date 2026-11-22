@@ -14,7 +14,6 @@ pub(crate) trait Calls {
     ) -> Result<Vec<VesselId>, Error>;
     fn finished(&mut self, backend: &CoreTerminalId) -> Result<(), Error>;
     fn terminal(&mut self, backend: &CoreTerminalId) -> Result<Terminal, Error>;
-    fn created(&mut self, before: &Layout, candidate: &mut Layout) -> Result<bool, Error>;
 }
 
 pub(crate) enum Route<'a> {
@@ -28,7 +27,6 @@ pub(crate) enum Route<'a> {
 pub(crate) struct Edit {
     pub(crate) candidate: Layout,
     pub(crate) reopening: Vec<VesselId>,
-    pub(crate) created_notes: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -88,26 +86,13 @@ pub(crate) fn check_package(
     scope: Option<&Context>,
     action: &Action,
     changed: bool,
-    (type_id, notes_type): (&str, &str),
-    closing: impl Fn(&VesselId) -> bool,
 ) -> Result<(), Error> {
     if changed {
         return Err(refused(
             "Workspace changed; inspect before changing a Vessel package",
         ));
     }
-    scope::check(layout, scope, action).map_err(refused)?;
-    if type_id == notes_type
-        && layout
-            .vessels
-            .iter()
-            .any(|item| item.type_id == type_id && closing(&item.id))
-    {
-        return Err(refused(
-            "Notes must remain available while their Voyage closes",
-        ));
-    }
-    Ok(())
+    scope::check(layout, scope, action).map_err(refused)
 }
 
 pub(crate) fn source(action: &Action) -> Option<&DirectorySource> {
@@ -207,11 +192,9 @@ pub(crate) fn edit(
         })?;
         require_live(&observed, backend)?;
     }
-    let created_notes = calls.created(layout, &mut candidate.layout)?;
     Ok(Edit {
         candidate: candidate.layout,
         reopening,
-        created_notes,
     })
 }
 
@@ -407,10 +390,6 @@ mod tests {
 
         fn terminal(&mut self, _: &CoreTerminalId) -> Result<Terminal, Error> {
             self.0.clone()
-        }
-
-        fn created(&mut self, _: &Layout, _: &mut Layout) -> Result<bool, Error> {
-            Ok(false)
         }
     }
 

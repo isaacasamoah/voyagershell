@@ -1,15 +1,14 @@
-use super::content_calls::{configure, select_note};
 use super::core_calls::{
     Listing, Notices, Observer, Subscription, changed_layout, close_exited, commit, connect, live,
     reports,
 };
 use super::terminal_start::{self, CreatedTerminal};
-use super::{Client, ContentReply, Message, Receipt};
+use super::{Client, Message, Receipt};
 use crate::adoption::{Adoptions, Unsaved};
 use crate::content::requests;
 use crate::core::{Core, Error, Viewer};
 use crate::families::terminal::Lifecycle;
-use crate::families::voyage_close::{Closing, RenameRelease, SaveTicket};
+use crate::families::voyage_close::Closing;
 use crate::front_door::{Admission, Envelope, FrontDoor};
 use crate::layout_parts::Part;
 use crate::layout_store::{LayoutRevision, Seen, load, rejected, save};
@@ -43,7 +42,6 @@ struct Departure {
     candidate: Layout,
     expected: LayoutRevision,
     reopening: Vec<VesselId>,
-    created_notes: bool,
 }
 
 struct Flight {
@@ -93,7 +91,6 @@ struct Owner {
     listing: Listing,
     notices: Notices,
     closing: Closing,
-    renaming: Option<(SaveTicket, crate::content::rename::Plan, RenameRelease)>,
 }
 
 impl Client {
@@ -207,7 +204,6 @@ impl Owner {
             voyager_started: false,
             listing: Listing::default(),
             closing: Closing::default(),
-            renaming: None,
         }
     }
 
@@ -246,11 +242,6 @@ impl Owner {
         let before = self.version;
         self.prepare();
         self.voyager();
-        if self.version != before
-            && let Some(owner) = self.content.as_mut()
-        {
-            owner.refresh_views();
-        }
         let mut noticed = false;
         if !self.door.flying() && self.adoptions.waiting() {
             if self
@@ -321,14 +312,6 @@ impl Owner {
     fn handle(&mut self, message: Message) {
         match message {
             Message::PrepareContext { scope, version } => self.prepare_context(&scope, version),
-            Message::NoteRenameReady {
-                request,
-                scope,
-                program,
-                reply,
-                result,
-            } => self.rename_ready(request, scope, program, reply, result),
-            Message::CloseSaves { sender } => self.closing.saves = Some(sender),
             Message::CloseDone {
                 request,
                 scope,
@@ -354,19 +337,6 @@ impl Owner {
             },
             Message::Launches { reply } => {
                 let _ = reply.try_send(crate::launch::catalog(self.launches.as_deref(), &self.cwd));
-            }
-            Message::RefreshContentViews => {
-                if let Some(owner) = &mut self.content {
-                    owner.refresh_views();
-                }
-            }
-            Message::RegisterView { binding, reply } => {
-                let result = self
-                    .content
-                    .as_mut()
-                    .ok_or_else(|| "Content owner unavailable".to_owned())
-                    .and_then(|owner| owner.register_view(binding));
-                let _ = reply.try_send(result);
             }
             Message::ContextFacts { reply } => {
                 let _ = reply.try_send(crate::context::capture(
@@ -404,25 +374,11 @@ impl Owner {
             Message::BindContent { id, reply } => {
                 let _ = reply.try_send(self.bind_content(&id));
             }
-            Message::ContentChanges {
-                binding,
-                after,
-                reply,
-            } => {
-                let result = self
-                    .content
-                    .as_mut()
-                    .ok_or_else(|| "Content owner unavailable".into())
-                    .map(|owner| owner.subscribe(&binding, after));
-                let _ = reply.try_send(result);
-            }
             Message::Content {
                 access,
                 request,
                 reply,
-                close_ticket,
-                native_save,
-            } => self.content_request(&access, &request, reply, close_ticket.as_ref(), native_save),
+            } => self.content_request(&access, &request, &reply),
             Message::WorktreeRemoveReady {
                 scope,
                 request,
@@ -494,17 +450,6 @@ impl Owner {
                     self.workspace(request, scope, program, reply, queued_at);
                 }
             }
-            Message::NoteExit {
-                view,
-                revision,
-                request,
-                reply,
-                claim,
-            } => {
-                if claim.take() {
-                    self.note_exit(view, revision, request, reply);
-                }
-            }
             Message::Terminal {
                 content,
                 request_id,
@@ -526,12 +471,7 @@ impl Owner {
             && let Ok(core) = self.core.as_mut()
         {
             let started = std::time::Instant::now();
-            let result = crate::context::prepare(
-                &self.layout,
-                self.version.structure,
-                core,
-                self.content.as_mut(),
-            );
+            let result = crate::context::prepare(&self.layout, self.version.structure, core);
             if let Ok(mut prepared) = self.client.prepared_context.lock() {
                 *prepared = result.ok();
             }
@@ -607,9 +547,7 @@ impl Owner {
         &mut self,
         access: &crate::content::Access,
         request: &voyager_contract::content::Request,
-        reply: ContentReply,
-        close_ticket: Option<&SaveTicket>,
-        native_save: bool,
+        reply: &SyncSender<Arc<voyager_contract::content::Response>>,
     ) {
         let previous_version = self.version;
         let agent = match access {
@@ -624,28 +562,12 @@ impl Owner {
             Receipt::content,
         ) {
             Admission::New(ticket) => ticket,
-            Admission::Repeat(first) => return reply.deliver(first),
+            Admission::Repeat(first) => return drop(reply.send(first)),
             Admission::Pending(message) | Admission::Refused(message) => {
-                return reply.deliver(Arc::new(crate::content::reject(request, message)));
+                return drop(reply.send(Arc::new(crate::content::reject(request, message))));
             }
         };
         let result = (|| {
-            if self.renaming.as_ref().is_some_and(|(ticket, plan, _)| {
-                plan.vessels.contains(crate::content::identity(request).0)
-                    && requests::is_write(request)
-                    && !(native_save && close_ticket == Some(ticket))
-            }) {
-                return Err("This Note is being renamed; wait for the saved result".into());
-            }
-            if requests::is_write(request)
-                && self.closing.blocks_content(
-                    crate::content::identity(request).0,
-                    close_ticket,
-                    native_save,
-                )
-            {
-                return Err("This Voyage is closing; its Notes are temporarily read-only".into());
-            }
             requests::check_envelope(request)?;
             let core = self.core.as_mut().map_err(|error| format!("{error:?}"))?;
             let (current, revision, _) = load(core, &self.cwd, &self.layout, self.version)
@@ -664,16 +586,6 @@ impl Owner {
                 },
             );
             let owner = self.content.as_mut().ok_or("Content owner unavailable")?;
-            let held = (&mut self.layout, &mut self.version, &mut self.fresh);
-            if requests::is_selection(request) {
-                return Ok(select_note(core, held, &self.seen, owner, &access, request));
-            }
-            if matches!(
-                request,
-                voyager_contract::content::Request::Configure { .. }
-            ) {
-                return Ok(configure(core, held, &self.seen, owner, &access, request));
-            }
             Ok(requests::run(
                 owner,
                 &self.layout,
@@ -684,20 +596,12 @@ impl Owner {
         })();
         let response = result.unwrap_or_else(|message| crate::content::reject(request, message));
         let response = Arc::new(requests::bounded_response(request, response));
-        if requests::notifies(request, &response)
-            && let Some(owner) = self.content.as_mut()
-        {
-            owner.notify(&response);
-        }
         if self.version != previous_version {
-            if let Some(owner) = self.content.as_mut() {
-                owner.refresh_views();
-            }
             self.notices.send(self.version, self.closing.revision);
         }
         self.door
             .record(ticket, Receipt::Content(Arc::clone(&response)));
-        reply.deliver(response);
+        let _ = reply.send(response);
     }
 
     fn process(
@@ -914,11 +818,6 @@ impl Owner {
         docked: bool,
         close: u64,
     ) {
-        if self.version != previous
-            && let Some(owner) = self.content.as_mut()
-        {
-            owner.refresh_views();
-        }
         if self.version != previous || packages || docked || self.closing.revision != close {
             if packages {
                 self.notices.packages.fetch_add(1, Ordering::Relaxed);
