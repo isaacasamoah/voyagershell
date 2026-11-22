@@ -419,6 +419,14 @@ features:
         checks: ['journey:agent-split/person-keeps-table-default']
         formal: []
         journeys: [agent-split]
+      - id: agent-splits-keep-the-maximize
+        kind: user
+        says: 'A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet''s maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent''s, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel.'
+        owner: application-queue
+        guards: ['type:contract/src/caller.rs#Caller']
+        checks: ['journey:agent-split/agent-split-keeps-maximize', 'journey:agent-split/voyager-split-clears-maximize', 'journey:agent-split/new-piece-shows-after-unmaximize']
+        formal: []
+        journeys: [agent-split]
       - id: typing-feels-immediate
         kind: user
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
@@ -624,6 +632,14 @@ features:
         checks: []
         formal: []
         journeys: []
+      - id: agent-splits-keep-the-maximize
+        kind: user
+        says: 'A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet''s maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent''s, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel.'
+        owner: application-queue
+        guards: ['type:contract/src/caller.rs#Caller']
+        checks: ['journey:agent-split/agent-split-keeps-maximize', 'journey:agent-split/voyager-split-clears-maximize', 'journey:agent-split/new-piece-shows-after-unmaximize']
+        formal: []
+        journeys: [agent-split]
     docs: [docs/terminal.md, docs/workspace.md]
     sources: [desktop/src/split.rs, 'desktop/canvas/panel-view.*', 'desktop/canvas/main.*', app/src/panels.rs]
     code: [app/src/panels.rs, desktop/canvas/main.js, desktop/canvas/main.ts, desktop/canvas/panel-view.js, desktop/canvas/panel-view.ts, desktop/src/split.rs]
@@ -1740,8 +1756,17 @@ features:
         checks: ['journey:agent-split/person-keeps-table-default']
         formal: []
         journeys: [agent-split]
+      - id: agent-splits-keep-the-maximize
+        kind: user
+        says: 'A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet''s maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent''s, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel.'
+        owner: application-queue
+        guards: ['type:contract/src/caller.rs#Caller']
+        checks: ['journey:agent-split/agent-split-keeps-maximize', 'journey:agent-split/voyager-split-clears-maximize', 'journey:agent-split/new-piece-shows-after-unmaximize']
+        formal: []
+        journeys: [agent-split]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
     sources:
+      - contract/src/caller.rs
       - contract/src/place.rs
       - contract/src/socket.rs
       - app/src/activity.rs
@@ -1764,6 +1789,7 @@ features:
       - app/src/focus_hook.rs
       - app/src/vessel_socket.rs
       - app/src/workspace.rs
+      - contract/src/caller.rs
       - contract/src/place.rs
       - contract/src/socket.rs
       - docs/voyager-command.md

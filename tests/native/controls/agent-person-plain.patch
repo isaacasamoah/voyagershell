@@ -1,13 +1,15 @@
-diff --git a/app/src/voyager_binding.rs b/app/src/voyager_binding.rs
-index 14265fdb..54834923 100644
---- a/app/src/voyager_binding.rs
-+++ b/app/src/voyager_binding.rs
-@@ -53,7 +53,7 @@ impl Binding {
-         caller: Option<&voyager_contract::VesselId>,
-     ) -> voyager_contract::launch::Defaults {
-         let Some(caller) = caller else {
--            return voyager_contract::launch::Defaults::Table;
-+            return voyager_contract::launch::Defaults::Plain;
-         };
-         let is_voyager = layout
-             .vessels
+diff --git a/contract/src/caller.rs b/contract/src/caller.rs
+index 0ec19fbe..b4450081 100644
+--- a/contract/src/caller.rs
++++ b/contract/src/caller.rs
+@@ -10,8 +10,8 @@ pub enum Caller {
+ impl Caller {
+     pub fn launch_defaults(self) -> Defaults {
+         match self {
+-            Self::Person | Self::Voyager => Defaults::Table,
+-            Self::Agent => Defaults::Plain,
++            Self::Voyager => Defaults::Table,
++            Self::Person | Self::Agent => Defaults::Plain,
+         }
+     }
+ 
