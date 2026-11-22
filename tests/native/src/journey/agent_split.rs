@@ -5,6 +5,7 @@ use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, bound_terminal, fleets, voyages};
 use crate::sandbox::SECOND_PROJECT;
 use crate::system::until;
+use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -21,6 +22,7 @@ cases! {
     CreateVesselSplitsBeside => "create-vessel-splits-beside",
     BadSplitPlacesNothing => "bad-split-places-nothing",
     AgentStartsPlain => "agent-starts-plain",
+    PersonKeepsTableDefault => "person-keeps-table-default",
     VoyagerResizesASplit => "voyager-resizes-a-split",
     AgentResizeRefused => "agent-resize-refused",
 }
@@ -43,6 +45,15 @@ const REFUSED_SHARE: u16 = 3000;
 const SHARE_TOLERANCE: f32 = 0.03;
 const BYPASS: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CODEX: &str = "codex";
+const TABLE_DEFAULT: [&str; 7] = [
+    "codex",
+    "--no-daemon",
+    "--model",
+    "gpt-6.1-sol",
+    "-c",
+    "model_reasoning_effort=\"high\"",
+    "--dangerously-bypass-approvals-and-sandbox",
+];
 const READ_ONLY: [&str; 10] = [
     "codex",
     "--no-daemon",
@@ -654,6 +665,33 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("plain", &plain)?
             .observed("readOnly", &read_only)
+    })?;
+
+    cases.check(native, Case::PersonKeepsTableDefault, |native| {
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let before = members(&layout, &fleet);
+        Terminal::bind(native, &left)?.focus(native)?;
+        native.press(Key::Char('o').ctrl().shift())?;
+        native.click(&Target::worker(CODEX))?;
+        let created = created_beside(native, &fleet, &before)?;
+        let agent = Terminal::bind(native, &created.placement)?;
+        let printed = agent.printed(native, "Stand-in codex started with: ")?;
+        let foreground = foreground_argv(native, &created.terminal)?;
+        native.keep_window("person-keeps-table-default")?;
+        let table: Vec<String> = TABLE_DEFAULT.iter().map(|argument| (*argument).to_owned()).collect();
+        Verdict::new()
+            .expect(
+                "the person's Create Codex saved the launch the agent table resolves, permission flag included",
+                created.launch == Some(Launch::Program { argv: table.clone() }),
+            )
+            .expect(
+                "the started stand-in codex got the table's arguments, bypass flag included",
+                printed
+                    && arguments(&foreground) == table[1..]
+                    && arguments(&foreground).iter().any(|argument| argument == BYPASS),
+            )
+            .observed("created", &created)?
+            .observed("foreground", &foreground)
     })?;
 
     let (_, layout) = native.document()?.context("Missing saved layout")?;

@@ -270,6 +270,14 @@ that terminal's `HC_TERMINAL_ID`, which is not Voyager's.
   reports as the foreground program got no arguments, and the second saved
   launch and the stand-in's arguments are the read-only row of
   `content/agent-programs.json`, with no bypass flag.
+- `person-keeps-table-default` focuses a shell, opens the creation picker with
+  the keyboard shortcut and clicks Create Codex, as the person would. It passes
+  when the saved launch of the new Vessel is the agent table's default for
+  `codex`, with its model, effort and bypass flag, and the stand-in `codex`
+  that Core reports as the foreground program got those arguments. It covers
+  the retained `terminal-agent-create` journey's assertion that the person's
+  Create Codex gets the table default. That journey's other assertions, which
+  need the installed Codex, stay Python only.
 - `voyager-resizes-a-split` puts two Vessels side by side in the second Fleet
   with the label and sends `resize-placement-split` for the Fleet's root split
   from Voyager's terminal. It passes when the command exits 0 and the saved
@@ -1183,6 +1191,9 @@ again, so a codex agent that another Vessel creates without naming permissions
 starts with the bypass flag. A candidate built with it must fail
 `agent-starts-plain` on the expectation that the saved agent's launch is
 exactly `codex`.
+`tests/native/controls/agent-person-plain.patch` gives the person the plain mode
+instead, so Create Codex from the app starts the stand-in with no arguments. A
+candidate built with it must fail `person-keeps-table-default`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

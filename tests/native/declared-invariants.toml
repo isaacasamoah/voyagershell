@@ -367,6 +367,18 @@ gap = "Only Linux X11 evidence exists."
 confidence = "stated"
 
 [[invariant]]
+id = "person-keeps-the-table-default"
+says = "When the person creates an agent from the app, such as Create Codex, it starts with the agent table's default, with its model, effort and permission flags, as before. Only a Vessel other than Voyager that names no permissions gets the plain mode."
+kind = "user"
+owner = "application-queue"
+source = "The retained terminal-agent-create journey, which asserts the person's Create Codex gets the table default; the admiral's ruling A on plain mode applies to other Vessels only, 22 Nov 2026."
+features = ["adopted-vessels", "agent-vessels"]
+guard = ["type:contract/src/launch.rs#Defaults"]
+check = ["journey:agent-split/person-keeps-table-default"]
+gap = "Only Linux X11 evidence exists. The journey starts the stand-in codex, not the installed one."
+confidence = "stated"
+
+[[invariant]]
 id = "avatar-stays-fast"
 says = "Each avatar tool call is one round trip and finishes within the limit in the usage envelope. A dock adds model work only when a dock behaviour the user chose asks for it."
 kind = "user"

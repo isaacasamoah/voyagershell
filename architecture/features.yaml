@@ -411,6 +411,14 @@ features:
         checks: ['journey:agent-split/agent-starts-plain']
         formal: []
         journeys: [agent-split]
+      - id: person-keeps-the-table-default
+        kind: user
+        says: 'When the person creates an agent from the app, such as Create Codex, it starts with the agent table''s default, with its model, effort and permission flags, as before. Only a Vessel other than Voyager that names no permissions gets the plain mode.'
+        owner: application-queue
+        guards: ['type:contract/src/launch.rs#Defaults']
+        checks: ['journey:agent-split/person-keeps-table-default']
+        formal: []
+        journeys: [agent-split]
       - id: typing-feels-immediate
         kind: user
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
@@ -1639,6 +1647,14 @@ features:
         owner: application-queue
         guards: ['type:contract/src/launch.rs#Defaults']
         checks: ['journey:agent-split/agent-starts-plain']
+        formal: []
+        journeys: [agent-split]
+      - id: person-keeps-the-table-default
+        kind: user
+        says: 'When the person creates an agent from the app, such as Create Codex, it starts with the agent table''s default, with its model, effort and permission flags, as before. Only a Vessel other than Voyager that names no permissions gets the plain mode.'
+        owner: application-queue
+        guards: ['type:contract/src/launch.rs#Defaults']
+        checks: ['journey:agent-split/person-keeps-table-default']
         formal: []
         journeys: [agent-split]
     docs: [docs/terminal.md, docs/voyager-command.md, docs/workspace.md]
