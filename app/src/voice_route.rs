@@ -29,7 +29,7 @@ impl Route {
     }
 }
 
-const OFFER_WORDS: &str = "want me to|do you want me|would you like me|shall i|should i|i can|can i|i could|i'll|i will|let me|let's";
+const OFFER_WORDS: &str = "what would you like|want me to|do you want me|would you like me|shall i|should i|i can|can i|i could|i'll|i will|let me|let's";
 
 const ACTION_WORDS: &str = "i'm going|going to|on it|i've|i have|i did|done|will do|right away|working on|voyager|ask|asking|check|checking|open|opening|look|looking|find|finding|move|moving|rename|renaming|dock|docking|switch|switching|start|stop|cancel|canceling|cancelling|drop|fleet|vessel|voyage|build|terminal|portal|workspace|opened|moved|renamed|docked|checked|started|stopped|canceled|cancelled|switched|found|dropped|fleets|vessels|voyages|builds|terminals|portals";
 
@@ -239,5 +239,13 @@ mod tests {
                 "{offering}"
             );
         }
+        assert_eq!(
+            Route::parse(
+                "I'm bored.",
+                &chat("I hear you. What would you like to do?"),
+                Some(1.0)
+            ),
+            Route::Voyager
+        );
     }
 }

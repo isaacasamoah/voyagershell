@@ -55,13 +55,21 @@ pub const HELLO_HOW_ARE_YOU: Speech = Speech {
     wav: include_bytes!("../../fixtures/speech/hello-how-are-you.wav"),
 };
 
-pub const ALL: [&Speech; 6] = [
+pub const HEY_IM_HERE: Speech = Speech {
+    name: "hey-im-here",
+    words: "Hey, I'm here.",
+    sha256: "63d8e6966c4ab4056de4c4db7c279525dfa537fa056d11da16bf87ca4b5b7ffd",
+    wav: include_bytes!("../../fixtures/speech/hey-im-here.wav"),
+};
+
+pub const ALL: [&Speech; 7] = [
     &OPEN_THE_ROADMAP,
     &RENAME_THE_FLEET,
     &RENAME_TO_HARBOR,
     &DOCK_ON_THIS_FLEET,
     &OPEN_THEN_DOCK,
     &HELLO_HOW_ARE_YOU,
+    &HEY_IM_HERE,
 ];
 
 const REQUESTS_TABLE: &str = include_str!("../../fixtures/hearing/hearing.tsv");

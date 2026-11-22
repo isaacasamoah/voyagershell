@@ -1056,14 +1056,16 @@ features:
         journeys: [voice]
       - id: voice-chat-replies-never-take-the-work
         kind: user
-        says: 'The voice answers small talk itself and sends nothing, only when the voice model says chat and is at least 0.99 sure. Its reply never promises or describes an action or states a fact about the work. Everything else reaches Voyager with the words, including help, what can you do, never mind and cancel.'
+        says: 'The voice answers small talk itself and sends nothing, only when the voice model says chat and is at least 0.99 sure. Its reply never offers, promises or describes an action or states a fact about the work. Everything else reaches Voyager with the words, including help, what can you do, never mind and cancel.'
         owner: conversation-provider
         guards: ['type:app/src/voice_route.rs#Route']
         checks:
           - 'journey:voice/small-talk-is-answered-by-the-voice'
           - 'journey:voice/request-gets-no-chat-reply'
+          - 'journey:voice/small-talk-that-draws-an-offer-goes-to-voyager'
           - 'test:app/src/voice_route.rs#small_talk_is_answered_by_the_voice_only_when_the_model_is_sure'
           - 'test:app/src/voice_route.rs#a_chat_reply_that_promises_or_describes_an_action_goes_to_voyager'
+          - 'test:app/src/voice_route.rs#a_chat_reply_that_offers_to_do_something_goes_to_voyager'
           - 'test:app/src/voice_layer_tests.rs#small_talk_is_answered_by_the_voice_and_nothing_reaches_voyager'
           - 'test:app/src/voice_layer_tests.rs#help_what_can_you_do_never_mind_and_cancel_reach_voyager_even_when_the_model_says_chat'
           - 'test:app/src/voice_layer_tests.rs#a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyager'

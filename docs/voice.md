@@ -103,12 +103,19 @@ held to one of two JSON shapes, `{"kind":"work"}` or `{"kind":"chat","say":"..."
 work answer has no room for words, so the voice never writes an acknowledgement for
 work and cannot promise to do it. The call has 3 s, a target to measure.
 
+The prompt is the routing rule, then the spoken guide, then one closing rule for chat,
+`voice_route::CHAT_CLOSING`. The guide asks Voyager to offer a next step as a question,
+and a chat reply must never offer, so the closing rule comes last and says it wins for
+chat. The guide itself is unchanged, and the test that holds it to the approved text
+still passes.
+
 The model's kind and its confidence decide. The answer is `Chat` only when the model
 says chat and the probability of chat at the kind token is at least 0.99, the gate from
-the voice experiment's round 7. Two word lists stand behind the gate as belts. Neither
-decides on its own, and each can only move a turn to Voyager. A chat reply that holds
-an action word, such as "I'll", "let me", "on it", "done", "opening", "ask" or a
-workspace word such as "Fleet" or "build", goes to Voyager. Heard words that hold
+the voice experiment's round 7. Three word lists stand behind the gate as belts. None
+decides on its own, and each can only move a turn to Voyager. A chat reply that offers
+to do something, such as "want me to", "shall I", "I can", "I'll" or "let me", goes to
+Voyager. So does a chat reply that holds an action word, such as "on it", "done",
+"opening" or "ask", or a workspace word such as "Fleet" or "build". Heard words that hold
 "help", "can you do", "never mind" or "cancel" go to Voyager, whatever the model said,
 because Isaac chose that these go to Voyager.
 
