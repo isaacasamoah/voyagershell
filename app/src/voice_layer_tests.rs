@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     audio_io::{FRAME, SpeechDetector},
-    speech::Standing,
+    speech::{Piece, Standing},
     voice_parts::{Clips, Frames, SendFailure},
 };
 use std::{
@@ -114,6 +114,47 @@ impl Hearing for Heard {
     }
 }
 
+enum Model {
+    Says(&'static str),
+    Slow(&'static str),
+    Fails,
+}
+
+impl Routing for Model {
+    fn route(&self, heard: &str) -> Result<Route, Fault> {
+        match self {
+            Model::Says(answer) => Ok(Route::parse(heard, answer, Some(1.0))),
+            Model::Slow(answer) => {
+                thread::sleep(HUM_AFTER * 3);
+                Ok(Route::parse(heard, answer, Some(1.0)))
+            }
+            Model::Fails => Err(Fault::Failed("no route".into())),
+        }
+    }
+}
+
+const CHAT_CLIP: usize = 100;
+
+struct Voiced {
+    speaks: bool,
+}
+
+impl Speaking for Voiced {
+    fn render(&self, _: Phrase) -> Result<Clip, Fault> {
+        Err(Fault::Failed("not rendered here".into()))
+    }
+
+    fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
+        if !self.speaks {
+            return Err(Fault::Failed("no speech".into()));
+        }
+        Ok(Clip {
+            rate: 24_000,
+            pcm: vec![0; CHAT_CLIP],
+        })
+    }
+}
+
 struct Standin {
     standing: Standing,
     said: Mutex<Vec<String>>,
@@ -196,6 +237,8 @@ fn mark(phrase: Phrase) -> usize {
 }
 
 struct Rig {
+    model: Model,
+    voiced: Voiced,
     audio: Fake,
     voyager: Standin,
     clips: HashMap<Phrase, Clip>,
@@ -217,6 +260,8 @@ impl Rig {
         let shared = Arc::new(Shared::new(Phase::Ready));
         let floor = Arc::new(Floor::default());
         Self {
+            model: Model::Says(r#"{"kind": "work"}"#),
+            voiced: Voiced { speaks: true },
             audio: Fake {
                 mics: Mutex::new(mics.into()),
                 played: Arc::default(),
@@ -245,6 +290,8 @@ impl Rig {
     ) -> Exchange<'a> {
         Exchange {
             hearing,
+            routing: &self.model,
+            speaking: &self.voiced,
             clips: &self.clips,
             audio: &self.audio,
             voyager: &self.voyager,
@@ -268,6 +315,10 @@ impl Rig {
 
     fn said(&self) -> Vec<String> {
         self.voyager.said.lock().unwrap().clone()
+    }
+
+    fn notes(&self) -> Vec<String> {
+        self.voyager.notes.lock().unwrap().clone()
     }
 
     fn played(&self) -> Vec<usize> {
@@ -361,6 +412,7 @@ fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_
     struct Clicking(Arc<Shared>);
     impl Hearing for Clicking {
         fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+            thread::sleep(HUM_AFTER * 3);
             click(&self.0);
             Ok("open the roadmap".into())
         }
@@ -376,7 +428,7 @@ fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_
         rig.shared.update(|state| state.shutdown = true);
     });
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Hum)]);
     assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
     assert_eq!(rig.opened(), 1);
 }
@@ -386,6 +438,7 @@ fn a_shutdown_while_the_acknowledgement_plays_cuts_it() {
     struct Closing(Arc<Shared>);
     impl Hearing for Closing {
         fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+            thread::sleep(HUM_AFTER * 3);
             self.0.update(|state| state.shutdown = true);
             Ok("open the roadmap".into())
         }
@@ -461,10 +514,7 @@ fn a_hearing_fault_says_it_did_not_catch_that_and_listening_resumes() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     rig.serve_with(&Down);
     assert!(rig.said().is_empty());
-    assert_eq!(
-        rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::Missed)]
-    );
+    assert_eq!(rig.played(), vec![mark(Phrase::Missed)]);
     assert_eq!(rig.opened(), 2);
     assert_eq!(
         rig.snapshot().notice.as_deref(),
@@ -597,7 +647,7 @@ fn empty_heard_text_says_nothing_more_and_sends_nothing() {
         let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
         rig.serve(heard);
         assert!(rig.said().is_empty(), "{heard:?}");
-        assert_eq!(rig.played(), vec![mark(Phrase::Asking)], "{heard:?}");
+        assert!(rig.played().is_empty(), "{heard:?}");
         assert_eq!(rig.opened(), 2, "{heard:?}");
     }
 }
@@ -609,13 +659,14 @@ struct Watching {
 
 impl Hearing for Watching {
     fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+        thread::sleep(HUM_AFTER * 3);
         *self.before_hearing.lock().unwrap() = Some(self.played.lock().unwrap().clone());
         Ok("open the roadmap".into())
     }
 }
 
 #[test]
-fn the_acknowledgement_has_started_before_hearing_begins() {
+fn the_hum_has_started_before_slow_hearing_ends() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     let hearing = Watching {
         played: rig.audio.played.clone(),
@@ -624,8 +675,9 @@ fn the_acknowledgement_has_started_before_hearing_begins() {
     rig.serve_with(&hearing);
     assert_eq!(
         hearing.before_hearing.lock().unwrap().clone(),
-        Some(vec![mark(Phrase::Asking)])
+        Some(vec![mark(Phrase::Hum)])
     );
+    assert_eq!(rig.played(), vec![mark(Phrase::Hum), mark(Phrase::Asking)]);
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
 }
 
@@ -679,4 +731,104 @@ fn wait_until(ready: impl Fn() -> bool) {
         thread::sleep(Duration::from_millis(5));
     }
     assert!(ready());
+}
+
+const SURE_CHAT: &str = r#"{"kind": "chat", "say": "I'm good, thanks."}"#;
+
+#[test]
+fn small_talk_is_answered_by_the_voice_and_nothing_reaches_voyager() {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Says(SURE_CHAT);
+    rig.serve("How are you?");
+    assert!(rig.said().is_empty());
+    assert_eq!(rig.played().last(), Some(&CHAT_CLIP));
+    assert_eq!(rig.notes(), vec!["I'm good, thanks."]);
+    assert!(rig.snapshot().on);
+}
+
+#[test]
+fn small_talk_is_answered_whatever_voyagers_state() {
+    for standing in [Standing::Working, Standing::Blocked, Standing::NotRunning] {
+        let mut rig = Rig::new(vec![Mic::Opens(sentence())], standing, false);
+        rig.model = Model::Says(SURE_CHAT);
+        rig.serve("Hello.");
+        assert!(rig.said().is_empty(), "{standing:?}");
+        assert_eq!(rig.played().last(), Some(&CHAT_CLIP), "{standing:?}");
+    }
+}
+
+#[test]
+fn help_what_can_you_do_never_mind_and_cancel_reach_voyager_even_when_the_model_says_chat() {
+    for heard in ["Help.", "What can you do?", "Never mind.", "Cancel that."] {
+        let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+        rig.model = Model::Says(SURE_CHAT);
+        rig.serve(heard);
+        assert_eq!(rig.said(), vec![format!("[spoken] {heard}")]);
+        assert!(!rig.played().contains(&CHAT_CLIP), "{heard}");
+    }
+}
+
+#[test]
+fn a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyager() {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Says(r#"{"kind": "chat", "say": "Sure, I'll rename it."}"#);
+    rig.serve("Rename it to Harbor.");
+    assert_eq!(rig.said(), vec!["[spoken] Rename it to Harbor."]);
+    assert!(!rig.played().contains(&CHAT_CLIP));
+    assert!(rig.played().contains(&mark(Phrase::Asking)));
+    assert!(rig.notes().is_empty());
+}
+
+#[test]
+fn a_failed_route_or_a_chat_reply_that_cannot_be_spoken_still_reaches_voyager() {
+    let mut failed = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    failed.model = Model::Fails;
+    failed.serve("Hello.");
+    let mut silent = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    silent.model = Model::Says(SURE_CHAT);
+    silent.voiced = Voiced { speaks: false };
+    silent.serve("Hello.");
+    for rig in [failed, silent] {
+        assert_eq!(rig.said(), vec!["[spoken] Hello."]);
+        assert!(rig.played().contains(&mark(Phrase::Asking)));
+        assert!(!rig.played().contains(&CHAT_CLIP));
+    }
+}
+
+#[test]
+fn a_fast_decision_plays_only_the_chat_reply() {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Says(SURE_CHAT);
+    rig.serve("Hello.");
+    assert_eq!(rig.played(), vec![CHAT_CLIP]);
+}
+
+#[test]
+fn a_slow_decision_hums_first_then_plays_the_chat_reply() {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Slow(SURE_CHAT);
+    rig.serve("Hello.");
+    assert_eq!(rig.played(), vec![mark(Phrase::Hum), CHAT_CLIP]);
+    assert!(rig.said().is_empty());
+}
+
+#[test]
+fn a_request_for_voyager_hums_only_when_deciding_is_slow_and_never_gets_a_chat_reply() {
+    let fast = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    fast.serve("Open the roadmap.");
+    assert_eq!(fast.played(), vec![mark(Phrase::Asking)]);
+    let mut slow = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    slow.model = Model::Slow(r#"{"kind": "work"}"#);
+    slow.serve("Open the roadmap.");
+    assert_eq!(slow.played(), vec![mark(Phrase::Hum), mark(Phrase::Asking)]);
+    assert_eq!(slow.said(), vec!["[spoken] Open the roadmap."]);
+}
+
+#[test]
+fn a_chat_reply_of_two_sentences_plays_each_sentence_in_order() {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Says(r#"{"kind": "chat", "say": "I'm good, thanks. You?"}"#);
+    rig.serve("How are you?");
+    assert_eq!(rig.played(), vec![CHAT_CLIP, CHAT_CLIP]);
+    assert!(rig.said().is_empty());
 }

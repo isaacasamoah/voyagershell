@@ -1,0 +1,13 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+index fa3f222e..b3673d2c 100644
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -21,7 +21,7 @@ pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+ 
+ const MICROPHONE_RETRY: Duration = Duration::from_secs(3);
+ const REPLY_WAIT_FRAMES: usize = 150;
+-const HUM_AFTER: Duration = Duration::from_millis(50);
++const HUM_AFTER: Duration = Duration::from_secs(3600);
+ 
+ #[derive(Clone, Debug, Eq, PartialEq)]
+ pub struct Snapshot {

@@ -1,0 +1,13 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+index e153ab03..eb17c6ae 100644
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -371,7 +371,7 @@ impl Exchange<'_> {
+         speaker: Option<Box<dyn Speaker>>,
+         notice: &mut Option<String>,
+     ) -> Option<Finish> {
+-        let mut finish = self.play(held.phrase, speaker);
++        let mut finish: Option<Finish> = speaker.and(None);
+         self.trace
+             .mark_words("acknowledgement-started", held.phrase.key());
+         if !held.send {

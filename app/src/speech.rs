@@ -17,6 +17,7 @@ pub enum Standing {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Phrase {
+    Hum,
     Asking,
     OkayAsking,
     Queued,
@@ -31,7 +32,8 @@ pub enum Phrase {
 }
 
 impl Phrase {
-    pub const ALL: [Phrase; 11] = [
+    pub const ALL: [Phrase; 12] = [
+        Phrase::Hum,
         Phrase::Asking,
         Phrase::OkayAsking,
         Phrase::Queued,
@@ -47,6 +49,7 @@ impl Phrase {
 
     pub fn words(self) -> &'static str {
         match self {
+            Phrase::Hum => "Mm-hm.",
             Phrase::Asking => "Asking Voyager.",
             Phrase::OkayAsking => "Okay, asking Voyager.",
             Phrase::Queued => "Queued for Voyager.",
@@ -63,6 +66,7 @@ impl Phrase {
 
     pub fn key(self) -> &'static str {
         match self {
+            Phrase::Hum => "mm-hm",
             Phrase::Asking => "asking",
             Phrase::OkayAsking => "okay-asking",
             Phrase::Queued => "queued",

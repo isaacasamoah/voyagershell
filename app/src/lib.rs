@@ -53,6 +53,7 @@ mod voice_host;
 pub mod voice_layer;
 pub mod voice_parts;
 pub mod voice_reply;
+pub mod voice_route;
 mod voice_session;
 mod voice_speaker;
 mod voice_transcript;

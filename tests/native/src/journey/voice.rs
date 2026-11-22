@@ -2,8 +2,8 @@ use super::{Cases, Verdict, cases};
 use crate::agent::{REPLY_MARKER, TYPED_REPLY};
 use crate::audio::room;
 use crate::audio::speech::{
-    self as speech, DOCK_ON_THIS_FLEET, Kind, OPEN_THE_ROADMAP, OPEN_THEN_DOCK, PAUSED_WORDS,
-    RENAME_THE_FLEET, RENAME_TO_HARBOR, Samples,
+    self as speech, DOCK_ON_THIS_FLEET, HELLO_HOW_ARE_YOU, HEY_IM_HERE, Kind, OPEN_THE_ROADMAP,
+    OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_THE_FLEET, RENAME_TO_HARBOR, Samples,
 };
 use crate::audio::voice::{
     self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
@@ -19,6 +19,9 @@ cases! {
     EngineReady => "engine-ready" setup,
     NoCaptureWithoutClick => "no-capture-without-click",
     VoyagerIsBound => "voyager-is-bound" setup,
+    SmallTalkIsAnswered => "small-talk-is-answered-by-the-voice",
+    RequestGetsNoChatReply => "request-gets-no-chat-reply",
+    OfferGoesToVoyager => "small-talk-that-draws-an-offer-goes-to-voyager",
     TurnWaitsForTheSentence => "turn-waits-for-the-sentence",
     StartThumpIsNotSpeech => "start-thump-is-not-speech",
     ConnectingThenListening => "connecting-then-listening",
@@ -110,6 +113,19 @@ impl Written {
     }
 }
 
+fn most_words_heard(heard: &str, said: &str) -> bool {
+    let plain = |text: &str| -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric() && c != '\'')
+            .filter(|word| !word.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let heard = plain(heard);
+    let said = plain(said);
+    let found = said.iter().filter(|word| heard.contains(word)).count();
+    !said.is_empty() && found * 2 >= said.len()
+}
+
 fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
 }
@@ -171,6 +187,77 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     else {
         return Ok(());
     };
+    cases.check(native, Case::SmallTalkIsAnswered, |native| {
+        let said = voice::converse(native, &HELLO_HOW_ARE_YOU, "small-talk")?;
+        let reply = said.chat.clone().unwrap_or_default();
+        let transcript = voice::transcribe(native, "small-talk")?;
+        let screen = voice::terminal_text(native, &voyager)?;
+        Verdict::new()
+            .expect("the voice answers the small talk itself", !reply.is_empty())
+            .expect(
+                "nothing reaches Voyager",
+                !said.sent && !screen.contains(&spoken(HELLO_HOW_ARE_YOU.words)),
+            )
+            .expect(
+                "a soft Mm-hm plays first while the engine decides, and reaches the speaker",
+                said.hummed && said.spoken.matches(),
+            )
+            .expect(
+                "the speaker carries most of the reply's words",
+                most_words_heard(&transcript, &reply),
+            )
+            .observed(
+                "firstSoundAfterCaptureMs",
+                said.first_sound_after_capture_ms,
+            )?
+            .observed("conversation", json!(said))?
+            .observed("speakerHeard", transcript)
+    })?;
+    cases.check(native, Case::RequestGetsNoChatReply, |native| {
+        let said = voice::converse(native, &RENAME_TO_HARBOR, "no-chat-reply")?;
+        let chatted = said.marks.iter().any(|mark| mark.event == "chat-started");
+        Verdict::new()
+            .expect(
+                "the request plays the asking clip at the speaker",
+                said.spoken.matches()
+                    && matches!(
+                        said.acknowledgement.as_deref(),
+                        Some("asking" | "okay-asking")
+                    ),
+            )
+            .expect(
+                "the voice gives no chat reply",
+                said.chat.is_none() && !chatted,
+            )
+            .expect("the words are sent to Voyager", said.sent)
+            .observed("hummed", said.hummed)?
+            .observed("conversation", json!(said))
+    })?;
+    cases.check(native, Case::OfferGoesToVoyager, |native| {
+        let said = voice::converse(native, &HEY_IM_HERE, "offer")?;
+        let chatted = said.marks.iter().any(|mark| mark.event == "chat-started");
+        Verdict::new()
+            .expect(
+                "the small talk is heard as spoken",
+                said.heard
+                    .as_deref()
+                    .is_some_and(|words| words_match(words, HEY_IM_HERE.words)),
+            )
+            .expect(
+                "the voice speaks no reply of its own, because the model's reply offers to help",
+                said.chat.is_none() && !chatted,
+            )
+            .expect(
+                "the request plays the asking clip at the speaker",
+                said.spoken.matches()
+                    && matches!(
+                        said.acknowledgement.as_deref(),
+                        Some("asking" | "okay-asking")
+                    ),
+            )
+            .expect("the words are sent to Voyager", said.sent)
+            .observed("conversation", json!(said))
+    })?;
     cases.check(native, Case::TurnWaitsForTheSentence, |native| {
         let speech = Samples::silence(ROOM_SILENCE_MS).then(&Samples::paused_request()?);
         voice::turn_on(native)?;

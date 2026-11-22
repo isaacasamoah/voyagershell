@@ -1,13 +1,13 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
-index 42a6b638..1dde1fdc 100644
+index fa3f222e..e2bee4ce 100644
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -296,7 +296,7 @@ impl Exchange<'_> {
-                 if heard_nothing(&heard) {
-                     self.trace.mark("dropped");
-                 } else if send {
--                    match self.voyager.say(&crate::spoken::prompt(&heard)) {
-+                    match self.voyager.say(&heard) {
-                         Ok(()) => self.trace.mark("sent"),
-                         Err(failure) => {
-                             if failure.refused {
+@@ -370,7 +370,7 @@ impl Exchange<'_> {
+         if !held.send {
+             return finish;
+         }
+-        match self.voyager.say(&crate::spoken::prompt(heard)) {
++        match self.voyager.say(heard) {
+             Ok(()) => self.trace.mark("sent"),
+             Err(failure) => {
+                 if failure.refused {

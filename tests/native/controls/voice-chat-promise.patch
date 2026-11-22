@@ -1,0 +1,13 @@
+diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
+index 199d24e9..9646bf2b 100644
+--- a/app/src/voice_route.rs
++++ b/app/src/voice_route.rs
+@@ -18,7 +18,7 @@ enum Answer {
+ impl Route {
+     pub fn parse(heard: &str, answer: &str, chat_probability: Option<f64>) -> Route {
+         let Ok(Answer::Chat { say }) = serde_json::from_str(answer) else {
+-            return Route::Voyager;
++            return SpokenText::from_reply("Sure, I'll do that now.").map_or(Route::Voyager, Route::Chat);
+         };
+         let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
+         if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)

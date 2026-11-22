@@ -36,9 +36,10 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
    with a median of 201 ms. A model that judges the end of a turn and interruptions
    are later work.
-4. A cached clip answers the moment the turn ends, before hearing finishes. It is
-   chosen from Voyager's standing, so it needs no words. It says only that the words
-   were heard and passed on. It never names an action or claims a result.
+4. Hearing and routing start the moment the turn ends. A cached "Mm-hm." plays if the
+   first answer is not ready within 0.05 s, as [Small talk](#small-talk) describes. The
+   clip for a request for Voyager is chosen from Voyager's standing. It says only that
+   the words were heard and passed on. It never names an action or claims a result.
 5. Omni turns the samples into words while the clip plays. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
    state the owner already holds, so hearing adds no inspection call. Right
@@ -46,10 +47,11 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    digit. Nothing more is said and nothing is sent. If hearing fails, "I didn't
    catch that." follows and nothing is sent. No filter over the heard words drops
    a request, because such a filter drops real requests it did not foresee.
-6. The words go to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
+6. Small talk is answered by the voice itself and goes no further, as
+   [Small talk](#small-talk) describes. Every other request goes to Voyager as `[spoken] <words>`, built by `spoken::prompt`, through the
    same send the chat box uses. The focus hook reads the marker and tells the app that
    the turn is spoken.
-7. Listening resumes when the clip ends. A new request while Voyager works queues
+7. Listening resumes when the last sound of the turn ends. A new request while Voyager works queues
    for it.
 
 The microphone is closed whenever the app's own audio plays, so the app never hears
@@ -71,6 +73,7 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 
 | Key | Words | Played when | Words sent |
 | --- | --- | --- | --- |
+| `mm-hm` | "Mm-hm." | Nothing is ready to play 0.05 s after the turn ends | Not decided yet |
 | `asking` | "Asking Voyager." | Voyager is idle or done, or has no state yet, on even turns | Yes |
 | `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
 | `queued` | "Queued for Voyager." | Voyager is working | Yes |
@@ -85,6 +88,55 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 
 The words in the table never name an action or claim a result, and none points to the
 chat.
+
+## Small talk
+
+After hearing, one text call to the Omni engine decides who answers. `voice_route::Route`
+is the result. It is either `Chat`, which holds the voice's own reply, or `Voyager`.
+Only `Route::parse` builds one, and every way it can go wrong gives `Voyager`, so a
+request is never dropped.
+
+The call sends `voice_route::route_prompt` with a few worked examples and then the heard
+words. The prompt is a short routing rule followed by `spoken::TALK`, read from its one
+owner, so the voice's replies follow the same spoken guide as Voyager's. The answer is
+held to one of two JSON shapes, `{"kind":"work"}` or `{"kind":"chat","say":"..."}`. A
+work answer has no room for words, so the voice never writes an acknowledgement for
+work and cannot promise to do it. The call has 3 s, a target to measure.
+
+The prompt is the routing rule, then the spoken guide, then one closing rule for chat,
+`voice_route::CHAT_CLOSING`. The guide asks Voyager to offer a next step as a question,
+and a chat reply must never offer, so the closing rule comes last and says it wins for
+chat. The guide itself is unchanged, and the test that holds it to the approved text
+still passes.
+
+The model's kind and its confidence decide. The answer is `Chat` only when the model
+says chat and the probability of chat at the kind token is at least 0.99, the gate from
+the voice experiment's round 7. Three word lists stand behind the gate as belts. None
+decides on its own, and each can only move a turn to Voyager. A chat reply that offers
+to do something, such as "want me to", "shall I", "I can help", "I can show", "can I
+get", "what can I do", "I'm here to help", "what would you like", "I'll" or "let me",
+goes to Voyager. A chat reply that holds an action word, such as "on it", "done",
+"opening" or "ask", or a workspace word such as "Fleet" or "build", goes to Voyager too.
+A bare "I can" is not an offer, so "Yes, I can hear you." stays small talk. Heard words that hold
+"help", "can you do", "never mind" or "cancel" go to Voyager, whatever the model said,
+because Isaac chose that these go to Voyager.
+
+A `Chat` turn is spoken through the speech endpoint, one sentence piece at a time as Voyager's replies are, and sends nothing to Voyager, and
+the reply is added to the chat. It is answered whatever Voyager's standing. If the
+route call fails or the reply cannot be spoken, the turn goes to Voyager as any other
+request.
+
+The first sound of a turn is the chat reply, or the clip that today's table gives for a
+request for Voyager, when it is ready within `voice_layer::HUM_AFTER` of the end of the
+turn. Otherwise a soft "Mm-hm." plays at that moment, and the reply or the clip follows
+it. A request for Voyager never gets a chat reply. `HUM_AFTER` is 0.05 s. The journey's
+first-sound check holds the median first sound under 0.3 s. With the clip played at once,
+the audio path alone took 187 to 206 ms, median 201 ms, in ten journey runs. The first
+sound of a turn that hums is the window plus that path, so 0.05 s puts it near 0.25 s and
+leaves margin under the worst run. A 0.1 s window would put it at the check itself. The
+skip needs hearing, routing and, for chat, the reply's render to finish inside the
+window. No machine measured so far does that. On the GPU engine hearing alone took
+0.09 s, and on the CPU engine 0.58 s, so every turn hears "Mm-hm." first today.
 
 ## The speech detector
 
@@ -346,11 +398,12 @@ trim but never trim out the accepted message.
 
 ## The seam
 
-`app/src/speech.rs` holds the traits `Hearing` and `Speaking`, the `Engine`
-that pairs them, the clip table and the speech filter. `SpokenText` and its `Piece`s can
-only be built by the filter, so unfiltered reply text never reaches an engine. The
-filter keeps every paragraph, drops code, tables, links, paths and long ids, says plain
-numbers as words, and stops only at the safety ceiling.
+`app/src/speech.rs` holds the traits `Hearing` and `Speaking`, the `Engine` that pairs
+them, the clip table and the speech filter. `app/src/voice_route.rs` holds `Routing`, the
+`Route` it gives and the routing prompt.
+`SpokenText` and its `Piece`s can only be built by the filter, so unfiltered reply text
+never reaches an engine. The filter keeps every paragraph, drops code, tables, links,
+paths and long ids, says plain numbers as words, and stops only at the safety ceiling.
 
 `app/src/voice_layer.rs` owns the exchange. A click flips the switch at once from
 the canvas thread. One listening thread converges on it, so two utterances never

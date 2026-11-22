@@ -192,6 +192,7 @@ Owns files:
 - `app/src/voice_layer_tests.rs`
 - `app/src/voice_voyager.rs`
 - `app/src/voice_reply.rs`
+- `app/src/voice_route.rs`
 - `app/src/voice_parts.rs`
 - `app/src/voice_speaker.rs`
 - `app/tests/voice_engine.rs`

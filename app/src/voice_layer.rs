@@ -4,14 +4,16 @@ use crate::{
     omni::{self, Clips, Omni, Running, Settings},
     replies::Replies,
     speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Utterance, acknowledge, heard_nothing,
+        Acknowledgement, Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance,
+        acknowledge, heard_nothing,
     },
     voice_parts::{Audio, Finish, Floor, Phase, Speaker, Trace, Voyager},
+    voice_route::{Route, Routing},
     voice_speaker,
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -20,6 +22,7 @@ pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
 const MICROPHONE_RETRY: Duration = Duration::from_secs(3);
 const REPLY_WAIT_FRAMES: usize = 150;
+const HUM_AFTER: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Snapshot {
@@ -194,6 +197,8 @@ impl Layer {
 
 struct Exchange<'a> {
     hearing: &'a dyn Hearing,
+    routing: &'a dyn Routing,
+    speaking: &'a dyn Speaking,
     clips: &'a HashMap<Phrase, Clip>,
     audio: &'a dyn Audio,
     voyager: &'a dyn Voyager,
@@ -201,6 +206,13 @@ struct Exchange<'a> {
     trace: &'a Trace,
     shared: &'a Shared,
     floor: &'a Floor,
+}
+
+enum Decided {
+    Nothing,
+    Missed(Fault),
+    Chat(SpokenText, Vec<Clip>),
+    Voyager(String),
 }
 
 enum Listened {
@@ -260,12 +272,16 @@ impl Exchange<'_> {
     }
 
     fn play(&self, phrase: Phrase, ready: Option<Box<dyn Speaker>>) -> Option<Finish> {
+        self.play_clips(vec![self.clips.get(&phrase)?.clone()], ready)
+    }
+
+    fn play_clips(&self, clips: Vec<Clip>, ready: Option<Box<dyn Speaker>>) -> Option<Finish> {
         if !self.shared.is_on() {
             return None;
         }
-        let clip = self.clips.get(&phrase)?;
-        let speaker = ready.or_else(|| self.audio.speaker(clip.rate).ok())?;
-        Some(speaker.play(Box::new(std::iter::once(clip.clone()))))
+        let rate = clips.first()?.rate;
+        let speaker = ready.or_else(|| self.audio.speaker(rate).ok())?;
+        Some(speaker.play(Box::new(clips.into_iter())))
     }
 
     fn finish(&self, finish: Option<Finish>) {
@@ -280,45 +296,128 @@ impl Exchange<'_> {
         self.finish(finish);
     }
 
-    fn answer(&self, turn: u64, utterance: Utterance, speaker: Option<Box<dyn Speaker>>) {
-        let standing = self.voyager.standing();
-        self.trace.mark("utterance-ended");
-        let Acknowledgement { phrase, send } = acknowledge(standing, turn);
-        let mut finish = self.play(phrase, speaker);
-        self.trace
-            .mark_words("acknowledgement-started", phrase.key());
-        self.shared.set(Phase::Hearing, None);
-        let mut notice = None;
-        let names = (self.vocabulary)();
-        match self.hearing.hear(&utterance, &names) {
-            Ok(heard) => {
-                self.trace.mark_words("heard", &heard);
-                if heard_nothing(&heard) {
-                    self.trace.mark("dropped");
-                } else if send {
-                    match self.voyager.say(&crate::spoken::prompt(&heard)) {
-                        Ok(()) => self.trace.mark("sent"),
-                        Err(failure) => {
-                            if failure.refused {
-                                self.voyager.note(&failure.reason);
-                                self.finish(finish.take());
-                                finish = self.play(failure.phrase, None);
-                                self.trace
-                                    .mark_words("refusal-started", failure.phrase.key());
-                            }
-                            notice = Some(failure.reason);
-                        }
-                    }
-                }
+    fn route(&self, heard: &str) -> Route {
+        match self.routing.route(heard) {
+            Ok(route) => {
+                let said = match &route {
+                    Route::Chat(text) => text.as_str(),
+                    Route::Voyager => "",
+                };
+                self.trace.mark_words("routed", said);
+                route
             }
             Err(fault) => {
-                self.finish(finish.take());
-                finish = self.play(Phrase::Missed, None);
-                self.trace
-                    .mark_words("acknowledgement-started", Phrase::Missed.key());
-                notice = Some(fault.to_string());
+                self.trace.mark_words("route-failed", &fault.to_string());
+                Route::Voyager
             }
         }
+    }
+
+    fn decide(&self, utterance: &Utterance, names: &[String]) -> Decided {
+        let heard = match self.hearing.hear(utterance, names) {
+            Ok(heard) => heard,
+            Err(fault) => return Decided::Missed(fault),
+        };
+        self.trace.mark_words("heard", &heard);
+        if heard_nothing(&heard) {
+            self.trace.mark("dropped");
+            return Decided::Nothing;
+        }
+        let Route::Chat(text) = self.route(&heard) else {
+            return Decided::Voyager(heard);
+        };
+        let clips: Result<Vec<Clip>, Fault> = text
+            .pieces()
+            .map(|piece| self.speaking.speak(piece))
+            .collect();
+        match clips {
+            Ok(clips) => Decided::Chat(text, clips),
+            Err(fault) => {
+                self.trace.mark_words("chat-failed", &fault.to_string());
+                Decided::Voyager(heard)
+            }
+        }
+    }
+
+    fn decide_or_hum(
+        &self,
+        utterance: &Utterance,
+        speaker: &mut Option<Box<dyn Speaker>>,
+    ) -> (Decided, Option<Finish>) {
+        let names = (self.vocabulary)();
+        let names = names.as_slice();
+        thread::scope(|scope| {
+            let (tell, told) = mpsc::channel();
+            scope.spawn(move || {
+                let _ = tell.send(self.decide(utterance, names));
+            });
+            if let Ok(decided) = told.recv_timeout(HUM_AFTER) {
+                return (decided, None);
+            }
+            let hum = self.play(Phrase::Hum, speaker.take());
+            self.trace
+                .mark_words("acknowledgement-started", Phrase::Hum.key());
+            let decided = told.recv().unwrap_or_else(|_| {
+                Decided::Missed(Fault::Failed("The voice stopped deciding".into()))
+            });
+            (decided, hum)
+        })
+    }
+
+    fn hand_off(
+        &self,
+        heard: &str,
+        held: Acknowledgement,
+        speaker: Option<Box<dyn Speaker>>,
+        notice: &mut Option<String>,
+    ) -> Option<Finish> {
+        let mut finish = self.play(held.phrase, speaker);
+        self.trace
+            .mark_words("acknowledgement-started", held.phrase.key());
+        if !held.send {
+            return finish;
+        }
+        match self.voyager.say(&crate::spoken::prompt(heard)) {
+            Ok(()) => self.trace.mark("sent"),
+            Err(failure) => {
+                if failure.refused {
+                    self.voyager.note(&failure.reason);
+                    self.finish(finish.take());
+                    finish = self.play(failure.phrase, None);
+                    self.trace
+                        .mark_words("refusal-started", failure.phrase.key());
+                }
+                *notice = Some(failure.reason);
+            }
+        }
+        finish
+    }
+
+    fn answer(&self, turn: u64, utterance: Utterance, speaker: Option<Box<dyn Speaker>>) {
+        let held = acknowledge(self.voyager.standing(), turn);
+        self.trace.mark("utterance-ended");
+        self.shared.set(Phase::Hearing, None);
+        let mut speaker = speaker;
+        let (decided, hum) = self.decide_or_hum(&utterance, &mut speaker);
+        self.finish(hum);
+        let mut notice = None;
+        let finish = match decided {
+            Decided::Nothing => None,
+            Decided::Missed(fault) => {
+                notice = Some(fault.to_string());
+                let finish = self.play(Phrase::Missed, speaker);
+                self.trace
+                    .mark_words("acknowledgement-started", Phrase::Missed.key());
+                finish
+            }
+            Decided::Chat(text, clips) => {
+                let finish = self.play_clips(clips, speaker);
+                self.trace.mark_words("chat-started", text.as_str());
+                self.voyager.note(text.as_str());
+                finish
+            }
+            Decided::Voyager(heard) => self.hand_off(&heard, held, speaker, &mut notice),
+        };
         self.shared.set(Phase::Acknowledging, notice.clone());
         self.finish(finish);
         self.shared.set(Phase::Connecting, notice);
@@ -450,6 +549,8 @@ pub fn start(
         });
         Exchange {
             hearing: engine.omni.as_ref(),
+            routing: engine.omni.as_ref(),
+            speaking: engine.omni.as_ref(),
             clips: &engine.clips,
             audio: audio.as_ref(),
             voyager: voyager.as_ref(),

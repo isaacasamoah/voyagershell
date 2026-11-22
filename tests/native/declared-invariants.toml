@@ -328,6 +328,30 @@ check = ["journey:voice/room-sound-is-never-a-turn", "journey:voice/request-in-r
 confidence = "stated"
 
 [[invariant]]
+id = "voice-chat-replies-never-take-the-work"
+says = "The voice answers small talk itself and sends nothing, only when the voice model says chat and is at least 0.99 sure. Its reply never offers, promises or describes an action or states a fact about the work. Everything else reaches Voyager with the words, including help, what can you do, never mind and cancel."
+kind = "user"
+owner = "conversation-provider"
+source = "Isaac, 22 Nov 2026, after the Sunday test: natural voice responses for hello and simple questions; his earlier decision that help, what can you do, never mind and cancel go to Voyager; the voice experiment's round 7 gate"
+features = ["voice"]
+guard = ["type:app/src/voice_route.rs#Route"]
+type_gap = "The reply is free text the model writes. The model's kind and the 0.99 gate decide. Two word lists are belts behind them: offer words such as want me to, shall I, I can help, I'm here to help and what would you like, and action and workspace words. Either one hands the reply to Voyager. A bare I can is not an offer word, so Yes, I can hear you stays small talk. Nothing in the types stops a reply that offers or promises an action in words the lists do not hold."
+check = ["journey:voice/small-talk-is-answered-by-the-voice", "journey:voice/request-gets-no-chat-reply", "journey:voice/small-talk-that-draws-an-offer-goes-to-voyager", "test:app/src/voice_route.rs#small_talk_is_answered_by_the_voice_only_when_the_model_is_sure", "test:app/src/voice_route.rs#a_chat_reply_that_promises_or_describes_an_action_goes_to_voyager", "test:app/src/voice_route.rs#a_chat_reply_that_offers_to_do_something_goes_to_voyager", "test:app/src/voice_route.rs#saying_yes_i_can_hear_you_is_still_small_talk", "test:app/src/voice_layer_tests.rs#small_talk_is_answered_by_the_voice_and_nothing_reaches_voyager", "test:app/src/voice_layer_tests.rs#help_what_can_you_do_never_mind_and_cancel_reach_voyager_even_when_the_model_says_chat", "test:app/src/voice_layer_tests.rs#a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyager"]
+confidence = "stated"
+
+[[invariant]]
+id = "voice-first-sound-is-the-answer-or-a-hum"
+says = "When a turn ends, the first sound is the voice's chat reply, or the clip for a request for Voyager, if it is ready within the window. Otherwise a soft Mm-hm plays first and the answer follows it. A request for Voyager never gets a chat reply."
+kind = "user"
+owner = "conversation-provider"
+source = "The owner's answer on the sound card, 22 Nov 2026: option C, a soft Mm-hm at once, skipped whenever deciding finishes in time, with the 0.3 s first-sound check kept"
+features = ["voice"]
+guard = ["type:app/src/voice_layer.rs#Decided"]
+type_gap = "The window is a duration the exchange waits on. Nothing in the types ties it to the measured audio path, so a longer window would delay the first sound past the check."
+check = ["journey:voice/small-talk-is-answered-by-the-voice", "journey:voice/request-gets-no-chat-reply", "test:app/src/voice_layer_tests.rs#a_fast_decision_plays_only_the_chat_reply", "test:app/src/voice_layer_tests.rs#a_slow_decision_hums_first_then_plays_the_chat_reply", "test:app/src/voice_layer_tests.rs#a_request_for_voyager_hums_only_when_deciding_is_slow_and_never_gets_a_chat_reply"]
+confidence = "stated"
+
+[[invariant]]
 id = "conversation-acts-through-operations"
 says = "The Conversation streams its reply and shows a Provider error. Its tool calls read and change the live workspace, so a renamed Vessel is known by its new name."
 kind = "user"
