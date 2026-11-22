@@ -1173,7 +1173,10 @@ and the typed line runs in the clicked shell.
 The `agent-split` patch offers `create-vessel` only to Voyager again.
 `create-vessel-splits-beside` then fails on the expectation `voyager do
 workspace applied create-vessel beside a placement from that Vessel and exited
-0`. `tests/native/controls/agent-resize.patch` offers `resize-placement-split`
+0`. The cases after it need the second Fleet that case sets up, so they are skipped and this
+control ends inconclusive by design, with `create-vessel-splits-beside` failed
+and blamed on the product in `checks.json`.
+`tests/native/controls/agent-resize.patch` offers `resize-placement-split`
 to every Vessel. A candidate built with it must fail `agent-resize-refused`.
 `tests/native/controls/agent-plain.patch` gives every caller the table default
 again, so a codex agent that another Vessel creates without naming permissions
