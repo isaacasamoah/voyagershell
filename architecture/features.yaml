@@ -393,10 +393,14 @@ features:
         journeys: []
       - id: any-agent-splits-a-placement
         kind: user
-        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
+        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom through the voyager.place label, or a Vessel of any ready type there through create-vessel with a beside insertion. A bad side, a malformed label, a closed Fleet, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
         owner: application-queue
         guards: ['type:contract/src/place.rs#Place']
-        checks: ['journey:agent-split/label-splits-each-side', 'journey:agent-split/create-vessel-splits-beside', 'journey:agent-split/bad-split-places-nothing']
+        checks:
+          - 'journey:agent-split/label-splits-each-side'
+          - 'journey:agent-split/create-vessel-splits-beside'
+          - 'journey:agent-split/bad-split-places-nothing'
+          - 'test:app/src/workspace/tests.rs#a_vessel_is_not_created_in_a_closed_fleet'
         formal: []
         journeys: [agent-split]
       - id: agents-start-plain-unless-they-name-permissions
@@ -1619,10 +1623,14 @@ features:
         journeys: [agent-split, socket-dock]
       - id: any-agent-splits-a-placement
         kind: user
-        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
+        says: 'Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom through the voyager.place label, or a Vessel of any ready type there through create-vessel with a beside insertion. A bad side, a malformed label, a closed Fleet, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent''s hc run could not start, and neither route resizes a split.'
         owner: application-queue
         guards: ['type:contract/src/place.rs#Place']
-        checks: ['journey:agent-split/label-splits-each-side', 'journey:agent-split/create-vessel-splits-beside', 'journey:agent-split/bad-split-places-nothing']
+        checks:
+          - 'journey:agent-split/label-splits-each-side'
+          - 'journey:agent-split/create-vessel-splits-beside'
+          - 'journey:agent-split/bad-split-places-nothing'
+          - 'test:app/src/workspace/tests.rs#a_vessel_is_not_created_in_a_closed_fleet'
         formal: []
         journeys: [agent-split]
       - id: agents-start-plain-unless-they-name-permissions
