@@ -52,6 +52,7 @@ const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
 const LONG_SPOKEN: &str = "Here's where things stand. The canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today. Want me to walk through any of it?";
+const LONG_START: &str = "Here's where things stand.";
 const LONG_ERROR_PERCENT: usize = 10;
 const PIECE_WORDS: usize = 25;
 const COMMA_PIECES: [&str; 2] = [
@@ -494,6 +495,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     let Some(long) = cases.make(native, Case::LongReplyIsClear, |native| {
         let said = voice::converse_long(native, &OPEN_THE_ROADMAP, "long-reply")?;
+        anyhow::ensure!(
+            said.spoken_texts.iter().any(|text| text.starts_with(LONG_START)),
+            "Inconclusive, blame on hearing: the request was heard as {:?}, so the stand-in gave its short reply and the long reply was never spoken",
+            said.heard
+        );
         let heard = voice::transcribe_long(native, "long-reply", &said)?;
         let (errors, words) = word_errors(&voice::digits_as_words(&heard.join(" ")), LONG_SPOKEN);
         let verdict = Verdict::new()

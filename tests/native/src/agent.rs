@@ -6,7 +6,6 @@ const AGENT_NAME: &str = "claude";
 pub const REPLY_MARKER: &str = "[vy]";
 pub const SPOKEN_REPLY: &str = "Docked on this fleet.\n\nThe Fleet was already open.";
 pub const TYPED_REPLY: &str = "Typed reply must stay silent.";
-const LONG_ASK: &str = "Open the roadmap.";
 pub const LONG_REPLY: &str = "Here's where things stand.\n\nThe canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed 1,200 lines in 4 minutes, about 50% faster than yesterday, and memory peaked at 6.5 gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today.\n\nWant me to walk through any of it?";
 
 pub fn invoked_as_agent() -> bool {
@@ -111,9 +110,10 @@ fn plain_words(text: &str) -> Vec<String> {
 }
 
 fn spoken_reply(line: &str) -> &'static str {
-    let mut asked = plain_words(line);
-    asked.retain(|word| word != "spoken");
-    if asked == plain_words(LONG_ASK) {
+    let asked = plain_words(line);
+    let has = |wanted: &str| asked.iter().any(|word| word == wanted);
+    let roadmap = has("roadmap") || (has("road") && has("map"));
+    if roadmap && !has("dock") {
         LONG_REPLY
     } else {
         SPOKEN_REPLY
@@ -206,15 +206,19 @@ mod tests {
     }
 
     #[test]
-    fn the_long_question_gets_the_long_reply_and_any_other_the_short_one() {
-        assert_eq!(spoken_reply("[spoken] Open the roadmap."), LONG_REPLY);
-        assert_eq!(spoken_reply("[spoken] open the road map"), SPOKEN_REPLY);
+    fn a_request_heard_with_the_roadmap_and_no_dock_gets_the_long_reply() {
+        let asked = format!("[spoken] {}", crate::audio::speech::OPEN_THE_ROADMAP.words);
+        assert_eq!(spoken_reply(&asked), LONG_REPLY);
+        for heard in ["Oh, and the roadmap.", "open the road map"] {
+            assert_eq!(
+                spoken_reply(&format!("[spoken] {heard}")),
+                LONG_REPLY,
+                "{heard}"
+            );
+        }
+        let both = format!("[spoken] {}", crate::audio::speech::OPEN_THEN_DOCK.words);
+        assert_eq!(spoken_reply(&both), SPOKEN_REPLY);
         assert_eq!(spoken_reply("[spoken] Dock on this fleet."), SPOKEN_REPLY);
-        assert_eq!(
-            LONG_ASK,
-            crate::audio::speech::OPEN_THE_ROADMAP.words,
-            "the journey asks the long question with this recording"
-        );
     }
 
     #[test]
