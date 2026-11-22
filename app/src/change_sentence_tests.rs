@@ -460,6 +460,13 @@ fn socket_refused(message: &str) -> SocketReply {
     }
 }
 
+const NAMED_SUBJECT: &str = "rename the Build Fleet to Notes";
+const UNNAMED_SUBJECT: &str = "rename the Fleet to Notes";
+
+fn because(subject: &str, reason: &str) -> String {
+    format!("I asked to {subject}, but it was refused because {reason}, so nothing changed.")
+}
+
 const NAMED: &str =
     "I asked to rename the Build Fleet to Notes, but it was refused, so nothing changed.";
 const UNNAMED: &str =
@@ -482,7 +489,7 @@ fn a_plain_reason_from_an_answered_refusal_follows_the_sentence() {
             rename(),
             &answered_with(Outcome::Refused, Some("Fleet is closed"))
         ),
-        format!("{NAMED} Fleet is closed.")
+        because(NAMED_SUBJECT, "Fleet is closed")
     );
     assert_eq!(
         said(
@@ -492,7 +499,7 @@ fn a_plain_reason_from_an_answered_refusal_follows_the_sentence() {
                 Some("Selected Voyage changed; reopen the choice")
             )
         ),
-        format!("{NAMED} Selected Voyage changed.")
+        because(NAMED_SUBJECT, "selected Voyage changed")
     );
 }
 
@@ -503,7 +510,7 @@ fn a_plain_reason_from_an_unanswered_refusal_follows_the_sentence() {
             rename(),
             &unanswered_with(Unapplied::Refused, "Voyage not found")
         ),
-        format!("{UNNAMED} Voyage not found.")
+        because(UNNAMED_SUBJECT, "Voyage not found")
     );
 }
 
@@ -514,7 +521,7 @@ fn a_plain_reason_from_a_socket_refusal_follows_the_sentence() {
             rename(),
             &socket_refused("dock is offered only to Voyager; nothing was queued")
         ),
-        format!("{UNNAMED} Dock is offered only to Voyager.")
+        because(UNNAMED_SUBJECT, "dock is offered only to Voyager")
     );
 }
 
@@ -528,7 +535,7 @@ fn an_internal_word_in_the_layout_reason_is_said_as_the_workspace() {
                 Some("Layout changed; inspect it before making a new request")
             )
         ),
-        format!("{NAMED} Workspace changed.")
+        because(NAMED_SUBJECT, "the workspace changed first")
     );
 }
 

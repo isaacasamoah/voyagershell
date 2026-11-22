@@ -196,6 +196,10 @@ fn unsettled(intent: &Intent) -> String {
     )
 }
 
+const NAMES: &[&str] = &[
+    "Fleet", "Fleets", "Portal", "Portals", "Vessel", "Vessels", "Voyage", "Voyages", "Voyager",
+];
+
 const NOT_PLAIN: &[&str] = &[
     "applied",
     "canvas",
@@ -228,22 +232,34 @@ fn plain_reason(message: &str) -> Option<String> {
                 let lowered = word.to_lowercase();
                 !NOT_PLAIN.contains(&lowered.as_str()) && !lowered.starts_with("placement")
             });
-    let mut letters = first.chars();
-    let capitalised = letters
+    if plain { clause(&first) } else { None }
+}
+
+fn clause(reason: &str) -> Option<String> {
+    if reason.eq_ignore_ascii_case("workspace changed") {
+        return Some("the workspace changed first".into());
+    }
+    let word = reason.split(' ').next()?;
+    if NAMES.contains(&word) {
+        return Some(reason.to_owned());
+    }
+    let mut letters = reason.chars();
+    letters
         .next()
-        .map(|head| head.to_uppercase().chain(letters).collect::<String>());
-    capitalised.filter(|_| plain)
+        .map(|head| head.to_lowercase().chain(letters).collect())
 }
 
 fn refused(intent: &Intent, message: Option<&str>) -> String {
-    let reason = message
-        .and_then(plain_reason)
-        .map(|reason| format!(" {reason}."))
-        .unwrap_or_default();
-    format!(
-        "I asked to {}, but it was refused, so nothing changed.{reason}",
-        intent.attempt
-    )
+    match message.and_then(plain_reason) {
+        Some(reason) => format!(
+            "I asked to {}, but it was refused because {reason}, so nothing changed.",
+            intent.attempt
+        ),
+        None => format!(
+            "I asked to {}, but it was refused, so nothing changed.",
+            intent.attempt
+        ),
+    }
 }
 
 pub fn sentence(request: &Request, reply: &SocketReply) -> Option<String> {
