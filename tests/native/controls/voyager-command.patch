@@ -9,7 +9,7 @@ diff --git a/app/src/client_voyager.rs b/app/src/client_voyager.rs
 -            self.client
 -                .replies
 -                .set_unbound(Some(Unbound::CommandMissing));
--            return;
+-            return true;
 -        }
          if let Err(error) = self.bring_up_voyager() {
              self.say(format!("Voyager was not started: {error:?}"));

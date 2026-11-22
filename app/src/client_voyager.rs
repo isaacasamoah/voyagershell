@@ -21,12 +21,12 @@ impl Owner {
         }
     }
 
-    pub(super) fn voyager(&mut self) {
+    pub(super) fn voyager(&mut self) -> bool {
         if self.voyager_started
             || self.launches.is_none()
             || !matches!(self.start, Start::Created | Start::Ready)
         {
-            return;
+            return false;
         }
         self.voyager_started = true;
         self.sockets.binding().forget();
@@ -34,11 +34,12 @@ impl Owner {
             self.client
                 .replies
                 .set_unbound(Some(Unbound::CommandMissing));
-            return;
+            return true;
         }
         if let Err(error) = self.bring_up_voyager() {
             self.say(format!("Voyager was not started: {error:?}"));
         }
+        false
     }
 
     fn bring_up_voyager(&mut self) -> Result<(), Error> {

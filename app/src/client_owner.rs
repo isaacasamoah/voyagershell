@@ -240,7 +240,7 @@ impl Owner {
         );
         let before = self.version;
         self.prepare();
-        self.voyager();
+        let unbound = self.voyager();
         if self.version != before
             && let Some(owner) = self.content.as_mut()
         {
@@ -283,7 +283,7 @@ impl Owner {
                 close_exited(core, saved, &ended, &live);
             }
         }
-        if reported || noticed || self.version != before {
+        if reported || noticed || unbound || self.version != before {
             self.notices.send(self.version, self.closing.revision);
         }
         self.sockets.sync(&self.layout);

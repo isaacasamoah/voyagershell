@@ -47,6 +47,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the status line on screen says Voyager cannot reply because the voyager command is missing",
                 !drawn.is_empty(),
             )
+            .expect("the status line holds that line and no error text", drawn == WORDS)
             .observed("status line", drawn)
     })?;
     cases.check(native, Case::NoVoyagerBound, |native| {
@@ -86,6 +87,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the status line on screen still says Voyager cannot reply after the layout changed",
                 !drawn.is_empty(),
             )
+            .expect("the status line holds that line and no error text", drawn == WORDS)
             .observed("fleets before", had)?
             .observed("status line", drawn)
     })
