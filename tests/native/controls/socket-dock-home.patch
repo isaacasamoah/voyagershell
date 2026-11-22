@@ -1,0 +1,80 @@
+diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
+index ea4235cb..3889cf46 100644
+--- a/desktop/canvas/panel-view.js
++++ b/desktop/canvas/panel-view.js
+@@ -9,12 +9,7 @@ import { notice as workspace_notice } from "voyager_workspace";
+ import { response as validateResponse } from "./validate.js";
+ import { activityBadge } from "./activity.js";
+ import { panelFrame } from "./regions.js";
+-import {
+-  openingPlacement,
+-  shownPanels,
+-  terminalBacked,
+-  visiblePanels,
+-} from "./panels.js";
++import { openingPlacement, terminalBacked, visiblePanels } from "./panels.js";
+ import { invoke } from "./workspace.js";
+ import { processIcon } from "./process-icons.js";
+ function noteFocus(workspace, id, cx) {
+@@ -48,17 +43,12 @@ function followDock(workspace, dock, cx) {
+   );
+ }
+ function focusDocked(workspace, cx) {
+-  const home = workspace.layout?.context.kind === "workspace";
+-  if (!home) moveFocus(workspace, "opening", cx);
++  moveFocus(workspace, "opening", cx);
+   if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
+     return;
+-  const target = home
+-    ? shownPanels(workspace.layout).find(
+-        (panel) => panel.id === focusedPlacement(workspace),
+-      )
+-    : workspace.layout
+-      ? openingPlacement(workspace.layout)
+-      : undefined;
++  const target = workspace.layout
++    ? openingPlacement(workspace.layout)
++    : undefined;
+   if (target) workspace.terminals.get(target.vessel)?.focus();
+ }
+ const focusedPlacements = new WeakMap();
+diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
+index 16aef091..65ef816f 100644
+--- a/desktop/canvas/panel-view.ts
++++ b/desktop/canvas/panel-view.ts
+@@ -9,12 +9,7 @@ import { notice as workspace_notice } from "voyager_workspace";
+ import { response as validateResponse } from "./validate.js";
+ import { activityBadge } from "./activity.js";
+ import { panelFrame } from "./regions.js";
+-import {
+-  openingPlacement,
+-  shownPanels,
+-  terminalBacked,
+-  visiblePanels,
+-} from "./panels.js";
++import { openingPlacement, terminalBacked, visiblePanels } from "./panels.js";
+ import { invoke } from "./workspace.js";
+ import { processIcon } from "./process-icons.js";
+ import type Canvas from "./main.js";
+@@ -68,17 +63,12 @@ function followDock(workspace: Canvas, dock: string, cx: UIContext) {
+ }
+ 
+ function focusDocked(workspace: Canvas, cx: AsyncContext) {
+-  const home = workspace.layout?.context.kind === "workspace";
+-  if (!home) moveFocus(workspace, "opening", cx);
++  moveFocus(workspace, "opening", cx);
+   if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
+     return;
+-  const target = home
+-    ? shownPanels(workspace.layout).find(
+-        (panel) => panel.id === focusedPlacement(workspace),
+-      )
+-    : workspace.layout
+-      ? openingPlacement(workspace.layout)
+-      : undefined;
++  const target = workspace.layout
++    ? openingPlacement(workspace.layout)
++    : undefined;
+   if (target) workspace.terminals.get(target.vessel)?.focus();
+ }
+ 

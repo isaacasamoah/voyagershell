@@ -817,14 +817,17 @@ test("context metadata rejects a late different dock and notifies only changed f
   assert.deepEqual(view.contextFacts, facts);
 });
 
-test("a dock follows once for each dock revision, once no request is preparing", () => {
+test("a dock follows once for each dock revision, once no request is preparing", async () => {
   const layout = (context, last) => ({
     view: "fleet",
     selectedVoyage: "voyage-1",
     selectedFleet: "fleet-4",
     context,
     lastVessels: [{ fleet: "fleet-4", vessel: last }],
-    vessels: [{ id: "content-2" }, { id: "content-10" }],
+    vessels: [
+      { id: "content-2", typeId: "terminal" },
+      { id: "content-10", typeId: "terminal" },
+    ],
     voyages: [
       {
         id: "voyage-1",
@@ -855,10 +858,13 @@ test("a dock follows once for each dock revision, once no request is preparing",
     status: "applied",
     version: "1",
     fresh: true,
+    createdVessels: [],
+    createdWorkspace: false,
     layout: layout({ kind: "vessel", id }, id),
   });
   let result = null;
   let dockRevision = "0";
+  let noticeRevision = "0";
   const { Canvas, acceptDockResult } = new Function(
     "View",
     "take_result",
@@ -876,29 +882,59 @@ test("a dock follows once for each dock revision, once no request is preparing",
     },
     () => true,
     { has_active_dialog: () => false },
-    () => ({ dockRevision }),
+    () => ({ dockRevision, revision: noticeRevision }),
   );
   const focused = [];
-  const view = Object.assign(new Canvas(), {
-    version: "1",
-    names: new Map(),
-    contextFacts: null,
-    terminals: new Map(
-      ["content-2", "content-10"].map((id) => [
-        id,
-        { focus: () => focused.push(id) },
-      ]),
-    ),
-  });
-  view.readContext = async () => {};
-  view.readProcesses = async () => {};
-  view.readObservation = async () => {};
+  const prepared = [];
+  const accepted = [];
+  let renderPhase = false;
   const cx = {
     spawn(callback) {
-      callback(cx);
+      renderPhase = true;
+      try {
+        callback(
+          Object.assign(Object.create(cx), {
+            notify() {},
+            sleep: () => new Promise((resolve) => setImmediate(resolve)),
+          }),
+        );
+      } finally {
+        renderPhase = false;
+      }
     },
     notify() {},
     focus_handle: () => ({}),
+  };
+  const build = () => {
+    const built = Object.assign(new Canvas(), {
+      version: "1",
+      pendingShortcuts: [],
+      names: new Map(),
+      contextFacts: null,
+      terminals: new Map(
+        ["content-2", "content-10"].map((id) => [
+          id,
+          { focus: () => focused.push(id) },
+        ]),
+      ),
+    });
+    built.readContext = async () => {};
+    built.readProcesses = async () => {};
+    built.readObservation = async () => {};
+    built.prepare = async (task, existingOnly) => {
+      prepared.push(existingOnly);
+    };
+    const realAccept = built.acceptSnapshot.bind(built);
+    built.acceptSnapshot = (reply, where) => {
+      accepted.push(where === cx || renderPhase ? "render" : "task");
+      return realAccept(reply, where);
+    };
+    return built;
+  };
+  const view = build();
+  const settle = async () => {
+    for (let turn = 0; turn < 5; turn += 1)
+      await new Promise((resolve) => setImmediate(resolve));
   };
   let next = null;
   let inspects = 0;
@@ -965,6 +1001,71 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "an avatar dock whose notice lands before its reply follows once",
   );
   assert.equal(inspects, 4, "that dock runs one inspect");
+  await settle();
+  result = JSON.stringify({
+    ...reply("placement-11"),
+    requestId: "avatar-home",
+  });
+  accepted.length = 0;
+  render();
+  render();
+  assert.deepEqual(
+    accepted,
+    [],
+    "an avatar reply is not accepted while the canvas is drawing",
+  );
+  await settle();
+  assert.deepEqual(
+    accepted,
+    ["task"],
+    "an avatar reply is accepted in a task, where focus may move, and not in render",
+  );
+  assert.equal(view.dockReceipt, "avatar-home");
+  assert.equal(prepared.length, 0, "an avatar reply prepares nothing itself");
+  const quiet = () => {
+    view.openings = new Map(
+      ["content-2", "content-10"].map((id) => [id, { status: "applied" }]),
+    );
+    noticeRevision = String(Number(view.version) + 1);
+    view.version = noticeRevision;
+    view.workspaceNotice = { ...view.workspaceNotice, revision: "0" };
+    inspects = 0;
+  };
+  quiet();
+  view.inspectNotice(cx);
+  assert.equal(
+    inspects,
+    0,
+    "a notice already accepted, with every Vessel open, reads nothing",
+  );
+  view.openings = new Map([["content-2", { status: "applied" }]]);
+  noticeRevision = view.version;
+  view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
+  view.inspectNotice(cx);
+  assert.equal(
+    inspects,
+    1,
+    "a notice already accepted, with a shown Vessel not yet opened, still reads and prepares",
+  );
+  view.openings = new Map(
+    ["content-2", "content-10"].map((id) => [id, { status: "applied" }]),
+  );
+  view.inspectNotice(cx);
+  assert.equal(
+    inspects,
+    1,
+    "once every Vessel is open the notice reads nothing more",
+  );
+  next = reply("placement-3");
+  result = JSON.stringify(reply("placement-3"));
+  dockRevision = "5";
+  render();
+  await settle();
+  assert.deepEqual(
+    prepared,
+    [],
+    "a dock reply prepares nothing but its own follow",
+  );
 });
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {

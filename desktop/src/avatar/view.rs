@@ -453,7 +453,7 @@ impl Render for AvatarView {
             .tab_stop(true)
             .role(gpui::Role::Button)
             .aria_label("Voyager avatar")
-            .aria_description(format!("{} Drag to move or dock. Hover, Shift-click or S plays the hover animation. F5 reloads animation pack {}.", if self.surface == Surface::Floating { "Enter or Space to show the workspace." } else { "Enter or Space to minimize the workspace." }, avatar.motion.pack.id))
+            .aria_description(format!("{} Drag to move or dock. Hover, Shift-click or S plays the hover animation. F5 reloads animation pack {}.", if self.surface == Surface::Floating { "Enter or Space to show the workspace." } else if avatar.scope == Scope::Workspace { "Enter or Space to open the home Voyage." } else { "Enter or Space to minimize the workspace." }, avatar.motion.pack.id))
             .on_a11y_action(gpui::AccessibleAction::Click, {
                 let avatar = self.avatar.downgrade();
                 move |_, window, cx| {

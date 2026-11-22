@@ -1,3 +1,4 @@
+mod click;
 mod paint;
 mod view;
 
@@ -44,6 +45,7 @@ pub struct Avatar {
     restore: Option<Restore>,
     window_epoch: Rc<Cell<u64>>,
     pending: Option<Task<()>>,
+    waiting_click: Option<AnyWindowHandle>,
     position: Option<Position>,
     position_task: Option<Task<()>>,
     position_io: Arc<Mutex<Option<crate::platform::WindowPosition>>>,
@@ -359,18 +361,6 @@ impl Avatar {
         cx.emit(Changed);
     }
 
-    fn activate(&mut self, window: &Window, cx: &mut Context<Self>) {
-        self.animate(Trigger::Click, cx);
-        if self.floating == Some(window.window_handle()) {
-            self.restore_workspace(cx);
-        } else {
-            if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some() {
-                eprintln!("Avatar float trigger: activation");
-            }
-            self.float(window, cx);
-        }
-    }
-
     fn restore_workspace(&mut self, cx: &mut Context<Self>) {
         let Some(restore) = self.restore.as_ref().filter(|restore| !restore.requested) else {
             return;
@@ -648,14 +638,15 @@ impl Avatar {
         }));
     }
 
-    fn dock(&mut self, scope: Scope, cx: &mut Context<Self>) {
+    fn submit(&mut self, action: Action, cx: &mut Context<Self>) {
         if self.pending.is_some() {
             return;
         }
+        let docking = matches!(action, Action::Dock { .. });
         let request = Request {
             request_id: self.client.request_id(),
             expected_version: self.version,
-            action: Action::Dock { context: scope },
+            action,
         };
         let client = self.client.clone();
         let epoch = self.window_epoch.get();
@@ -671,13 +662,14 @@ impl Avatar {
                         avatar.version = response.version;
                         avatar.scope = response.layout.context.clone();
                     }
-                    if response.status == Outcome::Applied {
+                    if docking && response.status == Outcome::Applied {
                         avatar.applied_dock(&response.request_id, epoch, cx);
                     }
                 }
                 *avatar.result.borrow_mut() = Some(Ok(Reply::from(result)));
                 cx.emit(Changed);
                 cx.notify();
+                avatar.release_waiting_click(cx);
             });
         }));
     }
@@ -834,6 +826,7 @@ impl Binding {
             restore: None,
             window_epoch: Rc::clone(&window_epoch),
             pending: None,
+            waiting_click: None,
             position: None,
             position_task: None,
             position_io: Arc::new(Mutex::new(None)),

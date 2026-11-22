@@ -26,6 +26,7 @@ impl Target {
     pub const CHAT_ERROR: Self = Self::single(Role::ChatError);
     pub const VOICE_CONTROL: Self = Self::single(Role::VoiceControl);
     pub const HOME: Self = Self::single(Role::HomeNavigation);
+    pub const WORKSPACE_DOCK: Self = Self::single(Role::WorkspaceDock);
     pub const STATUS: Self = Self::single(Role::WorkspaceStatus);
     pub const REFRESH: Self = Self::single(Role::WorkspaceRefresh);
     pub const STOP_SESSION: Self = Self::single(Role::StopSession);

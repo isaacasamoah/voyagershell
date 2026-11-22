@@ -119,7 +119,10 @@ The avatar is still at rest and runs finite animations on deliberate triggers.
 Hover starts one stretch on entry. Staying over the hit area does not repeat it.
 An applied dock replaces any active clip with a pronounced two-second float.
 Hover is ignored while a clip runs and is never queued. Click keeps its original
-minimize/restore action. Dragging keeps its placement behavior and sound.
+minimize/restore action while the avatar is docked anywhere but home. While the
+avatar is home, a click sends the existing Home request and the window stays up. A click made while a dock is still
+waiting for its reply is kept, one deep with the latest winning, and acts when the reply returns.
+Dragging keeps its placement behavior and sound.
 Shift-click and focused S also play the hover binding. Focused F5 reloads the
 profile's animation files. S and F5 use local press/release latches because the
 pinned X11 backend does not mark repeated keys as held. Blur clears those latches.
@@ -231,6 +234,7 @@ supplies actual Voyage-owned Portals and the shared content renderer. Portal
 targets and Go there now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
+An avatar reply that carries a layout is accepted after the script's first await, in a task, because the first part of `cx.spawn` still runs while the canvas draws and focus may not move there. A reply that opens Home is prepared by the notice inspect. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening, so a click during launch work prepares once when that work ends.
 
 ## Working-core integration
 

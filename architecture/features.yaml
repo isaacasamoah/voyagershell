@@ -842,12 +842,12 @@ features:
         journeys: []
       - id: avatar-click-minimizes
         kind: user
-        says: 'Clicking the avatar minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position.'
+        says: 'Clicking the avatar while it is docked anywhere but home minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position. Clicking the avatar while it is home opens the home Voyage and the window stays up. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar is docked.'
         owner: desktop-presentation
-        guards: []
-        checks: []
+        guards: ['type:desktop/src/avatar/click.rs#Click']
+        checks: ['journey:socket-dock/avatar-click-at-home-opens-home', 'journey:socket-dock/avatar-click-away-minimizes', 'journey:socket-dock/avatar-click-right-after-a-drag-opens-home']
         formal: []
-        journeys: []
+        journeys: [socket-dock]
       - id: authority-comes-from-assignment
         kind: user
         says: 'The avatar always acts with its user''s authority. Any other agent instructs another only through a recorded Assignment with a Rank, stored by the app. Fleet membership and Core parentage grant nothing.'
@@ -876,6 +876,7 @@ features:
     code:
       - contract/src/avatar_animation.rs
       - desktop/src/avatar.rs
+      - desktop/src/avatar/click.rs
       - desktop/src/avatar/paint.rs
       - desktop/src/avatar/view.rs
       - desktop/src/avatar_motion.rs
@@ -1660,10 +1661,10 @@ features:
         journeys: [adopt-by-label, quit-restore, voyage-close]
       - id: dock-gives-the-keyboard
         kind: user
-        says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
+        says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A dock home leaves the keyboard where it was. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
         owner: desktop-presentation
         guards: ['type:app/src/client_owner.rs#Flight', 'type:app/src/client_core.rs#WorkspaceNotice']
-        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane', 'journey:socket-dock/redock-takes-keyboard']
+        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane', 'journey:socket-dock/redock-takes-keyboard', 'journey:socket-dock/dock-home-keeps-keyboard']
         formal: []
         journeys: [socket-dock]
       - id: created-while-preparing-is-drawn

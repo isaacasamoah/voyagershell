@@ -1254,6 +1254,14 @@ then fails on the expectation `the Vessel created during the Home preparation is
 drawn with its terminal`, because the read during the Home preparation brings
 the new Vessel without opening it.
 
+The `socket-dock` journey also covers the home dock and the click on the avatar at home. `dock-home-keeps-keyboard` creates two shells in the Home fleet, clicks the second, drags the avatar onto the home dock and expects the canvas focus and the typed line to stay on the second shell. It closes its two shells before it ends. `avatar-click-at-home-opens-home` relaunches under client decorations and expects a click on the avatar at home to show the Home view and to send no minimise request. `avatar-click-right-after-a-drag-opens-home` drags the avatar onto the home dock with Core's save of that dock held and clicks at once, and expects the Home view once the reply returns. `avatar-click-away-minimizes` does the same onto a Fleet and expects one iconic change-state request. The journey declares an armed Core relay for this, and nothing is held unless a case arms a hold. `voyager-creates-and-maximizes` runs last. A late frame after its maximize request fails it on main, and a failed case ends the journey and skips every case after it.
+
+The `socket-dock-home` patch puts back the focus a dock home gave before. The canvas moves the keyboard to the first Vessel shown, as on any other dock. `dock-home-keeps-keyboard` then fails on the expectation `the canvas focus stayed on the Home Vessel the user had clicked`, because the focus moved to another Home Vessel.
+
+The `avatar-click-home` patch makes a click on the avatar at home minimize the workspace as it does anywhere else. `avatar-click-at-home-opens-home` then fails on the expectation `a click on the avatar at home showed the Home view`, because the click sent a minimise request instead.
+
+The `avatar-home-prepare` patch puts back the canvas as main has it. An avatar reply is accepted while the canvas is drawing, and the notice inspect skips a Home whose Vessels are not open. `created-during-avatar-home-click-is-drawn` is then expected to fail on `Opening Home never opened a terminal through terminal.attach`, and `dock-home-keeps-keyboard` on its script-error expectation. These two results are predictions until the control runs.
+
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
 after a journey launches the candidate again.

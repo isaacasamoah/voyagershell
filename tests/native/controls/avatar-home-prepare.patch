@@ -1,0 +1,80 @@
+diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
+index 6c1c2d29..2c395d0c 100644
+--- a/desktop/canvas/panel-view.js
++++ b/desktop/canvas/panel-view.js
+@@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
+   const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
+   workspace.workspaceNotice = notice;
+   workspace.refreshRequested = false;
+-  if (
+-    !changed &&
+-    BigInt(notice.revision) <= BigInt(workspace.version) &&
+-    !unopened(workspace)
+-  )
+-    return;
++  if (!changed && BigInt(notice.revision) <= BigInt(workspace.version)) return;
+   workspace.automaticRefresh = true;
+   try {
+     workspace.run({ operation: "inspect" }, cx);
+@@ -65,19 +60,8 @@ export function acceptDockResult(workspace, cx) {
+   if (raw !== null) {
+     const result = JSON.parse(raw);
+     if (!validateResponse(result)) throw Error("Invalid native dock response");
+-    if (!("layout" in result)) workspace.acceptSnapshot(result, cx);
+-    else {
+-      cx.spawn(async (task) => {
+-        await Promise.resolve();
+-        if (
+-          workspace.acceptSnapshot(result, task) &&
+-          result.status === "applied"
+-        )
+-          workspace.dockReceipt = result.requestId;
+-        task.notify();
+-      });
+-      return;
+-    }
++    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
++      workspace.dockReceipt = result.requestId;
+   }
+   if (workspace.busy) return;
+   const dock = workspace_notice().dockRevision;
+diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
+index fc38cd4d..39d63799 100644
+--- a/desktop/canvas/panel-view.ts
++++ b/desktop/canvas/panel-view.ts
+@@ -70,12 +70,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
+   const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
+   workspace.workspaceNotice = notice;
+   workspace.refreshRequested = false;
+-  if (
+-    !changed &&
+-    BigInt(notice.revision) <= BigInt(workspace.version) &&
+-    !unopened(workspace)
+-  )
+-    return;
++  if (!changed && BigInt(notice.revision) <= BigInt(workspace.version)) return;
+   workspace.automaticRefresh = true;
+   try {
+     workspace.run({ operation: "inspect" }, cx);
+@@ -89,19 +84,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+   if (raw !== null) {
+     const result: unknown = JSON.parse(raw);
+     if (!validateResponse(result)) throw Error("Invalid native dock response");
+-    if (!("layout" in result)) workspace.acceptSnapshot(result, cx);
+-    else {
+-      cx.spawn(async (task) => {
+-        await Promise.resolve();
+-        if (
+-          workspace.acceptSnapshot(result, task) &&
+-          result.status === "applied"
+-        )
+-          workspace.dockReceipt = result.requestId;
+-        task.notify();
+-      });
+-      return;
+-    }
++    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
++      workspace.dockReceipt = result.requestId;
+   }
+   if (workspace.busy) return;
+   const dock = workspace_notice().dockRevision;

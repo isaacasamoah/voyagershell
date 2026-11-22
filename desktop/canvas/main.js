@@ -40,6 +40,7 @@ import {
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
+  inspectNotice,
   focusedPlacement,
   moveFocus,
   renderPanel,
@@ -605,17 +606,7 @@ export default class Canvas extends View {
     cx.notify();
   }
   inspectNotice(cx) {
-    const notice = workspace_notice();
-    const changed = changedBesidesRevision(notice, this.workspaceNotice);
-    this.workspaceNotice = notice;
-    this.refreshRequested = false;
-    if (!changed && BigInt(notice.revision) <= BigInt(this.version)) return;
-    this.automaticRefresh = true;
-    try {
-      this.run({ operation: "inspect" }, cx);
-    } finally {
-      this.automaticRefresh = false;
-    }
+    inspectNotice(this, cx);
   }
   acceptSnapshot(result, task) {
     this.drag = null;
