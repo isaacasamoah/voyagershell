@@ -7,7 +7,7 @@ import { projection } from "voyager_theme";
 import { client_decorated, quit } from "voyager_workspace";
 import { voyageColour } from "./voyage-colours.js";
 import { stopSession } from "./stop-session.js";
-import { noticed } from "./status.js";
+import { noticed, unboundLine } from "./status.js";
 export function renderNameEditor(workspace, state, id) {
   return div()
     .min_w(60)
@@ -688,7 +688,7 @@ export function renderContext(workspace, layout, voyage, fleet) {
       workspace.action("Go there", goThere).child(Marker.new("go-there")),
     );
   const region = div().flex().flex_col().child(row);
-  if (noticed(workspace) || workspace.worktrees?.status)
+  if (noticed(workspace) || workspace.worktrees?.status || unboundLine())
     region.child(workspace.statusView());
   return region;
 }

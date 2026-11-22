@@ -182,6 +182,7 @@ fn load(
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
     let placement_client = client.clone();
+    let unbound_client = client.clone();
     let terminal_viewers = viewers.clone();
     let workspace = Bridge::new(&operations::WORKSPACE)
         .async_function("launches", move |_| {
@@ -394,6 +395,11 @@ fn load(
     let workspace = workspace
         .function("revision", move |_| {
             Ok(HostValue::from(revision.get().revision.to_string()))
+        })
+        .function("voyager_unbound", move |_| {
+            Ok(unbound_client
+                .voyager_unbound()
+                .map_or(HostValue::Null, HostValue::from))
         })
         .function("take_placement_notice", move |_| {
             Ok(placement_client

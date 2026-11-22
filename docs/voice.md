@@ -101,9 +101,11 @@ nothing plays and the words are sent.
 
 Voyager's replies reach the app through hooks that run the `voyager` command
 beside the app's executable. When that command is missing, the app does not
-start the background Voyager and binds none. It writes one line to the canvas
-status line that says Voyager cannot reply because the command is missing. It
-does not search for the command elsewhere, retry or start Voyager without hooks,
+start the background Voyager and binds none. The owner holds that reason, and
+the canvas reads it through `voyager_unbound` on every render. The canvas status
+line shows one line that says Voyager cannot reply because the command is
+missing, whenever no outcome line is showing, so a later change to the layout
+does not remove it. It does not search for the command elsewhere, retry or start Voyager without hooks,
 because a Voyager without hooks drops every reply and says nothing.
 
 ## Small talk

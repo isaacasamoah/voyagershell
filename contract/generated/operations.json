@@ -291,6 +291,16 @@
         }
       },
       {
+        "name": "voyager_unbound",
+        "shape": {
+          "kind": "sync",
+          "parameters": [],
+          "returns": {
+            "nullable": "text"
+          }
+        }
+      },
+      {
         "name": "reported_activity",
         "shape": {
           "kind": "sync",

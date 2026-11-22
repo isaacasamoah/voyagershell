@@ -1,6 +1,10 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
-import { notice, take_placement_notice } from "voyager_workspace";
+import {
+  notice,
+  take_placement_notice,
+  voyager_unbound,
+} from "voyager_workspace";
 import type { NativeElement } from "gpui-kit";
 import type { Reply } from "../../contract/generated/response";
 
@@ -44,6 +48,10 @@ export function outcome(reply: Reply): string {
 export function noticed(owner: { status: string }): string {
   owner.status = take_placement_notice() ?? owner.status;
   return owner.status;
+}
+
+export function unboundLine(): string {
+  return voyager_unbound() ?? "";
 }
 
 export function statusLine(

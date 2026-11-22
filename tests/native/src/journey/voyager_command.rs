@@ -1,11 +1,13 @@
 use super::{Cases, Verdict, cases};
-use crate::native::{Native, bound_terminal};
+use crate::inspection::Target;
+use crate::native::{Native, bound_terminal, fleets, voyages};
 use anyhow::{Context as _, Result};
 use serde_json::json;
 
 cases! {
     LineDrawn => "command-missing-line-drawn",
     NoVoyagerBound => "no-voyager-bound",
+    LineSurvivesLayoutChange => "line-survives-a-layout-change",
 }
 
 pub const CONTROL: Case = Case::LineDrawn;
@@ -58,5 +60,33 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("bound", bound)?
             .observed("started", started)
+    })?;
+    cases.check(native, Case::LineSurvivesLayoutChange, |native| {
+        let (_, before) = native.document()?.context("The app saved no layout")?;
+        let voyage = voyages(&before)
+            .next()
+            .context("The layout holds no Voyage")?
+            .id
+            .clone();
+        let had = fleets(&before).count();
+        native.click(&Target::create_fleet(&voyage))?;
+        native.click(&Target::worker("terminal"))?;
+        let grown = native.watch(|native| {
+            Ok(native
+                .document()?
+                .map(|(_, layout)| fleets(&layout).count())
+                .filter(|count| *count > had))
+        })?;
+        let drawn = native.screen_status("the missing command line after the layout change", |label| {
+            label.contains(WORDS)
+        })?;
+        Verdict::new()
+            .expect("a new Fleet was saved", grown.is_some())
+            .expect(
+                "the status line on screen still says Voyager cannot reply after the layout changed",
+                !drawn.is_empty(),
+            )
+            .observed("fleets before", had)?
+            .observed("status line", drawn)
     })
 }

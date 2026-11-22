@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
-import { take_placement_notice } from "voyager_workspace";
+import { take_placement_notice, voyager_unbound } from "voyager_workspace";
 export function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -31,6 +31,9 @@ export function outcome(reply) {
 export function noticed(owner) {
   owner.status = take_placement_notice() ?? owner.status;
   return owner.status;
+}
+export function unboundLine() {
+  return voyager_unbound() ?? "";
 }
 export function statusLine(text, refresh) {
   const view = div()

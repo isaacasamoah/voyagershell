@@ -1,12 +1,14 @@
 diff --git a/app/src/client_voyager.rs b/app/src/client_voyager.rs
 --- a/app/src/client_voyager.rs
 +++ b/app/src/client_voyager.rs
-@@ -29,10 +29,6 @@ impl Owner {
+@@ -30,12 +30,6 @@ impl Owner {
          }
          self.voyager_started = true;
          self.sockets.binding().forget();
 -        if crate::launch::command_path().is_none() {
--            self.say("COMMAND-MISSING-WORDS-PENDING".to_owned());
+-            if let Ok(mut unbound) = self.client.voyager_unbound.lock() {
+-                *unbound = Some(Unbound::CommandMissing);
+-            }
 -            return;
 -        }
          if let Err(error) = self.bring_up_voyager() {

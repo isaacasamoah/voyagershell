@@ -318,6 +318,19 @@ fn answer<T>(
     })
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum Unbound {
+    CommandMissing,
+}
+
+impl Unbound {
+    pub(crate) fn line(self) -> &'static str {
+        match self {
+            Self::CommandMissing => "COMMAND-MISSING-WORDS-PENDING",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Client {
     sender: async_channel::Sender<Message>,
@@ -327,6 +340,7 @@ pub struct Client {
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
     placement_notice: Arc<Mutex<Option<String>>>,
+    voyager_unbound: Arc<Mutex<Option<Unbound>>>,
     workspace_words: Arc<Mutex<Vec<String>>>,
     replies: crate::replies::Replies,
 }
