@@ -40,7 +40,12 @@ fn focused(seen: &Seen) -> Option<PlacementId> {
         .map(|element| PlacementId(element.key.clone()))
 }
 
-fn request_line(native: &Native, caller: &str, id: &str, action: Action) -> Result<String> {
+pub(super) fn request_line(
+    native: &Native,
+    caller: &str,
+    id: &str,
+    action: Action,
+) -> Result<String> {
     let status: Value = serde_json::from_str(&native.system.execute(
         "env",
         &[caller, COMMAND, "status"],
@@ -57,14 +62,22 @@ fn request_line(native: &Native, caller: &str, id: &str, action: Action) -> Resu
     .to_string())
 }
 
-fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
-    let caller = format!("HC_TERMINAL_ID={voyager}");
-    let request = request_line(native, &caller, id, action)?;
+pub(super) fn voyager_caller(voyager: &str) -> String {
+    format!("HC_TERMINAL_ID={voyager}")
+}
+
+pub(super) fn send_line(native: &Native, caller: &str, request: &str) -> Result<Value> {
     Ok(serde_json::from_str(&native.system.execute(
         "env",
-        &[&caller, COMMAND, "do", "workspace", &request],
+        &[caller, COMMAND, "do", "workspace", request],
         None,
     )?)?)
+}
+
+fn from_voyager(native: &Native, voyager: &str, id: &str, action: Action) -> Result<Value> {
+    let caller = voyager_caller(voyager);
+    let request = request_line(native, &caller, id, action)?;
+    send_line(native, &caller, &request)
 }
 
 pub(super) fn from_another_vessel(
