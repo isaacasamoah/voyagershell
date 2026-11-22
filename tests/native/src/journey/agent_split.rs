@@ -985,10 +985,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             }
             _ => None,
         };
+        maximize(native, &voyager, &second, &left, "keep-max-child")?;
+        let child_terminal = started_from(
+            native,
+            &voyager,
+            "voyager-child",
+            &format!("fleet:{}:bottom:{}", second.0, left.0),
+        )?;
+        let parent = native
+            .system
+            .rpc("terminal.get", json!({"terminal":child_terminal}))?["parent"]
+            .clone();
+        let child_placed = native.observe(
+            "the shell started from Voyager's terminal saved as a Vessel",
+            |seen| bound_to(seen.document, &child_terminal).map(|placed| placed.id),
+        )?;
+        let child = settled(native, &second, &child_placed, KEPT, |view| {
+            view.kept(&left, &area)
+        })?;
         native.keep_window("agent-split-keeps-maximize")?;
-        let views: Vec<&View> = [&side, &plain].into_iter().chain(&made).collect();
+        let views: Vec<&View> = [&side, &plain, &child].into_iter().chain(&made).collect();
         let every =
-            |holds: &dyn Fn(&View) -> bool| views.len() == 3 && views.iter().all(|&view| holds(view));
+            |holds: &dyn Fn(&View) -> bool| views.len() == 4 && views.iter().all(|&view| holds(view));
         let verdict = Verdict::new()
             .expect(
                 "neither the labelling shell nor the create-vessel caller is Voyager's terminal",
@@ -1011,7 +1029,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the canvas draws only the maximized Vessel, filling the area both Vessels filled",
                 every(&|view| view.alone(&left, &area)),
             )
+            .expect(
+                "a labelled shell started from Voyager's terminal still keeps the maximize",
+                child.kept(&left, &area),
+            )
             .observed("area", area)?
+            .observed("child", &child)?
+            .observed(
+                "parent",
+                json!({"reported":parent,"voyager":voyager,"isVoyager":parent == voyager.as_str()}),
+            )?
             .observed("side", &side)?
             .observed("fleet", &plain)?
             .observed("beside", &made)?
@@ -1093,25 +1120,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             }
             _ => None,
         };
-        maximize(native, &voyager, &second, &left, "clear-max-label")?;
-        let terminal = started_from(
-            native,
-            &voyager,
-            "voyager-side",
-            &format!("fleet:{}:bottom:{}", second.0, left.0),
-        )?;
-        let parent = native
-            .system
-            .rpc("terminal.get", json!({"terminal":terminal}))?["parent"]
-            .clone();
-        let from_voyager = parent == voyager.as_str();
-        let placed = native.observe(
-            "the shell started from Voyager's terminal saved as a Vessel",
-            |seen| bound_to(seen.document, &terminal).map(|placed| placed.id),
-        )?;
-        let started = settled(native, &second, &placed, CLEARED, |view| {
-            view.cleared(&left)
-        })?;
         native.keep_window("voyager-split-clears-maximize")?;
         Verdict::new()
             .expect(
@@ -1128,20 +1136,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 made.as_ref()
                     .is_some_and(|view| view.drew(&left) && view.drew(&view.placement)),
             )
-            .expect(
-                "after a labelled shell started from Voyager's terminal the saved layout holds it in the Fleet's split tree and no maximized Vessel",
-                started.held && started.maximized.is_none(),
-            )
-            .expect(
-                "after a labelled shell started from Voyager's terminal the canvas draws the Vessel that was maximized and the new Vessel",
-                started.drew(&left) && started.drew(&started.placement),
-            )
             .observed("beside", &made)?
-            .observed("labelled", &started)?
-            .observed(
-                "parent",
-                json!({"reported":parent,"voyager":voyager,"isVoyager":from_voyager}),
-            )?
             .observed("reply", &output)
     })
 }

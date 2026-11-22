@@ -308,14 +308,21 @@ second Fleet. Voyager maximizes the left one with `set-placement-maximized`
 before each split, when it is not still maximized. The area that both Vessels
 filled before the first maximize is the Fleet's area.
 
-- `agent-split-keeps-maximize` splits three times while the left Vessel is
+- `agent-split-keeps-maximize` splits four times while the left Vessel is
   maximized. It types two labelled `bash` starts into the left Vessel's shell,
   first with `fleet:<id>:right:<left placement id>` and then with only
-  `fleet:<id>`, and it sends `create-vessel` beside the right Vessel from the
-  first terminal. It passes when neither caller is Voyager's terminal, the
-  command exits 0, and after each split the saved layout still names the left
-  Vessel as maximized, the new Vessel is in the Fleet's split tree and the
-  canvas draws only the left Vessel, filling the Fleet's area.
+  `fleet:<id>`, it sends `create-vessel` beside the right Vessel from the
+  first terminal, and it runs `hc run --bg` with `voyager.place=fleet:<id>:bottom:<left
+  placement id>` and Voyager's `HC_TERMINAL_ID`, so Core records Voyager's
+  terminal as the new terminal's `parent`. The fixture's stand-in `claude` runs
+  no typed command, so the verifier starts that one the way a command inside
+  Voyager's terminal would. Every labelled placement counts as a working
+  agent's, so that last start keeps the maximize too. It passes when neither
+  caller is Voyager's terminal, the command exits 0, and after each split the
+  saved layout still names the left Vessel as maximized, the new Vessel is in
+  the Fleet's split tree and the canvas draws only the left Vessel, filling
+  the Fleet's area. It records the `parent` that Core reports for the last
+  terminal, or null when Core reports none, for information only.
 - `new-piece-shows-after-unmaximize` sends `set-placement-maximized` with
   `"maximized":false` from Voyager's terminal. It passes when the command
   exits 0, the saved layout holds no maximized Vessel, the Vessel from the
@@ -323,15 +330,10 @@ filled before the first maximize is the Fleet's area.
   and right of the left Vessel without overlapping it, and its shell prints
   `PIECE-42`.
 - `voyager-split-clears-maximize` sends `create-vessel` beside the right Vessel
-  from Voyager's terminal. It then runs `hc run --bg` with
-  `voyager.place=fleet:<id>:bottom:<left placement id>` and Voyager's
-  `HC_TERMINAL_ID`, so Core records Voyager's terminal as the new terminal's
-  `parent`. The fixture's stand-in `claude` runs no typed command, so the
-  verifier starts it the way a command inside Voyager's terminal would. It
-  passes when each command's new Vessel is in the split tree, the saved layout
-  holds no maximized Vessel and the canvas draws both the left Vessel and the
-  new one. It records the `parent` that Core reports for the labelled
-  terminal, or null when Core reports none.
+  from Voyager's terminal while the left Vessel is maximized. It passes when
+  the command exits 0, the new Vessel is in the Fleet's split tree, the saved
+  layout holds no maximized Vessel and the canvas draws both the left Vessel
+  and the new one.
 
 The `worktrees` journey proves that a Voyage on a git repository makes,
 guards and removes a linked worktree from its row's context menu. Before the

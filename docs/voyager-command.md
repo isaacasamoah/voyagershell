@@ -57,10 +57,9 @@ hc run --bg --name review --label voyager.place=fleet:<fleet id>:right:<placemen
   Splitting does not resize anything. Only Voyager and the person resize.
 - When the person has maximized a placement in that Fleet, your new Vessel
   does not change their view. It joins the split and shows when they restore
-  the view. A program that Voyager starts clears the maximize instead, as the
-  person's own split does. VoyagerShell treats a program as Voyager's when Core
-  names Voyager's terminal as its parent. If you are Voyager and want the view
-  cleared but Core may not name you as the starter, use `create-vessel` instead.
+  the view. Every placement made through the label counts as a working
+  agent's, even one that Voyager starts. If you are Voyager and want the view
+  cleared, use `create-vessel` beside a placement instead.
 - VoyagerShell adds the Vessel when Core reports the new terminal. A known
   agent program, such as `claude` or `codex`, shows as an agent Vessel. Any
   other program shows as a terminal Vessel.

@@ -97,17 +97,16 @@ gives no name, or another member of the group already holds it, the placement
 gets the default `Terminal N`. Adoption starts nothing, because the terminal is already
 running.
 
-Adoption leaves the Fleet's or Portal column's maximized placement alone when a
-working agent started the terminal, so the person's view does not change. The
-new placement still joins the split, and it shows when the person restores the
-view. A terminal whose Core `parent` is the terminal that `voyager.json` names
-was started by Voyager, and its adoption clears the maximize, as a split by the
-person does. `Adoptions::settle` in `app/src/adoption.rs` makes that choice
-with the `Caller` type in `contract/src/caller.rs`. A terminal with no parent
-counts as a working agent's. A program can name any parent with
-`hc run --parent`, so the parent can be false. A false parent can only make a
-placement count as Voyager's, which clears the maximize as before, and can
-never keep a maximize that Voyager's own start would clear. When a later launch finds that the adopted terminal is gone or ended,
+Adoption leaves the Fleet's or Portal column's maximized placement alone, so the
+person's view does not change. The new placement still joins the split, and it
+shows when the person restores the view. Every labelled terminal counts as a
+working agent's. Core records a `parent` for each terminal, but a program can
+name any parent with `hc run --parent`, and Core parentage grants no rights, so
+the app does not read it to decide who started a terminal. If the parent decided,
+an agent could name Voyager and clear the person's maximize. Voyager clears a
+maximize through `create-vessel`, where the bound-terminal record identifies it.
+`Adoptions::settle` in `app/src/adoption.rs` passes the `Caller::Agent` of
+`contract/src/caller.rs` for every labelled terminal. When a later launch finds that the adopted terminal is gone or ended,
 `prepare_reopen` in `app/src/families/terminal/lifecycle.rs` deletes the
 Vessel, its placement and its saved-layout leaves, and starts no shell. Reopening
 can never use such a record, because it refuses ended programs.
