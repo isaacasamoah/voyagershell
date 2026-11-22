@@ -162,6 +162,7 @@ export default class Canvas extends View {
   declare activityLimit: string | null;
   declare terminals: Map<string, TerminalState>;
   declare openings: Map<string, Opening>;
+  declare created: ReadonlySet<string>;
   declare editing: Editing | null | undefined;
   declare afterRename: Action | null | undefined;
   declare chat: Chat;
@@ -219,6 +220,7 @@ export default class Canvas extends View {
     this.activityLimit = null;
     this.terminals = new Map();
     this.openings = new Map();
+    this.created = new Set();
     this.hoveredPanel = null;
     this.hoveredFleet = null;
     this.processPending = false;
@@ -670,7 +672,7 @@ export default class Canvas extends View {
               "create-fleet",
               "create-vessel",
             ].includes(action.operation);
-            const allowed = new Set(result.createdVessels);
+            const allowed = new Set<string>();
             if (creates)
               for (const item of result.layout.vessels)
                 if (!previousContents.has(item.id)) allowed.add(item.id);
@@ -780,6 +782,7 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
+    this.created = new Set(result.createdVessels);
     if (!this.focused && result.layout.view === "fleet")
       moveFocus(this, "opening", task);
     if (
@@ -947,7 +950,9 @@ export default class Canvas extends View {
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (!content || !terminalBacked(content.typeId)) continue;
       const opening = this.openings.get(vessel.vessel);
-      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
+      const created =
+        allowed.has(vessel.vessel) || this.created.has(vessel.vessel);
+      if (created && reopens(content, opening)) {
         this.openings.delete(vessel.vessel);
         this.terminals.delete(vessel.vessel);
       }
@@ -961,7 +966,7 @@ export default class Canvas extends View {
         existingOnly &&
         (!content?.backend || content.startPending) &&
         !retry.has(vessel.vessel) &&
-        !allowed.has(vessel.vessel)
+        !created
       ) {
         if (!this.openings.has(vessel.vessel))
           this.openings.set(vessel.vessel, { status: "unbound" });

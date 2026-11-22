@@ -1,0 +1,106 @@
+diff --git b/desktop/canvas/main.js a/desktop/canvas/main.js
+index f10a752e..802fb29a 100644
+--- b/desktop/canvas/main.js
++++ a/desktop/canvas/main.js
+@@ -101,7 +101,6 @@ export default class Canvas extends View {
+     this.activityLimit = null;
+     this.terminals = new Map();
+     this.openings = new Map();
+-    this.created = new Set();
+     this.hoveredPanel = null;
+     this.hoveredFleet = null;
+     this.processPending = false;
+@@ -531,7 +530,7 @@ export default class Canvas extends View {
+               "create-fleet",
+               "create-vessel",
+             ].includes(action.operation);
+-            const allowed = new Set();
++            const allowed = new Set(result.createdVessels);
+             if (creates)
+               for (const item of result.layout.vessels)
+                 if (!previousContents.has(item.id)) allowed.add(item.id);
+@@ -639,7 +638,6 @@ export default class Canvas extends View {
+     this.version = result.version;
+     this.splitReset += 1;
+     this.layout = result.layout;
+-    this.created = new Set(result.createdVessels);
+     if (!this.focused && result.layout.view === "fleet")
+       moveFocus(this, "opening", task);
+     if (
+@@ -794,9 +792,7 @@ export default class Canvas extends View {
+       const content = layout.vessels.find((item) => item.id === vessel.vessel);
+       if (!content || !terminalBacked(content.typeId)) continue;
+       const opening = this.openings.get(vessel.vessel);
+-      const created =
+-        allowed.has(vessel.vessel) || this.created.has(vessel.vessel);
+-      if (created && reopens(content, opening)) {
++      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
+         this.openings.delete(vessel.vessel);
+         this.terminals.delete(vessel.vessel);
+       }
+@@ -810,7 +806,7 @@ export default class Canvas extends View {
+         existingOnly &&
+         (!content?.backend || content.startPending) &&
+         !retry.has(vessel.vessel) &&
+-        !created
++        !allowed.has(vessel.vessel)
+       ) {
+         if (!this.openings.has(vessel.vessel))
+           this.openings.set(vessel.vessel, { status: "unbound" });
+diff --git b/desktop/canvas/main.ts a/desktop/canvas/main.ts
+index d008cf92..711a96f8 100644
+--- b/desktop/canvas/main.ts
++++ a/desktop/canvas/main.ts
+@@ -162,7 +162,6 @@ export default class Canvas extends View {
+   declare activityLimit: string | null;
+   declare terminals: Map<string, TerminalState>;
+   declare openings: Map<string, Opening>;
+-  declare created: ReadonlySet<string>;
+   declare editing: Editing | null | undefined;
+   declare afterRename: Action | null | undefined;
+   declare chat: Chat;
+@@ -220,7 +219,6 @@ export default class Canvas extends View {
+     this.activityLimit = null;
+     this.terminals = new Map();
+     this.openings = new Map();
+-    this.created = new Set();
+     this.hoveredPanel = null;
+     this.hoveredFleet = null;
+     this.processPending = false;
+@@ -672,7 +670,7 @@ export default class Canvas extends View {
+               "create-fleet",
+               "create-vessel",
+             ].includes(action.operation);
+-            const allowed = new Set<string>();
++            const allowed = new Set(result.createdVessels);
+             if (creates)
+               for (const item of result.layout.vessels)
+                 if (!previousContents.has(item.id)) allowed.add(item.id);
+@@ -782,7 +780,6 @@ export default class Canvas extends View {
+     this.version = result.version;
+     this.splitReset += 1;
+     this.layout = result.layout;
+-    this.created = new Set(result.createdVessels);
+     if (!this.focused && result.layout.view === "fleet")
+       moveFocus(this, "opening", task);
+     if (
+@@ -950,9 +947,7 @@ export default class Canvas extends View {
+       const content = layout.vessels.find((item) => item.id === vessel.vessel);
+       if (!content || !terminalBacked(content.typeId)) continue;
+       const opening = this.openings.get(vessel.vessel);
+-      const created =
+-        allowed.has(vessel.vessel) || this.created.has(vessel.vessel);
+-      if (created && reopens(content, opening)) {
++      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
+         this.openings.delete(vessel.vessel);
+         this.terminals.delete(vessel.vessel);
+       }
+@@ -966,7 +961,7 @@ export default class Canvas extends View {
+         existingOnly &&
+         (!content?.backend || content.startPending) &&
+         !retry.has(vessel.vessel) &&
+-        !created
++        !allowed.has(vessel.vessel)
+       ) {
+         if (!this.openings.has(vessel.vessel))
+           this.openings.set(vessel.vessel, { status: "unbound" });

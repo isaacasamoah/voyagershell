@@ -801,7 +801,11 @@ notification, not another writer or effect retry. A caught-up document notice
 is consumed without another read or preparation, including after a busy action.
 
 Notice reads keep normal preparation for newly authorized visible content, but
-do not retry known-refused terminal starts. Explicit Refresh retains that retry;
+do not retry known-refused terminal starts. The canvas takes the owner's list of
+created Vessels from every reply it accepts, including the reads it makes while it
+prepares another request. A Vessel that Voyager creates during that preparation
+is therefore opened by the same preparation. The notice for it then finds the
+canvas caught up and needs no read of its own. Explicit Refresh retains that retry;
 uncertain starts are never replayed. The package filesystem/availability source
 and its remaining native-lifetime requirements are described in [content.md](content.md).
 
