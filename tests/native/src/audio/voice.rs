@@ -729,7 +729,8 @@ pub fn await_floor(native: &Native) -> Result<u64> {
     let began = now_millis();
     poll(REPLY_WAIT.within(), LOOK, true, || {
         Ok(floor_is_clear(&marks(&trace)?).then_some(()))
-    })?;
+    })?
+    .context("The previous reply did not end and release the floor, so the feed was not started")?;
     Ok(now_millis() - began)
 }
 
