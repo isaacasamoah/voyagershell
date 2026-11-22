@@ -107,6 +107,7 @@ edges:
   - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_contract', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::conversation_client', to: 'rs:voyager_contract::context', from_owner: conversation-provider, to_owner: placement}
   - {from: 'rs:voyager_app::conversation_client::audio', to: 'rs:voyager_app::client', from_owner: conversation-provider, to_owner: application-queue}
+  - {from: 'rs:voyager_app::conversation_client::audio', to: 'rs:voyager_app::spoken', from_owner: conversation-provider, to_owner: application-queue}
   - {from: 'rs:voyager_app::core', to: 'rs:voyager_app', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::core', to: 'rs:voyager_app::activity', from_owner: core-adapter, to_owner: application-queue}
   - {from: 'rs:voyager_app::core', to: 'rs:voyager_app::core_shapes', from_owner: core-adapter, to_owner: application-queue}

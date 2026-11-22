@@ -248,9 +248,8 @@ code, says from what it sees when something failed or it isn't sure, and never
 points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
 prompt on a resumed conversation, so the focus hook repeats the rule at every prompt.
 The whole hook reminder is under 700 characters, and a test holds it there, because it
-is sent on every prompt. The voice model's prompt in `conversation_audio.rs` and the
-in-app text administrator's prompt in `conversation_client.rs` read the same
-`spoken::STYLE`, and the voice model also reads `spoken::BRIEF`.
+is sent on every prompt. The voice model's prompt in `conversation_audio.rs` reads the
+same `spoken::STYLE` and `spoken::BRIEF`.
 
 The guide follows the plain-language rules of pstack's `bro` and `unslop` skills, and
 `deslop`'s rule of cutting what does not serve the reader. Two replies from a trial

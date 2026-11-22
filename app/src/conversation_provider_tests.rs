@@ -76,7 +76,7 @@ fn the_configured_or_default_settings_reach_the_provider_through_the_trait() {
         [
             "1 Initialize".to_owned(),
             "initialized".into(),
-            format!("2 open {model} high {}", administrator()),
+            format!("2 open {model} high {ADMINISTRATOR}"),
             "3 turn Hello high".into(),
         ]
     );
