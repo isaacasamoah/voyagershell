@@ -256,15 +256,15 @@ check = ["journey:voice/long-reply-is-clear", "journey:voice/long-sentence-split
 confidence = "stated"
 
 [[invariant]]
-id = "voice-reply-plays-without-gaps"
-says = "A spoken reply plays as one stream from its first sentence to its last, so the pause between two sentences is no longer than the speech's own pause."
+id = "voice-speaker-waits-only-for-rendering"
+says = "A spoken reply plays through one speaker stream, and the speaker never pauses while the next sentence is ready. A pause longer than the speech's own comes only from the engine still rendering the next sentence."
 kind = "user"
 owner = "conversation-provider"
 source = "Build commodore, 22 Nov 2026, after a loaded run took 10.5 s to play a two-second sentence through its own player: feed every piece of a reply into one speaker stream, one player per reply"
 features = ["voice"]
 guard = ["type:app/src/voice_parts.rs#Clips"]
-type_gap = "The speaker takes the whole reply as one stream of clips, so a reply opens one player. Nothing in the types stops a caller from opening a speaker per piece, and when the engine renders a sentence slower than the last one plays, the stream waits and the pause grows."
-check = ["journey:voice/long-reply-plays-without-a-gap", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker"]
+type_gap = "The speaker takes the whole reply as one stream of clips, so a reply opens one player. Nothing in the types stops a caller from opening a speaker per piece. A slow engine can still leave a pause while the next sentence renders, about 1 s on the development laptop's CPU engine at a load of 12, and none was seen on a GPU engine."
+check = ["journey:voice/long-reply-waits-only-for-rendering", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker"]
 confidence = "stated"
 
 [[invariant]]

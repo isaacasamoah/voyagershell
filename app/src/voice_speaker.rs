@@ -68,11 +68,12 @@ fn clip_of(parts: &Parts, line: &Line) -> Rendered {
                 .pieces()
                 .next()
                 .ok_or_else(|| "The reply has nothing to speak".to_owned())?;
-            parts
+            let clip = parts
                 .speaking
                 .speak(piece)
-                .map(|clip| (clip, piece.as_str().to_owned()))
-                .map_err(|fault| fault.to_string())
+                .map_err(|fault| fault.to_string())?;
+            parts.trace.mark_words("piece-rendered", piece.as_str());
+            Ok((clip, piece.as_str().to_owned()))
         }
         Line::Said(phrase) => parts
             .clips
@@ -90,6 +91,7 @@ fn rest_of(parts: &Parts, line: &Line) -> Receiver<Rendered> {
         let text = text.clone();
         let speaking = parts.speaking.clone();
         let stopped = parts.stopped.clone();
+        let trace = parts.trace.clone();
         thread::spawn(move || {
             for piece in text.pieces().skip(1) {
                 if stopped() {
@@ -97,7 +99,10 @@ fn rest_of(parts: &Parts, line: &Line) -> Receiver<Rendered> {
                 }
                 let rendered = speaking
                     .speak(piece)
-                    .map(|clip| (clip, piece.as_str().to_owned()))
+                    .map(|clip| {
+                        trace.mark_words("piece-rendered", piece.as_str());
+                        (clip, piece.as_str().to_owned())
+                    })
                     .map_err(|fault| fault.to_string());
                 if send.send(rendered).is_err() {
                     break;

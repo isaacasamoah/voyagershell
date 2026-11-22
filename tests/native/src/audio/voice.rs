@@ -906,7 +906,18 @@ pub fn marks_between(marks: &[Mark], event: &str, from: &str, to: &str) -> usize
     }
 }
 
-pub fn longest_pause_ms(native: &Native, name: &str, said: &Conversation) -> Result<u64> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Pause {
+    pub from_ms: u64,
+    pub to_ms: u64,
+}
+
+pub fn pauses(
+    native: &Native,
+    name: &str,
+    said: &Conversation,
+    floor_ms: u64,
+) -> Result<Vec<Pause>> {
     let stack = stack(native)?;
     let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
     let offset = |event: &str| {
@@ -915,14 +926,25 @@ pub fn longest_pause_ms(native: &Native, name: &str, said: &Conversation) -> Res
             .with_context(|| format!("The app marked no {event}"))
     };
     let per_ms = (super::speech::RATE / 1000) as usize;
-    let from = usize::try_from(offset("speech-started")?)?.saturating_mul(per_ms);
+    let start_ms = offset("speech-started")?;
+    let from = usize::try_from(start_ms)?.saturating_mul(per_ms);
     let to = usize::try_from(offset("speech-ended")?)?
         .saturating_mul(per_ms)
         .min(heard.0.len());
-    Ok(longest_quiet_inside(heard.0.get(from..to).unwrap_or_default(), per_ms * 20) * 20)
+    let base = said.capture_began_ms + start_ms;
+    Ok(
+        quiet_runs(heard.0.get(from..to).unwrap_or_default(), per_ms * 20)
+            .into_iter()
+            .map(|(first, frames)| Pause {
+                from_ms: base + first as u64 * 20,
+                to_ms: base + (first + frames) as u64 * 20,
+            })
+            .filter(|pause| pause.to_ms - pause.from_ms > floor_ms)
+            .collect(),
+    )
 }
 
-fn longest_quiet_inside(samples: &[i16], frame: usize) -> u64 {
+fn quiet_runs(samples: &[i16], frame: usize) -> Vec<(usize, usize)> {
     let loud: Vec<bool> = samples
         .chunks(frame)
         .map(|chunk| {
@@ -934,15 +956,21 @@ fn longest_quiet_inside(samples: &[i16], frame: usize) -> u64 {
         loud.iter().position(|is_loud| *is_loud),
         loud.iter().rposition(|is_loud| *is_loud),
     ) else {
-        return 0;
+        return Vec::new();
     };
-    let mut longest = 0;
-    let mut quiet = 0;
-    for is_loud in &loud[first..=last] {
-        quiet = if *is_loud { 0 } else { quiet + 1 };
-        longest = longest.max(quiet);
+    let mut runs = Vec::new();
+    let mut start = None;
+    for (index, is_loud) in loud.iter().enumerate().take(last + 1).skip(first) {
+        match (is_loud, start) {
+            (false, None) => start = Some(index),
+            (true, Some(began)) => {
+                runs.push((began, index - began));
+                start = None;
+            }
+            _ => {}
+        }
     }
-    longest
+    runs
 }
 
 pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Result<Vec<String>> {
@@ -1118,7 +1146,7 @@ mod tests {
     }
 
     #[test]
-    fn the_longest_pause_counts_only_the_quiet_between_sounds() {
+    fn pauses_are_only_the_quiet_between_sounds() {
         let frame = 960;
         let sound = vec![3000i16; frame * 10];
         let samples: Vec<i16> = [
@@ -1131,8 +1159,8 @@ mod tests {
             vec![0; frame * 40],
         ]
         .concat();
-        assert_eq!(longest_quiet_inside(&samples, frame), 12);
-        assert_eq!(longest_quiet_inside(&[0; 9600], frame), 0);
+        assert_eq!(quiet_runs(&samples, frame), vec![(10, 12), (32, 5)]);
+        assert!(quiet_runs(&[0; 9600], frame).is_empty());
     }
 
     #[test]

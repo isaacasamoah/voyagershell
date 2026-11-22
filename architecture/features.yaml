@@ -986,12 +986,12 @@ features:
           - 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker'
         formal: []
         journeys: [voice]
-      - id: voice-reply-plays-without-gaps
+      - id: voice-speaker-waits-only-for-rendering
         kind: user
-        says: 'A spoken reply plays as one stream from its first sentence to its last, so the pause between two sentences is no longer than the speech''s own pause.'
+        says: 'A spoken reply plays through one speaker stream, and the speaker never pauses while the next sentence is ready. A pause longer than the speech''s own comes only from the engine still rendering the next sentence.'
         owner: conversation-provider
         guards: ['type:app/src/voice_parts.rs#Clips']
-        checks: ['journey:voice/long-reply-plays-without-a-gap', 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker']
+        checks: ['journey:voice/long-reply-waits-only-for-rendering', 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker']
         formal: []
         journeys: [voice]
       - id: voice-is-click-to-talk

@@ -267,14 +267,18 @@ first render comes before the first sound. The whole reply plays through one spe
 stream: `Speaker::play` takes the reply as a stream of clips, `voice_parts::Clips`, and
 writes each clip to the same player as soon as it is rendered. A reply therefore starts
 one player, with no process start between sentences. The floor stays taken until the
-last clip has played. When the engine renders the next sentence slower than the last one
-plays, the stream waits, and the pause grows by that wait. On a run at a load of up to 66
-on 24 cores the longest pauses were 7.7 and 3.9 s, and at a load of about 14 at most 0.9 s. A click-off stops the piece
+last clip has played. The speaker never pauses while the next sentence is ready. A slow engine can
+still leave a pause while the next sentence renders, most often after a short first
+sentence. On the development laptop's CPU engine one such wait was 1.0 s at a load of 12
+and 0.5 s at a low load, and a run at a load of up to 66 had waits of 7.7 and 3.9 s. No
+wait was seen on a GPU engine. The engine's own speech pauses up to 660 ms between and
+inside sentences, measured over 12 joined replies. A click-off stops the piece
 that is playing at once and plays no more. A piece that fails to render ends the reply
 there and reports its reason, as a failed render did before. The reply is added to the
 chat once, when its first piece starts. The trace marks `speech-started` with the whole
-spoken text once, `speaker-opened` once for the stream, and `piece-started` with each
-piece's words when that piece is handed to the player.
+spoken text once, `speaker-opened` once for the stream, `piece-rendered` with each
+piece's words when its render ends, and `piece-started` with each piece's words when that
+piece is handed to the player.
 
 First audio is the wait for the render of what plays first. With one synthesis it was
 the whole render: 11.9 to 28.2 s, median 17.1 s, on the CPU engine of
