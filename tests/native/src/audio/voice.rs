@@ -36,6 +36,7 @@ pub struct Conversation {
     pub acknowledgement: Option<String>,
     pub spoken: Score,
     pub first_sound_after_capture_ms: i64,
+    pub capture_began_ms: u64,
     pub started_before_heard: bool,
     pub sent: bool,
     pub spoken_texts: Vec<String>,
@@ -99,6 +100,86 @@ fn scored_words(text: &str) -> Vec<String> {
                 .map_or_else(|| word.to_owned(), |name| (*name).to_owned())
         })
         .collect()
+}
+
+pub fn digits_as_words(heard: &str) -> String {
+    heard
+        .split_whitespace()
+        .map(|word| {
+            let core = word.trim_end_matches(['.', ',', ';', ':', '!', '?']);
+            let (number, percent) = core
+                .strip_suffix('%')
+                .map_or((core, false), |number| (number, true));
+            let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+            let digits = whole.replace(',', "");
+            let plain = |text: &str| text.chars().all(|c| c.is_ascii_digit());
+            match digits.parse::<u64>() {
+                Ok(value) if plain(&digits) && plain(fraction) && value < 1_000_000 => {
+                    let mut words = integer_words(value);
+                    if !fraction.is_empty() {
+                        words.push("point");
+                        words.extend(fraction.chars().filter_map(|c| {
+                            c.to_digit(10)
+                                .and_then(|d| NUMBERS.get(d as usize).copied())
+                        }));
+                    }
+                    if percent {
+                        words.push("percent");
+                    }
+                    words.join(" ")
+                }
+                _ => word.to_owned(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn integer_words(value: u64) -> Vec<&'static str> {
+    const TEENS: [&str; 10] = [
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+    ];
+    const TENS: [&str; 10] = [
+        "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    ];
+    let below_thousand = |value: u64| {
+        let mut words = Vec::new();
+        let (hundreds, rest) = (value / 100, value % 100);
+        if hundreds > 0 {
+            words.extend([NUMBERS[hundreds as usize], "hundred"]);
+        }
+        match rest {
+            0 => {}
+            1..10 => words.push(NUMBERS[rest as usize]),
+            10..20 => words.push(TEENS[(rest - 10) as usize]),
+            _ => {
+                words.push(TENS[(rest / 10) as usize]);
+                if rest % 10 > 0 {
+                    words.push(NUMBERS[(rest % 10) as usize]);
+                }
+            }
+        }
+        words
+    };
+    if value == 0 {
+        return vec![NUMBERS[0]];
+    }
+    let mut words = Vec::new();
+    if value >= 1000 {
+        words.extend(below_thousand(value / 1000));
+        words.push("thousand");
+    }
+    words.extend(below_thousand(value % 1000));
+    words
 }
 
 pub fn word_errors(heard: &str, wanted: &str) -> (usize, usize) {
@@ -313,6 +394,7 @@ fn converse_within(
         acknowledgement: Some(started),
         spoken: score,
         first_sound_after_capture_ms: first_sound,
+        capture_began_ms: began,
         started_before_heard: acknowledged
             .zip(heard_at)
             .is_some_and(|(started, heard)| started <= heard),
@@ -812,7 +894,7 @@ pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
         .collect()
 }
 
-pub fn transcribe_long(native: &Native, name: &str) -> Result<Vec<String>> {
+pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Result<Vec<String>> {
     let stack = stack(native)?;
     let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
     let narrow: Vec<i16> = heard
@@ -822,7 +904,13 @@ pub fn transcribe_long(native: &Native, name: &str) -> Result<Vec<String>> {
         .iter()
         .map(|trio| ((i32::from(trio[0]) + i32::from(trio[1]) + i32::from(trio[2])) / 3) as i16)
         .collect();
-    windows(&narrow)
+    let reply_from_ms = mark_of(&said.marks, "speech-started")
+        .map(|mark| mark.at_ms.saturating_sub(said.capture_began_ms))
+        .context("The app marked no start of the spoken reply")?;
+    let reply_from = usize::try_from(reply_from_ms)?
+        .saturating_mul(16)
+        .min(narrow.len());
+    windows(&narrow[reply_from..])
         .into_iter()
         .map(|window| hear_16k(native, window))
         .collect()
@@ -965,6 +1053,28 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heard_digits_count_as_the_same_number_said_in_words() {
+        let heard =
+            "The run changed 1,200 lines in 4 minutes, about 50% faster, and peaked at 6.5 GB.";
+        let wanted = "The run changed one thousand two hundred lines in four minutes, about fifty percent faster, and peaked at six point five gigabytes.";
+        assert_eq!(word_errors(&digits_as_words(heard), wanted), (1, 22));
+        assert_eq!(
+            digits_as_words("38 checks, 0.25 and 4:20."),
+            "thirty eight checks, zero point two five and 4:20."
+        );
+    }
+
+    #[test]
+    fn the_capture_is_cut_into_windows_at_its_pauses() {
+        let voiced = vec![3000i16; 16_000 * 9];
+        let pause = vec![0i16; 16_000];
+        let narrow: Vec<i16> = [voiced.clone(), pause.clone(), voiced, pause].concat();
+        let cut = windows(&narrow);
+        assert_eq!(cut.len(), 2);
+        assert!(cut.iter().all(|window| window.len() <= 16_000 * 15));
+    }
 
     #[test]
     fn words_are_found_inside_a_longer_transcript_ignoring_case_and_punctuation() {

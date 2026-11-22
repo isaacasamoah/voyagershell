@@ -494,8 +494,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     let Some(long) = cases.make(native, Case::LongReplyIsClear, |native| {
         let said = voice::converse_long(native, &OPEN_THE_ROADMAP, "long-reply")?;
-        let heard = voice::transcribe_long(native, "long-reply")?;
-        let (errors, words) = word_errors(&heard.join(" "), LONG_SPOKEN);
+        let heard = voice::transcribe_long(native, "long-reply", &said)?;
+        let (errors, words) = word_errors(&voice::digits_as_words(&heard.join(" ")), LONG_SPOKEN);
         let verdict = Verdict::new()
             .expect(
                 "the long reply is spoken after the words were sent",
