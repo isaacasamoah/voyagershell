@@ -698,6 +698,41 @@ pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result
     })
 }
 
+fn floor_is_clear(marks: &[Mark]) -> bool {
+    let reply_owed = marks
+        .iter()
+        .rposition(|mark| mark.event == "sent")
+        .is_some_and(|sent| {
+            !marks[sent..]
+                .iter()
+                .any(|mark| mark.event == "speech-started")
+        });
+    let floor_held = marks
+        .iter()
+        .rposition(|mark| mark.event == "speech-started")
+        .is_some_and(|started| {
+            match marks[started..]
+                .iter()
+                .position(|mark| mark.event == "speech-ended")
+            {
+                None => true,
+                Some(ended) => !marks[started + ended..]
+                    .iter()
+                    .any(|mark| mark.event == "listening"),
+            }
+        });
+    !reply_owed && !floor_held
+}
+
+pub fn await_floor(native: &Native) -> Result<u64> {
+    let trace = native.voice_trace();
+    let began = now_millis();
+    poll(REPLY_WAIT.within(), LOOK, true, || {
+        Ok(floor_is_clear(&marks(&trace)?).then_some(()))
+    })?;
+    Ok(now_millis() - began)
+}
+
 pub fn feed(native: &Native, speech: &Speech) -> Result<()> {
     stack(native)?.feed(&native.system, speech)
 }
@@ -1306,6 +1341,65 @@ mod tests {
         assert_eq!(first.len(), 1);
         assert_eq!(second.len(), 2);
         Ok(())
+    }
+
+    fn trace(events: &[&str]) -> Vec<Mark> {
+        events
+            .iter()
+            .zip(0..)
+            .map(|(event, at_ms)| Mark {
+                event: (*event).to_owned(),
+                at_ms,
+                words: None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_floor_is_clear_before_any_reply_is_owed() {
+        assert!(floor_is_clear(&trace(&[])));
+        assert!(floor_is_clear(&trace(&["capture-open", "listening"])));
+    }
+
+    #[test]
+    fn a_sent_turn_owes_a_reply_that_has_not_started() {
+        assert!(!floor_is_clear(&trace(&["heard", "sent"])));
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "capture-open",
+            "listening"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_holds_the_floor_until_capture_reopens_after_it_ends() {
+        assert!(!floor_is_clear(&trace(&["sent", "speech-started"])));
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "capture-open"
+        ])));
+        assert!(floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "capture-open",
+            "listening"
+        ])));
+    }
+
+    #[test]
+    fn a_later_sent_turn_owes_its_own_reply() {
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "listening",
+            "sent",
+            "capture-open",
+            "listening"
+        ])));
     }
 
     #[test]

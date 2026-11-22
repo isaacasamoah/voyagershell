@@ -91,6 +91,7 @@ struct QuietTurn {
     bed: room::Bed,
     turns: usize,
     sent: usize,
+    waited_ms: u64,
     heard: String,
     word_errors: usize,
     words: usize,
@@ -441,6 +442,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             let samples =
                 room::quiet_request(&DOCK_ON_THIS_FLEET, gain, bed, QUIET_VOICE_AROUND_S)?;
             voice::turn_on(native)?;
+            let waited_ms = voice::await_floor(native)?;
             let listened = voice::feed_and_settle(native, "quiet-voice", &samples);
             voice::turn_off(native)?;
             let listened = listened?;
@@ -455,6 +457,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 bed,
                 turns: listened.turns.len(),
                 sent: listened.sent(),
+                waited_ms,
                 heard,
                 word_errors,
                 words,
