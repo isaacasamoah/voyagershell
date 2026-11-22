@@ -83,9 +83,8 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `no-microphone` | "I can't hear your microphone." | The microphone cannot be opened or its stream ends, once for each outage | No |
 | `failed` | "That didn't work." | A spoken turn ends in failure | No |
 
-A reply past the ceiling also ends with "I can say more if you ask." That sentence is
-part of the spoken text and not a clip. The words in the table never name an action or claim
-a result, and none points to the chat.
+The words in the table never name an action or claim a result, and none points to the
+chat.
 
 ## The speech detector
 
@@ -254,7 +253,7 @@ word, and the app logs "A spoken sentence had no comma within the piece limit, s
 was cut at the limit." once for that reply. The pieces hold every word of the spoken
 text in order. The longest sentence in the runs was 23 words and 9.8 s of audio, and the
 slowest rate seen was 0.94 s a word, so 25 words is at most about 23.5 s, far under the
-40.96 s stop. The offer of more is its own piece.
+40.96 s stop.
 
 The filter says a whole number, a number with thousands commas, a decimal and a percent
 as words, so "1,200" is "one thousand two hundred", "6.5" is "six point five" and "50%"
@@ -291,20 +290,52 @@ the next render. On the loaded CPU 15 of 18 runs had no wait, and the other thre
 at most 1.2, 3.9 and 8.6 s once, when one 13-word sentence took 10.2 s to render 4.8 s
 of audio.
 
-### The whole answer, written for the ear
+### How Voyager talks
 
-Voice is the primary surface, and the chat is an alternative. A spoken reply is the
-whole answer and never says that more is in the chat. The agent's launch policy,
-`spoken::policy_rule`, tells it to answer a spoken prompt aloud in full, brief and
-plain, with no ids, paths or code, to say the reason when something fails, to say only the gist of an answer that would pass about 100 words, such as a list, and
-offer more, and never to point to the chat. Each word
-of the rule is sent on every spoken turn, so it stays short.
+Voice is the primary surface, and the chat is an alternative. Voyager should sound
+like a friend who knows the system inside out and explains it in plain words. One
+guide says who Voyager is and how it talks. It is stored once, as two files:
+`app/src/spoken_who.md` holds "Who you are", and `app/src/spoken_talk.md` holds the
+sections from "How you talk" to "Examples". `spoken::guide` joins them, and a test
+holds the joined text to the approved text byte for byte.
+
+The guide asks for the answer first, in the words a person would use, with no ids,
+revision numbers, paths, commands or layout terms, and no description of how the
+app handled a request. Most answers are one or two sentences, and Voyager does not
+offer more detail, because the person asks when they want it. It does only what was
+asked, offers a next step as a question, and claims only what a tool's output
+showed. When something fails, it says in one sentence what failed and why. A spoken
+answer is the whole answer, with no lists, symbols, paths or code, and it never
+points to the chat.
+
+The background Voyager reads the guide in two places. Its launch prompt is the
+background-session line, the reply-marker rule `spoken::reply_rule` and the guide.
+Claude Code ignores the launch prompt on a resumed conversation, so the focus hook
+sends the same text after the dock line at every prompt. The background-session line
+stays beside the marker rule because it is part of the marker mechanism. It lets
+Voyager drop a personal reply prefix that the person's own instructions name. The
+hook text is 3,130 bytes, and a test holds it under 3,200, because it is sent on
+every prompt. It adds no tool call or round trip. The voice model's prompt in
+`conversation_audio.rs` reads `spoken::TALK` and leaves out "Who you are", because
+the voice model has no `voyager` or `hc` commands.
+
+Three checks hold this in place. A unit test in `spoken.rs` holds the joined guide
+to the approved text byte for byte, by length and sha256, so any drift in wording
+fails. A unit test in `focus_hook.rs` holds the hook text under 3,200 bytes and
+checks that it carries the background-session line, the marker rule and the guide.
+The `adopt-by-label` journey's `focus-hook-names-dock` case reads the stand-in
+agent's scrollback and requires the docked Vessel's name to end the first line of
+the hook's context, so the dock still comes first ahead of the longer guide.
 
 The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
 is a target to measure, and not a measured limit. The engine's 30 s limit per request
-now applies to one piece. Past it the filter cuts at the last sentence end in
-the second half of the kept words, or at the ceiling when there is none, and adds "I can
-say more if you ask." It adds no pointer to the chat.
+now applies to one piece. The ceiling acts on the whole reply, before it is split into
+pieces. Past it the filter cuts at the last whole sentence within the ceiling, when that
+sentence ends in the second half of the kept words, or at the ceiling when there is
+none. A run-on reply with no full stop in the second half is cut at word 120. Only then
+is the kept text split into pieces, so no piece is cut mid-sentence by the ceiling. It adds no words and no pointer to the chat, and it writes one log line,
+`speech::CEILING_CUT`, each time it cuts, when the reply is spoken. A reply short enough for the guide never
+reaches the ceiling.
 
 The chat was empty for a voice turn because Voyager's replies reach the app only through
 the reply store, which feeds the speaker and the agent socket. The chat is the private

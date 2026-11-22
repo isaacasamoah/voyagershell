@@ -430,6 +430,14 @@ impl Terminal {
         Ok(printed.is_some())
     }
 
+    pub fn history(&self, native: &Native, lines: u64) -> Result<String> {
+        let read = native.system.watch(
+            "terminal.read",
+            json!({"terminal":self.address,"lines":lines}),
+        )?;
+        Ok(read["text"].as_str().unwrap_or_default().to_owned())
+    }
+
     pub fn screen(&self, native: &Native) -> Result<String> {
         let read = native
             .system

@@ -2,7 +2,7 @@ use super::layout::avatar_on_dock;
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, fleets, voyages};
-use crate::system::until;
+use crate::system::{TimedOut, until};
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
 use serde::Serialize;
@@ -507,7 +507,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |on| *on,
         )?;
         typed(&agent, native, "where am I")?;
-        let named_hooked = agent.printed(native, &format!("> {}.", placed.name))?;
+        let named_hooked = dock_line_first(&agent, native, "where am I", &placed.name)?;
         let (_, layout) = native.document()?.context("Missing saved layout")?;
         let shell = fleets(&layout)
             .flat_map(|item| &item.placements)
@@ -529,15 +529,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |on| *on,
         )?;
         typed(&agent, native, "and now")?;
-        let named_first = agent.printed(native, &format!("> {shell}."))?;
+        let named_first = dock_line_first(&agent, native, "and now", &shell)?;
         native.keep_window("focus-hook-names-dock")?;
         Verdict::new()
             .expect(
-                "the hook gave the agent's prompt the name of the docked Vessel",
+                "the hook gave the agent's prompt the name of the docked Vessel as its first line",
                 named_hooked,
             )
             .expect(
-                "the hook gave the next prompt the Vessel the avatar was moved to",
+                "the hook gave the next prompt the Vessel the avatar was moved to as its first line",
                 named_first,
             )
             .observed("hooked", &placed.name)?
@@ -876,6 +876,42 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
+const HISTORY_LINES: u64 = 4000;
+
+fn dock_line_first(agent: &Terminal, native: &Native, prompt: &str, name: &str) -> Result<bool> {
+    let named = until("the dock line first in the stand-in's context", || {
+        Ok(
+            first_context_line(&agent.history(native, HISTORY_LINES)?, prompt)
+                .filter(|line| names_vessel(line, name)),
+        )
+    });
+    match named {
+        Ok(_) => Ok(true),
+        Err(error) if error.downcast_ref::<TimedOut>().is_some() => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn squeezed(text: &str) -> String {
+    text.chars()
+        .filter(|letter| !letter.is_whitespace())
+        .collect()
+}
+
+fn first_context_line(history: &str, prompt: &str) -> Option<String> {
+    let history = squeezed(history);
+    let heard = history.rfind(&squeezed(&format!("Stand-in claude heard: {prompt}")))?;
+    let given = history[..heard].rfind(&squeezed("Stand-in claude was given:"))?;
+    let marker = squeezed("Stand-in line:");
+    let block = &history[given..heard];
+    let rest = &block[block.find(&marker)? + marker.len()..];
+    Some(rest[..rest.find(&marker).unwrap_or(rest.len())].to_owned())
+}
+
+fn names_vessel(line: &str, name: &str) -> bool {
+    line.ends_with(&squeezed(&format!("> {name}.")))
+}
+
 fn terminal_addresses(native: &Native) -> Result<Vec<String>> {
     let listed = native.system.watch("terminal.list", json!({"all":true}))?;
     Ok(listed["terminals"]
@@ -887,4 +923,46 @@ fn terminal_addresses(native: &Native) -> Result<Vec<String>> {
                 .collect()
         })
         .unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GIVEN: &str = "Stand-in claude was given: VoyagerShell focus at this prompt: The user is docked on\nStand-in line: Voyager > Fleet 1 > hoo\nked.\nStand-in line: This is the app's dock context now.\nStand-in line: Never say an id > other.\nStand-in claude heard: where am I\n";
+
+    #[test]
+    fn the_first_context_line_is_read_across_wrapped_rows_and_names_the_dock() {
+        let line = first_context_line(GIVEN, "where am I").unwrap();
+        assert!(names_vessel(&line, "hooked"));
+        assert!(!names_vessel(&line, "hook"));
+        assert!(!names_vessel(&line, "other"));
+    }
+
+    #[test]
+    fn a_dock_name_that_is_not_the_first_line_does_not_count() {
+        let late = GIVEN.replace("Voyager > Fleet 1 > hoo\nked.", "Nothing here.");
+        let late = late.replace("Never say an id > other.", "Voyager > Fleet 1 > hooked.");
+        let line = first_context_line(&late, "where am I").unwrap();
+        assert!(!names_vessel(&line, "hooked"));
+    }
+
+    #[test]
+    fn the_latest_prompt_is_the_one_read() {
+        let both = format!(
+            "{GIVEN}{}",
+            GIVEN
+                .replace("hoo\nked", "Terminal 1")
+                .replace("where am I", "and now")
+        );
+        assert!(names_vessel(
+            &first_context_line(&both, "and now").unwrap(),
+            "Terminal 1"
+        ));
+        assert!(names_vessel(
+            &first_context_line(&both, "where am I").unwrap(),
+            "hooked"
+        ));
+        assert_eq!(first_context_line(&both, "never typed"), None);
+    }
 }
