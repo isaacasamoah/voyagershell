@@ -1,8 +1,8 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index 2de9095d..3c4e4359 100644
+index b1fa18c8..0cadc7dd 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -83,7 +83,7 @@ export function acceptDockResult(workspace, cx) {
+@@ -72,7 +72,7 @@ export function acceptDockResult(workspace, cx) {
      }
    }
    if (workspace.busy) return;
@@ -12,10 +12,10 @@ index 2de9095d..3c4e4359 100644
    if (seen === undefined) seenDocks.set(workspace, dock);
    else if (seen !== dock) followDock(workspace, dock, cx);
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index 9bdeb011..4fca97bf 100644
+index d8f4cdd7..5294fb6c 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -107,7 +107,7 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -96,7 +96,7 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
      }
    }
    if (workspace.busy) return;
