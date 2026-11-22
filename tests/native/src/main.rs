@@ -586,6 +586,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         "src/journey/arrangement.rs",
         include_bytes!("journey/arrangement.rs"),
     ),
+    (
+        "src/journey/avatar_drag.rs",
+        include_bytes!("journey/avatar_drag.rs"),
+    ),
     ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
     (
         "src/journey/core_events.rs",

@@ -1,12 +1,15 @@
 mod click;
+mod drag;
 mod paint;
 mod view;
 
 use crate::avatar_motion::Motion;
 use crate::avatar_pack::{self, Prepared, asset};
+use drag::Drag;
+pub(crate) use drag::RedrawAtRest;
 use gpui::{
     AnyWindowHandle, App, AppContext, Bounds, Context, Entity, EventEmitter, FocusHandle,
-    IntoElement, ParentElement, Pixels, Point, Styled, Subscription, Task, Window,
+    IntoElement, MouseMoveEvent, ParentElement, Pixels, Point, Styled, Subscription, Task, Window,
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, canvas, div, img, point,
     prelude::*, px, size,
 };
@@ -195,16 +198,6 @@ fn notify_geometry(
         let _ = view.update(cx, |_, cx| cx.notify());
         let _ = avatar.update(cx, |avatar, cx| avatar.update_dock_visibility(cx));
     });
-}
-
-struct Drag {
-    source: AnyWindowHandle,
-    start: Point<Pixels>,
-    position: Point<Pixels>,
-    offset: Point<Pixels>,
-    size: f32,
-    began: Instant,
-    moved: bool,
 }
 
 struct Restore {
@@ -461,17 +454,17 @@ impl Avatar {
         cx.notify();
     }
 
-    fn moving(&mut self, event: &gpui::MouseMoveEvent, window: &Window, cx: &mut Context<Self>) {
+    fn moving(&mut self, event: &MouseMoveEvent, window: &Window, cx: &mut Context<Self>) -> bool {
         let Some(drag) = self
             .drag
             .as_mut()
             .filter(|drag| drag.source == window.window_handle())
         else {
-            return;
+            return false;
         };
         if event.pressed_button != Some(gpui::MouseButton::Left) {
             self.cancel_drag(cx);
-            return;
+            return false;
         }
         let desktop = window.bounds().origin + event.position;
         let delta = desktop - drag.start;
@@ -482,14 +475,17 @@ impl Avatar {
                 crate::platform::tone(false);
             }
         }
-        if drag.moved {
-            drag.position = desktop - drag.offset;
-            if self.floating == Some(drag.source) {
-                let origin = drag.position - point(px(13.), px(13.));
-                self.position_float(origin, window, cx);
-            }
-            cx.notify();
+        if !drag.moved {
+            return false;
         }
+        drag.hold_terminals(cx);
+        drag.position = desktop - drag.offset;
+        if self.floating == Some(drag.source) {
+            let origin = drag.position - point(px(13.), px(13.));
+            self.position_float(origin, window, cx);
+        }
+        cx.notify();
+        true
     }
 
     fn cancel_drag(&mut self, cx: &mut Context<Self>) {

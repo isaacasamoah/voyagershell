@@ -63,6 +63,24 @@ drags clamp their preview to the viewport as the reference does. Context changes
 still require the typed Dock response; OS window movement does not establish a
 dock. No window is created for each motion or release.
 
+Once a drag has moved, the avatar's capture-phase move listener stops each
+pointer move from propagating. The canvas's bubble-phase move handlers, which
+serve only the canvas's own reordering drags, then do not run during an avatar
+drag. Dock targets are found by the avatar's own listener before the stop, so a
+drag that ends on a target still docks.
+
+A moved drag owns a terminal hold (`Hold` in `desktop/src/avatar/drag.rs`). The
+hold starts on the first move after the drag passes its 7 px threshold. Each
+later move refreshes it. It ends 120 ms after the last move, or when the drag
+ends, is cancelled or is reset by a window restore, because dropping the drag
+drops the hold. Ending the hold closes a channel that every waiting terminal pane
+awaits, so no pane polls for the end. While a hold lives, panes keep parsing
+their output and returning Core's credit, but defer their redraw to the hold's
+end (`RedrawAtRest`). A terminal therefore keeps its last drawn screen while the
+avatar moves and draws its current screen once the pointer rests or the drag
+ends. Redrawing a pane rebuilds the whole canvas, and that rebuild is what the
+hold keeps out of a drag's frames.
+
 On Linux/X11, one connection subscribes to the owned window's `_NET_WM_STATE` changes
 and destruction before its first read. The already-nonblocking connection's
 duplicated descriptor supplies readiness only; x11rb remains the only protocol

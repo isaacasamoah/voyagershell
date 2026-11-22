@@ -507,6 +507,23 @@ impl Terminal {
     }
 
     pub fn cell(&self, native: &Native, column: u16, row: u16) -> Result<Geometry> {
+        self.grid(native)?.cell(column, row)
+    }
+
+    pub fn widths(&self, native: &Native, masked: Option<Geometry>) -> Result<Vec<u16>> {
+        let grid = self.grid(native)?;
+        let mut look = self.look(native)?;
+        if let Some(masked) = masked {
+            look.mask(masked);
+        }
+        widths(&look, &grid)
+    }
+
+    pub fn columns(&self, native: &Native) -> Result<u16> {
+        Ok(self.grid(native)?.columns)
+    }
+
+    fn grid(&self, native: &Native) -> Result<Grid> {
         let reported = native
             .system
             .rpc("terminal.get", json!({"terminal":self.address}))?;
@@ -524,7 +541,7 @@ impl Terminal {
                 frame.window.scale,
             ))
         })?;
-        Grid::new(area, scale, columns, rows)?.cell(column, row)
+        Grid::new(area, scale, columns, rows)
     }
 
     pub fn click_cell(&self, native: &Native, column: u16, row: u16) -> Result<()> {
@@ -687,6 +704,32 @@ impl Grid {
             height,
         })
     }
+}
+
+fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<u16>> {
+    let rows: Vec<&[u8]> = look.rows().collect();
+    let background = background(&rows).context("The terminal shows no background")?;
+    (0..grid.rows)
+        .map(|row| {
+            let cell = grid.cell(0, row)?;
+            let left = usize::try_from(cell.x - look.region.x)?;
+            let top = usize::try_from(cell.y - look.region.y)?;
+            let bottom = (top + usize::from(cell.height)).min(rows.len());
+            let right =
+                rows.get(top..bottom)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|line| {
+                        line.as_chunks::<4>().0.iter().rposition(|pixel| {
+                            pixel[..3] != background[..3] && pixel[..3] != MASKED
+                        })
+                    })
+                    .max();
+            Ok(right.filter(|right| *right >= left).map_or(0, |right| {
+                u16::try_from((right - left) / usize::from(cell.width) + 1).unwrap_or(u16::MAX)
+            }))
+        })
+        .collect()
 }
 
 fn placement_of<'a>(layout: &'a Layout, content: &VesselId) -> Option<&'a PlacementId> {
@@ -924,6 +967,42 @@ mod tests {
             inner(area.height) / (18 * scale as u16),
         );
         Grid::new(area, scale, columns, rows).unwrap()
+    }
+
+    #[test]
+    fn each_row_counts_the_cells_its_ink_reaches() {
+        let grid = Grid::new(
+            Geometry {
+                x: 0,
+                y: 0,
+                width: 96,
+                height: 52,
+            },
+            1.,
+            10,
+            2,
+        )
+        .unwrap();
+        let stride = 96 * 4;
+        let mut bgrx: Vec<u8> = (0..96 * 52).flat_map(|_| BACKGROUND).collect();
+        let mut ink = |row: usize, from: usize, to: usize| {
+            for y in row..row + 4 {
+                bgrx[y * stride + from * 4..y * stride + to * 4].fill(200);
+            }
+        };
+        ink(12, 8, 24);
+        ink(30, 8, 9);
+        ink(30, 47, 50);
+        let look = Pixels::new(grid.area, bgrx);
+        assert_eq!(widths(&look, &grid).unwrap(), vec![2, 6]);
+        let mut hidden = look;
+        hidden.mask(Geometry {
+            x: 40,
+            y: 26,
+            width: 20,
+            height: 26,
+        });
+        assert_eq!(widths(&hidden, &grid).unwrap(), vec![2, 1]);
     }
 
     #[test]

@@ -276,8 +276,12 @@ impl AvatarView {
             move |_, _, window, _| {
                 let moving = avatar.clone();
                 window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
-                    if phase == gpui::DispatchPhase::Capture {
-                        let _ = moving.update(cx, |avatar, cx| avatar.moving(event, window, cx));
+                    if phase == gpui::DispatchPhase::Capture
+                        && moving
+                            .update(cx, |avatar, cx| avatar.moving(event, window, cx))
+                            .unwrap_or(false)
+                    {
+                        cx.stop_propagation();
                     }
                 });
                 let released = avatar.clone();
@@ -521,6 +525,7 @@ impl Render for AvatarView {
                                     size: s,
                                     began: Instant::now(),
                                     moved: false,
+                                    hold: None,
                                 });
                             });
                             cx.stop_propagation();
