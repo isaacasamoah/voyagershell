@@ -1,6 +1,6 @@
 use crate::{
     replies::Replies,
-    speech::{CUT_AT_LIMIT, Clip, Phrase, Speaking},
+    speech::{CEILING_CUT, CUT_AT_LIMIT, Clip, Phrase, Speaking},
     voice_parts::{Audio, Floor, Phase, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
 };
@@ -131,10 +131,13 @@ fn say(parts: &Parts, line: Line) {
         note_unspoken(parts, &line);
         return;
     }
-    if let Line::Reply(text) = &line
-        && text.cut_at_limit()
-    {
-        eprintln!("{CUT_AT_LIMIT}");
+    if let Line::Reply(text) = &line {
+        if text.cut_at_ceiling() {
+            eprintln!("{CEILING_CUT}");
+        }
+        if text.cut_at_limit() {
+            eprintln!("{CUT_AT_LIMIT}");
+        }
     }
     let first = clip_of(parts, &line);
     let _floor = parts.floor.take();

@@ -332,9 +332,9 @@ is a target to measure, and not a measured limit. The engine's 30 s limit per re
 now applies to one piece. The ceiling acts on the whole reply, before it is split into
 pieces. Past it the filter cuts at the last whole sentence within the ceiling, when that
 sentence ends in the second half of the kept words, or at the ceiling when there is
-none. Only then is the kept text split into pieces, so no piece is cut mid-sentence by
-the ceiling. It adds no words and no pointer to the chat, and it writes one log line,
-`speech::CEILING_CUT`, each time it cuts. A reply short enough for the guide never
+none. A run-on reply with no full stop in the second half is cut at word 120. Only then
+is the kept text split into pieces, so no piece is cut mid-sentence by the ceiling. It adds no words and no pointer to the chat, and it writes one log line,
+`speech::CEILING_CUT`, each time it cuts, when the reply is spoken. A reply short enough for the guide never
 reaches the ceiling.
 
 The chat was empty for a voice turn because Voyager's replies reach the app only through

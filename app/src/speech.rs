@@ -180,6 +180,7 @@ pub struct SpokenText {
     text: String,
     pieces: Vec<String>,
     cut_at_limit: bool,
+    cut_at_ceiling: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -202,6 +203,10 @@ impl SpokenText {
 
     pub fn cut_at_limit(&self) -> bool {
         self.cut_at_limit
+    }
+
+    pub fn cut_at_ceiling(&self) -> bool {
+        self.cut_at_ceiling
     }
 
     pub fn from_reply(reply: &str) -> Option<Self> {
@@ -240,9 +245,6 @@ impl SpokenText {
         if !last.ends_with(['.', '!', '?']) {
             last.push('.');
         }
-        if cut {
-            eprintln!("{CEILING_CUT}");
-        }
         let mut cut_at_limit = false;
         let pieces = sentences(&kept)
             .flat_map(|sentence| split_long(sentence, &mut cut_at_limit))
@@ -251,6 +253,7 @@ impl SpokenText {
             text: kept.join(" "),
             pieces,
             cut_at_limit,
+            cut_at_ceiling: cut,
         })
     }
 }
@@ -822,6 +825,16 @@ mod tests {
     }
 
     #[test]
+    fn a_run_on_reply_with_no_full_stop_is_cut_at_the_ceiling_and_marked_for_the_log() {
+        let run_on = vec!["word"; 130].join(" ");
+        let text = SpokenText::from_reply(&run_on).unwrap();
+        assert_eq!(text.as_str().split_whitespace().count(), CEILING_WORDS);
+        assert!(text.cut_at_ceiling());
+        let short = SpokenText::from_reply("Done, you're there.").unwrap();
+        assert!(!short.cut_at_ceiling());
+    }
+
+    #[test]
     fn the_ceiling_cuts_the_whole_reply_before_it_is_split_and_no_piece_is_cut_mid_sentence() {
         let sentences: Vec<String> = (1..=8)
             .map(|number| format!("{} end{number}.", vec!["word"; 19].join(" ")))
@@ -829,6 +842,7 @@ mod tests {
         let text = SpokenText::from_reply(&sentences.join(" ")).unwrap();
         assert_eq!(piece_texts(&text), sentences[..6]);
         assert_eq!(text.as_str(), sentences[..6].join(" "));
+        assert!(text.cut_at_ceiling());
         assert!(!text.cut_at_limit());
         assert!(!text.as_str().contains("say more"));
     }
