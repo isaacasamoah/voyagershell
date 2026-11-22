@@ -247,6 +247,13 @@ impl Pane {
             match self.viewer.take(4096) {
                 Ok(bytes) if bytes.is_empty() => break,
                 Ok(bytes) => {
+                    #[cfg(feature = "frame-profiler")]
+                    if bytes.windows(7).any(|window| window == b"KEYECHO") {
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({"event": "voyager_key_echo_parsed", "wall_ns": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)})
+                        );
+                    }
                     self.screen.write(&bytes);
                     consumed += bytes.len();
                     self.pending_reply = self.screen.take_replies();

@@ -12,6 +12,11 @@ APPROACH = 50
 LAPS = 900
 REACH = (330.0, 230.0)
 VISIBLE_STREAMS = 8
+MANY_VISIBLE_STREAMS = 20
+KEYS = 40
+KEY_GAP_S = 0.15
+KEY_A = 30
+TYPER = "stty raw -echo; while IFS= read -rsn1 c; do printf 'KEYECHO%s' \"$c\"; done"
 HIDDEN_FLEETS = 3
 STREAMS_PER_HIDDEN_FLEET = 4
 SETTLE_S = 2.0
@@ -192,6 +197,9 @@ class Pointer:
     def move_to(self, x, y):
         self.relative(x - self.x, y - self.y)
 
+    def key(self, code, pressed):
+        self.call("NotifyKeyboardKeycode", self.GLib.Variant("(ub)", (code, pressed)))
+
     def button(self, pressed):
         self.call("NotifyPointerButton", self.GLib.Variant("(ib)", (BTN_LEFT, pressed)))
 
@@ -285,6 +293,29 @@ def glide(run, pointer, case, offset, running):
     time.sleep(1.0)
 
 
+def typing(run, pointer, case, offset, running, key):
+    bounds = run.element("terminal", key)
+    click(pointer, offset, bounds)
+    time.sleep(0.5)
+    run.window.write_bytes(b"")
+    opened = wall_ns()
+    time.sleep(0.3)
+    keys = []
+    for _ in range(KEYS):
+        at = wall_ns()
+        pointer.key(KEY_A, True)
+        pointer.key(KEY_A, False)
+        keys.append({"at_ns": at})
+        time.sleep(KEY_GAP_S)
+    time.sleep(0.5)
+    closed = wall_ns()
+    run.window.unlink()
+    record = {"case": case, "opened_ns": opened, "closed_ns": closed, "keys": keys, "running": running, "load": loadavg()}
+    (run.out / f"typing-{case}.json").write_text(json.dumps(record))
+    print(json.dumps({"case": case, "typed": len(keys)}), flush=True)
+    time.sleep(0.5)
+
+
 def start_load(run, name, fleet, program):
     arguments = ["run", "--bg", "--no-notify", "--name", name]
     if fleet:
@@ -323,6 +354,13 @@ def main():
         wait(lambda: run.fleets(), "the saved layout", patience=60)
         print(json.dumps({"window": run.frame().get("window"), "avatar": run.avatar(), "fleets": run.fleets()}), flush=True)
         home = run.fleets()[0][0]
+        typer = None
+        if any(level.startswith("streaming") for level in wanted):
+            before = {element.get("key") for element in (run.frame() or {}).get("elements", []) if element.get("role") == "terminal"}
+            start_load(run, "typing", home, TYPER)
+            wait(lambda: run.count("terminal") > len(before), "the typing Vessel")
+            time.sleep(1.0)
+            typer = next(element.get("key") for element in run.frame().get("elements", []) if element.get("role") == "terminal" and element.get("key") not in before)
         hidden = []
         if "fleets" in wanted:
             for _ in range(HIDDEN_FLEETS):
@@ -337,12 +375,23 @@ def main():
             print(json.dumps({"hidden": hidden}), flush=True)
         if "idle" in wanted:
             glide(run, pointer, "idle", offset, 0)
+            if typer:
+                typing(run, pointer, "idle", offset, 0, typer)
         if "streaming" in wanted:
             for index in range(VISIBLE_STREAMS):
                 start_load(run, f"load-visible-{index}", home, STREAM)
-            wait(lambda: run.count("terminal") > VISIBLE_STREAMS, "the streaming Vessels")
+            wait(lambda: run.count("terminal") > VISIBLE_STREAMS + 1, "the streaming Vessels")
             time.sleep(SETTLE_S)
             glide(run, pointer, "streaming", offset, VISIBLE_STREAMS)
+            typing(run, pointer, "streaming", offset, VISIBLE_STREAMS, typer)
+        if "streaming20" in wanted:
+            already = VISIBLE_STREAMS if "streaming" in wanted else 0
+            for index in range(already, MANY_VISIBLE_STREAMS):
+                start_load(run, f"load-visible-{index}", home, STREAM)
+            wait(lambda: run.count("terminal") > MANY_VISIBLE_STREAMS + 1, "the twenty streaming Vessels")
+            time.sleep(SETTLE_S)
+            glide(run, pointer, "streaming20", offset, MANY_VISIBLE_STREAMS)
+            typing(run, pointer, "streaming20", offset, MANY_VISIBLE_STREAMS, typer)
         if "fleets" in wanted:
             for fleet_index, fleet in enumerate(hidden):
                 for index in range(STREAMS_PER_HIDDEN_FLEET):

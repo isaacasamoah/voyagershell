@@ -131,6 +131,74 @@ def summarise(evidence, window, all_records):
     }
 
 
+def echoes(evidence):
+    out = []
+    for name in ("app.log",):
+        path = evidence / name
+        if not path.exists():
+            continue
+        for line in path.read_text(errors="replace").splitlines():
+            if "voyager_key_echo_parsed" not in line:
+                continue
+            try:
+                out.append(json.loads(line)["wall_ns"])
+            except (json.JSONDecodeError, KeyError):
+                continue
+    return sorted(out)
+
+
+def summarise_typing(window, all_records, parsed):
+    keys = [key["at_ns"] for key in window["keys"]]
+    first, last = keys[0], keys[-1] + 500e6
+    inside = [r for r in all_records if "t0" in r and first - 50e6 <= r["t0"] <= last]
+    draws = [r for r in inside if r.get("category") == "draw"]
+    windows = defaultdict(int)
+    for draw in draws:
+        windows[draw["window"]] += 1
+    workspace = max(windows, key=windows.get) if windows else None
+    draws = [d for d in draws if d["window"] == workspace]
+    presents = sorted((r for r in inside if r.get("category") == "submit_paired" and r["window"] == workspace), key=lambda r: r["t1"])
+    latency, echo_wait, missing = [], [], 0
+    cursor = 0
+    for key in keys:
+        while cursor < len(parsed) and parsed[cursor] < key:
+            cursor += 1
+        if cursor == len(parsed):
+            missing += 1
+            continue
+        echo = parsed[cursor]
+        cursor += 1
+        shown = next((p["t1"] for p in presents if p["draw_t0"] >= echo), None)
+        if shown is None:
+            missing += 1
+            continue
+        echo_wait.append(echo - key)
+        latency.append(shown - key)
+    during = [p for p in presents if first <= p["t1"] <= last]
+    durations = [d["duration_ns"] for d in draws if first <= d["t0"] <= last]
+    phases = {
+        name: ms(statistics.median([d[f"{name}_ns"] for d in draws if d.get(f"{name}_ns") is not None])) if draws else None
+        for name in ("layout", "prepaint", "paint")
+    }
+    span = last - first
+    busy = defaultdict(int)
+    for record in inside:
+        if record.get("category") in ("draw", "task", "input", "small_polls") and first <= record["t0"] <= last:
+            busy[record["category"]] += record.get("duration_ns") or 0
+    busy["present"] = sum(p["duration_ns"] for p in during)
+    return {
+        "case": window["case"],
+        "keys": len(keys),
+        "missing": missing,
+        "keyLatencyMs": {"median": ms(quantile(latency, 0.5)), "p95": ms(quantile(latency, 0.95)), "max": ms(max(latency) if latency else None)},
+        "echoParsedMs": {"median": ms(quantile(echo_wait, 0.5)), "p95": ms(quantile(echo_wait, 0.95))},
+        "drawMs": {"median": ms(quantile(durations, 0.5)), "p95": ms(quantile(durations, 0.95)), "max": ms(max(durations) if durations else None)},
+        "phasesMedianMs": phases,
+        "presentsPerSecond": round(len(during) / (span / 1e9), 1),
+        "mainThreadBusyShare": {k: round(v / span, 3) for k, v in busy.items()},
+    }
+
+
 def main():
     results = []
     for argument in sys.argv[1:]:
@@ -139,6 +207,13 @@ def main():
         for drag in sorted(evidence.glob("drag-*.json")):
             window = json.loads(drag.read_text())
             summary = summarise(evidence, window, all_records)
+            summary["evidence"] = str(evidence)
+            results.append(summary)
+        parsed = echoes(evidence)
+        for typed in sorted(evidence.glob("typing-*.json")):
+            window = json.loads(typed.read_text())
+            summary = summarise_typing(window, all_records, parsed)
+            summary["kind"] = "typing"
             summary["evidence"] = str(evidence)
             results.append(summary)
     print(json.dumps(results, indent=1))
