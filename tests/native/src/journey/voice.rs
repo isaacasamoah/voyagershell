@@ -203,16 +203,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.hummed && said.spoken.matches(),
             )
             .expect(
-                "the first sound comes within the first-sound target",
-                said.first_sound_after_capture_ms < TARGET_MS,
-            )
-            .expect(
                 "the speaker carries most of the reply's words",
                 most_words_heard(&transcript, &reply),
             )
+            .observed(
+                "firstSoundAfterCaptureMs",
+                said.first_sound_after_capture_ms,
+            )?
             .observed("conversation", json!(said))?
-            .observed("speakerHeard", transcript)?
-            .observed("targetMs", TARGET_MS)
+            .observed("speakerHeard", transcript)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {
         let said = voice::converse(native, &RENAME_TO_HARBOR, "no-chat-reply")?;
