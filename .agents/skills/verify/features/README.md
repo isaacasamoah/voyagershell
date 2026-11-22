@@ -36,6 +36,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Refused and uncertain results | covered | none | none | covered | outcomes | - | linux |
 | Core reports and slow reads | covered | none | none | covered | core-events, slow-list | - | linux |
 | Labelled programs as Vessels | covered | none | none | covered | adopt-by-label, socket-dock, agent-split, home-create | - | linux |
+| Voyager without its command | covered | none | none | covered | voyager-command | - | linux |
 | Verification environment | none | none | none | none | - | - | linux |
 <!-- features:end -->
 

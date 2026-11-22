@@ -58,7 +58,7 @@ debug = "covered"
 test("the committed map and page match their inputs", () => {
   const result = check(ROOT);
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /^PASS 29 features, 1 proven by its tests\n$/);
+  assert.match(result.out, /^PASS 30 features, 1 proven by its tests\n$/);
 });
 
 test("a feature row added without regenerating fails and names it", () => {
