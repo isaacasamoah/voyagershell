@@ -504,7 +504,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             said.heard
         );
         let heard = voice::transcribe_long(native, "long-reply", &said)?;
-        let (errors, words) = word_errors(&voice::digits_as_words(&heard.join(" ")), LONG_SPOKEN);
+        let (errors, words) = word_errors(&voice::digits_as_words(&voice::join_heard(&heard)), LONG_SPOKEN);
         let verdict = Verdict::new()
             .expect(
                 "the long reply is spoken after the words were sent",

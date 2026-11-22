@@ -868,7 +868,7 @@ const LONGEST_FRAMES: usize = 750;
 const PAUSE_FRAMES: usize = 15;
 const QUIET_RMS: f64 = 100.0;
 
-pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
+fn window_ranges(narrow: &[i16]) -> Vec<std::ops::Range<usize>> {
     let frame = 320;
     let loud: Vec<bool> = narrow
         .chunks(frame)
@@ -889,9 +889,63 @@ pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
     }
     cuts.push(narrow.len());
     cuts.windows(2)
-        .map(|pair| &narrow[pair[0].min(narrow.len())..pair[1]])
-        .filter(|window| window.iter().any(|s| s.unsigned_abs() >= 1000))
+        .map(|pair| pair[0].min(narrow.len())..pair[1])
+        .filter(|range| {
+            narrow[range.clone()]
+                .iter()
+                .any(|s| s.unsigned_abs() >= 1000)
+        })
         .collect()
+}
+
+const OVERLAP_SAMPLES: usize = 16_000 * 4;
+const OVERLAP_WORDS: usize = 24;
+const SEAM_RUN: usize = 3;
+
+pub fn overlapped_ranges(narrow: &[i16]) -> Vec<std::ops::Range<usize>> {
+    window_ranges(narrow)
+        .into_iter()
+        .map(|range| {
+            range.start.saturating_sub(OVERLAP_SAMPLES)
+                ..(range.end + OVERLAP_SAMPLES).min(narrow.len())
+        })
+        .collect()
+}
+
+pub fn join_heard(parts: &[String]) -> String {
+    let mut joined: Vec<String> = Vec::new();
+    for part in parts {
+        let words: Vec<String> = part.split_whitespace().map(str::to_owned).collect();
+        let (keep_before, skip_after) = seam(&joined, &words);
+        joined.truncate(keep_before);
+        joined.extend(words.into_iter().skip(skip_after));
+    }
+    joined.join(" ")
+}
+
+fn seam(before: &[String], after: &[String]) -> (usize, usize) {
+    let key = |word: &String| scored_words(&digits_as_words(word)).join(" ");
+    let tail_from = before.len().saturating_sub(OVERLAP_WORDS);
+    let tail: Vec<String> = before[tail_from..].iter().map(key).collect();
+    let head: Vec<String> = after.iter().take(OVERLAP_WORDS).map(key).collect();
+    let mut best = (0, 0, 0);
+    for start in 0..tail.len() {
+        for from in 0..head.len() {
+            let run = tail[start..]
+                .iter()
+                .zip(&head[from..])
+                .take_while(|(a, b)| !a.is_empty() && a == b)
+                .count();
+            if run > best.0 {
+                best = (run, start, from);
+            }
+        }
+    }
+    let (run, start, from) = best;
+    if run < SEAM_RUN {
+        return (before.len(), 0);
+    }
+    (tail_from + start + run, from + run)
 }
 
 pub fn marks_between(marks: &[Mark], event: &str, from: &str, to: &str) -> usize {
@@ -989,9 +1043,10 @@ pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Resu
     let reply_from = usize::try_from(reply_from_ms)?
         .saturating_mul(16)
         .min(narrow.len());
-    windows(&narrow[reply_from..])
+    let reply = &narrow[reply_from..];
+    overlapped_ranges(reply)
         .into_iter()
-        .map(|window| hear_16k(native, window))
+        .map(|range| hear_16k(native, &reply[range]))
         .collect()
 }
 
@@ -1192,12 +1247,116 @@ mod tests {
         );
     }
 
+    fn spoken_sentences() -> (Vec<i16>, Vec<(std::ops::Range<usize>, String)>) {
+        let (word, gap, between) = (16_000 * 3 / 10, 16_000 / 20, 16_000 / 5);
+        let mut narrow = Vec::new();
+        let mut sentences = Vec::new();
+        for number in 0..6 {
+            let start = narrow.len();
+            let words: Vec<String> = (0..9).map(|index| format!("w{number}x{index}")).collect();
+            for _ in &words {
+                narrow.extend(std::iter::repeat_n(3000i16, word));
+                narrow.extend(std::iter::repeat_n(0i16, gap));
+            }
+            sentences.push((start..narrow.len(), format!("{}.", words.join(" "))));
+            narrow.extend(std::iter::repeat_n(0i16, between));
+        }
+        (narrow, sentences)
+    }
+
+    fn whole_sentences_inside(
+        sentences: &[(std::ops::Range<usize>, String)],
+        window: &std::ops::Range<usize>,
+    ) -> String {
+        sentences
+            .iter()
+            .filter(|(span, _)| window.start <= span.start && span.end <= window.end)
+            .map(|(_, text)| text.clone())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn a_window_edge_inside_a_sentence_loses_it_and_overlapped_hearing_keeps_it() {
+        let (narrow, sentences) = spoken_sentences();
+        let wanted = sentences
+            .iter()
+            .map(|(_, text)| text.clone())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let cuts = window_ranges(&narrow);
+        assert!(cuts.len() >= 2);
+        assert!(sentences.iter().any(|(span, _)| {
+            cuts.iter()
+                .any(|range| span.start < range.start && range.start < span.end)
+        }));
+        let old: Vec<String> = cuts
+            .iter()
+            .map(|range| whole_sentences_inside(&sentences, range))
+            .collect();
+        let (lost, words) = word_errors(&old.join(" "), &wanted);
+        assert!(lost * 100 > words * 10, "{lost} of {words}");
+        let heard: Vec<String> = overlapped_ranges(&narrow)
+            .iter()
+            .map(|range| whole_sentences_inside(&sentences, range))
+            .collect();
+        assert_eq!(word_errors(&join_heard(&heard), &wanted), (0, words));
+    }
+
+    #[test]
+    fn the_seam_keeps_one_copy_of_the_words_both_windows_heard() {
+        let parts = [
+            "the second is being tested right now and the third is waiting".to_owned(),
+            "and the third is waiting for a build slot".to_owned(),
+        ];
+        assert_eq!(
+            join_heard(&parts),
+            "the second is being tested right now and the third is waiting for a build slot"
+        );
+    }
+
+    #[test]
+    fn windows_with_no_shared_run_keep_every_word() {
+        let parts = ["one two three".to_owned(), "four five six".to_owned()];
+        assert_eq!(join_heard(&parts), "one two three four five six");
+        let one_shared = ["one two three".to_owned(), "three four five".to_owned()];
+        assert_eq!(join_heard(&one_shared), "one two three three four five");
+    }
+
+    #[test]
+    fn the_seam_never_drops_words_outside_the_overlap() {
+        let early: Vec<String> = (0..30).map(|index| format!("w{index}")).collect();
+        let before = format!("alpha bravo charlie {}", early.join(" "));
+        let parts = [before.clone(), "alpha bravo charlie delta".to_owned()];
+        assert_eq!(
+            join_heard(&parts),
+            format!("{before} alpha bravo charlie delta")
+        );
+    }
+
+    #[test]
+    fn a_garbled_repeat_at_the_seam_is_still_counted_wrong() {
+        let wanted = "and the third is waiting for a build slot that should free up soon";
+        let parts = [
+            "and the third is matz matz matz".to_owned(),
+            "matz matz matz build slot that should free up soon".to_owned(),
+        ];
+        let joined = join_heard(&parts);
+        assert_eq!(
+            joined,
+            "and the third is matz matz matz build slot that should free up soon"
+        );
+        let (errors, words) = word_errors(&joined, wanted);
+        assert_eq!(words, 14);
+        assert_eq!(errors, 3);
+    }
+
     #[test]
     fn the_capture_is_cut_into_windows_at_its_pauses() {
         let voiced = vec![3000i16; 16_000 * 9];
         let pause = vec![0i16; 16_000];
         let narrow: Vec<i16> = [voiced.clone(), pause.clone(), voiced, pause].concat();
-        let cut = windows(&narrow);
+        let cut = window_ranges(&narrow);
         assert_eq!(cut.len(), 2);
         assert!(cut.iter().all(|window| window.len() <= 16_000 * 15));
     }
