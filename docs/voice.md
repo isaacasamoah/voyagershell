@@ -235,7 +235,7 @@ Voice is the primary surface, and the chat is an alternative. Voyager should sou
 like a technical friend who explains things plainly and briefly. One guide,
 `spoken::STYLE`, says how, and every prompt that speaks for Voyager reads it. It
 opens with "Best friend energy, always accurate, always approachable and human." and
-"Accuracy beats warmth.", so a friendly reply that is wrong is still a wrong reply. It
+"Say why when something fails." It
 asks for the answer first, yes or no first for a yes or no question, plain words and
 contractions. It leaves out ids, revision numbers, layout terms and how the app took
 a request unless the person asks, so a finished dock is "Done, you're there." and

@@ -33,7 +33,7 @@ pub fn has_reply_marker(text: &str) -> bool {
     strip_reply_marker(text).len() != text.len()
 }
 
-pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Accuracy beats warmth. Talk like a technical friend. Lead with the answer, yes or no first. Plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
+pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Say why when something fails. Talk like a technical friend. Lead with the answer, yes or no first. Plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
 
 pub const BRIEF: &str = "Stop after three short sentences, then offer more.";
 
@@ -151,6 +151,7 @@ mod tests {
         assert!(rule.contains(&format!(" A {MARKER} prompt came by voice.")));
         assert!(rule.contains(BRIEF));
         assert!(rule.contains("no paths or code"));
+        assert!(rule.contains("Say why when something fails."));
         assert!(rule.contains("Claim only what a tool's output showed. Do only what was asked."));
         assert!(rule.ends_with("Never point to the chat."));
     }
@@ -159,7 +160,7 @@ mod tests {
     fn the_style_asks_for_the_answer_first_in_plain_words_without_mechanics() {
         for words in [
             "Best friend energy, always accurate, always approachable and human.",
-            "Accuracy beats warmth.",
+            "Say why when something fails.",
             "Lead with the answer, yes or no first.",
             "contractions",
             "Skip ids, revisions, layout terms",
