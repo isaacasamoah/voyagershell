@@ -325,6 +325,7 @@ fn load(
         })
         .async_function("call", move |arguments| {
             let request = arguments.string(0)?.to_owned();
+            crate::diagnostics::redraw::event("script_call", || serde_json::json!({}));
             let client = calls.clone();
             Ok(async move {
                 let request: Request = serde_json::from_str(&request)
@@ -431,9 +432,10 @@ fn load(
         })
         .function("notice", move |_| {
             let notice = notice.get();
-            crate::diagnostics::redraw::event("script_read_notice", || {
-                serde_json::json!({"revision": notice.revision})
-            });
+            crate::diagnostics::redraw::event(
+                "script_read_notice",
+                || serde_json::json!({"revision": notice.revision}),
+            );
             Ok(HostValue::Object(vec![
                 (
                     "closeRevision".into(),
