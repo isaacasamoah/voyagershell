@@ -3,6 +3,7 @@ mod administrator;
 mod adoption;
 pub mod agent_programs;
 mod canvas;
+pub mod change_sentence;
 pub mod client;
 pub mod content;
 pub mod context;

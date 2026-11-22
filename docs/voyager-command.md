@@ -238,6 +238,17 @@ socket.
   shows "Choose content" until a labelled program arrives.
 - Give each change a new `requestId`. Repeating the same request returns its
   first result instead of acting twice.
+- Each change prints one plain sentence on standard error, before the
+  JSON, such as `Renamed the Fleet to Notes.`. It names things as the person does and
+  carries no id or revision. Say it to the person as it is. A refused or
+  uncertain change says so and never claims the change happened. A refused
+  change gives the app's reason after "because" when that reason is in plain
+  words, as in "...but it was refused because the workspace changed first, so
+  nothing changed.", and leaves it out when it holds an id, a number or an
+  internal term. The JSON on
+  standard output is unchanged. The sentence is on standard error, so pipe
+  standard output alone into `jq`. Do not use `2>&1` there, because the
+  sentence is not JSON.
 - The exit code is 0 when the change applied, 1 when it was refused and 2 when
   its result is uncertain. After an uncertain result, run `voyager status`
   before you repeat anything.
@@ -288,7 +299,7 @@ voyager do workspace '{"requestId":"flag-1","expectedVersion":"<version>","actio
 Dock on that Vessel with the `dock` request above and
 `"context":{"kind":"vessel","id":"<placement id>"}`. `voyager status` lists
 placements of your own Vessel only, so take the new placement's id from the
-reply of the create request. An applied reply means the app took the dock.
+reply of the create request. The sentence says whether the dock happened.
 Run `voyager focus` to read it back. Its `scope` names the placement you docked
 on.
 

@@ -211,10 +211,21 @@ fn answered(output: &str) -> (Value, String) {
         .trim_end()
         .rsplit_once("exit=")
         .unwrap_or((output, ""));
+    let json = body
+        .lines()
+        .skip_while(|line| !line.starts_with('{'))
+        .collect::<Vec<_>>()
+        .join("\n");
     (
-        serde_json::from_str(body.trim()).unwrap_or(Value::Null),
+        serde_json::from_str(json.trim()).unwrap_or(Value::Null),
         code.trim().to_owned(),
     )
+}
+
+fn said_before_json(output: &str) -> Option<&str> {
+    let sentence = output.lines().next()?.trim();
+    (!sentence.starts_with('{') && !sentence.is_empty() && sentence.ends_with('.'))
+        .then_some(sentence)
 }
 
 fn created_beside(native: &Native, fleet: &FleetId, before: &[PlacementId]) -> Result<Created> {
@@ -511,6 +522,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "voyager do workspace applied create-vessel beside a placement from that Vessel and exited 0",
                 code == "0" && reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "the command said in plain words what it added, before the JSON",
+                said_before_json(&output)
+                    .is_some_and(|sentence| sentence.starts_with("Added a terminal Vessel to ")),
             )
             .expect(
                 "the saved layout holds the new Vessel below the named placement at an even share",
