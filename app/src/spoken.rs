@@ -39,7 +39,7 @@ pub const BRIEF: &str = "Stop after three short sentences, then offer more.";
 
 pub fn policy_rule() -> String {
     format!(
-        "{STYLE} A prompt starting with {MARKER} came by voice. Act, then answer aloud with no paths or code. {BRIEF} If it failed or you're unsure, say so from what you see. Never point to the chat."
+        "{STYLE} A {MARKER} prompt came by voice. Act, then answer aloud, no paths or code. {BRIEF} Say done or I checked only if a tool showed it, else what you tried and saw. Never point to the chat."
     )
 }
 
@@ -148,10 +148,12 @@ mod tests {
     fn the_policy_rule_opens_with_the_style_and_names_the_marker_the_prompt_carries() {
         let rule = policy_rule();
         assert!(rule.starts_with(STYLE));
-        assert!(rule.contains(&format!(" A prompt starting with {MARKER} came by voice.")));
+        assert!(rule.contains(&format!(" A {MARKER} prompt came by voice.")));
         assert!(rule.contains(BRIEF));
         assert!(rule.contains("no paths or code"));
-        assert!(rule.contains("If it failed or you're unsure, say so from what you see."));
+        assert!(rule.contains(
+            "Say done or I checked only if a tool showed it, else what you tried and saw."
+        ));
         assert!(rule.ends_with("Never point to the chat."));
     }
 
