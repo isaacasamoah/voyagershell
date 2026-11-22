@@ -1,13 +1,13 @@
 diff --git a/app/src/voyager_binding.rs b/app/src/voyager_binding.rs
-index 92f64c0e..60f23831 100644
+index 14265fdb..dab15022 100644
 --- a/app/src/voyager_binding.rs
 +++ b/app/src/voyager_binding.rs
 @@ -64,7 +64,7 @@ impl Binding {
          if is_voyager {
-             crate::agent_programs::Defaults::Table
+             voyager_contract::launch::Defaults::Table
          } else {
--            crate::agent_programs::Defaults::Plain
-+            crate::agent_programs::Defaults::Table
+-            voyager_contract::launch::Defaults::Plain
++            voyager_contract::launch::Defaults::Table
          }
      }
  

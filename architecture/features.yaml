@@ -407,7 +407,7 @@ features:
         kind: user
         says: 'When a Vessel other than Voyager creates an agent and names no permissions, the agent starts in its plain mode, with the arguments a plain hc run of that agent would carry and no bypass flag. Voyager and the person keep the table default.'
         owner: application-queue
-        guards: ['type:app/src/agent_programs.rs#Defaults']
+        guards: ['type:contract/src/launch.rs#Defaults']
         checks: ['journey:agent-split/agent-starts-plain']
         formal: []
         journeys: [agent-split]
@@ -1637,7 +1637,7 @@ features:
         kind: user
         says: 'When a Vessel other than Voyager creates an agent and names no permissions, the agent starts in its plain mode, with the arguments a plain hc run of that agent would carry and no bypass flag. Voyager and the person keep the table default.'
         owner: application-queue
-        guards: ['type:app/src/agent_programs.rs#Defaults']
+        guards: ['type:contract/src/launch.rs#Defaults']
         checks: ['journey:agent-split/agent-starts-plain']
         formal: []
         journeys: [agent-split]
