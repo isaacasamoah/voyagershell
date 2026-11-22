@@ -21,14 +21,17 @@ impl Route {
             return Route::Voyager;
         };
         let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
-        if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) {
+        if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)
+        {
             return Route::Voyager;
         }
         SpokenText::from_reply(&say).map_or(Route::Voyager, Route::Chat)
     }
 }
 
-const ACTION_WORDS: &str = "i'll|i will|i'm going|going to|let me|let's|on it|i've|i have|i did|done|will do|right away|working on|voyager|ask|asking|check|checking|open|opening|look|looking|find|finding|move|moving|rename|renaming|dock|docking|switch|switching|start|stop|cancel|canceling|cancelling|drop|fleet|vessel|voyage|build|terminal|portal|workspace|opened|moved|renamed|docked|checked|started|stopped|canceled|cancelled|switched|found|dropped|fleets|vessels|voyages|builds|terminals|portals";
+const OFFER_WORDS: &str = "want me to|do you want me|would you like me|shall i|should i|i can|can i|i could|i'll|i will|let me|let's";
+
+const ACTION_WORDS: &str = "i'm going|going to|on it|i've|i have|i did|done|will do|right away|working on|voyager|ask|asking|check|checking|open|opening|look|looking|find|finding|move|moving|rename|renaming|dock|docking|switch|switching|start|stop|cancel|canceling|cancelling|drop|fleet|vessel|voyage|build|terminal|portal|workspace|opened|moved|renamed|docked|checked|started|stopped|canceled|cancelled|switched|found|dropped|fleets|vessels|voyages|builds|terminals|portals";
 
 const VOYAGER_WORDS: &str = "help|can you do|never mind|nevermind|cancel";
 
@@ -79,8 +82,10 @@ pub const ROUTE_EXAMPLES: [(&str, Option<&str>); 14] = [
     ("Bye for now.", Some("Bye, talk soon.")),
 ];
 
+pub const CHAT_CLOSING: &str = "For a chat reply, this rule comes before the guide above: never offer to do anything, never ask whether to do something, and never say what you or Voyager will do. Answer the small talk and stop.";
+
 pub fn route_prompt() -> String {
-    format!("{ROUTE_RULE}\n\n{}", crate::spoken::TALK)
+    format!("{ROUTE_RULE}\n\n{}\n\n{CHAT_CLOSING}", crate::spoken::TALK)
 }
 
 #[cfg(test)]
@@ -206,8 +211,33 @@ mod tests {
     }
 
     #[test]
-    fn the_routing_prompt_ends_with_the_spoken_guide_from_its_owner() {
-        assert!(route_prompt().starts_with(ROUTE_RULE));
-        assert!(route_prompt().ends_with(crate::spoken::TALK));
+    fn the_routing_prompt_is_the_rule_then_the_spoken_guide_unchanged_then_the_chat_closing() {
+        assert_eq!(
+            route_prompt(),
+            format!("{ROUTE_RULE}\n\n{}\n\n{CHAT_CLOSING}", crate::spoken::TALK)
+        );
+    }
+
+    #[test]
+    fn a_chat_reply_that_offers_to_do_something_goes_to_voyager() {
+        for offering in [
+            "Want me to show you around?",
+            "Hi! Do you want me to open something?",
+            "Would you like me to find it?",
+            "Shall I take you there?",
+            "Should I keep going?",
+            "I can show you what's new.",
+            "Can I get you anything?",
+            "I could pull that up.",
+            "I'll be right here.",
+            "Let me know what you need.",
+            "Let's get started.",
+        ] {
+            assert_eq!(
+                Route::parse("Hi there.", &chat(offering), Some(1.0)),
+                Route::Voyager,
+                "{offering}"
+            );
+        }
     }
 }
