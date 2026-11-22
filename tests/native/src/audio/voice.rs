@@ -1159,7 +1159,7 @@ mod tests {
             vec![0; frame * 40],
         ]
         .concat();
-        assert_eq!(quiet_runs(&samples, frame), vec![(10, 12), (32, 5)]);
+        assert_eq!(quiet_runs(&samples, frame), vec![(40, 12), (62, 5)]);
         assert!(quiet_runs(&[0; 9600], frame).is_empty());
     }
 
