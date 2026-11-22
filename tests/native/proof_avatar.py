@@ -6,9 +6,8 @@ import sys
 import time
 from pathlib import Path
 
-from proof_workspace import chord, core_rpc, named_button
+from proof_workspace import chord, core_rpc, named_button, wait
 from proof_avatar_window import floating_windows as owned_floating_windows
-from proof_foundation_notes import wait
 from proof_process import process_identity
 
 

@@ -1,7 +1,7 @@
 diff --git a/app/src/client_structure.rs b/app/src/client_structure.rs
 --- a/app/src/client_structure.rs
 +++ b/app/src/client_structure.rs
-@@ -686,8 +686,8 @@
+@@ -586,8 +586,8 @@
          if records_created(scope, &request.action) {
              record_created_terminals(&mut self.created_vessels, &self.layout, &edit.candidate);
          }

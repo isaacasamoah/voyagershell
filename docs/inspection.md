@@ -106,7 +106,7 @@ Read a frame by these rules:
   therefore inside the control. A control that is fully clipped is absent.
 - A control that is absent from `elements` and from `ambiguous` was not part
   of the latest drawn frame. Absence is an answer. A closed creation menu has
-  no `create-notes` element.
+  no `create-agents` element.
 - `bounds` describe geometry only. A frame does not say whether another
   element covers the control.
 - After an input, wait for the element or the absence you expect. A change in
@@ -129,7 +129,7 @@ union all come from that list.
 | `terminal` | Placement id of the Vessel or Portal | The terminal view, once it is attached and accepts input | `renderPanel` in `panel-view.ts` |
 | `split-right`, `split-bottom` | Placement id of the Vessel or Portal to split | The split buttons | `Workspace.splitControl` |
 | `sidebar-toggle` | Empty | The sidebar toggle | `Workspace.sidebarToggle` |
-| `create-notes`, `create-agents` | Empty | The Notes and Agents entries of the creation menu | `CreationPicker.render` in `creation.ts` |
+| `create-agents` | Empty | The Agents entry of the creation menu | `CreationPicker.render` in `creation.ts` |
 | `create-manifest` | Vessel type id | The entry of the creation menu for a type that a manifest declares | `CreationPicker.render` in `creation.ts` |
 | `manifest-state` | Vessel id | The state of a manifest Vessel. Its `label` is `revision N` and the state as JSON | `ManifestView::render` in `manifest_view.rs` |
 | `manifest-action` | Vessel id, a colon and the action name | The button for one declared action that takes no arguments | `ManifestView::render` |
@@ -208,8 +208,7 @@ Portal title shows the program and the folder before the name, as in
 Put the marker in the helper that builds the control, so that every caller of
 the helper is marked. A context menu entry takes its marker through
 `MenuItem.marker`, which `WorkspaceMenu.render` draws inside the entry's
-button. `content/ui.ts` cannot hold a marker, because the Notes
-package loads it without `voyager_native`.
+button.
 
 `voyager_native` exports three more constructors for the same component.
 `EditorMarker.new(id, state)` marks the rename editor and reports the draft

@@ -492,9 +492,7 @@ export function renderPanel(
                                       ? "Resume"
                                       : "Start new shell",
                                   )
-                                  .disabled(
-                                    workspace.busy || !workspace.fresh,
-                                  )
+                                  .disabled(workspace.busy || !workspace.fresh)
                                   .child(
                                     content.id === VOYAGER_VESSEL
                                       ? "Resume"

@@ -1,20 +1,8 @@
 known:
-  - id: 'no-module-cycles: rs:voyager_desktop::host <-> rs:voyager_desktop::notes'
-    owner: isaac
-    reason: 'Modules in this group use each other. Breaking the loop clears it.'
-  - id: 'no-module-cycles: rs:voyager_desktop::notes_input <-> rs:voyager_desktop::notes_scope <-> rs:voyager_desktop::notes_session'
-    owner: isaac
-    reason: 'Modules in this group use each other. Breaking the loop clears it.'
   - id: 'no-child-cycles: rs:voyager_app::client <-> rs:voyager_app::client::core_calls'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::description'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::markdown'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_app::content <-> rs:voyager_app::content::view'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_app::conversation_client <-> rs:voyager_app::conversation_client::audio'
@@ -44,32 +32,8 @@ known:
   - id: 'no-child-cycles: rs:voyager_desktop::terminal <-> rs:voyager_desktop::terminal::row_paint'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'notes-type-has-one-home: "notes" in app/src/content.rs'
-    limit: 2
-    owner: isaac
-    reason: 'The package directory name repeats the Notes type id. Reading it from NOTES_TYPE clears it.'
-  - id: 'notes-type-has-one-home: "notes" in app/src/content/description.rs'
-    limit: 3
-    owner: isaac
-    reason: 'The Notes description repeats the Notes type id and its package directory name. Reading them from NOTES_TYPE clears it.'
-  - id: 'notes-type-has-one-home: "notes" in contract/src/bin/export.rs'
-    limit: 1
-    owner: isaac
-    reason: 'The schema export keys the Notes content schema by the type id, and the contract crate cannot read NOTES_TYPE from the app crate. Moving the type id into the contract crate clears it.'
-  - id: 'notes-type-has-one-home: "notes" in desktop/src/notes.rs'
-    limit: 1
-    owner: isaac
-    reason: 'The Notes check repeats the Notes type id. Reading it from NOTES_TYPE clears it.'
   - id: 'file-size: app/src/administrator.rs'
-    limit: 1394
-    owner: isaac
-    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'file-size: app/src/client.rs'
-    limit: 1062
-    owner: isaac
-    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'file-size: app/src/content.rs'
-    limit: 1268
+    limit: 1340
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/conversation_client.rs'

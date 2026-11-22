@@ -18,10 +18,9 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Terminal I/O | covered | none | covered | covered | terminal-input | terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
 | Selection | covered | none | covered | covered | terminal-input | - | linux |
-| Clipboard | python-only | none | none | python-only | terminal-input | notes-lifetime | linux |
-| Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
+| Clipboard | python-only | none | none | python-only | terminal-input | conversation-ux | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | avatar-drag, socket-dock | avatar, portal-avatar | linux |
-| Chat / conversation | python-only | none | python-only | python-only | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
+| Chat / conversation | python-only | none | python-only | python-only | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop | linux |
 | Voice | covered | none | none | python-only | voice | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | covered | none | none | covered | worktrees | - | linux |
@@ -30,7 +29,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Profile theme | covered | none | none | covered | profile | - | linux |
 | Profile updates | covered | none | none | covered | profile-updates | - | linux |
 | Manifest Vessels | covered | none | none | none | manifest-vessel | - | linux |
-| Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
+| Scripts live edit | none | none | none | none | - | - | linux |
 | Stored layout across builds | covered | none | none | covered | layout-compat, layout-refused, layout-corrupt | - | linux |
 | Front door | covered | none | none | covered | slow-save | - | linux |
 | Refused and uncertain results | covered | none | none | covered | outcomes | - | linux |
@@ -50,9 +49,9 @@ only the actions that its recipe lists. Those are create, switch and rename a Vo
 a Fleet, and split and rename a terminal Vessel. `terminal-input` proves
 Terminal I/O and Selection, and only the checks that its recipe lists. It
 also drives copy and paste in a terminal, but the Clipboard feature stays
-`python-only` because copy and paste in the canvas and in Notes have no
-native journey. Fleet arrangement, agent
-Vessels, Notes, conversation, voice, actual Codex, the real compositor and
+`python-only` because copy in the chat composer and copy or paste in the
+canvas have no native journey. Fleet arrangement, agent
+Vessels, conversation, voice, actual Codex, the real compositor and
 performance journeys remain in the existing Python fixture and are not
 migrated or re-proved here. Preserve them. Add a mapped feature only with
 source entry points, prerequisites, actual actions and observable success. No

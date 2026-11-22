@@ -6,7 +6,7 @@ from secrets import token_hex
 
 from PIL import ImageChops
 
-from proof_workspace import click_control, core_rpc, named_button, review_frame, wait as wait_for
+from proof_workspace import click_control, core_rpc, named_button, wait as wait_for
 from proof_clipboard import Clipboard
 from proof_process import exit_observation, observe_core_exit, process_identity
 
@@ -463,7 +463,6 @@ def prove(
             read=read,
         )
 
-    content_case = journey == "conversation-content"
     process_case = journey == "conversation-process"
     closed_chat = journey == "conversation-workspace-refresh"
     administrator = closed_chat or journey in (
@@ -499,17 +498,13 @@ def prove(
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
-    if administrator or content_case:
+    if administrator:
         marker = token_hex(8)
         initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
-        if administrator:
-            fixture = evidence / "profile/conversation/administrator-read.txt"
-            fixture.parent.mkdir(parents=True, exist_ok=True)
-            fixture.write_text(marker)
-        else:
-            workspace = evidence / "content-workspace"
-            workspace.mkdir()
-    if process_case or content_case:
+        fixture = evidence / "profile/conversation/administrator-read.txt"
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text(marker)
+    if process_case:
         deadline = time.monotonic() + 15
         while True:
             initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
@@ -530,8 +525,6 @@ def prove(
         if process_case
         else "Use your native file read tool to read administrator-read.txt in your current directory. Then use voyager_workspace to inspect the workspace and create exactly one Fleet named Native admin inside the existing Voyage. Report the file marker and actual result briefly. Do not change project files or launch agents."
         if administrator
-        else f"Use voyager_workspace to inspect this workspace. Create exactly one Voyage named Content trial with cwd {workspace}. In its first Fleet create exactly two Notes instances: one Vessel beside its terminal and one Portal in that Voyage. Use voyager_vessel to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all previous content and avatar context unchanged. Do not edit files, send terminal input, create extra Fleets, repeat an uncertain action or use native tools to bypass the content owner."
-        if content_case
         else "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
         else "Reply with one short sentence about a quiet ocean. Use no tools."
@@ -625,13 +618,13 @@ def prove(
         lambda state: any(
             message["role"] == "assistant" for message in state["messages"]
         ),
-        240 if content_case else 90,
+        90,
     )
     (evidence / "conversation-first.json").write_text(json.dumps(first, indent=2))
     capture("conversation-progress")
     final = wait(
         lambda state: state["phase"] in ("completed", "failed", "unconfirmed"),
-        240 if content_case else 90,
+        90,
     )
     assert final["phase"] == "completed", final
     assert final["thread"] and final["turn"] and final["model"]
@@ -647,107 +640,6 @@ def prove(
     assert users[0]["context"]["path"] == ["Overwatch"]
     assert users[0]["context"]["scope"] == {"kind": "workspace"}
     assert users[0]["context"]["revision"].isdigit()
-    if content_case:
-        tools = [message for message in final["messages"] if message["role"] == "tool"]
-        assert tools and all(
-            message["tool"]["status"] == "applied"
-            or (
-                message["tool"]["status"] == "rejected"
-                and message["tool"]["action"]["action"]["operation"] == "create-vessel"
-                and message["text"]
-                == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
-            )
-            for message in tools
-        ), tools
-        assert len({message["tool"]["requestId"] for message in tools}) == len(tools)
-        assert all(
-            message["context"] == users[0]["context"]
-            and message["requestId"] == users[0]["requestId"]
-            and message["tool"]["callId"] == message["id"]
-            and message["tool"]["callbackIds"]
-            for message in tools
-        )
-        actions = [
-            message["tool"]["action"]["action"]
-            for message in tools
-            if message["tool"]["name"] == "voyager_vessel"
-        ]
-        assert {action["operation"] for action in actions} == {
-            "describe",
-            "inspect",
-            "update",
-        }
-        assert sum(action["operation"] == "update" for action in actions) == 2
-        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v2"})
-        layout = observed["value"]
-        assert len(layout["voyages"]) == len(initial["value"]["voyages"]) + 1
-        voyage = next(v for v in layout["voyages"] if v["name"] == "Content trial")
-        assert voyage["cwd"] == str(workspace) and len(voyage["fleets"]) == 1
-        fleet = voyage["fleets"][0]
-        assert (
-            len(layout["vessels"]) == len(initial["value"]["vessels"]) + 3
-            and len(fleet["placements"]) == 2
-            and len(voyage["portals"]) == 1
-        )
-        assert layout["context"] == initial["value"]["context"]
-        assert layout["voyages"][0] == initial["value"]["voyages"][0]
-        assert layout["vessels"][:len(initial["value"]["vessels"])] == initial["value"]["vessels"]
-        ids = [fleet["placements"][1]["vessel"], voyage["portals"][0]["vessel"]]
-        expected = [
-            {"title": "Fleet notes", "text": f"FLEET_{marker}"},
-            {"title": "Voyage notes", "text": f"VOYAGE_{marker}"},
-        ]
-        assert ids[0] != ids[1]
-        for key in ids:
-            calls = [
-                message["tool"]
-                for message in tools
-                if message["tool"]["name"] == "voyager_vessel"
-                and message["tool"]["action"]["action"]["vesselId"] == key
-            ]
-            assert [call["action"]["action"]["operation"] for call in calls] == [
-                "describe",
-                "inspect",
-                "update",
-                "inspect",
-            ]
-            assert (
-                calls[2]["action"]["action"]["expectedRevision"] == calls[1]["version"]
-            )
-            assert calls[3]["version"] == calls[2]["version"] != calls[1]["version"]
-        files = []
-        for key, data in zip(ids, expected, strict=True):
-            content = next(item for item in layout["vessels"] if item["id"] == key)
-            binding = content["configuration"]["notesFile"]
-            path = Path(binding["directory"]) / binding["filename"]
-            assert path.parent == workspace / "notes"
-            assert next(
-                panel["name"]
-                for panel in [*fleet["placements"], *voyage["portals"]]
-                if panel["vessel"] == key
-            ) == path.name
-            assert path.read_text() == f"# {data['title']}\n\n{data['text']}"
-            files.append(str(path))
-        click_control(native, capture, geometry, evidence, pid, "Close chat", targets)
-        fields = native("fields", pid, ["Note title", "Note text"], "window")["fields"]
-        visual = review_frame(
-            capture, evidence,
-            "Both native Notes must visibly show these exact title/text values: " + json.dumps(expected),
-            "content-agent-both-native-views",
-        )
-        (evidence / "content-agent-observed.json").write_text(
-            json.dumps(
-                {
-                    "layout": observed,
-                    "ids": ids,
-                    "data": expected,
-                    "files": files,
-                    "fields": fields,
-                    "visual": visual,
-                },
-                indent=2,
-            )
-        )
     if administrator:
         assert marker in " ".join(message["text"] for message in answers), (
             "Native file inspection did not return the undisclosed fixture marker"
@@ -940,176 +832,9 @@ def prove(
         retained = exit_observation(shells, socket)
         assert all(item["observedState"] not in ("absent", "pid-reused", "Z") for item in retained["processes"]), retained
         (evidence / "shells-retained-after-quit.json").write_text(json.dumps(retained, indent=2))
-    return (
-        (
-            ["native-content-agent-create-inspect-update-both-scopes"]
-            if content_case
-            else []
-        )
-        + (["native-workspace-refresh-with-chat-closed"] if closed_chat else [])
-        + [
-            "native-private-text-completed",
-            "matching-thread-turn-request-context",
-            "native-quit",
-        ]
-    )
-
-
-def private_turn(
-    *,
-    native,
-    pid,
-    evidence,
-    wait,
-    type_text,
-    prompt,
-    context,
-    owned,
-    name,
-    accepted=None,
-    focus=None,
-):
-    def read():
-        path = evidence / "conversation.json"
-        return json.loads(path.read_text()) if path.exists() else None
-
-    before = wait(
-        read,
-        lambda state: state["phase"] in ("idle", "completed"),
-        "ready private conversation",
-    )
-    prior = {
-        message["requestId"]
-        for message in before["messages"]
-        if message["role"] == "user"
-    }
-    if focus is None:
-        wait(
-            lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
-            lambda fields: (
-                len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
-            ),
-            "visible private composer",
-        )
-        native("focus", pid, "Message Voyager", 0)
-        wait(
-            lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
-            lambda values: len(values) == 1 and values[0]["focused"],
-            "focused private composer",
-        )
-    else:
-        focus()
-    type_text(prompt)
-    native("key", 65293, True)
-    native("key", 65293, False)
-    submitted = wait(
-        read,
-        lambda state: any(
-            message["role"] == "user" and message["requestId"] not in prior
-            for message in state["messages"]
-        ),
-        "new submitted private request",
-    )
-    user = next(
-        message
-        for message in submitted["messages"]
-        if message["role"] == "user" and message["requestId"] not in prior
-    )
-    assert user["text"] == prompt and user["context"]["scope"] == context
-    if accepted is not None:
-        accepted_state = wait(
-            read,
-            lambda state: bool(state["turn"]) and state["phase"] == "working",
-            "accepted private turn",
-        )
-    providers = wait(
-        lambda: provider_processes(evidence), bool, "actual private provider", 20
-    )
-    for provider in providers:
-        owned[f"provider-{provider['pid']}-{provider['start']}"] = provider
-    if accepted is not None:
-        accepted(accepted_state, user)
-    final = wait(
-        read,
-        lambda state: (
-            state["phase"] in ("completed", "failed", "unconfirmed")
-            and any(
-                message["role"] == "user" and message["requestId"] == user["requestId"]
-                for message in state["messages"]
-            )
-        ),
-        "private turn completed without replay",
-        90,
-    )
-    (evidence / (name + ".json")).write_text(json.dumps(final, indent=2))
-    assert final["phase"] == "completed" and final["thread"] and final["turn"]
-    assert not final["limited"]
-    assert (
-        len(
-            [
-                message
-                for message in final["messages"]
-                if message["role"] == "user" and message["requestId"] not in prior
-            ]
-        )
-        == 1
-    )
-    assert any(
-        message["role"] == "assistant"
-        and message["requestId"] == user["requestId"]
-        and message["text"].strip()
-        for message in final["messages"]
-    )
-    assert all(
-        message["context"] == user["context"]
-        and (message["role"] != "tool" or message["tool"]["callId"] == message["id"])
-        for message in final["messages"]
-        if message["requestId"] == user["requestId"]
-    )
-    return final, user
-
-
-def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned, focus=None):
-    assert operation in ("remove", "restore") and context == {"kind": "workspace"}
-    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-vessel-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
-    final, user = private_turn(
-        native=native,
-        pid=pid,
-        evidence=evidence,
-        wait=wait,
-        type_text=type_text,
-        prompt=prompt,
-        context=context,
-        owned=owned,
-        name="notes-lifetime-package-" + operation,
-        focus=focus,
-    )
-    tools = [
-        message
-        for message in final["messages"]
-        if message["role"] == "tool" and message["requestId"] == user["requestId"]
+    return (["native-workspace-refresh-with-chat-closed"] if closed_chat else []) + [
+        "native-private-text-completed",
+        "matching-thread-turn-request-context",
+        "native-quit",
     ]
-    assert [message["tool"]["action"]["action"]["operation"] for message in tools] == [
-        "inspect",
-        operation + "-vessel-package",
-    ]
-    assert len({message["id"] for message in tools}) == len(tools)
-    assert len({message["tool"]["requestId"] for message in tools}) == len(tools)
-    assert all(
-        message["context"] == user["context"]
-        and message["tool"]["name"] == "voyager_workspace"
-        and message["tool"]["status"] == "applied"
-        and message["tool"]["callId"] == message["id"]
-        and message["tool"]["requestId"]
-        and message["tool"]["callbackIds"]
-        and message["tool"]["version"].isdigit()
-        for message in tools
-    )
-    assert tools[1]["tool"]["action"]["action"]["typeId"] == "notes"
-    assert any(
-        message["role"] == "assistant"
-        and message["requestId"] == user["requestId"]
-        and message["text"]
-        for message in final["messages"]
-    )
-    return final
+

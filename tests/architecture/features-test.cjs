@@ -58,14 +58,14 @@ debug = "covered"
 test("the committed map and page match their inputs", () => {
   const result = check(ROOT);
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /^PASS 30 features, 1 proven by its tests\n$/);
+  assert.match(result.out, /^PASS 29 features, 2 proven by its tests\n$/);
 });
 
 test("a feature row added without regenerating fails and names it", () => {
   const directory = scratch();
   edit(directory, "tests/native/features.toml", (text) => text + ADDED);
   edit(directory, "architecture/atlas-features.yaml", (text) =>
-    text.replace("[notes]", "[notes, planted-feature]"),
+    text.replace("[clipboard]", "[clipboard, planted-feature]"),
   );
   fails(
     check(directory),
@@ -103,7 +103,7 @@ test("a feature whose files are in no context has no owner", () => {
     (text) => text + ADDED.replace("app/src/scope.rs", "docs/glossary.md"),
   );
   edit(directory, "architecture/atlas-features.yaml", (text) =>
-    text.replace("[notes]", "[notes, planted-feature]"),
+    text.replace("[clipboard]", "[clipboard, planted-feature]"),
   );
   fails(check(directory), "FAIL planted-feature has no owner");
 });
@@ -117,9 +117,9 @@ test("a feature in no group fails and names it", () => {
 test("a feature in two groups fails", () => {
   const directory = scratch();
   edit(directory, "architecture/atlas-features.yaml", (text) =>
-    text.replace("[notes]", "[notes, clipboard]"),
+    text.replace("[core-reports]", "[core-reports, clipboard]"),
   );
-  fails(check(directory), "clipboard is in groups notes and platform");
+  fails(check(directory), "clipboard is in groups core-adapter and platform");
 });
 
 test("a source glob that matches nothing fails", () => {
@@ -243,7 +243,8 @@ test("a feature with every tier none and no check no longer passes", () => {
   );
   fails(
     check(directory),
-    "FAIL verification-environment has no journey, name one in tests/native/features.toml or a CI check in architecture/atlas-features.yaml",
+    "FAIL scripts-live-edit has no journey, name one in tests/native/features.toml or a CI check in architecture/atlas-features.yaml",
+    "verification-environment has no journey, name one in tests/native/features.toml or a CI check in architecture/atlas-features.yaml",
   );
 });
 
@@ -365,7 +366,7 @@ test("a feature shows each declared invariant that names it, with its guards, ch
     journeys: ["portals"],
   });
   assert.ok(
-    !invariantsOf(directory, "notes").some(
+    !invariantsOf(directory, "clipboard").some(
       (entry) => entry.id === "planted-invariant",
     ),
   );

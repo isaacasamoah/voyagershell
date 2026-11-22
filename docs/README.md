@@ -63,9 +63,8 @@ mkdir -p /var/tmp/voyager-try/project
 cd /var/tmp/voyager-try/project
 ```
 
-The folder matters. The first Voyage uses the directory you launch from, and
-Notes writes its Markdown files into a `notes/` folder there. Launching from the
-repository would put notes into your checkout.
+The folder matters. The first Voyage and its terminals use the directory you
+launch from. Launching from the repository would start them in your checkout.
 
 Start the app with a new profile and its own Core session:
 
@@ -105,17 +104,18 @@ The command and its output appear in the app's terminal Vessel. The app shows
 the screen. Core owns the process. [Terminal input and
 lifecycle](terminal.md) describes that split.
 
-## Step 4. Split a Fleet and open Notes
+## Step 4. Split a Fleet and open Agents
 
 1. Hover over the terminal. Split, maximize and close buttons appear in its top
    right corner.
 2. Click the first split button. A chooser lists **Terminal**, **Codex**,
-   **Claude**, **Notes** and **Agents**. Codex and Claude appear only when they
-   are installed.
-3. Click **Notes**.
+   **Claude** and **Agents**. Codex and Claude appear only when they are
+   installed.
+3. Click **Agents**.
 
-A Notes Vessel opens beside the terminal and shows **Title**. In your second
-terminal, `ls /var/tmp/voyager-try/project/notes` prints `Title.md`.
+An Agents Vessel named **Agents 1** opens beside the terminal. Its heading
+reads **Activity**, and it lists the Vessels of the Voyage named **Voyager**,
+including the shell from step 2.
 
 Both Vessels belong to Fleet 1. A Vessel sits inside one Fleet.
 
@@ -123,8 +123,8 @@ Both Vessels belong to Fleet 1. A Vessel sits inside one Fleet.
 
 1. Click **+** beside the Fleet tabs, then click **Terminal**. **Fleet 2** opens
    with a new shell.
-2. Click **‹** at the right end of the tab bar, then click **Notes**. A Portal
-   column opens on the right.
+2. Click **‹** at the right end of the tab bar, then click **Terminal**. A
+   Portal column opens on the right with a new shell named **Terminal 1**.
 3. Click the **Fleet 1** tab.
 
 The Portal stays on screen when you change Fleets. A Portal is a Vessel placed
@@ -136,8 +136,8 @@ type. Only the placement differs.
 Drag the avatar from the sidebar and drop it on the Portal.
 
 The avatar moves into the Portal, and the bottom right corner changes from
-**Overwatch** to **Voyager / Title.md**. Drop it on a Vessel instead and the
-label shows the full path, such as **Voyager / Fleet 1 / Title.md**.
+**Overwatch** to **Voyager / Terminal 1**. Drop it on a Vessel instead and the
+label shows the full path, such as **Voyager / Fleet 1 / Agents 1**.
 
 Docking sets what the private assistant sees and what it may change.
 **Overwatch** means the whole workspace. Docking does not move keyboard focus,
@@ -149,8 +149,8 @@ and it never limits your own clicks. The [avatar guide](avatar.md) and the
 Press **Ctrl+Q**. Closing the window does the same. Both quit the app and keep
 its programs.
 
-In your second terminal, `hc ls` still lists both shells as live. Quitting the
-app leaves Core programs running. To end them as well, right-click **Home**,
+In your second terminal, `hc ls` still lists all three shells as live. Quitting
+the app leaves Core programs running. To end them as well, right-click **Home**,
 choose **Stop session…** and confirm. That stops Core and every program it
 started in the session.
 
@@ -237,15 +237,14 @@ from step 4. Open each file as you read and find the named function.
 
 Every workspace operation from the interface takes this path. The assistant's
 tools join it at item 4, through `Client::scoped_call`, which
-`app/src/administrator.rs` calls. The data lives in three places:
+`app/src/administrator.rs` calls. The data lives in two places:
 
 - Core holds the workspace document and the running programs.
 - The profile holds interface scripts, the theme, `launches.json`,
   `voyager.json` (the app-written binding that names Voyager's terminal), avatar
-  artwork and older Notes data.
-- Each Voyage's directory holds its Notes as Markdown files in `notes/`.
+  artwork and the state of each manifest Vessel in `data/`.
 
-[Workspace](workspace.md) and [Notes and content ownership](content.md) explain
+[Workspace](workspace.md) and [Vessel types and content](content.md) explain
 the owners in depth.
 
 ## Step 10. Run the checks
@@ -305,9 +304,10 @@ procedure.
   [Script authoring](workspace.md#script-authoring-and-checking).
 - **A native view.** Start at `native_registry` in `desktop/src/lib.rs`. See
   [Workspace](workspace.md).
-- **A Vessel type.** Start at `IMPLEMENTATIONS` in
-  `app/src/content/description.rs`. See [Notes and content
-  ownership](content.md).
+- **A Vessel type.** Write a manifest in `vessels/<folder>/manifest.json` in
+  the profile, checked by `app/src/content/manifest/check.rs`. A built-in type
+  starts at `IMPLEMENTATIONS` in `app/src/content/description.rs`. See [Vessel
+  types and content](content.md).
 - **An assistant tool.** Start at the tool catalog in
   `app/src/administrator.rs`. See [Private conversation](conversation.md).
 - **A Core call.** Start at `app/src/core.rs` and `app/core-schema.cjs`. See

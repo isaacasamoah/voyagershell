@@ -32,7 +32,7 @@ const PLANTS = [
   ],
   [
     "README.md",
-    `The Notes ${["m", "od"].join("")} is a package.`,
+    `The Terminal ${["m", "od"].join("")} is a package.`,
     "package-nickname",
   ],
   [
@@ -269,7 +269,7 @@ const FORMS = [
   [
     "a nickname camel-case identifier",
     "desktop/canvas/main.ts",
-    `const notes${join("M", "od")} = 1;`,
+    `const demo${join("M", "od")} = 1;`,
     "package-nickname",
   ],
   [

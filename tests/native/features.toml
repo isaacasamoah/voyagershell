@@ -2,7 +2,7 @@
 id = "voyages"
 name = "Voyages"
 path = "Create a Voyage from the canvas, switch between Voyages and rename one."
-sources = ["desktop/canvas/main.*", "desktop/canvas/navigation-view.*", "desktop/canvas/voyage-colours.ts", "app/src/workspace.rs", "app/src/content/rename.rs", "app/src/scope.rs", "app/src/families/structure.rs", "app/src/client_structure.rs"]
+sources = ["desktop/canvas/main.*", "desktop/canvas/navigation-view.*", "desktop/canvas/voyage-colours.ts", "app/src/workspace.rs", "app/src/scope.rs", "app/src/families/structure.rs", "app/src/client_structure.rs"]
 journeys = ["workspace"]
 platforms = ["linux"]
 python = ["demo-feedback"]
@@ -131,27 +131,14 @@ debug = "covered"
 [[feature]]
 id = "clipboard"
 name = "Clipboard"
-path = "Copy text out of and paste text into a terminal, canvas or note."
+path = "Copy text out of a terminal or the chat composer and paste text into a terminal."
 sources = ["desktop/src/text.rs", "desktop/src/terminal_input.rs"]
 journeys = ["terminal-input"]
 platforms = ["linux"]
-python = ["notes-lifetime"]
+python = ["conversation-ux"]
 behavior = "python-only"
 performance = "none"
 visual = "none"
-debug = "python-only"
-
-[[feature]]
-id = "notes"
-name = "Notes"
-path = "Open a note, type into it and find it again after a restart."
-sources = ["desktop/src/notes.rs", "desktop/src/notes_*.rs"]
-journeys = []
-platforms = ["linux"]
-python = ["notes", "notes-lifetime"]
-behavior = "python-only"
-performance = "none"
-visual = "python-only"
 debug = "python-only"
 
 [[feature]]
@@ -174,7 +161,7 @@ path = "Talk to the assistant in the conversation panel and read, scroll and sto
 sources = ["desktop/src/conversation.rs", "app/src/conversation.rs", "app/src/conversation_*.rs", "app/src/codex*.rs", "app/src/provider*.rs", "desktop/canvas/chat.ts"]
 journeys = ["chat"]
 platforms = ["linux"]
-python = ["conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "conversation-scroll", "conversation-stop", "conversation-content"]
+python = ["conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "conversation-scroll", "conversation-stop"]
 behavior = "python-only"
 performance = "none"
 visual = "python-only"
@@ -291,11 +278,11 @@ path = "Edit a canvas script and see the change appear live."
 sources = ["desktop/canvas/main.ts", "contract/src/operations.rs", "desktop/src/bridge.rs", "desktop/script-types.json"]
 journeys = []
 platforms = ["linux"]
-python = ["canvas-stack"]
-behavior = "python-only"
-performance = "python-only"
-visual = "python-only"
-debug = "python-only"
+python = []
+behavior = "none"
+performance = "none"
+visual = "none"
+debug = "none"
 
 [[feature]]
 id = "layout-compat"

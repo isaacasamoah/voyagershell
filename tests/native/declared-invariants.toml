@@ -687,7 +687,7 @@ says = "A valid edit to a theme, canvas script or Vessel package shows while the
 kind = "user"
 owner = "content"
 source = "AGENTS.md: 'A valid edit updates the existing instance; a broken edit must expose its error and retain the usable version where supported'"
-features = ["scripts-live-edit", "profile-theme", "notes"]
+features = ["scripts-live-edit", "profile-theme"]
 guard = []
 type_gap = "No type holds a last-good copy beside the edit, so a broken edit can replace the running version. S14a keeps the last good copy per script Vessel."
 check = ["journey:profile/live-edit-recolours", "journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed"]
@@ -932,12 +932,12 @@ id = "vessel-type-id-has-one-home"
 says = "A Vessel type id is written in one place and read from there."
 kind = "structure"
 owner = "content"
-source = "The Notes type rule in tests/architecture/rules.yaml, generalised per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026"
+source = "The type id rule in tests/architecture/rules.yaml, generalised per the declared invariants design, section 3, agreed by Isaac 19 Nov 2026, and retargeted from the Notes type id to the agents type id when Notes was removed"
 features = []
-guard = ["gate:notes-type-has-one-home"]
+guard = ["gate:agents-type-has-one-home"]
 type_gap = "type_id is a bare String on Vessel and in the close plan, so any literal can name a type. DI14 adds VesselTypeId and the gate retires."
 check = []
-gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate. It covers the Notes type id only."
+gap = "The gate is its own check, run by npm run architecture:check in CI, and no check link names a gate. It covers the agents type id only."
 confidence = "inferred"
 
 [[invariant]]
@@ -1068,7 +1068,7 @@ confidence = "inferred"
 [[out_of_scope]]
 id = "vocabulary-gate-odd-literals"
 state = "The vocabulary gate meeting a raw or byte string literal of a type id, a cfg_attr test gate, or an empty rules file"
-why = "git grep finds no r#\"notes\"#, b\"notes\" or cfg_attr under app/src, contract/src or desktop/src, and tests/architecture/rules.yaml is not empty"
+why = "git grep finds no r#\"agents\"#, b\"agents\" or cfg_attr under app/src, contract/src or desktop/src, and tests/architecture/rules.yaml is not empty"
 revisit_when = "A file under the rule's roots gains such a literal or a cfg_attr(test) gate, or rules.yaml is emptied"
 confidence = "inferred"
 

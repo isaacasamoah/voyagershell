@@ -42,7 +42,6 @@ Its guide is [docs/workspace.md](workspace.md).
 Owns files:
 
 - `app/src/client.rs`
-- `app/src/client_content.rs`
 - `app/src/client_owner.rs`
 - `app/src/client_owner_tests.rs`
 - `app/src/core_session.rs`

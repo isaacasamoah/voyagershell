@@ -2,10 +2,11 @@
 
 The source candidate adds a compact Create Vessel picker to the existing pane
 creation area and the collapsed sidebar rail. It offers installed Terminal,
-Codex and configured program entries, including Claude when installed. Notes uses
-the same creation flow when its actual content description is available. There
-is no separate agent section. The ordinary Fleet plus and terminal shortcuts
-still create terminals. Native picker/input evidence on this candidate is pending.
+Codex and configured program entries, including Claude when installed. The
+Agents view and each ready manifest Vessel type use the same creation flow when
+the content catalogue describes them. There is no separate agent section. The
+ordinary Fleet plus and terminal shortcuts still create terminals. Native
+picker/input evidence on this candidate is pending.
 
 ## Personal defaults
 
@@ -57,7 +58,8 @@ lists it. [Voyager's start](workspace.md#voyagers-start) describes the rest.
 The picker captures its destination and workspace revision when it opens.
 The Rust workspace owner validates the request and saves the concrete launch
 only on the newly created terminal content. An unrelated pending Vessel ID
-cannot acquire a later picker selection. Notes rejects a program launch.
+cannot acquire a later picker selection. Any type other than `terminal` and
+`agent` rejects a program launch.
 The existing pending creation record retains that ID's accepted effective launch.
 An absent launch means Terminal. Fresh inspection advertises eligibility only
 while the stored choice matches. Starting checks that same record before the

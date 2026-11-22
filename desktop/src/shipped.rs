@@ -1,4 +1,4 @@
-use voyager_app::content::install::Shipped;
+use voyager_app::content::install::{Absent, Shipped};
 
 const FILES: &[(&str, &[u8])] = &[
     (
@@ -205,11 +205,10 @@ pub fn files() -> Vec<Shipped<'static>> {
         .map(|(path, bytes)| Shipped {
             path,
             bytes,
+            absent: Absent::Write,
         })
         .collect()
 }
-
-pub const RETIRED_KEPT: &[&str] = &["vessels/notes/"];
 
 #[cfg(test)]
 mod tests {
@@ -220,7 +219,7 @@ mod tests {
     const OLD: [&str; 4] = ["main.js", "ui.js", "vessel.json", "validate.js"];
 
     #[test]
-    fn a_start_keeps_every_retired_notes_file_data_and_project_note() {
+    fn a_start_removes_untouched_old_notes_copies_and_keeps_edits_data_and_project_notes() {
         let root = std::env::temp_dir().join(format!("voyager-retired-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let profile = root.join("profile");
@@ -245,18 +244,30 @@ mod tests {
         .unwrap();
         fs::write(package.join("main.js"), "personal edit\n").unwrap();
         fs::write(package.join("AGENTS.md"), "personal guide\n").unwrap();
-        fs::write(profile.join("data/note-1.json"), "{\"title\":\"T\",\"text\":\"x\"}").unwrap();
+        fs::write(
+            profile.join("data/note-1.json"),
+            "{\"title\":\"T\",\"text\":\"x\"}",
+        )
+        .unwrap();
         fs::write(project.join("Title.md"), "# Title\n").unwrap();
-        install(&profile, &files(), RETIRED_KEPT).unwrap();
-        for name in OLD {
-            assert!(package.join(name).is_file(), "{name}");
+        for _ in 0..2 {
+            install(&profile, &files()).unwrap();
+            for name in ["ui.js", "vessel.json", "validate.js"] {
+                assert!(!package.join(name).exists(), "{name}");
+            }
+            assert_eq!(
+                fs::read(package.join("main.js")).unwrap(),
+                b"personal edit\n"
+            );
+            assert_eq!(
+                fs::read(package.join("AGENTS.md")).unwrap(),
+                b"personal guide\n"
+            );
+            assert!(profile.join("data/note-1.json").is_file());
+            assert_eq!(fs::read(project.join("Title.md")).unwrap(), b"# Title\n");
+            let kept = fs::read_to_string(profile.join("installed.json")).unwrap();
+            assert!(!kept.contains("vessels/notes/"), "{kept}");
         }
-        assert_eq!(fs::read(package.join("main.js")).unwrap(), b"personal edit\n");
-        assert_eq!(fs::read(package.join("AGENTS.md")).unwrap(), b"personal guide\n");
-        assert!(profile.join("data/note-1.json").is_file());
-        assert_eq!(fs::read(project.join("Title.md")).unwrap(), b"# Title\n");
-        install(&profile, &files(), RETIRED_KEPT).unwrap();
-        assert!(package.join("ui.js").is_file());
         fs::remove_dir_all(root).unwrap();
     }
 }
