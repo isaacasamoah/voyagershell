@@ -398,7 +398,7 @@ fn below_thousand(value: u64) -> Vec<String> {
     match rest {
         0 => {}
         1..20 => words.push(ONES[rest].to_owned()),
-        _ if rest % 10 == 0 => words.push(TENS[rest / 10].to_owned()),
+        _ if rest.is_multiple_of(10) => words.push(TENS[rest / 10].to_owned()),
         _ => words.push(format!("{}-{}", TENS[rest / 10], ONES[rest % 10])),
     }
     words

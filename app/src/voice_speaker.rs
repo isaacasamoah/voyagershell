@@ -200,7 +200,7 @@ fn play_all(
 mod tests {
     use super::*;
     use crate::{
-        speech::{Fault, Piece, SpokenText, Standing},
+        speech::{Fault, Piece, Standing},
         voice_parts::{Frames, Speaker},
     };
     use std::{
