@@ -23,6 +23,7 @@ impl Click {
 impl Avatar {
     pub(super) fn activate(&mut self, window: &Window, cx: &mut Context<Self>) {
         self.animate(Trigger::Click, cx);
+        super::trace(format!("activate pending={} scope={:?} floating={}", self.pending.is_some(), self.scope, self.floating.is_some()));
         if self.pending.is_some() {
             self.waiting_click = Some(window.window_handle());
             return;
@@ -47,7 +48,9 @@ impl Avatar {
     }
 
     fn click(&mut self, window: &Window, cx: &mut Context<Self>) {
-        match Click::of(self.floating == Some(window.window_handle()), &self.scope) {
+        let decision = Click::of(self.floating == Some(window.window_handle()), &self.scope);
+        super::trace(format!("click decision={decision:?} scope={:?}", self.scope));
+        match decision {
             Click::Restore => self.restore_workspace(cx),
             Click::Home => self.submit(Action::Home, cx),
             Click::Minimize => {

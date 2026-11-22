@@ -222,6 +222,13 @@ impl Restore {
     }
 }
 
+pub(crate) fn trace(line: String) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() % 1_000_000);
+    eprintln!("TRACE {now} {line}");
+}
+
 fn floating_origin(avatar: Bounds<Pixels>) -> Point<Pixels> {
     avatar.center() - point(px(60.), px(60.))
 }
@@ -504,6 +511,14 @@ impl Avatar {
     }
 
     fn released(&mut self, event: &gpui::MouseUpEvent, window: &Window, cx: &mut Context<Self>) {
+        trace(format!(
+            "released drag={} source_match={} moved={} scope={:?} pending={}",
+            self.drag.is_some(),
+            self.drag.as_ref().is_some_and(|drag| drag.source == window.window_handle()),
+            self.drag.as_ref().is_some_and(|drag| drag.moved),
+            self.scope,
+            self.pending.is_some()
+        ));
         if self
             .drag
             .as_ref()
@@ -543,7 +558,10 @@ impl Avatar {
                 crate::platform::tone(true);
             }
         } else if drag.began.elapsed().as_millis() < 350 {
+            trace(format!("released-as-click held_ms={}", drag.began.elapsed().as_millis()));
             self.activate(window, cx);
+        } else {
+            trace(format!("released-too-slow held_ms={}", drag.began.elapsed().as_millis()));
         }
         cx.notify();
     }
@@ -639,6 +657,7 @@ impl Avatar {
     }
 
     fn submit(&mut self, action: Action, cx: &mut Context<Self>) {
+        trace(format!("submit {:?} pending={} scope={:?}", action, self.pending.is_some(), self.scope));
         if self.pending.is_some() {
             return;
         }
@@ -658,6 +677,10 @@ impl Avatar {
             let _ = avatar.update(cx, |avatar, cx| {
                 avatar.pending = None;
                 if let Ok(response) = &result {
+                    trace(format!(
+                        "reply status={:?} version={} avatar.version={} reply_scope={:?} scope_before={:?}",
+                        response.status, response.version, avatar.version, response.layout.context, avatar.scope
+                    ));
                     if response.version >= avatar.version {
                         avatar.version = response.version;
                         avatar.scope = response.layout.context.clone();
@@ -675,7 +698,9 @@ impl Avatar {
     }
 
     fn float(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
+        trace(format!("float opening={:?} floating={}", self.opening, self.floating.is_some()));
         if self.opening.is_some() {
+            trace("float-return opening".into());
             return true;
         }
         if self.floating.is_none() {
@@ -683,12 +708,14 @@ impl Avatar {
                 let geometry = self.geometry.borrow();
                 geometry.avatar.zip(geometry.window_bounds)
             }) else {
+                trace("float-return no-painted-position".into());
                 self.report("The avatar has no painted screen position".into(), cx);
                 return false;
             };
             let native = match crate::platform::native_window(window) {
                 Ok(native) => native,
                 Err(message) => {
+                    trace(format!("float-return native-window-error {message}"));
                     self.report(message, cx);
                     return false;
                 }
@@ -712,14 +739,17 @@ impl Avatar {
                     .upgrade()
                     .is_some_and(|avatar| avatar.read(cx).window_epoch.get() == epoch)
                 {
+                    trace("minimize_window called".into());
                     let _ = workspace.update(cx, |_, window, _| window.minimize_window());
                 }
             });
             return true;
         }
         let Some(painted) = self.geometry.borrow().avatar else {
+            trace("float-return no-painted-avatar".into());
             return false;
         };
+        trace("float opening-floating-window".into());
         let origin = floating_origin(painted);
         self.opening = Some(epoch);
         let avatar = cx.entity();
@@ -971,6 +1001,10 @@ impl Binding {
                         changed |= !receipt.is_empty() && receipt != avatar.dock_receipt;
                         avatar.applied_dock(receipt, epoch, cx);
                     }
+                    trace(format!(
+                        "props scope={:?} version={:?} avatar.version={} avatar.scope={:?}",
+                        scope, version, avatar.version, avatar.scope
+                    ));
                     if let (Some(raw), Some(version)) = (scope, version)
                         && version >= avatar.version
                         && let Ok(scope) = serde_json::from_str::<Scope>(raw)
@@ -1108,9 +1142,12 @@ impl Binding {
             })
             .function("take_result", move |_| match result.borrow_mut().take() {
                 None => Ok(HostValue::Null),
-                Some(Ok(reply)) => serde_json::to_string(&reply)
+                Some(Ok(reply)) => {
+                    trace("take_result".into());
+                    serde_json::to_string(&reply)
                     .map(HostValue::from)
-                    .map_err(|error| HostError::new(error.to_string())),
+                    .map_err(|error| HostError::new(error.to_string()))
+                }
                 Some(Err(error)) => Err(HostError::new(error)),
             })
             .finish()
