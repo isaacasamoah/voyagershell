@@ -7,8 +7,8 @@ pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed, FLOAT_SPACING,
-    LONG_SILENCE, Owed, PAST_CORE_DEADLINE, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, Stopwatch,
-    VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
+    LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, QUIET_MIC, REPLY_WAIT, ROOM_FEED,
+    SEND_WAIT, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 

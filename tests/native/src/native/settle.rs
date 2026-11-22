@@ -37,6 +37,7 @@ pub const ENGINE_START: Owed = Owed::secs(90);
 pub const QUIET_MIC: Owed = Owed::secs(2);
 pub const LONG_SILENCE: Owed = Owed::secs(12);
 pub const REPLY_WAIT: Owed = Owed::secs(20);
+pub const LONG_REPLY_WAIT: Owed = Owed::secs(120);
 pub const SEND_WAIT: Owed = Owed::secs(5);
 pub const ROOM_FEED: Owed = Owed::secs(330);
 

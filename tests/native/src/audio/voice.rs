@@ -1,6 +1,6 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
+use crate::native::{LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -230,6 +230,19 @@ fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
 }
 
 pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+    converse_within(native, speech, name, REPLY_WAIT)
+}
+
+pub fn converse_long(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
+    converse_within(native, speech, name, LONG_REPLY_WAIT)
+}
+
+fn converse_within(
+    native: &Native,
+    speech: &Speech,
+    name: &str,
+    reply_wait: Owed,
+) -> Result<Conversation> {
     let stack = stack(native)?;
     let system = &native.system;
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control ready", |label| {
@@ -274,7 +287,7 @@ pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversa
     })?
     .is_some();
     if sent {
-        poll(REPLY_WAIT.within(), LOOK, true, || {
+        poll(reply_wait.within(), LOOK, true, || {
             Ok(marks(&trace)?
                 .get(before..)
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
@@ -742,6 +755,77 @@ fn wav_16k(narrow: &[i16]) -> Vec<u8> {
         wav.extend_from_slice(&sample.to_le_bytes());
     }
     wav
+}
+
+fn hear_16k(native: &Native, narrow: &[i16]) -> Result<String> {
+    let body = json!({
+        "temperature": 0,
+        "max_tokens": 200,
+        "messages": [
+            {"role": "system", "content": "Perform ASR in English."},
+            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav_16k(narrow)), "format": "wav"}}]}
+        ]
+    })
+    .to_string();
+    let response = post(native, "/v1/chat/completions", &body)?;
+    let at = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .context("The engine sent no header")?;
+    let reply: Value = serde_json::from_slice(&response[at + 4..])?;
+    Ok(reply["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .replace("<|im_end|>", " ")
+        .trim()
+        .to_owned())
+}
+
+const WINDOW_FRAMES: usize = 400;
+const LONGEST_FRAMES: usize = 750;
+const PAUSE_FRAMES: usize = 15;
+const QUIET_RMS: f64 = 100.0;
+
+pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
+    let frame = 320;
+    let loud: Vec<bool> = narrow
+        .chunks(frame)
+        .map(|chunk| {
+            let energy: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (energy / chunk.len() as f64).sqrt() >= QUIET_RMS
+        })
+        .collect();
+    let mut cuts = vec![0];
+    let (mut start, mut quiet) = (0, 0);
+    for (index, is_loud) in loud.iter().enumerate() {
+        quiet = if *is_loud { 0 } else { quiet + 1 };
+        let length = index + 1 - start;
+        if (quiet >= PAUSE_FRAMES && length >= WINDOW_FRAMES) || length >= LONGEST_FRAMES {
+            start = index + 1;
+            cuts.push(start * frame);
+        }
+    }
+    cuts.push(narrow.len());
+    cuts.windows(2)
+        .map(|pair| &narrow[pair[0].min(narrow.len())..pair[1]])
+        .filter(|window| window.iter().any(|s| s.unsigned_abs() >= 1000))
+        .collect()
+}
+
+pub fn transcribe_long(native: &Native, name: &str) -> Result<Vec<String>> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    let narrow: Vec<i16> = heard
+        .0
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|trio| ((i32::from(trio[0]) + i32::from(trio[1]) + i32::from(trio[2])) / 3) as i16)
+        .collect();
+    windows(&narrow)
+        .into_iter()
+        .map(|window| hear_16k(native, window))
+        .collect()
 }
 
 pub fn transcribe(native: &Native, name: &str) -> Result<String> {
