@@ -1046,12 +1046,20 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(view.dockReceipt, "avatar-home");
   assert.equal(
     inspects,
+    0,
+    "an avatar reply starts no inspect while the canvas draws, because the request it starts asks for a redraw",
+  );
+  assert.equal(view.refreshRequested, true);
+  await settle();
+  assert.equal(
+    inspects,
     1,
-    "an avatar reply that shows a Vessel not yet open reads and prepares once, though the notice did not change",
+    "an avatar reply that shows a Vessel not yet open reads and prepares once, from a task, though the notice did not change",
   );
   assert.equal(view.refreshRequested, false);
   view.openings = open("content-2", "content-10");
   avatarReply("avatar-home-open");
+  await settle();
   assert.equal(
     inspects,
     0,
@@ -1060,6 +1068,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   view.openings = open("content-2");
   view.busy = true;
   avatarReply("avatar-home-busy");
+  await settle();
   assert.equal(
     accepted[0],
     "render",
@@ -1085,6 +1094,18 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "when the request ends the wanted refresh opens the Vessels once",
   );
   assert.equal(view.refreshRequested, false);
+  view.openings = open("content-2");
+  avatarReply("avatar-home-then-busy");
+  view.busy = true;
+  await settle();
+  assert.equal(
+    inspects,
+    0,
+    "a request that starts between the reply and its task is not doubled",
+  );
+  assert.equal(view.refreshRequested, true);
+  view.busy = false;
+  view.refreshRequested = false;
   view.openings = open("content-2", "content-10");
   moveFocus(view, { placement: "placement-9" }, cx);
   focusCalls.length = 0;

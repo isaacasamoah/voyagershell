@@ -60,6 +60,12 @@ export function inspectNotice(workspace, cx) {
     workspace.automaticRefresh = false;
   }
 }
+export function inspectOutsideRender(workspace, cx) {
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    if (!workspace.busy) inspectNotice(workspace, task);
+  });
+}
 export function acceptDockResult(workspace, cx) {
   const raw = take_result();
   if (raw !== null) {
@@ -68,7 +74,7 @@ export function acceptDockResult(workspace, cx) {
     if (workspace.acceptSnapshot(result, cx) && result.status === "applied") {
       workspace.dockReceipt = result.requestId;
       workspace.refreshRequested = true;
-      if (!workspace.busy) inspectNotice(workspace, cx);
+      inspectOutsideRender(workspace, cx);
     }
   }
   if (workspace.busy) return;
