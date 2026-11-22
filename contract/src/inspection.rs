@@ -66,7 +66,6 @@ roles! {
     SplitRight => "split-right",
     SplitBottom => "split-bottom",
     SidebarToggle => "sidebar-toggle",
-    CreateNotes => "create-notes",
     CreateAgents => "create-agents",
     CreateManifest => "create-manifest",
     ManifestState => "manifest-state",

@@ -159,7 +159,7 @@ export function hiddenPanels(
                 content.backend &&
                 live.has(JSON.stringify([content.id, content.backend])),
               )
-            : ["notes", "agents"].includes(content.typeId) && !content.backend;
+            : content.typeId === "agents" && !content.backend;
         })
         .map((panel) => ({
           ...panel,

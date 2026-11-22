@@ -7,7 +7,7 @@ mod banner;
 mod bridge;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
-mod content_budget;
+mod content_host;
 mod conversation;
 mod diagnostics;
 mod host;
@@ -15,11 +15,6 @@ mod inspect;
 mod lifecycle;
 mod manifest_view;
 mod measure;
-mod notes;
-mod notes_draft;
-mod notes_input;
-mod notes_scope;
-mod notes_session;
 mod notice_listener;
 mod occluding;
 mod platform;
@@ -63,12 +58,10 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
     let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
-    let notes_package = profile.join("vessels/notes");
     let profile_updates = voyager_app::content::install::install(
         &profile,
-        &shipped::files(voyager_app::content::install::package_absent(
-            &notes_package,
-        )),
+        &shipped::files(),
+        shipped::RETIRED_KEPT,
     )?;
     let content_owner = voyager_app::content::Owner::open(&profile)?;
     let manifest: serde_json::Value =
@@ -151,7 +144,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     return;
                 }
             };
-            let notes = notes::Host::new(notes_package.clone(), client.clone());
+            let content_host = content_host::Host::new(profile.join("vessels"), client.clone());
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                     point(px(180.), px(130.)),
@@ -193,7 +186,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             viewers,
                             notices,
                             conversation,
-                            notes,
+                            content_host,
                             avatar,
                             lifecycle,
                             profile_updates,
@@ -249,14 +242,6 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
 pub fn declarations() -> Result<String> {
     let mut declarations = gpui_shell::type_declarations(&native_registry(Default::default())?);
     for module in voyager_contract::operations::CANVAS_MODULES {
-        declarations.push_str(&module.declared_module());
-    }
-    Ok(declarations)
-}
-
-pub fn notes_declarations() -> Result<String> {
-    let mut declarations = gpui_shell::type_declarations(&notes_input::registry()?);
-    for module in voyager_contract::operations::VESSEL_MODULES {
         declarations.push_str(&module.declared_module());
     }
     Ok(declarations)

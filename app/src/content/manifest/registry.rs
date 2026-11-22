@@ -174,6 +174,21 @@ impl Registry {
         self.find(type_id).and_then(|entry| entry.manifest)
     }
 
+    pub fn installed(&self, type_id: &str) -> Result<Manifest, Option<String>> {
+        match self.find(type_id) {
+            Some(Entry {
+                manifest: Some(manifest),
+                removed: false,
+                ..
+            }) => Ok(manifest),
+            Some(Entry {
+                manifest: Some(manifest),
+                ..
+            }) => Err(Some(manifest.name)),
+            _ => Err(None),
+        }
+    }
+
     pub fn describe(&self, type_id: &str) -> Option<Description> {
         self.find(type_id).as_ref().map(describe)
     }

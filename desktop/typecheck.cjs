@@ -31,8 +31,6 @@ const entries = [
   "desktop/canvas/chat.ts",
 ];
 
-const notesEntries = ["content/notes/main.ts", "content/ui.ts"];
-
 function imports(source) {
   const names = new Set();
   function visit(node) {
@@ -123,7 +121,7 @@ function selectDeclarations(raw, sources) {
 }
 
 function compile(extra = [], scope = "canvas") {
-  if (!["canvas", "notes"].includes(scope)) throw Error("Unknown script scope");
+  if (scope !== "canvas") throw Error("Unknown script scope");
   const filename = path.join(__dirname, "tsconfig.json");
   const config = ts.readConfigFile(filename, ts.sys.readFile);
   if (config.error)
@@ -136,13 +134,7 @@ function compile(extra = [], scope = "canvas") {
     __dirname,
   );
   const program = ts.createProgram(
-    scope === "notes"
-      ? [
-          ...notesEntries.map((name) => path.join(root, name)),
-          path.join(directory, "notes.d.ts"),
-          ...extra,
-        ]
-      : [...parsed.fileNames, ...extra],
+    [...parsed.fileNames, ...extra],
     parsed.options,
   );
   const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
@@ -212,46 +204,37 @@ async function check(mode) {
   if (!["--write", "--check"].includes(mode))
     throw Error("Expected --write or --check");
   fs.mkdirSync(directory, { recursive: true });
-  const metadata = {};
-  for (const scope of ["canvas", "notes"]) {
-    const notes = scope === "notes";
-    const raw = execFileSync(
-      "cargo",
-      [
-        "run",
-        "--quiet",
-        "--locked",
-        "-p",
-        "voyager-desktop",
-        "--bin",
-        "export-script-types",
-        ...(notes ? ["--", "--notes"] : []),
-      ],
-      { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
-    );
-    fs.writeFileSync(
-      path.join(directory, notes ? "notes-raw.d.ts" : "raw.d.ts"),
-      raw,
-    );
-    const selected = selectDeclarations(raw, notes ? notesEntries : entries);
-    fs.writeFileSync(
-      path.join(directory, notes ? "notes.d.ts" : "gpui-kit.d.ts"),
-      selected.source,
-    );
-    const diagnostics = compile([], scope);
-    if (diagnostics.length) throw Error(describeDiagnostics(diagnostics));
-    metadata[scope] = {
+  const raw = execFileSync(
+    "cargo",
+    [
+      "run",
+      "--quiet",
+      "--locked",
+      "-p",
+      "voyager-desktop",
+      "--bin",
+      "export-script-types",
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+  );
+  fs.writeFileSync(path.join(directory, "raw.d.ts"), raw);
+  const selected = selectDeclarations(raw, entries);
+  fs.writeFileSync(path.join(directory, "gpui-kit.d.ts"), selected.source);
+  const diagnostics = compile([], "canvas");
+  if (diagnostics.length) throw Error(describeDiagnostics(diagnostics));
+  const metadata = {
+    canvas: {
       rawSha256: crypto.createHash("sha256").update(raw).digest("hex"),
       modules: selected.modules,
-    };
-  }
+    },
+  };
   const files = [
     [
       "desktop/script-types.json",
       await prettier.format(JSON.stringify(metadata), { parser: "json" }),
     ],
   ];
-  for (const name of new Set([...entries, ...notesEntries])) {
+  for (const name of entries) {
     const filename = name.replace(/\.ts$/, ".js");
     const emitted = fs.readFileSync(
       path.join(directory, "emitted", filename),

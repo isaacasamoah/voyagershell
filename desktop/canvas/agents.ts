@@ -161,13 +161,11 @@ export function agentsView(
           (foreground === "bash"
             ? "Bash"
             : foreground ||
-              (content.typeId === "notes"
-                ? "Notes"
-                : content.typeId === "agents"
-                  ? "Activity"
-                  : terminalBacked(content.typeId)
-                    ? "Terminal"
-                    : content.typeId));
+              (content.typeId === "agents"
+                ? "Activity"
+                : terminalBacked(content.typeId)
+                  ? "Terminal"
+                  : content.typeId));
         if (/^Terminal\s+\d+$/i.test(name)) {
           const folder =
             process?.agentName ||
