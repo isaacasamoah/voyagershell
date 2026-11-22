@@ -298,6 +298,24 @@ fn start_agent(
     })
 }
 
+fn create_codex(native: &mut Native, fleet: &FleetId, left: &PlacementId) -> Result<Started> {
+    let (_, layout) = native.document()?.context("Missing saved layout")?;
+    let before = members(&layout, fleet);
+    Terminal::bind(native, left)?.focus(native)?;
+    native.press(Key::Char('o').ctrl().shift())?;
+    native.click(&Target::worker(CODEX))?;
+    let created = created_beside(native, fleet, &before)?;
+    let agent = Terminal::bind(native, &created.placement)?;
+    let printed = agent.printed(native, "Stand-in codex started with: ")?;
+    let foreground = foreground_argv(native, &created.terminal)?;
+    Ok(Started {
+        created: Some(created),
+        code: String::new(),
+        foreground,
+        printed,
+    })
+}
+
 fn divided(
     seen: &Seen,
     fleet: &FleetId,
@@ -669,31 +687,36 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     cases.check(native, Case::PersonKeepsTableDefault, |native| {
-        let (_, layout) = native.document()?.context("Missing saved layout")?;
-        let before = members(&layout, &fleet);
+        let seeded = create_codex(native, &fleet, &left)?;
         native.edit_profile_file("launches.json", UNNAMED_CODEX)?;
-        Terminal::bind(native, &left)?.focus(native)?;
-        native.press(Key::Char('o').ctrl().shift())?;
-        native.click(&Target::worker(CODEX))?;
-        let created = created_beside(native, &fleet, &before)?;
-        let agent = Terminal::bind(native, &created.placement)?;
-        let printed = agent.printed(native, "Stand-in codex started with: ")?;
-        let foreground = foreground_argv(native, &created.terminal)?;
+        let unnamed = create_codex(native, &fleet, &left)?;
         native.keep_window("person-keeps-table-default")?;
         let table: Vec<String> = TABLE_DEFAULT.iter().map(|argument| (*argument).to_owned()).collect();
+        let saved = |started: &Started| started.created.as_ref().and_then(|made| made.launch.clone()) == Some(Launch::Program { argv: table.clone() });
+        let got = |started: &Started| {
+            started.printed
+                && arguments(&started.foreground) == table[1..]
+                && arguments(&started.foreground).iter().any(|argument| argument == BYPASS)
+        };
         Verdict::new()
             .expect(
-                "the person's Create Codex, from a launch entry that names no permissions, saved the table's default launch, permission flag included",
-                created.launch == Some(Launch::Program { argv: table.clone() }),
+                "with the Codex entry as shipped, the person's Create Codex saved the arguments that entry names",
+                saved(&seeded),
             )
             .expect(
-                "the started stand-in codex got the table's arguments, bypass flag included",
-                printed
-                    && arguments(&foreground) == table[1..]
-                    && arguments(&foreground).iter().any(|argument| argument == BYPASS),
+                "with the Codex entry as shipped, the started stand-in codex got those arguments, bypass flag included",
+                got(&seeded),
             )
-            .observed("created", &created)?
-            .observed("foreground", &foreground)
+            .expect(
+                "with a Codex entry that names no permissions, the person's Create Codex saved the table's default launch",
+                saved(&unnamed),
+            )
+            .expect(
+                "with a Codex entry that names no permissions, the started stand-in codex got the table's default arguments, bypass flag included",
+                got(&unnamed),
+            )
+            .observed("seeded", &seeded)?
+            .observed("unnamed", &unnamed)
     })?;
 
     let (_, layout) = native.document()?.context("Missing saved layout")?;
