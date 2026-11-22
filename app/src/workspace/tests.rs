@@ -745,3 +745,51 @@ fn a_vessel_is_not_created_in_a_closed_fleet() {
     assert!(refused.unwrap_err().contains("no open Fleet"));
     assert_eq!(model.layout, before);
 }
+
+#[test]
+fn a_missing_placement_gets_the_same_message_through_the_label_and_through_create_vessel() {
+    let (mut model, ..) = two_voyages();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let missing = PlacementId("placement-404".into());
+    let by_label = model
+        .adopt(
+            Place::Fleet {
+                id: fleet.clone(),
+                beside: Some((voyager_contract::Side::Left, missing.clone())),
+            },
+            &CoreTerminalId("t9".into()),
+            "/work".into(),
+            Launch::Terminal,
+            None,
+        )
+        .unwrap_err();
+    assert_eq!(
+        by_label,
+        format!("Fleet {} has no visible placement placement-404", fleet.0)
+    );
+    for caller in [None, Some(VesselId("content-9".into()))] {
+        let defaults = if caller.is_some() {
+            Defaults::Plain
+        } else {
+            Defaults::Table
+        };
+        let by_operation = model
+            .apply_from(
+                caller.as_ref(),
+                defaults,
+                Action::CreateVessel {
+                    type_id: "terminal".into(),
+                    destination: ContentDestination::Placement {
+                        owner: PlacementOwner::Fleet { id: fleet.clone() },
+                        insertion: PlacementInsertion::Beside {
+                            id: missing.clone(),
+                            side: voyager_contract::Side::Left,
+                        },
+                    },
+                    launch: None,
+                },
+            )
+            .unwrap_err();
+        assert_eq!(by_operation, by_label);
+    }
+}

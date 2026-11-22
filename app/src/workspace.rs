@@ -258,11 +258,7 @@ impl Model {
         if let PlacementInsertion::Beside { id, .. } = &insertion
             && !panels::contains(&panels::visible(target.root, target.members), id)
         {
-            let scope = match owner {
-                PlacementOwner::Fleet { id } => format!("Fleet {}", id.0),
-                PlacementOwner::Portals { voyage } => format!("Voyage {}", voyage.0),
-            };
-            return Err(format!("{scope} has no visible placement {}", id.0));
+            return Err(panels::no_visible_placement(owner, id));
         }
         let members = target.members;
         let core_name = core_name

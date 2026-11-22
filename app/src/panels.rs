@@ -472,6 +472,14 @@ pub(crate) fn repair_maximized(group: GroupMut<'_>) {
     }
 }
 
+pub(crate) fn no_visible_placement(owner: &PlacementOwner, id: &PlacementId) -> String {
+    let scope = match owner {
+        PlacementOwner::Fleet { id } => format!("Fleet {}", id.0),
+        PlacementOwner::Portals { voyage } => format!("Voyage {}", voyage.0),
+    };
+    format!("{scope} has no visible placement {}", id.0)
+}
+
 pub(crate) fn insertion_cwd(
     layout: &Layout,
     owner: &PlacementOwner,
@@ -495,7 +503,8 @@ pub(crate) fn insertion_cwd(
                 .ok_or("Panel content not found")?;
             return Ok(content.cwd.clone());
         }
-        _ => return Err("Panel insertion target changed".into()),
+        PlacementInsertion::Beside { id, .. } => return Err(no_visible_placement(owner, id)),
+        PlacementInsertion::Empty => return Err("Panel insertion target changed".into()),
     }
     let voyage = layout
         .containers()
