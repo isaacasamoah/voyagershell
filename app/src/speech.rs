@@ -836,9 +836,12 @@ mod tests {
 
     #[test]
     fn the_ceiling_cuts_the_whole_reply_before_it_is_split_and_no_piece_is_cut_mid_sentence() {
-        let sentences: Vec<String> = (1..=8)
-            .map(|number| format!("{} end{number}.", vec!["word"; 19].join(" ")))
-            .collect();
+        let sentences: Vec<String> = [
+            "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
+        ]
+        .iter()
+        .map(|last| format!("{} {last}.", vec!["word"; 19].join(" ")))
+        .collect();
         let text = SpokenText::from_reply(&sentences.join(" ")).unwrap();
         assert_eq!(piece_texts(&text), sentences[..6]);
         assert_eq!(text.as_str(), sentences[..6].join(" "));
