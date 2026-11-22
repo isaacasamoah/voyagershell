@@ -102,7 +102,7 @@ fn say(parts: &Parts, line: Line) {
                 parts.trace.mark_words("speech-started", &label);
                 let finish = speaker.play(&clip);
                 note_unspoken(parts, &line);
-                finish(&|| !(parts.on)());
+                finish(&|| (parts.stopped)());
                 parts.trace.mark("speech-ended");
                 None
             }
@@ -132,16 +132,29 @@ mod tests {
     };
     use voyager_contract::reply::ReplyEvent;
 
-    struct Voice(Arc<Mutex<Vec<usize>>>);
+    struct Voice(
+        Arc<Mutex<Vec<usize>>>,
+        Arc<Mutex<Vec<bool>>>,
+        Arc<AtomicBool>,
+    );
 
     impl Speaker for Voice {
         fn play(self: Box<Self>, clip: &Clip) -> crate::voice_parts::Finish {
             self.0.lock().unwrap().push(clip.pcm.len());
-            Box::new(|_| {})
+            Box::new(move |cut| {
+                if self.2.load(Ordering::SeqCst) {
+                    thread::sleep(Duration::from_millis(300));
+                }
+                self.1.lock().unwrap().push(cut());
+            })
         }
     }
 
-    struct Out(Arc<Mutex<Vec<usize>>>);
+    struct Out(
+        Arc<Mutex<Vec<usize>>>,
+        Arc<Mutex<Vec<bool>>>,
+        Arc<AtomicBool>,
+    );
 
     impl Audio for Out {
         fn microphone(&self) -> io::Result<Box<dyn Frames>> {
@@ -149,7 +162,11 @@ mod tests {
         }
 
         fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
-            Ok(Box::new(Voice(self.0.clone())))
+            Ok(Box::new(Voice(
+                self.0.clone(),
+                self.1.clone(),
+                self.2.clone(),
+            )))
         }
 
         fn detector(&self) -> Box<dyn crate::audio_io::SpeechDetector> {
@@ -201,6 +218,8 @@ mod tests {
         stop: Arc<AtomicBool>,
         on: Arc<AtomicBool>,
         noted: Arc<Mutex<Vec<(String, usize)>>>,
+        cut: Arc<Mutex<Vec<bool>>>,
+        slow: Arc<AtomicBool>,
     }
 
     impl Rig {
@@ -210,6 +229,8 @@ mod tests {
             let stop = Arc::new(AtomicBool::new(false));
             let replies = Replies::default();
             let noted: Arc<Mutex<Vec<(String, usize)>>> = Arc::default();
+            let cut: Arc<Mutex<Vec<bool>>> = Arc::default();
+            let slow = Arc::new(AtomicBool::new(false));
             let floor = Arc::new(Floor::default());
             let recorded = phases.clone();
             let halted = stop.clone();
@@ -232,7 +253,7 @@ mod tests {
                         })
                         .collect(),
                 ),
-                audio: Arc::new(Out(played.clone())),
+                audio: Arc::new(Out(played.clone(), cut.clone(), slow.clone())),
                 voyager: Arc::new(Here(standing, played.clone(), noted.clone())),
                 replies: replies.clone(),
                 trace: Trace::off(),
@@ -249,6 +270,8 @@ mod tests {
                 stop,
                 on,
                 noted,
+                cut,
+                slow,
             }
         }
 
@@ -326,6 +349,37 @@ mod tests {
         drop(held);
         rig.wait_for(1);
         assert!(!rig.floor.is_wanted());
+    }
+
+    fn wait_for_finish(rig: &Rig) {
+        let until = Instant::now() + Duration::from_secs(3);
+        while rig.cut.lock().unwrap().is_empty() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn a_click_off_while_a_reply_plays_lets_it_finish() {
+        let rig = Rig::start(Standing::Idle);
+        rig.slow.store(true, Ordering::SeqCst);
+        rig.say("p1", true, "Renamed it. Then I tidied the tabs.");
+        rig.wait_for(1);
+        rig.on.store(false, Ordering::SeqCst);
+        wait_for_finish(&rig);
+        assert_eq!(rig.cut.lock().unwrap().clone(), vec![false]);
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(rig.phases.lock().unwrap().last(), Some(&Phase::Ready));
+    }
+
+    #[test]
+    fn stopping_the_voice_layer_while_a_reply_plays_cuts_it() {
+        let rig = Rig::start(Standing::Idle);
+        rig.slow.store(true, Ordering::SeqCst);
+        rig.say("p1", true, "Renamed it. Then I tidied the tabs.");
+        rig.wait_for(1);
+        rig.stop.store(true, Ordering::SeqCst);
+        wait_for_finish(&rig);
+        assert_eq!(rig.cut.lock().unwrap().clone(), vec![true]);
     }
 
     #[test]

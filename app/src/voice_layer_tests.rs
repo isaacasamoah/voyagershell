@@ -354,7 +354,7 @@ fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
 }
 
 #[test]
-fn a_click_while_the_acknowledgement_plays_cuts_it_and_the_request_still_goes() {
+fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
     struct Clicking(Arc<Shared>);
     impl Hearing for Clicking {
         fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
@@ -374,8 +374,43 @@ fn a_click_while_the_acknowledgement_plays_cuts_it_and_the_request_still_goes() 
     });
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
     assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
-    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![true]);
+    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
     assert_eq!(rig.opened(), 1);
+}
+
+#[test]
+fn a_shutdown_while_the_acknowledgement_plays_cuts_it() {
+    struct Closing(Arc<Shared>);
+    impl Hearing for Closing {
+        fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+            self.0.update(|state| state.shutdown = true);
+            Ok("open the roadmap".into())
+        }
+    }
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.shared.update(|state| state.snapshot.on = true);
+    rig.serve_with(&Closing(rig.shared.clone()));
+    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![true]);
+}
+
+#[test]
+fn a_click_off_while_a_reply_holds_the_floor_never_opens_the_microphone_again() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    let held = rig.floor.hold();
+    thread::scope(|scope| {
+        scope.spawn(|| rig.serve("open the roadmap"));
+        thread::sleep(Duration::from_millis(100));
+        click(&rig.shared);
+        drop(held);
+        thread::sleep(Duration::from_millis(150));
+        wait_until(|| {
+            let snapshot = rig.snapshot();
+            !snapshot.on && snapshot.phase == Phase::Ready
+        });
+        rig.shared.update(|state| state.shutdown = true);
+    });
+    assert_eq!(rig.opened(), 0);
+    assert!(rig.said().is_empty());
 }
 
 #[test]
@@ -511,7 +546,7 @@ fn a_gone_or_ended_voyager_is_told_it_is_not_running_and_receives_nothing() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::NotRunning, false);
     rig.serve("open the roadmap");
     assert!(rig.said().is_empty());
-    assert_eq!(rig.played(), vec![mark(Phrase::NotRunning)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::Gone)]);
 }
 
 #[test]
