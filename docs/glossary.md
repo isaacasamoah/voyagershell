@@ -37,7 +37,7 @@ Retired words fail `npm run vocabulary:check`.
 | Queue | The one ordered owner of application effects. A caller sends a request and the queue decides its outcome. | Application queue and front door |  |
 | Refusal | A known outcome. The application declined the Operation and nothing changed. | Application queue and front door |  |
 | Region | A node of the Canvas region tree, such as the sidebar, the Fleet strip, the active Fleet, the Portals or the context bar. | Placement |  |
-| Reply marker | The token [vy] that Voyager starts every reply with. The app strips it where it stores the reply, before the reply is spoken or noted in the chat. | Application queue and front door |  |
+| Reply marker | The token [vy] that Voyager starts every reply with. The app keeps only the text after the first one where it stores the reply, and removes any later one, before the reply is spoken or noted in the chat. | Application queue and front door |  |
 | Uncertain effect | An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically. | Application queue and front door |  |
 | Vessel | One piece of content with its own identity, configuration, state and revision, of one Vessel type. A Placement puts it on screen. | Content | `content instance`, `content id` |
 | Vessel package | The source folder under vessels/ in the profile that provides one scripted Vessel type. Its manifest is vessel.json. | Content | `content package`, `mod` |

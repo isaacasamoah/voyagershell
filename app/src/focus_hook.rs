@@ -20,6 +20,8 @@ const NAME: &str = "voyager";
 pub(crate) const DEFAULT_ARGV: [&str; 5] =
     [PROGRAM, "--model", "claude-sonnet-5-5", "--effort", "low"];
 
+const TASK_TOOLS: &str = "TaskCreate,TaskUpdate,TaskList,TaskGet,TodoWrite";
+
 const BACKGROUND: &str = "VOYAGER_BACKGROUND";
 const SESSION_LINE: &str =
     "This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1.";
@@ -87,6 +89,8 @@ pub(crate) fn voyager_arguments(
         rules(),
         "--settings".into(),
         settings(command).to_string(),
+        "--disallowedTools".into(),
+        TASK_TOOLS.into(),
     ]
 }
 
@@ -462,6 +466,34 @@ mod tests {
         let unknown = settings_argument(&voyager_arguments("s1", true, None));
         assert_eq!(unknown["env"]["VOYAGER_BACKGROUND"], "1");
         assert!(unknown.get("hooks").is_none());
+    }
+
+    #[test]
+    fn the_launch_removes_the_task_tools_on_a_fresh_start_and_a_resume() {
+        for resume in [false, true] {
+            let words = voyager_arguments("s1", resume, None);
+            let at = words
+                .iter()
+                .position(|word| word == "--disallowedTools")
+                .unwrap();
+            assert_eq!(
+                words[at + 1].split(',').collect::<Vec<_>>(),
+                [
+                    "TaskCreate",
+                    "TaskUpdate",
+                    "TaskList",
+                    "TaskGet",
+                    "TodoWrite"
+                ]
+            );
+            assert_eq!(
+                words
+                    .iter()
+                    .filter(|word| *word == "--disallowedTools")
+                    .count(),
+                1
+            );
+        }
     }
 
     #[test]

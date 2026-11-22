@@ -120,8 +120,11 @@ that appends the rule is the Voyager start, which this guide does not describe.
 The same launch tells Voyager that this is the app's background Voyager session,
 that its reply marker is `[vy]` and that `[vy]` replaces any other reply marker
 its instructions name. It asks Voyager to start every reply with `[vy]`, which
-`spoken::reply_rule` words and `spoken::strip_reply_marker` removes. The launch
-also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
+`spoken::reply_rule` words. `spoken::strip_reply_marker` keeps only the text after
+the first `[vy]` and removes every later one. The launch passes `--disallowedTools`
+with `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet` and `TodoWrite`, which keeps
+Claude Code's task reminder out of Voyager's replies on a fresh start and on a
+resume. It also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
 own instructions leave their personal reply prefix out of Voyager's replies.
 Claude cannot read its own environment, so the background-session line states the same fact in
 words. Claude Code ignores `--append-system-prompt` when it resumes a
@@ -129,8 +132,8 @@ conversation, and the earlier replies in that conversation carry the personal pr
 focus hook output repeats the background-session line, `spoken::reply_rule` and the guide,
 which points to `voyager --skill`, at every prompt. A launch with no hook command path has no such
 repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
-the marker where it stores a reply, so neither the speech filter nor the chat
-note ever sees it.
+the marker, and any text before it, where it stores a reply, so neither the speech filter
+nor the chat note ever sees them.
 
 The hook reads the prompt from the `UserPromptSubmit` input it receives on
 stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
