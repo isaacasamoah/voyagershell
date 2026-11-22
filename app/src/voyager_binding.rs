@@ -51,9 +51,9 @@ impl Binding {
         &self,
         layout: &voyager_contract::Layout,
         caller: Option<&voyager_contract::VesselId>,
-    ) -> crate::agent_programs::Defaults {
+    ) -> voyager_contract::launch::Defaults {
         let Some(caller) = caller else {
-            return crate::agent_programs::Defaults::Table;
+            return voyager_contract::launch::Defaults::Table;
         };
         let is_voyager = layout
             .vessels
@@ -62,9 +62,9 @@ impl Binding {
             .and_then(|vessel| vessel.backend.as_ref())
             .is_some_and(|terminal| self.names(terminal));
         if is_voyager {
-            crate::agent_programs::Defaults::Table
+            voyager_contract::launch::Defaults::Table
         } else {
-            crate::agent_programs::Defaults::Plain
+            voyager_contract::launch::Defaults::Plain
         }
     }
 

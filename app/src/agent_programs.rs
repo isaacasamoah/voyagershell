@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use std::sync::LazyLock;
 use voyager_contract::launch::{
-    AgentProgram, AgentTable, Effort, Launch, LaunchEntry, LaunchSettings, LaunchSpec,
+    AgentProgram, AgentTable, Defaults, Effort, Launch, LaunchEntry, LaunchSettings, LaunchSpec,
     PROGRAM_KIND, Permissions, TERMINAL_KIND,
 };
 
@@ -79,12 +79,6 @@ fn substitute(flags: &[String], name: &str, value: &str) -> Vec<String> {
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Defaults {
-    Table,
-    Plain,
-}
-
 pub fn argv(
     kind: &str,
     model: Option<&str>,
@@ -154,7 +148,7 @@ fn argv_with(
     Ok(args)
 }
 
-pub(crate) fn resolve(spec: &LaunchSpec, defaults: Defaults) -> Result<Launch, String> {
+pub fn resolve(spec: &LaunchSpec, defaults: Defaults) -> Result<Launch, String> {
     match spec {
         LaunchSpec::Terminal => Ok(Launch::Terminal),
         LaunchSpec::Program { argv } => Ok(Launch::Program { argv: argv.clone() }),

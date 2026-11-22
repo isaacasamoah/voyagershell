@@ -1,9 +1,9 @@
-use crate::{agent_programs::Defaults, panels};
+use crate::panels;
 use voyager_contract::{
     Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, LastVessel,
     Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget,
     Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView,
-    launch::{Launch, LaunchSpec},
+    launch::{Defaults, Launch, LaunchSpec},
     place::Place,
 };
 

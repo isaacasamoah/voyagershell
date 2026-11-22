@@ -1,6 +1,5 @@
-use crate::agent_programs::Defaults;
 use std::{collections::HashSet, io::Read as _, path::Path};
-use voyager_contract::launch::{Catalog, Launch, LaunchSettings, LaunchSpec};
+use voyager_contract::launch::{Catalog, Defaults, Launch, LaunchSettings, LaunchSpec};
 
 pub(crate) const VOYAGER_ENTRY: &str = "voyager";
 
