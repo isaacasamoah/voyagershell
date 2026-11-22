@@ -359,9 +359,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |_| true,
         )?;
         let labels = native.drawn_labels(&Target::STATUS, CANVAS_REFRESH)?;
-        let script_error = labels
-            .iter()
-            .any(|label| label.contains("cannot run during render"));
+        let script_error = render_error(&labels);
         native.click(&Target::HOME)?;
         let (home_fleet, agents) = native.settle(
             "the Home view with its first Vessel",
@@ -515,6 +513,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let still_up = native.observe("the window still drawing the workspace", |seen| {
             seen.shows(&Target::HOME).then_some(())
         });
+        let labels = native.drawn_labels(&Target::STATUS, CANVAS_REFRESH)?;
         native.keep_window("avatar-click-at-home-opens-home")?;
         Verdict::new()
             .expect(
@@ -534,6 +533,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 !minimises(&sent),
             )
             .expect("the window stayed up", still_up.is_ok())
+            .expect(
+                "the click left no render error in the status line",
+                !render_error(&labels),
+            )
+            .observed("statusLabels", &labels)?
             .observed("requests", &sent)
     })?;
 
@@ -686,6 +690,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
+fn render_error(labels: &[String]) -> bool {
+    labels.iter().any(|label| {
+        label.contains("cannot run during render") || label.contains("during the `render` phase")
+    })
+}
+
 fn held_release(native: &Native, arm: &crate::core_relay::Arm) -> Result<Option<u64>> {
     let ledger = std::fs::read_to_string(native.system.evidence.join(crate::core_relay::LEDGER))
         .unwrap_or_default();
@@ -716,4 +726,27 @@ fn minimises(sent: &[Observed]) -> bool {
     sent.iter().any(|observed| {
         matches!(&observed.request, Request::ChangeState { state, .. } if state.name == "iconic")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_error;
+
+    #[test]
+    fn both_render_phase_refusals_count_as_a_render_error() {
+        assert!(render_error(&[
+            "FocusHandle.focus() cannot run during render or layout; mutate state from an event handler or task"
+                .to_owned()
+        ]));
+        assert!(render_error(&[
+            "cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead"
+                .to_owned()
+        ]));
+    }
+
+    #[test]
+    fn an_empty_or_ordinary_status_line_is_not_a_render_error() {
+        assert!(!render_error(&[]));
+        assert!(!render_error(&["Home opened".to_owned()]));
+    }
 }
