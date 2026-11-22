@@ -1,8 +1,6 @@
-use crate::content::requests;
 pub use crate::core::CallError;
 use crate::core::{Error, Viewer, WeakViewer};
 pub use crate::families::terminal::Lifecycle;
-pub use crate::families::voyage_close::{SaveRequest, SaveTicket};
 use std::{
     sync::{
         Arc, Mutex,
@@ -14,8 +12,6 @@ use std::{
 use voyager_contract::administrator::{ProcessRequest, ProcessResponse};
 use voyager_contract::{Action, Context, Layout, Request, Response, VesselId};
 
-#[path = "client_content.rs"]
-mod content_calls;
 #[path = "client_core.rs"]
 mod core_calls;
 #[path = "client_owner.rs"]
@@ -42,9 +38,6 @@ enum Message {
         scope: Context,
         version: u64,
     },
-    CloseSaves {
-        sender: async_channel::Sender<SaveRequest>,
-    },
     CloseDone {
         request: Request,
         scope: Option<Context>,
@@ -66,11 +59,6 @@ enum Message {
     Service {
         request: ProgramRequest,
         reply: SyncSender<Result<ProgramReply, Error>>,
-    },
-    RefreshContentViews,
-    RegisterView {
-        binding: crate::content::Binding,
-        reply: async_channel::Sender<Result<crate::content::ViewBinding, String>>,
     },
     ContextFacts {
         reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
@@ -94,17 +82,10 @@ enum Message {
         id: VesselId,
         reply: async_channel::Sender<Result<crate::content::Binding, String>>,
     },
-    ContentChanges {
-        binding: crate::content::Binding,
-        after: Option<u64>,
-        reply: async_channel::Sender<Result<async_channel::Receiver<u64>, String>>,
-    },
     Content {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
-        reply: ContentReply,
-        close_ticket: Option<SaveTicket>,
-        native_save: bool,
+        reply: SyncSender<Arc<voyager_contract::content::Response>>,
     },
     Worktree {
         scope: Option<Context>,
@@ -148,20 +129,6 @@ enum Message {
         queued_at: std::time::Instant,
         claim: Claim,
     },
-    NoteExit {
-        view: crate::content::ViewBinding,
-        revision: String,
-        request: Request,
-        reply: SyncSender<Response>,
-        claim: Claim,
-    },
-    NoteRenameReady {
-        request: Request,
-        scope: Option<Context>,
-        program: Option<VesselId>,
-        reply: SyncSender<Response>,
-        result: Result<Option<String>, CallError>,
-    },
     Terminal {
         content: VesselId,
         request_id: String,
@@ -178,24 +145,6 @@ enum Message {
         reply: SyncSender<Response>,
         terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
-}
-
-enum ContentReply {
-    Blocking(SyncSender<Arc<voyager_contract::content::Response>>),
-    Asynchronous(async_channel::Sender<Arc<voyager_contract::content::Response>>),
-}
-
-impl ContentReply {
-    fn deliver(self, response: Arc<voyager_contract::content::Response>) {
-        match self {
-            Self::Blocking(reply) => {
-                let _ = reply.send(response);
-            }
-            Self::Asynchronous(reply) => {
-                let _ = reply.try_send(response);
-            }
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -258,7 +207,6 @@ impl Message {
             Self::Workspace { request, scope, .. } => {
                 Envelope::workspace(scope.as_ref(), request).effect
             }
-            Self::NoteExit { request, .. } => Envelope::workspace(None, request).effect,
             Self::Content {
                 access, request, ..
             } => Envelope::content(access, request).effect,
@@ -268,23 +216,18 @@ impl Message {
             | Self::Quit { .. }
             | Self::Listed { .. }
             | Self::WorktreeRemoveReady { .. }
-            | Self::WorktreeDone { .. }
-            | Self::NoteRenameReady { .. } => return true,
+            | Self::WorktreeDone { .. } => return true,
             Self::PrepareContext { .. }
-            | Self::CloseSaves { .. }
             | Self::CoreReported
             | Self::RefreshActivity { .. }
             | Self::Subscribed
             | Self::RemovalListed { .. }
             | Self::Relisted { .. }
             | Self::Launches { .. }
-            | Self::RefreshContentViews
-            | Self::RegisterView { .. }
             | Self::ContextFacts { .. }
             | Self::WorkspaceObservation { .. }
             | Self::WorkspaceChanges { .. }
             | Self::BindContent { .. }
-            | Self::ContentChanges { .. }
             | Self::ProcessDone { .. }
             | Self::Saved { .. } => return false,
         };
@@ -414,13 +357,6 @@ impl Client {
         self.package_revision.load(Ordering::Relaxed)
     }
 
-    pub async fn refresh_content_views(&self) -> Result<(), String> {
-        self.sender
-            .send(Message::RefreshContentViews)
-            .await
-            .map_err(|_| "Content refresh unavailable".into())
-    }
-
     pub async fn workspace_changes(
         &self,
         after: Option<WorkspaceNotice>,
@@ -448,88 +384,6 @@ impl Client {
             .map_err(|_| "Worker settings read was not confirmed")?
     }
 
-    pub async fn bind_content_view(
-        &self,
-        id: VesselId,
-    ) -> Result<crate::content::ViewBinding, String> {
-        let binding = self.bind_content(id).await?;
-        let (reply, receive) = async_channel::bounded(1);
-        self.sender
-            .send(Message::RegisterView { binding, reply })
-            .await
-            .map_err(|_| "Content view registration unavailable".to_owned())?;
-        receive
-            .recv()
-            .await
-            .map_err(|_| "Content view registration unconfirmed".to_owned())?
-    }
-
-    async fn admit_view(
-        &self,
-        view: &crate::content::ViewBinding,
-        message: Message,
-    ) -> Result<(), CallError> {
-        use std::future::Future as _;
-        let mut sending = std::pin::pin!(self.sender.send(message));
-        let mut retired = std::pin::pin!(view.gate.retired.recv());
-        let mut published = std::pin::pin!(view.gate.published.recv());
-        std::future::poll_fn(|cx| {
-            let active = view.lock();
-            if *active == crate::content::ViewPhase::Retired {
-                return std::task::Poll::Ready(Err(CallError::Rejected(
-                    "Notes view was retired; nothing was queued".into(),
-                )));
-            }
-            if *active == crate::content::ViewPhase::Pending {
-                let _ = published.as_mut().poll(cx);
-                return std::task::Poll::Pending;
-            }
-            let _ = retired.as_mut().poll(cx);
-            sending.as_mut().poll(cx).map(|result| {
-                result.map_err(|_| {
-                    CallError::Rejected("Content view unavailable; nothing was queued".into())
-                })
-            })
-        })
-        .await
-    }
-
-    pub async fn view_changed(
-        &self,
-        view: &crate::content::ViewBinding,
-        after: Option<u64>,
-    ) -> Result<u64, CallError> {
-        use std::future::Future as _;
-        let (reply, receive) = async_channel::bounded(1);
-        self.admit_view(
-            view,
-            Message::ContentChanges {
-                binding: view.binding.clone(),
-                after,
-                reply,
-            },
-        )
-        .await?;
-        let changes = receive
-            .recv()
-            .await
-            .map_err(|_| CallError::Unconfirmed("Content observer unconfirmed".into()))?
-            .map_err(CallError::Rejected)?;
-        let mut next = std::pin::pin!(changes.recv());
-        let mut retired = std::pin::pin!(view.gate.retired.recv());
-        std::future::poll_fn(|cx| {
-            if retired.as_mut().poll(cx).is_ready() {
-                return std::task::Poll::Ready(Err(CallError::Rejected(
-                    "Notes view was retired".into(),
-                )));
-            }
-            next.as_mut().poll(cx).map(|result| {
-                result.map_err(|_| CallError::Rejected("Content observer replaced".into()))
-            })
-        })
-        .await
-    }
-
     pub async fn end(&self, operation: Lifecycle) -> Result<(), Error> {
         let (reply, receive) = async_channel::bounded(1);
         self.sender
@@ -541,161 +395,22 @@ impl Client {
         })?
     }
 
-    pub async fn content_changes(
-        &self,
-        binding: crate::content::Binding,
-        after: Option<u64>,
-    ) -> Result<async_channel::Receiver<u64>, String> {
-        let (reply, receive) = async_channel::bounded(1);
-        self.sender
-            .send(Message::ContentChanges {
-                binding,
-                after,
-                reply,
-            })
-            .await
-            .map_err(|_| "Content notification subscription unavailable")?;
-        receive
-            .recv()
-            .await
-            .map_err(|_| "Content notification subscription unconfirmed".to_owned())?
-    }
-
-    pub async fn read_content(
-        &self,
-        access: crate::content::Access,
-        request: voyager_contract::content::Request,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        self.read_content_inner(access, request, None).await
-    }
-
-    pub async fn read_content_view(
-        &self,
-        view: &crate::content::ViewBinding,
-        request: voyager_contract::content::Request,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        self.read_content_inner(
-            crate::content::Access::View(view.binding.clone()),
-            request,
-            Some(view),
-        )
-        .await
-    }
-
-    async fn read_content_inner(
-        &self,
-        access: crate::content::Access,
-        request: voyager_contract::content::Request,
-        view: Option<&crate::content::ViewBinding>,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        if requests::is_write(&request) {
-            return Err(CallError::Rejected(
-                "Content effects cannot use read-only admission".into(),
-            ));
-        }
-        check_content_size(&request)?;
-        let (reply, receive) = async_channel::bounded(1);
-        let message = Message::Content {
-            access,
-            request,
-            reply: ContentReply::Asynchronous(reply),
-            close_ticket: None,
-            native_save: false,
-        };
-        if let Some(view) = view {
-            self.admit_view(view, message).await?;
-        } else {
-            self.sender.send(message).await.map_err(|_| {
-                CallError::Rejected("Content read unavailable; nothing was queued".into())
-            })?;
-        }
-        receive
-            .recv()
-            .await
-            .map_err(|_| CallError::Unconfirmed("Content read unconfirmed".into()))
-    }
-
     pub fn content(
         &self,
         access: crate::content::Access,
         request: voyager_contract::content::Request,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        self.content_inner(access, request, None, None, false)
-    }
-
-    pub fn content_view(
-        &self,
-        view: &crate::content::ViewBinding,
-        request: voyager_contract::content::Request,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        self.content_inner(
-            crate::content::Access::View(view.binding.clone()),
-            request,
-            Some(view),
-            None,
-            false,
-        )
-    }
-
-    pub fn content_native_save(
-        &self,
-        ticket: Option<SaveTicket>,
-        view: &crate::content::ViewBinding,
-        request: voyager_contract::content::Request,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        if !matches!(request, voyager_contract::content::Request::Update { .. }) {
-            return Err(CallError::Rejected(
-                "A close lease only permits saving its native Note".into(),
-            ));
-        }
-        self.content_inner(
-            crate::content::Access::View(view.binding.clone()),
-            request,
-            Some(view),
-            ticket,
-            true,
-        )
-    }
-
-    pub fn close_save_requests(&self) -> Result<async_channel::Receiver<SaveRequest>, String> {
-        let (sender, receiver) = async_channel::bounded(4);
-        self.sender
-            .try_send(Message::CloseSaves { sender })
-            .map_err(|_| "The Notes shutdown bridge could not be registered".to_owned())?;
-        Ok(receiver)
-    }
-
-    fn content_inner(
-        &self,
-        access: crate::content::Access,
-        request: voyager_contract::content::Request,
-        view: Option<&crate::content::ViewBinding>,
-        close_ticket: Option<SaveTicket>,
-        native_save: bool,
-    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
         check_content_size(&request)?;
         let (reply, receive) = mpsc::sync_channel(1);
-        let active = view.map(|view| view.lock());
-        if active
-            .as_ref()
-            .is_some_and(|active| **active != crate::content::ViewPhase::Active)
-        {
-            return Err(CallError::Rejected(
-                "Notes view was retired; nothing was queued".into(),
-            ));
-        }
         self.sender
             .try_send(Message::Content {
                 access,
                 request,
-                reply: ContentReply::Blocking(reply),
-                close_ticket,
-                native_save,
+                reply,
             })
             .map_err(|_| {
                 CallError::Rejected("Workspace busy; no content operation was queued".into())
             })?;
-        drop(active);
         receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
             CallError::Unconfirmed("Content result unconfirmed; do not repeat the request".into())
         })
@@ -707,49 +422,6 @@ impl Client {
             self.identity,
             self.sequence.fetch_add(1, Ordering::Relaxed)
         )
-    }
-
-    pub fn note_exit_request(
-        &self,
-        view: &crate::content::ViewBinding,
-    ) -> Result<Request, CallError> {
-        if !view.is_active() {
-            return Err(CallError::Rejected("Notes view is not active".into()));
-        }
-        let observed = self.queue_inspection()?.wait()?;
-        if observed.status != voyager_contract::Outcome::Applied || !observed.fresh {
-            return Err(CallError::Rejected(
-                "Inspect the workspace before closing Notes".into(),
-            ));
-        }
-        Ok(Request {
-            request_id: self.request_id(),
-            expected_version: observed.version,
-            action: Action::RemovePlacement {
-                id: note_exit_target(&observed.layout, view.binding.id())
-                    .map_err(CallError::Rejected)?,
-            },
-        })
-    }
-
-    pub fn exit_note(
-        &self,
-        view: crate::content::ViewBinding,
-        revision: String,
-        request: Request,
-    ) -> Result<Response, CallError> {
-        let (reply, receive) = mpsc::sync_channel(1);
-        let claim = Claim::default();
-        self.sender
-            .try_send(Message::NoteExit {
-                view,
-                revision,
-                request,
-                reply,
-                claim: claim.clone(),
-            })
-            .map_err(|_| CallError::Rejected("Workspace busy; Notes Exit was not queued".into()))?;
-        PendingCall(receive, Duration::from_secs(20), claim).wait()
     }
 
     pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {
@@ -940,50 +612,6 @@ impl Client {
     }
 }
 
-fn note_exit_target(
-    layout: &Layout,
-    content: &VesselId,
-) -> Result<voyager_contract::PlacementId, String> {
-    if !layout
-        .vessels
-        .iter()
-        .any(|item| &item.id == content && item.type_id == crate::vessel_type::NOTES_TYPE)
-    {
-        return Err("This view is not Notes".into());
-    }
-    let mut targets = layout
-        .containers()
-        .filter(|voyage| !voyage.closed)
-        .flat_map(|voyage| {
-            voyage
-                .fleets
-                .iter()
-                .filter(|fleet| !fleet.closed)
-                .flat_map(|fleet| {
-                    fleet.placements.iter().filter(|panel| {
-                        !panel.hidden && crate::panels::contains(&fleet.root, &panel.id)
-                    })
-                })
-                .chain(voyage.portals.iter().filter(|panel| {
-                    !panel.hidden
-                        && voyage
-                            .portal_layout
-                            .as_ref()
-                            .is_some_and(|column| crate::panels::contains(&column.root, &panel.id))
-                }))
-        })
-        .filter(|panel| &panel.vessel == content);
-    let id = targets
-        .next()
-        .ok_or("The Notes placement is closed")?
-        .id
-        .clone();
-    if targets.next().is_some() {
-        return Err("Notes has multiple placements; close the intended panel directly".into());
-    }
-    Ok(id)
-}
-
 fn check_content_size(request: &voyager_contract::content::Request) -> Result<(), CallError> {
     if serde_json::to_vec(request)
         .map_err(|error| CallError::Rejected(error.to_string()))?
@@ -995,66 +623,6 @@ fn check_content_size(request: &voyager_contract::content::Request) -> Result<()
         ));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod voice_scope_tests {
-    use super::*;
-    use crate::workspace::Model;
-
-    #[test]
-    fn note_exit_requires_one_visible_notes_placement() {
-        let mut model = Model::default();
-        model
-            .apply(Action::CreateVoyage {
-                name: "Work".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let fleet = model.layout.voyages[0].fleets[0].id.clone();
-        let shell = model.layout.voyages[0].fleets[0].placements[0]
-            .vessel
-            .clone();
-        assert!(note_exit_target(&model.layout, &shell).is_err());
-        model
-            .apply(Action::CreateVessel {
-                type_id: crate::vessel_type::NOTES_TYPE.into(),
-                destination: voyager_contract::ContentDestination::Placement {
-                    owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
-                    insertion: voyager_contract::PlacementInsertion::Beside {
-                        id: model.layout.voyages[0].fleets[0].placements[0].id.clone(),
-                        side: voyager_contract::Side::Right,
-                    },
-                },
-                launch: None,
-            })
-            .unwrap();
-        let note = model.layout.voyages[0].fleets[0].placements[1].clone();
-        assert_eq!(
-            note_exit_target(&model.layout, &note.vessel).unwrap(),
-            note.id
-        );
-        let mut duplicate = note.clone();
-        duplicate.id = voyager_contract::PlacementId("duplicate".into());
-        let fleet = &mut model.layout.voyages[0].fleets[0];
-        fleet.root = Some(voyager_contract::Split::Branch {
-            axis: voyager_contract::Axis::Horizontal,
-            share: Default::default(),
-            first: Box::new(fleet.root.take().unwrap()),
-            second: Box::new(voyager_contract::Split::Leaf {
-                placement: duplicate.id.clone(),
-            }),
-        });
-        fleet.placements.push(duplicate.clone());
-        assert!(note_exit_target(&model.layout, &note.vessel).is_err());
-        model
-            .apply(Action::RemovePlacement { id: duplicate.id })
-            .unwrap();
-        model
-            .apply(Action::RemovePlacement { id: note.id })
-            .unwrap();
-        assert!(note_exit_target(&model.layout, &note.vessel).is_err());
-    }
 }
 
 #[cfg(test)]

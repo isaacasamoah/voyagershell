@@ -2,9 +2,7 @@ use crate::{
     core::{CallError, Error},
     core_shapes::Terminal,
     core_state::TerminalState,
-    panels,
 };
-use async_channel::{Receiver, Sender};
 use std::{path::Path, sync::Arc};
 use voyager_contract::administrator::{
     ProcessAction, ProcessInput, ProcessOutput, ProcessResponse,
@@ -22,83 +20,6 @@ pub(crate) trait Calls {
         scope: Context,
         input: ProcessInput,
     ) -> Result<Arc<ProcessResponse>, CallError>;
-}
-
-pub(crate) struct Observed<'a> {
-    pub terminals: &'a [Terminal],
-    pub notes_type: &'a str,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SaveTicket(String);
-
-impl SaveTicket {
-    pub(crate) fn new(request: &str) -> Self {
-        Self(request.into())
-    }
-}
-
-pub enum SaveRequest {
-    Prepare {
-        ticket: SaveTicket,
-        vessels: Vec<VesselId>,
-        reply: Sender<Result<(), CallError>>,
-    },
-    Release {
-        ticket: SaveTicket,
-        vessels: Vec<VesselId>,
-    },
-    PrepareRename {
-        ticket: SaveTicket,
-        vessels: Vec<VesselId>,
-        files: Vec<(VesselId, voyager_contract::content::NotesFile)>,
-        reply: Sender<Result<Option<String>, CallError>>,
-    },
-    ReleaseRename {
-        ticket: SaveTicket,
-        vessels: Vec<VesselId>,
-        rebind: Option<RenamedNotes>,
-    },
-}
-
-pub struct RenamedNotes {
-    pub files: Vec<(VesselId, voyager_contract::content::NotesFile)>,
-    pub workspace_version: u64,
-    pub snapshot: voyager_contract::content::Snapshot,
-}
-
-pub(crate) struct RenameRelease {
-    pub rebind: Option<RenamedNotes>,
-    sender: Sender<SaveRequest>,
-    ticket: SaveTicket,
-    vessels: Vec<VesselId>,
-}
-
-impl RenameRelease {
-    pub fn new(sender: Sender<SaveRequest>, ticket: SaveTicket, vessels: Vec<VesselId>) -> Self {
-        Self {
-            sender,
-            ticket,
-            vessels,
-            rebind: None,
-        }
-    }
-}
-
-impl Drop for RenameRelease {
-    fn drop(&mut self) {
-        if self
-            .sender
-            .try_send(SaveRequest::ReleaseRename {
-                ticket: self.ticket.clone(),
-                vessels: std::mem::take(&mut self.vessels),
-                rebind: self.rebind.take(),
-            })
-            .is_err()
-        {
-            eprintln!("Native Notes rename release was not delivered");
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -129,16 +50,12 @@ impl Target {
 pub(crate) struct Confirmed {
     plan: Plan,
     target: Target,
-    saves: Option<Receiver<Result<(), CallError>>>,
 }
 
 #[derive(Default)]
 pub(crate) struct Closing {
     pub plan: Option<Plan>,
     pub revision: u64,
-    pub saves: Option<Sender<SaveRequest>>,
-    ticket: Option<SaveTicket>,
-    notes: Vec<VesselId>,
     target: Option<Target>,
 }
 
@@ -165,13 +82,9 @@ impl Closing {
         version: u64,
         id: &VoyageId,
         request: &str,
-        observed: Observed,
+        terminals: &[Terminal],
         changes: impl FnOnce(&Path) -> Result<Option<u32>, String>,
     ) -> Result<(), Error> {
-        let Observed {
-            terminals,
-            notes_type,
-        } = observed;
         if self
             .plan
             .as_ref()
@@ -202,7 +115,6 @@ impl Closing {
             .flat_map(|fleet| fleet.placements.iter())
             .chain(voyage.portals.iter())
             .collect();
-        self.notes.clear();
         let mut entries = Vec::new();
         for content in layout
             .vessels
@@ -214,37 +126,19 @@ impl Closing {
                     "A program start is unresolved; inspect it before closing the Voyage",
                 ));
             }
-            let terminal = content.backend.as_ref().and_then(|address| {
-                terminals
-                    .iter()
-                    .find(|terminal| terminal.address == address.0)
-            });
-            let live = terminal.filter(|terminal| terminal.is_live());
-            let note = content.type_id == notes_type;
-            if note {
-                self.notes.push(content.id.clone());
-            }
-            let visible_note = note
-                && (voyage
-                    .fleets
-                    .iter()
-                    .filter(|fleet| !fleet.closed)
-                    .any(|fleet| {
-                        let root = panels::visible(&fleet.root, &fleet.placements);
-                        fleet.placements.iter().any(|panel| {
-                            panel.vessel == content.id && panels::contains(&root, &panel.id)
-                        })
-                    })
-                    || voyage.portal_layout.as_ref().is_some_and(|column| {
-                        let root = panels::visible(&column.root, &voyage.portals);
-                        voyage.portals.iter().any(|panel| {
-                            panel.vessel == content.id && panels::contains(&root, &panel.id)
-                        })
-                    }));
-            if live.is_none() && !visible_note {
+            let Some(live) = content
+                .backend
+                .as_ref()
+                .and_then(|address| {
+                    terminals
+                        .iter()
+                        .find(|terminal| terminal.address == address.0)
+                })
+                .filter(|terminal| terminal.is_live())
+            else {
                 continue;
-            }
-            if live.is_some_and(|terminal| terminal.pid.is_none()) {
+            };
+            if live.pid.is_none() {
                 return Err(refused("A running program has no verified PID"));
             }
             let panel = placements
@@ -255,8 +149,8 @@ impl Closing {
                 vessel: content.id.clone(),
                 name: panel.name.clone(),
                 type_id: content.type_id.clone(),
-                terminal: live.map(|terminal| CoreTerminalId(terminal.address.clone())),
-                pid: live.and_then(|terminal| terminal.pid),
+                terminal: Some(CoreTerminalId(live.address.clone())),
+                pid: live.pid,
             });
         }
         self.target = Some(Target {
@@ -276,9 +170,7 @@ impl Closing {
             phase: Phase::Ready,
             entries,
             uncommitted_changes,
-            message: Some(
-                "Confirm shutdown. Notes will be saved and running programs stopped.".into(),
-            ),
+            message: Some("Confirm shutdown. Running programs will be stopped.".into()),
         });
         self.revision = self.revision.saturating_add(1);
         Ok(())
@@ -289,7 +181,6 @@ impl Closing {
         id: &VoyageId,
         plan_id: &str,
         version: u64,
-        request: &str,
     ) -> Result<Confirmed, Error> {
         let plan = self
             .plan
@@ -301,27 +192,9 @@ impl Closing {
                     && plan.phase == Phase::Ready
             })
             .ok_or_else(|| refused("The close confirmation changed; inspect the Voyage again"))?;
-        let ticket = SaveTicket(request.into());
-        let waiting = if self.notes.is_empty() {
-            None
-        } else {
-            let saves = self.saves.as_ref().ok_or_else(|| {
-                refused("The native Notes save service is unavailable; nothing was stopped")
-            })?;
-            let (reply, receive) = async_channel::bounded(1);
-            saves
-                .try_send(SaveRequest::Prepare {
-                    ticket: ticket.clone(),
-                    vessels: self.notes.clone(),
-                    reply,
-                })
-                .map_err(|_| refused("Notes save could not be requested; nothing was stopped"))?;
-            Some(receive)
-        };
         let mut plan = plan.clone();
         plan.phase = Phase::Saving;
-        plan.message = Some("Saving Notes before stopping programs…".into());
-        self.ticket = Some(ticket);
+        plan.message = Some("Closing programs…".into());
         self.plan = Some(plan.clone());
         self.revision = self.revision.saturating_add(1);
         Ok(Confirmed {
@@ -330,7 +203,6 @@ impl Closing {
                 .target
                 .clone()
                 .ok_or_else(|| refused("Close identity unavailable"))?,
-            saves: waiting,
         })
     }
 
@@ -345,25 +217,19 @@ impl Closing {
                 "Shutdown is already in progress; inspect its result",
             ));
         }
-        self.release();
         self.plan = None;
         self.revision = self.revision.saturating_add(1);
         Ok(())
     }
 
-    pub fn blocks_content(
-        &self,
-        id: &VesselId,
-        ticket: Option<&SaveTicket>,
-        native_save: bool,
-    ) -> bool {
-        self.ticket.is_some()
-            && self.notes.contains(id)
-            && (!native_save || (ticket.is_some() && ticket != self.ticket.as_ref()))
+    fn confirmed(&self) -> bool {
+        self.plan
+            .as_ref()
+            .is_some_and(|plan| plan.phase == Phase::Saving)
     }
 
     pub fn check_layout(&self, layout: &Layout) -> Result<(), Error> {
-        if self.ticket.is_some()
+        if self.confirmed()
             && let Some(target) = &self.target
         {
             target.check(layout)?;
@@ -372,7 +238,7 @@ impl Closing {
     }
 
     pub fn blocks_terminal(&self, id: &VesselId) -> bool {
-        self.ticket.is_some()
+        self.confirmed()
             && self
                 .target
                 .as_ref()
@@ -380,7 +246,7 @@ impl Closing {
     }
 
     pub fn owns_terminal(&self, address: &CoreTerminalId) -> bool {
-        self.ticket.is_some()
+        self.confirmed()
             && self.plan.as_ref().is_some_and(|plan| {
                 plan.entries
                     .iter()
@@ -405,37 +271,12 @@ impl Closing {
                 }
             });
         }
-        self.release();
         self.revision = self.revision.saturating_add(1);
-    }
-
-    fn release(&mut self) {
-        if let Some(ticket) = self.ticket.take()
-            && let Some(saves) = &self.saves
-        {
-            let _ = saves.try_send(SaveRequest::Release {
-                ticket,
-                vessels: self.notes.clone(),
-            });
-        }
     }
 }
 
 pub(crate) fn execute(calls: &impl Calls, confirmed: Confirmed) -> Result<(), Error> {
-    let Confirmed {
-        plan,
-        target,
-        saves,
-    } = confirmed;
-    if let Some(saves) = saves {
-        match saves.recv_blocking().map_err(|_| {
-            Error::Uncertain("Notes save acknowledgement was lost; no stop was sent".into())
-        })? {
-            Ok(()) => (),
-            Err(CallError::Rejected(message)) => return Err(refused(&message)),
-            Err(CallError::Unconfirmed(message)) => return Err(Error::Uncertain(message)),
-        }
-    }
+    let Confirmed { plan, target } = confirmed;
     let mut stopped = 0;
     for entry in &plan.entries {
         let (Some(address), Some(pid)) = (&entry.terminal, entry.pid) else {
@@ -554,7 +395,6 @@ impl Confirmed {
                 voyage,
                 vessels: Vec::new(),
             },
-            saves: None,
         }
     }
 }
@@ -577,6 +417,66 @@ mod tests {
             }),
             ..Closing::default()
         }
+    }
+
+    #[test]
+    fn a_confirmed_close_freezes_its_voyage_until_it_finishes() {
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Demo".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let address = CoreTerminalId("t1".into());
+        model.layout.vessels[0].backend = Some(address.clone());
+        model
+            .apply(Action::CreateVessel {
+                launch: None,
+                type_id: "dashboard".into(),
+                destination: voyager_contract::ContentDestination::Placement {
+                    owner: voyager_contract::PlacementOwner::Portals {
+                        voyage: model.layout.voyages[0].id.clone(),
+                    },
+                    insertion: voyager_contract::PlacementInsertion::Empty,
+                },
+            })
+            .unwrap();
+        let layout = model.layout;
+        let voyage = layout.voyages[0].id.clone();
+        let shell = layout.vessels[0].id.clone();
+        let running: Terminal = serde_json::from_value(serde_json::json!({
+            "address": "t1", "labels": {}, "argv": ["bash"], "cwd": "/tmp", "state": "live", "pid": 123,
+            "created_ms": 1, "screen": "exact", "cols": 80, "rows": 24
+        }))
+        .unwrap();
+        let mut edited = layout.clone();
+        edited.voyages[0].name = "Renamed".into();
+        let mut closing = Closing::default();
+        closing
+            .prepare(&layout, 4, &voyage, "plan-1", &[running], |_| Ok(None))
+            .unwrap();
+        let plan = closing.plan.clone().unwrap();
+        assert_eq!(plan.phase, Phase::Ready);
+        assert_eq!(plan.entries.len(), 1);
+        assert_eq!(plan.entries[0].vessel, shell);
+        assert_eq!(plan.entries[0].terminal, Some(address.clone()));
+        assert_eq!(plan.entries[0].pid, Some(123));
+        assert!(closing.check_layout(&edited).is_ok());
+        assert!(!closing.blocks_terminal(&shell));
+        assert!(!closing.owns_terminal(&address));
+        assert!(closing.confirm(&voyage, "plan-1", 5).is_err());
+        closing.confirm(&voyage, "plan-1", 4).unwrap();
+        assert!(closing.check_layout(&layout).is_ok());
+        assert!(closing.check_layout(&edited).is_err());
+        assert!(closing.blocks_terminal(&shell));
+        assert!(closing.owns_terminal(&address));
+        assert!(closing.cancel(&voyage, "plan-1").is_err());
+        closing.finish(Ok(()));
+        assert_eq!(closing.plan.as_ref().unwrap().phase, Phase::Closed);
+        assert!(closing.check_layout(&edited).is_ok());
+        assert!(!closing.blocks_terminal(&shell));
+        assert!(!closing.owns_terminal(&address));
     }
 
     #[test]

@@ -231,7 +231,6 @@ fn describe(entry: &Entry) -> Description {
             host,
             view,
             placements: vec![Placement::Fleet, Placement::Voyage],
-            configuration: None,
             state: None,
             actions: None::<Actions>,
             backend: None,
@@ -250,7 +249,6 @@ fn describe(entry: &Entry) -> Description {
         host,
         view,
         placements: vec![Placement::Fleet, Placement::Voyage],
-        configuration: None,
         state: ready.then(|| DataDescription {
             schema: Some(manifest.state.schema.clone()),
             defaults: manifest.state.initial.clone(),

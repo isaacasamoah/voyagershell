@@ -119,9 +119,6 @@ impl Owner {
                 );
                 self.layout = Arc::new(candidate.layout);
                 self.version = saved;
-                if let Some(owner) = self.content.as_mut() {
-                    owner.refresh_views();
-                }
                 self.notices.send(self.version, self.closing.revision);
                 Ok(())
             })()

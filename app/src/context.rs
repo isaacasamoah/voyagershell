@@ -57,7 +57,6 @@ pub(crate) fn prepare(
     layout: &Arc<Layout>,
     version: u64,
     core: &mut crate::core::Core,
-    mut content: Option<&mut crate::content::Owner>,
 ) -> Result<Prepared, String> {
     use voyager_contract::{Context, WorkspaceView};
     let scoped = crate::scope::project(layout, Some(&layout.context));
@@ -114,34 +113,6 @@ pub(crate) fn prepare(
                     Ok(read) => append_preview(&mut text, &read.text),
                     Err(_) => {
                         append_preview(&mut text, "Current terminal screen is unavailable.\n")
-                    }
-                }
-            } else if instance.type_id == crate::vessel_type::NOTES_TYPE {
-                if let Some(owner) = content.as_deref_mut() {
-                    let binding =
-                        crate::content::requests::register_content(owner, &scoped, &instance.id)?;
-                    let response = owner.call(
-                        &binding,
-                        voyager_contract::content::Request::Inspect {
-                            version: voyager_contract::content::Version::V1,
-                            request_id: format!("dock-preview-{}-{version}", instance.id.0),
-                            vessel_id: instance.id.clone(),
-                        },
-                    );
-                    if let voyager_contract::content::Response::Snapshot { snapshot, .. } = response
-                    {
-                        append_preview(
-                            &mut text,
-                            "Saved Markdown; unsaved editor drafts are not included.\n",
-                        );
-                        if let Some(warning) = &snapshot.warning {
-                            append_preview(&mut text, "Notes warning: ");
-                            append_preview(&mut text, warning);
-                            append_preview(&mut text, "\n");
-                        }
-                        append_preview(&mut text, &snapshot.data.title);
-                        append_preview(&mut text, "\n");
-                        append_preview(&mut text, &snapshot.data.text);
                     }
                 }
             } else {
@@ -486,7 +457,7 @@ mod tests {
         let voyage = model.layout.voyages[0].id.clone();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::vessel_type::NOTES_TYPE.into(),
+                type_id: "dashboard".into(),
                 destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Portals {
                         voyage: voyage.clone(),

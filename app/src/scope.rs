@@ -319,7 +319,7 @@ mod tests {
             .unwrap();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::vessel_type::NOTES_TYPE.into(),
+                type_id: "terminal".into(),
                 destination: ContentDestination::Placement {
                     owner,
                     insertion: PlacementInsertion::Empty,
@@ -337,7 +337,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             crate::context::focus(&model.layout, 1).unwrap().path,
-            ["Home", "Notes 1"]
+            ["Home", "Terminal 1"]
         );
         let snapshot = Arc::new(model.layout.clone());
         let normal = project(

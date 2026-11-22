@@ -39,7 +39,7 @@ export class VoyageClose {
     const plan = this.current;
     if (!plan || this.pending) return;
     this.pending = true;
-    this.message = confirm ? "Saving Notes and closing programs…" : "";
+    this.message = confirm ? "Closing programs…" : "";
     cx.spawn(async (task) => {
       try {
         const result = await invoke(
@@ -122,9 +122,7 @@ export class VoyageClose {
       .child(
         div()
           .text_size(12)
-          .child(
-            "Save Notes and stop this Voyage's programs. Other Voyages stay open.",
-          ),
+          .child("Stop this Voyage's programs. Other Voyages stay open."),
       );
     const inventory = div()
       .id("voyage-close-contents")

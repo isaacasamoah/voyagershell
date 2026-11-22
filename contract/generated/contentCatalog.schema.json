@@ -115,16 +115,6 @@
             }
           ]
         },
-        "configuration": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/DataDescription"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "host": {
           "$ref": "#/definitions/NativeHost"
         },

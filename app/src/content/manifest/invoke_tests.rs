@@ -133,8 +133,6 @@ fn a_view_and_an_agent_run_the_same_declared_action_with_the_same_effect() {
         expected_version: 7,
     };
     let (first, second) = (scene.first.clone(), scene.second.clone());
-    let watched = bind(&mut scene.owner, &layout, &second).unwrap();
-    let changes = scene.owner.subscribe(&watched, Some(0));
     let results: Vec<(String, Value)> = [(&view, &second), (&agent, &first)]
         .into_iter()
         .map(|(access, id)| {
@@ -161,11 +159,6 @@ fn a_view_and_an_agent_run_the_same_declared_action_with_the_same_effect() {
     assert_eq!(results[0], results[1]);
     assert_eq!(results[0].0, "2");
     assert_eq!(results[0].1["items"][0]["done"], json!(true));
-    assert_eq!(changes.try_recv().unwrap(), 1);
-    assert_eq!(
-        scene.owner.subscribe(&watched, Some(1)).try_recv().unwrap(),
-        2
-    );
     assert!(
         scene
             .root
@@ -250,6 +243,21 @@ fn instance_data_outlives_the_owner_and_describe_lists_every_action() {
         (revision.as_str(), listed["items"][0]["text"].as_str()),
         ("1", Some("kept"))
     );
+    let answer = run(
+        &mut reopened,
+        &layout,
+        7,
+        &again,
+        Request::Describe {
+            version: Version::V1,
+            request_id: "describe".into(),
+            vessel_id: id.clone(),
+        },
+    );
+    assert!(
+        matches!(&answer, Response::Described { schema_declared: true, state_schema: Some(schema), .. } if *schema == checklist()["state"]["schema"]),
+        "{answer:?}"
+    );
     let registry = crate::content::open_registry(scene.root.join("vessels"));
     let described = registry.describe("checklist").unwrap().actions.unwrap();
     assert_eq!(described.names, ["describe", "inspect", "invoke"]);
@@ -316,61 +324,55 @@ fn a_saved_action_whose_confirmation_exceeds_the_limit_is_uncertain_not_rejected
 }
 
 #[test]
-fn an_invoke_counts_as_a_write_for_the_rename_and_close_blocks() {
-    use crate::content::requests::{is_selection, is_write, notifies};
-    let id = VesselId("v".into());
-    let revision = || "0".to_owned();
-    let kinds = [
-        (
-            Request::Inspect {
-                version: Version::V1,
-                request_id: "r".into(),
-                vessel_id: id.clone(),
-            },
-            false,
-        ),
-        (
-            Request::Describe {
-                version: Version::V1,
-                request_id: "r".into(),
-                vessel_id: id.clone(),
-            },
-            false,
-        ),
-        (
-            Request::ListNotes {
-                version: Version::V1,
-                request_id: "r".into(),
-                vessel_id: id.clone(),
-            },
-            false,
-        ),
-        (
-            Request::Update {
-                version: Version::V1,
-                request_id: "r".into(),
-                vessel_id: id.clone(),
-                expected_revision: revision(),
-                data: voyager_contract::content::Notes {
-                    title: String::new(),
-                    text: String::new(),
-                },
-            },
-            true,
-        ),
-        (invoke(&id, "toggle", json!({}), "0"), true),
-    ];
-    for (request, write) in &kinds {
-        assert_eq!(is_write(request), *write, "{request:?}");
-        assert!(!is_selection(request), "{request:?}");
-    }
-    let invoked = invoke(&id, "toggle", json!({}), "0");
-    let uncertain = Response::Uncertain {
-        version: Version::V1,
-        request_id: "r".into(),
-        vessel_id: id.clone(),
-        expected_revision: revision(),
-        message: String::new(),
+fn an_agent_needs_the_current_workspace_revision_and_a_vessel_inside_its_scope() {
+    let mut scene = scene("scope");
+    let layout = scene.layout.clone();
+    let (first, second) = (scene.first.clone(), scene.second.clone());
+    let agent = Access::Agent {
+        scope: Context::Vessel {
+            id: scene.first_placement.clone(),
+        },
+        expected_version: 7,
     };
-    assert!(!notifies(&invoked, &uncertain));
+    let add = invoke(&first, "add", json!({"text": "kept"}), "0");
+    let stale = refused(run(&mut scene.owner, &layout, 8, &agent, add.clone()));
+    assert!(stale.starts_with("Workspace revision changed"), "{stale}");
+    let outside = refused(run(&mut scene.owner, &layout, 7, &agent, inspect(&second)));
+    assert!(
+        outside.contains("outside the captured workspace scope"),
+        "{outside}"
+    );
+    let added = state(run(&mut scene.owner, &layout, 7, &agent, add.clone()));
+    assert_eq!(added.0, "1");
+    let mut changed = (*layout).clone();
+    let fleet = &mut changed.voyages[0].fleets[0];
+    fleet.root = Some(voyager_contract::Split::Leaf {
+        placement: fleet.placements[0].id.clone(),
+    });
+    let whole_fleet = Access::Agent {
+        scope: Context::Fleet {
+            id: fleet.id.clone(),
+        },
+        expected_version: 7,
+    };
+    let hidden = Arc::new(changed.clone());
+    let read = state(run(
+        &mut scene.owner,
+        &hidden,
+        7,
+        &whole_fleet,
+        inspect(&first),
+    ));
+    assert_eq!(read, added);
+    changed.voyages[0].fleets[0]
+        .placements
+        .retain(|placement| placement.id != scene.first_placement);
+    let gone = refused(run(&mut scene.owner, &Arc::new(changed), 7, &agent, add));
+    assert!(
+        gone.contains("outside the captured workspace scope"),
+        "{gone}"
+    );
+    let kept = state(run(&mut scene.owner, &layout, 7, &agent, inspect(&first)));
+    assert_eq!(kept, added);
+    fs::remove_dir_all(&scene.root).unwrap();
 }

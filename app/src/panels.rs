@@ -607,10 +607,10 @@ pub(crate) fn insert(
 }
 
 pub(crate) fn default_name(members: &[Placement], type_id: &str) -> String {
-    let base = match type_id {
-        crate::vessel_type::NOTES_TYPE => "Notes",
-        "agents" => "Agents",
-        _ => "Terminal",
+    let base = if type_id == crate::vessel_type::AGENTS_TYPE {
+        "Agents"
+    } else {
+        "Terminal"
     };
     let mut suffix = 1_u64;
     loop {
@@ -855,7 +855,7 @@ mod tests {
         let first = model.layout.voyages[0].fleets[0].placements[0].clone();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::vessel_type::NOTES_TYPE.into(),
+                type_id: "dashboard".into(),
                 destination: ContentDestination::Placement {
                     owner: PlacementOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),

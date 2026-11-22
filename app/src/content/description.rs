@@ -1,9 +1,7 @@
-use super::{INITIAL_NOTES, manifest, manifest::Registry, state_schema};
-pub use crate::vessel_type::NOTES_TYPE;
-use std::path::Path;
+use super::{manifest, manifest::Registry};
+use crate::vessel_type::AGENTS_TYPE;
 use voyager_contract::content::{
-    Actions, Availability, Backend, Catalog, DataDescription, Description, NativeHost, NativeView,
-    NotesConfiguration, Placement,
+    Actions, Availability, Backend, Catalog, Description, NativeHost, NativeView, Placement,
 };
 
 struct Implementation {
@@ -16,12 +14,6 @@ struct Implementation {
     input: &'static str,
     output: &'static str,
     action_definition: &'static str,
-    state: Option<State>,
-}
-
-struct State {
-    package: &'static str,
-    defaults: &'static [u8],
 }
 
 const IMPLEMENTATIONS: &[Implementation] = &[
@@ -35,7 +27,6 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         input: include_str!("../../../contract/generated/processTool.schema.json"),
         output: include_str!("../../../contract/generated/processResponse.schema.json"),
         action_definition: "ProcessAction",
-        state: None,
     },
     Implementation {
         type_id: "agent",
@@ -47,10 +38,9 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         input: include_str!("../../../contract/generated/processTool.schema.json"),
         output: include_str!("../../../contract/generated/processResponse.schema.json"),
         action_definition: "ProcessAction",
-        state: None,
     },
     Implementation {
-        type_id: "agents",
+        type_id: AGENTS_TYPE,
         name: "Agents",
         module: "./agents.js",
         component: "agentsView",
@@ -59,22 +49,6 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         input: include_str!("../../../contract/generated/processTool.schema.json"),
         output: include_str!("../../../contract/generated/processResponse.schema.json"),
         action_definition: "ProcessAction",
-        state: None,
-    },
-    Implementation {
-        type_id: NOTES_TYPE,
-        name: "Notes",
-        module: "voyager_content_view",
-        component: "Notes",
-        backend: None,
-        tool: "voyager_vessel",
-        input: include_str!("../../../contract/generated/contentTool.schema.json"),
-        output: include_str!("../../../contract/generated/contentResponse.schema.json"),
-        action_definition: "Action",
-        state: Some(State {
-            package: "notes",
-            defaults: INITIAL_NOTES,
-        }),
     },
 ];
 
@@ -93,31 +67,11 @@ pub fn open_registry(dir: std::path::PathBuf) -> Registry {
     Registry::new(dir, super::ENVELOPE_LIMIT, is_builtin)
 }
 
-pub fn require_available(
-    packages: &Path,
-    registry: &Registry,
-    type_id: &str,
-) -> Result<(), String> {
+pub fn require_available(registry: &Registry, type_id: &str) -> Result<(), String> {
     if let Some(found) = registry.describe(type_id) {
         return require_ready(&found);
     }
-    if package_name(type_id)?.is_none() {
-        return require_ready(&describe(packages, type_id)?);
-    }
-    let catalog = discover(packages)?;
-    let kind = catalog
-        .types
-        .iter()
-        .find(|kind| kind.type_id == type_id)
-        .ok_or("Unsupported Vessel type")?;
-    require_ready(kind)
-}
-
-pub(crate) fn package_name(type_id: &str) -> Result<Option<&'static str>, String> {
-    Ok(implementation(type_id)?
-        .state
-        .as_ref()
-        .map(|state| state.package))
+    require_ready(&describe(type_id)?)
 }
 
 pub(crate) fn require_ready(description: &Description) -> Result<(), String> {
@@ -128,78 +82,16 @@ pub(crate) fn require_ready(description: &Description) -> Result<(), String> {
     }
 }
 
-fn installed_schema(package: &Path, file: &str) -> Result<Option<serde_json::Value>, String> {
-    let manifest = manifest(package, file)?;
-    let entry = manifest
-        .get("entry")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("Content entry is missing")?;
-    if manifest.get("version").and_then(serde_json::Value::as_u64) != Some(1)
-        || manifest
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .is_none_or(str::is_empty)
-        || !package.join(entry).is_file()
-    {
-        return Err("Vessel package requires a name, version 1 and an existing entry file".into());
-    }
-    state_schema(&manifest)
-}
-
-pub(crate) fn configuration(packages: &Path) -> Result<Option<DataDescription>, String> {
-    let canvas = packages
-        .parent()
-        .ok_or("Vessel packages have no profile")?
-        .join("canvas");
-    for (path, file) in [
-        (packages.join("notes"), "vessel.json"),
-        (canvas, "canvas.json"),
-    ] {
-        if installed_schema(&path, file).is_err() {
-            return Ok(None);
-        }
-        if !matches!(
-            manifest(&path, file)?
-                .get("contentConfiguration")
-                .and_then(serde_json::Value::as_u64),
-            Some(1 | 2)
-        ) {
-            return Ok(None);
-        }
-    }
-    Ok(Some(DataDescription {
-        schema: Some(
-            serde_json::from_str(include_str!(
-                "../../../contract/generated/notesConfiguration.schema.json"
-            ))
-            .map_err(|error| error.to_string())?,
-        ),
-        defaults: serde_json::to_value(NotesConfiguration::default())
-            .map_err(|error| error.to_string())?,
-    }))
-}
-
-pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
+pub fn describe(type_id: &str) -> Result<Description, String> {
     let kind = implementation(type_id)?;
     let mut input_schema: serde_json::Value =
         serde_json::from_str(kind.input).map_err(|error| error.to_string())?;
-    let configuration = (kind.type_id == NOTES_TYPE)
-        .then(|| configuration(packages))
-        .transpose()?
-        .flatten();
-    let configurable = configuration.is_some()
-        && manifest(&packages.join("notes"), "vessel.json")?
-            .get("contentConfiguration")
-            .and_then(serde_json::Value::as_u64)
-            == Some(1);
-    if let Some(actions) =
-        input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
+    if kind.type_id == AGENTS_TYPE
+        && let Some(actions) =
+            input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
     {
-        actions.retain(|action| {
-            let operation = action["properties"]["operation"]["const"].as_str();
-            (configurable || operation != Some("configure"))
-                && (kind.type_id != "agents" || operation == Some("list"))
-        });
+        actions
+            .retain(|action| action["properties"]["operation"]["const"].as_str() == Some("list"));
     }
     let names = input_schema["definitions"][kind.action_definition]["oneOf"]
         .as_array()
@@ -212,48 +104,13 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
                 .ok_or_else(|| "Content action name is unavailable".to_owned())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (availability, state) = match &kind.state {
-        None => (Availability::Ready, None),
-        Some(state) => {
-            let path = packages.join(state.package);
-            if super::package::removed_path(&path).exists() && !path.exists() {
-                (Availability::Removed, None)
-            } else {
-                match installed_schema(&path, "vessel.json") {
-                    Ok(schema) => (
-                        Availability::Ready,
-                        Some(DataDescription {
-                            schema,
-                            defaults: serde_json::from_slice(state.defaults)
-                                .map_err(|error| error.to_string())?,
-                        }),
-                    ),
-                    Err(reason) => {
-                        let short: String = reason.chars().take(1024).collect();
-                        let reason = if short.len() < reason.len() {
-                            format!("{short}... Metadata error detail truncated")
-                        } else {
-                            reason
-                        };
-                        (Availability::Unavailable { reason }, None)
-                    }
-                }
-            }
-        }
-    };
     let result_schema = serde_json::from_str(kind.output).map_err(|error| error.to_string())?;
-    let actions = (availability == Availability::Ready).then_some(Actions {
-        tool: kind.tool.into(),
-        names,
-        input_schema,
-        result_schema,
-    });
     Ok(Description {
         type_id: kind.type_id.into(),
         name: manifest::built_in(kind.type_id)
             .map_or(kind.name, |manifest| manifest.name.as_str())
             .into(),
-        availability,
+        availability: Availability::Ready,
         host: NativeHost {
             runtime: "gpui-shell".into(),
             version: "0.8.1".into(),
@@ -263,25 +120,29 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
             component: kind.component.into(),
         },
         placements: vec![Placement::Fleet, Placement::Voyage],
-        configuration,
-        state,
-        actions,
+        state: None,
+        actions: Some(Actions {
+            tool: kind.tool.into(),
+            names,
+            input_schema,
+            result_schema,
+        }),
         backend: kind.backend,
         problems: Vec::new(),
     })
 }
 
-pub fn discover(packages: &Path) -> Result<Catalog, String> {
+pub fn discover() -> Result<Catalog, String> {
     bound(Catalog {
         types: IMPLEMENTATIONS
             .iter()
-            .map(|kind| describe(packages, kind.type_id))
+            .map(|kind| describe(kind.type_id))
             .collect::<Result<_, _>>()?,
     })
 }
 
-pub fn discover_all(packages: &Path, registry: &Registry) -> Result<Catalog, String> {
-    let mut catalog = discover(packages)?;
+pub fn discover_all(registry: &Registry) -> Result<Catalog, String> {
+    let mut catalog = discover()?;
     catalog.types.extend(registry.descriptions());
     bound(catalog)
 }
@@ -296,7 +157,6 @@ fn bound(mut catalog: Catalog) -> Result<Catalog, String> {
             if kind.state.is_some() {
                 kind.availability = Availability::Unavailable { reason: "Content description exceeds the catalogue limit; its state and action details were not included".into() };
                 kind.state = None;
-                kind.configuration = None;
                 kind.actions = None;
             }
         }
