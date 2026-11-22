@@ -26,7 +26,6 @@ import {
   outcome,
   startingNotice,
   statusLine,
-  unboundLine,
 } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
@@ -1611,7 +1610,7 @@ export default class Canvas extends View {
 
   statusView(): NativeElement {
     return statusLine(
-      this.status || this.worktrees?.status || unboundLine(),
+      this.status || this.worktrees?.status || "",
       this.action("Refresh", { operation: "inspect" }),
     );
   }

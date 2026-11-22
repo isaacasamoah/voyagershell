@@ -1608,6 +1608,7 @@ features:
           - 'journey:voice/refusal-is-in-the-chat'
           - 'journey:voyager-command/command-missing-line-drawn'
           - 'journey:voyager-command/no-voyager-bound'
+          - 'journey:voyager-command/line-survives-a-layout-change'
         formal: []
         journeys: [outcomes, voice, voyager-command, workspace]
     docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
@@ -1820,6 +1821,7 @@ features:
           - 'journey:voice/refusal-is-in-the-chat'
           - 'journey:voyager-command/command-missing-line-drawn'
           - 'journey:voyager-command/no-voyager-bound'
+          - 'journey:voyager-command/line-survives-a-layout-change'
         formal: []
         journeys: [outcomes, voice, voyager-command, workspace]
     docs: [docs/voice.md, docs/workspace.md]

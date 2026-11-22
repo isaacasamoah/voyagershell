@@ -82,7 +82,8 @@ mod linux {
             inspect(&missing);
             assert!(
                 missing
-                    .voyager_unbound()
+                    .replies()
+                    .unbound()
                     .is_some_and(|line| !line.is_empty()),
                 "the line shows while the command is missing"
             );
@@ -97,7 +98,11 @@ mod linux {
             std::fs::hard_link(env!("CARGO_BIN_EXE_voyager"), &beside_test).unwrap();
             let found = Client::open_with_profile(session.clone(), "/tmp".into(), profile.clone());
             inspect(&found);
-            assert_eq!(found.voyager_unbound(), None, "the line clears once it can");
+            assert_eq!(
+                found.replies().unbound(),
+                None,
+                "the line clears once it can"
+            );
             assert_eq!(voyagers(&mut core).len(), 1, "Voyager starts");
             wait(found.end(Lifecycle::StopSession)).unwrap();
         }));

@@ -42,7 +42,9 @@ export function statusLine(text, refresh) {
     .px(12)
     .py(6)
     .child(
-      Status.new("workspace-status", text).text_size(11).text_color("#ffcad3"),
+      Status.new("workspace-status", text || unboundLine())
+        .text_size(11)
+        .text_color("#ffcad3"),
     )
     .child(refresh.child(Marker.new("workspace-refresh")));
   return text ? view.child(Marker.new("workspace-status", "", text)) : view;

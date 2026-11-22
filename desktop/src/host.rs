@@ -398,7 +398,8 @@ fn load(
         })
         .function("voyager_unbound", move |_| {
             Ok(unbound_client
-                .voyager_unbound()
+                .replies()
+                .unbound()
                 .map_or(HostValue::Null, HostValue::from))
         })
         .function("take_placement_notice", move |_| {

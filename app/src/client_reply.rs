@@ -1,4 +1,4 @@
-use super::{CallError, Client, Unbound};
+use super::{CallError, Client};
 use crate::families::voyage_close::Calls;
 use std::sync::Arc;
 use voyager_contract::administrator::{ProcessInput, ProcessRequest, ProcessResponse};
@@ -22,13 +22,6 @@ impl Client {
             .lock()
             .map(|words| words.clone())
             .unwrap_or_default()
-    }
-
-    pub fn voyager_unbound(&self) -> Option<&'static str> {
-        self.voyager_unbound
-            .lock()
-            .ok()
-            .and_then(|unbound| unbound.map(Unbound::line))
     }
 
     pub fn take_placement_notice(&self) -> Option<String> {
@@ -108,7 +101,6 @@ mod tests {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
-            voyager_unbound: Arc::default(),
             workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
             package_revision: Arc::new(AtomicU64::new(0)),

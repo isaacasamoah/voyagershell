@@ -6,9 +6,9 @@ diff --git a/app/src/client_voyager.rs b/app/src/client_voyager.rs
          self.voyager_started = true;
          self.sockets.binding().forget();
 -        if crate::launch::command_path().is_none() {
--            if let Ok(mut unbound) = self.client.voyager_unbound.lock() {
--                *unbound = Some(Unbound::CommandMissing);
--            }
+-            self.client
+-                .replies
+-                .set_unbound(Some(Unbound::CommandMissing));
 -            return;
 -        }
          if let Err(error) = self.bring_up_voyager() {

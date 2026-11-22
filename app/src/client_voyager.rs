@@ -1,8 +1,8 @@
 use super::terminal_start::{CreatedTerminal, Owned, start_terminal};
 use super::{Owner, Start};
-use crate::client::Unbound;
 use crate::core::Error;
 use crate::layout_store::{rejected, save};
+use crate::replies::Unbound;
 use crate::voyager_start::{self, Standing};
 use crate::workspace::Model;
 use std::sync::Arc;
@@ -31,9 +31,9 @@ impl Owner {
         self.voyager_started = true;
         self.sockets.binding().forget();
         if crate::launch::command_path().is_none() {
-            if let Ok(mut unbound) = self.client.voyager_unbound.lock() {
-                *unbound = Some(Unbound::CommandMissing);
-            }
+            self.client
+                .replies
+                .set_unbound(Some(Unbound::CommandMissing));
             return;
         }
         if let Err(error) = self.bring_up_voyager() {

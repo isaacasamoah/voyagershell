@@ -116,7 +116,6 @@ impl Client {
             activity: Arc::default(),
             prepared_context: Arc::default(),
             placement_notice: Arc::default(),
-            voyager_unbound: Arc::default(),
             workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
             identity: format!(
