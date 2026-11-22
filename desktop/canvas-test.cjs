@@ -1985,7 +1985,11 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     observationRead: 0,
   });
   const cx = {
-    spawn() {},
+    spawn(run) {
+      try {
+        Promise.resolve(run(cx)).catch(() => {});
+      } catch {}
+    },
     notify() {},
     focus_handle() {
       return {};
@@ -2036,6 +2040,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   layout.voyages[0].fleets[0].root = null;
   view.chat = { open: true };
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     0,
@@ -2044,6 +2049,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   view.chat.open = false;
   dialog = true;
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     0,
@@ -2051,6 +2057,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   );
   dialog = false;
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     1,
