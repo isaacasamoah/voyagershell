@@ -409,6 +409,55 @@ sleeps for a fixed time, and a gesture the app never answers fails on its
 deadline. `Native::resize_window` resizes the owned window, and
 `Terminal::screen` reads Core's text for a terminal once.
 
+`Held::glide` moves the held pointer through a list of window points at one
+move every 4 ms, without waiting on the app between moves, and returns the wall
+time of each move. `Terminal::widths` reads how many cells of ink each row of a
+terminal's pixels reaches, after masking the avatar and an optional extra area.
+Its unit test checks a drawn row, a second row and a masked row.
+
+The `avatar-drag` journey proves that a held avatar follows the pointer under
+load, that terminals wait for the drag without losing output, and that a drag
+can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
+120 ms rest. The first four cases use the first terminal. Each types a program
+that starts after two seconds, holds the avatar and circles it in the
+terminal's lower right in segments of 25 moves. Between segments it captures
+the terminal with the circle's area masked and reads Core's screen.
+
+- `still` prints a staircase of about 5 MiB while the avatar circles. It passes
+  when Core's screen changed, the terminal's pixels did not, and no pause
+  between moves reached 120 ms.
+- `caught-up` does the same, then holds the avatar still. It passes when the
+  terminal draws the program's output while the button is still down, and not
+  before 120 ms after the last move. The time to the drawing is recorded, not
+  judged, because under Xvfb and llvmpipe a present alone takes 40 to 117 ms.
+- `kept` prints the staircase during a drag, then parks the avatar beside the
+  terminal and scrolls the terminal up two wheel clicks at a time to the top.
+  Row k of the staircase is k `#` characters after about 32 KiB of invisible
+  SGR resets, so about 4.25 MiB in, Core's 4 MiB queue limit would drop rows
+  from a terminal that stopped reading. It passes when every row from 1 to the
+  last appears, and every pair of adjacent staircase rows on every page goes up
+  by one. Each page's widths are kept in `drag-kept.json`.
+- `throughput` runs a printer of 8 MiB four times at rest and four times while
+  the avatar circles. Each run prints its start and end times. It passes when
+  every dragged run started and ended within the drag and the median dragged
+  time is no slower than the slowest rest time plus the rest runs' spread.
+- `idle`, `streaming` and `fleets` glide the avatar along a 950-point path with
+  no load, then with eight visible terminals printing coloured build output,
+  then with four more in each of three hidden Fleets. Each passes when the held
+  avatar is drawn under the pointer at the end of the glide and the load
+  programs were running.
+- `docks` circles the avatar over a streaming terminal and ends the glide on
+  the first terminal's Vessel name. It passes when the avatar docks on that
+  Vessel and the streaming terminal draws again after the release.
+
+The control `tests/native/controls/avatar-drag.patch` drops the redraw at the
+end of the hold, so `caught-up` fails: the staircase has finished, nothing
+else prints, and the terminal never draws it. The journey judges no frame
+budget. The drag's frame timing was measured with the exploratory Wayland
+harness on the `experiment/avatar-motion` branch, which runs a candidate built
+with the frame profiler on a headless mutter compositor with a GPU and injects
+moves through RemoteDesktop. The same harness can measure this change.
+
 ### Profile fixtures, live edits and a second build
 
 A run's profile is `profile/` in the evidence directory. The app seeds a file
