@@ -73,3 +73,25 @@ by drag stay with the trimmed Python `arrangement` journey. Tab to the
 maximize button and a layout change during a held divider gesture are not
 driven. No case compares pixels. Linux evidence does not establish another
 platform.
+
+## Known gap in canvas updates through the owner
+
+The retired Python journey `canvas-stack` drove a real agent turn that submitted
+`update-canvas` calls with a stack canvas. The list below gives native coverage of
+its five assertions.
+
+- A stack canvas update is applied and the stored canvas equals the proposal.
+  Model-level unit test `stack_retains_selection_and_rejects_invalid_alternatives_atomically`
+  in `app/src/canvas.rs`. No native case.
+- An invalid stack is refused with the layout unchanged. The same unit test and
+  `outer_canvas_preserves_the_fleet_tree_and_rejects_invalid_replacement` in
+  `app/tests/canvas.rs`. No native case.
+- The terminal's pid, start time and earlier output survive the updates. No case
+  drives canvas updates. `quit-and-keep` and `relaunch-reattaches` keep the same
+  terminal across a Quit and relaunch only.
+- The stack selection survives a Quit and relaunch. `quit-and-keep` and
+  `relaunch-reattaches` check that the layout document and its version are the
+  same after Quit and relaunch, but no case puts a stack canvas in the document.
+- The agent uses the inspected version as the expected revision. The workspace
+  case `stale-agent-edit-refused` covers the rule for agent edits in general, not
+  `update-canvas`.
