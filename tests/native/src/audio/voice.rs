@@ -1,6 +1,8 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
+use crate::native::{
+    FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis,
+};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -9,6 +11,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
+use std::time::Duration;
 
 pub const APP_CLIENT: &str = "voyager-voice";
 pub const READY: &str = "Start voice";
@@ -726,11 +729,20 @@ fn floor_is_clear(marks: &[Mark]) -> bool {
 
 pub fn await_floor(native: &Native) -> Result<u64> {
     let trace = native.voice_trace();
+    wait_for_floor(|| marks(&trace), FLOOR_WAIT.within())
+}
+
+fn wait_for_floor(mut read: impl FnMut() -> Result<Vec<Mark>>, within: Duration) -> Result<u64> {
     let began = now_millis();
-    poll(REPLY_WAIT.within(), LOOK, true, || {
-        Ok(floor_is_clear(&marks(&trace)?).then_some(()))
+    poll(within, LOOK, true, || {
+        Ok(floor_is_clear(&read()?).then_some(()))
     })?
-    .context("The previous reply did not end and release the floor, so the feed was not started")?;
+    .with_context(|| {
+        format!(
+            "previous reply still playing after {} s, so the feed was not started",
+            within.as_secs()
+        )
+    })?;
     Ok(now_millis() - began)
 }
 
@@ -1189,6 +1201,7 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::Defect;
 
     #[test]
     fn heard_digits_count_as_the_same_number_said_in_words() {
@@ -1401,6 +1414,37 @@ mod tests {
             "capture-open",
             "listening"
         ])));
+    }
+
+    #[test]
+    fn a_reply_that_never_releases_the_floor_fails_with_the_named_reason() {
+        let error = wait_for_floor(
+            || Ok(trace(&["sent", "speech-started"])),
+            Duration::from_millis(50),
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_none());
+    }
+
+    #[test]
+    fn a_clear_floor_ends_the_wait_at_once() {
+        let waited = wait_for_floor(
+            || {
+                Ok(trace(&[
+                    "sent",
+                    "speech-started",
+                    "speech-ended",
+                    "listening",
+                ]))
+            },
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        assert!(waited < 1000);
     }
 
     #[test]
