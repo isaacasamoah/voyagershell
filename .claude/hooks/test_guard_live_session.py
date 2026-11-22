@@ -121,12 +121,14 @@ class Allowed(unittest.TestCase):
 
 
 class Message(unittest.TestCase):
-    SESSION_FORM = "env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ..."
+    SESSION_FORM = "env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-<yours> hc ..."
 
     def test_blocked_hc_offers_the_session_form_and_not_the_clearing_prefix(self):
         message = guard.check("HC_SESSION=voyager-live-conversation-20261108 hc ls", TRIAL)
         self.assertIn(self.SESSION_FORM, message)
         self.assertNotIn(guard.PREFIX, message)
+        self.assertNotIn("voyager-trial", message)
+        self.assertIn("reaches the default session", message)
 
     def test_blocked_cargo_test_keeps_the_clearing_prefix(self):
         message = guard.check("cargo test --workspace --locked", LIVE)
