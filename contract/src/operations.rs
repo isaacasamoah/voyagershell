@@ -309,6 +309,11 @@ pub const WORKSPACE: Module = Module {
         function("stop_session", &[], Ty::Void),
         function("quit", &[], Ty::Void),
         function("client_decorated", &[], Ty::Bool),
+        function(
+            "trace",
+            &[bounded("stage", 256), bounded("detail", 4096)],
+            Ty::Void,
+        ),
     ],
 };
 
