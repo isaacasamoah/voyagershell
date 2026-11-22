@@ -1066,6 +1066,7 @@ features:
           - 'test:app/src/voice_route.rs#small_talk_is_answered_by_the_voice_only_when_the_model_is_sure'
           - 'test:app/src/voice_route.rs#a_chat_reply_that_promises_or_describes_an_action_goes_to_voyager'
           - 'test:app/src/voice_route.rs#a_chat_reply_that_offers_to_do_something_goes_to_voyager'
+          - 'test:app/src/voice_route.rs#saying_yes_i_can_hear_you_is_still_small_talk'
           - 'test:app/src/voice_layer_tests.rs#small_talk_is_answered_by_the_voice_and_nothing_reaches_voyager'
           - 'test:app/src/voice_layer_tests.rs#help_what_can_you_do_never_mind_and_cancel_reach_voyager_even_when_the_model_says_chat'
           - 'test:app/src/voice_layer_tests.rs#a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyager'

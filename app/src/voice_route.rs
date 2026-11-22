@@ -29,7 +29,7 @@ impl Route {
     }
 }
 
-const OFFER_WORDS: &str = "what would you like|want me to|do you want me|would you like me|shall i|should i|i can|can i|i could|i'll|i will|let me|let's";
+const OFFER_WORDS: &str = "what would you like|want me to|do you want me|would you like me|shall i|should i|i could|i'll|i will|let me|let's|can i help|i can help|i'm here to help|happy to help";
 
 const ACTION_WORDS: &str = "i'm going|going to|on it|i've|i have|i did|done|will do|right away|working on|voyager|ask|asking|check|checking|open|opening|look|looking|find|finding|move|moving|rename|renaming|dock|docking|switch|switching|start|stop|cancel|canceling|cancelling|drop|fleet|vessel|voyage|build|terminal|portal|workspace|opened|moved|renamed|docked|checked|started|stopped|canceled|cancelled|switched|found|dropped|fleets|vessels|voyages|builds|terminals|portals";
 
@@ -219,6 +219,16 @@ mod tests {
     }
 
     #[test]
+    fn saying_yes_i_can_hear_you_is_still_small_talk() {
+        let Route::Chat(said) =
+            Route::parse("Can you hear me?", &chat("Yes, I can hear you."), Some(1.0))
+        else {
+            panic!("a plain yes to can you hear me is a chat reply");
+        };
+        assert_eq!(said.as_str(), "Yes, I can hear you.");
+    }
+
+    #[test]
     fn a_chat_reply_that_offers_to_do_something_goes_to_voyager() {
         for offering in [
             "Want me to show you around?",
@@ -226,8 +236,10 @@ mod tests {
             "Would you like me to find it?",
             "Shall I take you there?",
             "Should I keep going?",
-            "I can show you what's new.",
-            "Can I get you anything?",
+            "I can help with that.",
+            "Can I help with anything?",
+            "I'm here to help.",
+            "Happy to help!",
             "I could pull that up.",
             "I'll be right here.",
             "Let me know what you need.",
