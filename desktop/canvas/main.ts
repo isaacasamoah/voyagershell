@@ -16,6 +16,7 @@ import {
   workspace_observation,
   reported_activity,
   refresh_activity,
+  trace,
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
@@ -544,6 +545,7 @@ export default class Canvas extends View {
     prepareContents = true,
   ) {
     this.drag = null;
+    trace("run", `${action.operation} busy=${this.busy}`);
     if (this.busy) {
       if (
         action.operation === "resize-placement-split" ||
@@ -640,6 +642,7 @@ export default class Canvas extends View {
       try {
         result = await invoke(action, expectedVersion);
         accepted = this.acceptSnapshot(result, task);
+        trace("accepted", `${action.operation} accepted=${accepted} version=${this.version}`);
         if (
           accepted &&
           action.operation === "dock" &&
@@ -671,7 +674,9 @@ export default class Canvas extends View {
         ) {
           try {
             const allowed = ownCreated(action, previousContents, result.layout);
+            trace("prepare_start", action.operation);
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
+            trace("prepare_end", action.operation);
             prepared = true;
             const current = this.layout;
             const shown = shownPanels(current);
@@ -702,6 +707,7 @@ export default class Canvas extends View {
         this.splitReset += 1;
       }
       this.busy = false;
+      trace("idle", action.operation);
       if (done) done(result, task);
       if (result?.status === "applied" && this.fresh) {
         if (this.pendingLayout) {
@@ -751,6 +757,7 @@ export default class Canvas extends View {
     const changed = changedBesidesRevision(notice, this.workspaceNotice);
     this.workspaceNotice = notice;
     this.refreshRequested = false;
+    trace("inspect_decision", `revision=${notice.revision} version=${this.version} changed=${changed} skip=${!changed && BigInt(notice.revision) <= BigInt(this.version)}`);
     if (!changed && BigInt(notice.revision) <= BigInt(this.version)) return;
     this.automaticRefresh = true;
     try {
@@ -1942,6 +1949,13 @@ export default class Canvas extends View {
   }
 
   render(cx: UIContext): NativeElement {
+    trace("render_start", `busy=${this.busy} version=${this.version}`);
+    const drawn = this.renderInner(cx);
+    trace("render_end", `busy=${this.busy} version=${this.version}`);
+    return drawn;
+  }
+
+  renderInner(cx: UIContext): NativeElement {
     const animationNotice = take_animation_notice();
     if (animationNotice !== null) {
       if (animationNotice || this.status === this.animationNotice)
@@ -1966,6 +1980,7 @@ export default class Canvas extends View {
       changedBesidesRevision(ownerNotice, this.workspaceNotice)
     ) {
       this.refreshRequested = true;
+      trace("notice_seen", `revision=${ownerNotice.revision} seen=${this.workspaceNotice.revision} busy=${this.busy}`);
       if (!this.busy) this.inspectNotice(cx);
     }
     const colors = projection();

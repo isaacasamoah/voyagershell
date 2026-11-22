@@ -2,10 +2,10 @@ use gpui::profiler::journal::{
     ForegroundEvent, ForegroundJournalEntry, IntervalBoundary, PresentedFrame,
 };
 use serde_json::{Value, json};
-use std::fs::OpenOptions;
+
 use std::io::Write;
-use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn selected(flag: Option<&str>, session: Option<&str>) -> bool {
     flag == Some("1") && session.is_some_and(|s| s.starts_with("voyager-typing-"))
@@ -87,38 +87,15 @@ fn presented_data(t: PresentedFrame) -> Value {
 }
 
 pub(crate) fn start(cx: &mut gpui::App) {
-    if !selected(
-        std::env::var("VOYAGER_FRAME_PROFILE").ok().as_deref(),
-        std::env::var("VOYAGER_WORKSPACE_SESSION").ok().as_deref(),
-    ) {
-        return;
-    }
-    let stop = std::env::var_os("VOYAGER_FRAME_PROFILE_STOP").map(PathBuf::from);
-    if stop.as_ref().is_none_or(|path| !path.is_absolute()) {
-        return;
-    }
-    let Some(stop) = stop else { return };
-    let destination = stop.with_extension("jsonl");
     let mut collector = cx.foreground_journal().collector();
     let _writer = std::thread::Builder::new()
         .name("frame-work".into())
         .spawn(move || {
-            if stop.exists() || destination == stop {
-                return;
-            }
-            let started = Instant::now();
-            let Ok(mut output) = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(destination)
-            else {
-                return;
-            };
+            let mut output = std::io::stderr();
             let mut sequence = 0;
             let mut lost = 0;
             let mut last_drain_wall_ns = None;
-            while started.elapsed() < Duration::from_secs(120) && sequence < 20000 && !stop.exists()
-            {
+            loop {
                 let drained = collector.collect_unseen();
                 last_drain_wall_ns = wall();
                 lost += drained.lost;
@@ -134,29 +111,20 @@ pub(crate) fn start(cx: &mut gpui::App) {
                         _ => continue,
                     };
                     record["event"] = json!("voyager_frame_work");
+                    record["late_redraw"] = json!("ui");
+                    if let (Some(before), Some(start), Some(end)) = (record["wall_before_ns"].as_u64(), record["start_age_ns"].as_u64(), record["end_age_ns"].as_u64()) {
+                        record["wall_ms"] = json!((before - start) / 1_000_000);
+                        record["start_ms_f"] = json!((before - start) as f64 / 1e6);
+                        record["end_ms_f"] = json!((before - end) as f64 / 1e6);
+                    }
                     record["sequence"] = json!(sequence);
                     if writeln!(output, "{record}").is_err() {
                         return;
                     }
                     sequence += 1;
-                    if sequence == 20000 {
-                        break;
-                    }
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
-            let _ = writeln!(
-                output,
-                "{}",
-                json!({
-                    "event": "voyager_frame_work_end", "records": sequence, "lost": lost,
-                    "requested_stop": stop.exists(),
-                    "capped": sequence == 20000,
-                    "expired": started.elapsed() >= Duration::from_secs(120),
-                    "last_drain_wall_ns": last_drain_wall_ns,
-                    "coverage": "Observed prefix through last drain, not the process lifetime",
-                })
-            );
         });
 }
 

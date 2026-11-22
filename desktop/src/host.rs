@@ -255,6 +255,12 @@ fn load(
                 Ok(HostValue::Null)
             })
         })
+        .function("trace", move |arguments| {
+            let stage = arguments.string(0)?.to_owned();
+            let detail = arguments.string(1).map(str::to_owned).unwrap_or_default();
+            eprintln!("{}", serde_json::json!({"late_redraw":"js","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"stage":stage,"detail":detail}));
+            Ok(HostValue::Null)
+        })
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })
@@ -765,6 +771,7 @@ impl CanvasHost {
 impl Render for CanvasHost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::diagnostics::redraw::record("canvas_renders", 1);
+        eprintln!("{}", serde_json::json!({"late_redraw":"host_render","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)}));
         let content = self.root.as_ref().map(|root| {
             let view = root.read(cx).content().clone();
             if window.is_a11y_active() {
