@@ -344,13 +344,13 @@ confidence = "stated"
 
 [[invariant]]
 id = "any-agent-splits-a-placement"
-says = "Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom, through the voyager.place label or through create-vessel with a beside insertion. A bad side, a malformed label, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent's hc run could not start, and neither route resizes a split."
+says = "Any agent Vessel can put a terminal or agent beside a named placement of a Fleet on the left, right, top or bottom through the voyager.place label, or a Vessel of any ready type there through create-vessel with a beside insertion. A bad side, a malformed label, a closed Fleet, or a placement that is not in the named Fleet places nothing. A created Vessel starts nothing that the same agent's hc run could not start, and neither route resizes a split."
 kind = "user"
 owner = "application-queue"
 source = "Isaac, 22 Nov 2026: 'we need all agents to be able to split terminals vertically or horizontally, not just add one, this will vastly improve layouts.'"
 features = ["adopted-vessels", "agent-vessels"]
 guard = ["type:contract/src/place.rs#Place"]
-check = ["journey:agent-split/label-splits-each-side", "journey:agent-split/create-vessel-splits-beside", "journey:agent-split/bad-split-places-nothing"]
+check = ["journey:agent-split/label-splits-each-side", "journey:agent-split/create-vessel-splits-beside", "journey:agent-split/bad-split-places-nothing", "test:app/src/workspace/tests.rs#a_vessel_is_not_created_in_a_closed_fleet"]
 gap = "Only Linux X11 evidence exists."
 confidence = "stated"
 

@@ -253,22 +253,7 @@ impl Model {
         {
             return Ok(false);
         }
-        let open = self.layout.containers().any(|voyage| {
-            !voyage.closed
-                && match owner {
-                    PlacementOwner::Fleet { id } => voyage
-                        .fleets
-                        .iter()
-                        .any(|fleet| &fleet.id == id && !fleet.closed),
-                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
-                }
-        });
-        if !open {
-            return Err(match owner {
-                PlacementOwner::Fleet { id } => format!("no open Fleet {}", id.0),
-                PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
-            });
-        }
+        self.require_open(owner)?;
         let target = panels::group(&self.layout, owner)?;
         if let PlacementInsertion::Beside { id, .. } = &insertion
             && !panels::contains(&panels::visible(target.root, target.members), id)
@@ -317,6 +302,26 @@ impl Model {
         }
     }
 
+    fn require_open(&self, owner: &PlacementOwner) -> Result<(), String> {
+        let open = self.layout.containers().any(|voyage| {
+            !voyage.closed
+                && match owner {
+                    PlacementOwner::Fleet { id } => voyage
+                        .fleets
+                        .iter()
+                        .any(|fleet| &fleet.id == id && !fleet.closed),
+                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
+                }
+        });
+        if open {
+            return Ok(());
+        }
+        Err(match owner {
+            PlacementOwner::Fleet { id } => format!("no open Fleet {}", id.0),
+            PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
+        })
+    }
+
     fn create_vessel(
         &mut self,
         type_id: String,
@@ -328,6 +333,7 @@ impl Model {
         if !crate::content::valid_type_id(&type_id) {
             return Err("Unsupported Vessel type".into());
         }
+        self.require_open(&owner)?;
         let launch = crate::launch::requested(&type_id, launch, defaults)?;
         let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
         let name = panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);

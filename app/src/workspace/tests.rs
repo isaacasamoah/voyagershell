@@ -715,3 +715,33 @@ fn only_the_vessel_on_the_bound_terminal_keeps_the_table_default() {
         Defaults::Plain
     );
 }
+
+#[test]
+fn a_vessel_is_not_created_in_a_closed_fleet() {
+    let (mut model, ..) = two_voyages();
+    let fleet = model.layout.voyages[0].fleets[0].clone();
+    let beside = fleet.placements[0].id.clone();
+    model
+        .apply(Action::CloseFleet {
+            id: fleet.id.clone(),
+        })
+        .unwrap();
+    let before = model.layout.clone();
+    let refused = model.apply_from(
+        Some(&VesselId("content-9".into())),
+        Defaults::Plain,
+        Action::CreateVessel {
+            type_id: "terminal".into(),
+            destination: ContentDestination::Placement {
+                owner: PlacementOwner::Fleet { id: fleet.id },
+                insertion: PlacementInsertion::Beside {
+                    id: beside,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
+        },
+    );
+    assert!(refused.unwrap_err().contains("no open Fleet"));
+    assert_eq!(model.layout, before);
+}
