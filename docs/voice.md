@@ -244,8 +244,8 @@ after three short sentences and offers more, and the rest comes only if the pers
 
 The background Voyager gets both through `spoken::policy_rule`, which adds the voice
 rules for a prompt that starts with `[spoken]`. It answers aloud with no paths or
-code. It says done, or that it checked, only when a tool showed the result, and
-otherwise says what it tried and what it saw. It never points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
+code. It claims only what a tool's output showed, does only what was asked, and
+never points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
 prompt on a resumed conversation, so the focus hook repeats the rule at every prompt.
 The whole hook reminder is under 700 characters, and a test holds it there, because it
 is sent on every prompt. The voice model's prompt in `conversation_audio.rs` reads the
@@ -257,7 +257,7 @@ show the direction. "The Voyager Voyage's Portal column holds just the terminal,
 it is visible. The two admiral Portals exist in the Voyage but aren't in the visible
 layout. Should I dock you to the visible terminal Portal?" becomes "Right, only one of
 them is on screen. The other two are hidden. Want me to dock you to the one you can
-see?", and "I docked you to the terminal Portal in the Voyager Voyage, and the app
+see?", and after the person says yes, "I docked you to the terminal Portal in the Voyager Voyage, and the app
 accepted it." becomes "Done, you're there."
 
 The filter keeps only a safety ceiling for runaway text, `CEILING_WORDS`, 120 words. It
