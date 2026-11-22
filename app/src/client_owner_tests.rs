@@ -1,4 +1,6 @@
-use super::structure_calls::{eligible_contents, grant_new_shell, record_created_terminals};
+use super::structure_calls::{
+    eligible_contents, forget_created_terminals, grant_new_shell, record_created_terminals,
+};
 use super::*;
 use crate::core::Core;
 use crate::families::structure::{reopen_backend, require_live, visible_content};
@@ -458,6 +460,14 @@ fn automatic_terminal_eligibility_excludes_notes() {
         pending,
         vec![record(terminal.clone()), record(new_terminal.clone())]
     );
+    record_created_terminals(&mut pending, &previous, &model.layout);
+    assert_eq!(
+        pending,
+        vec![record(terminal.clone()), record(new_terminal.clone())]
+    );
+    let mut failed = pending.clone();
+    forget_created_terminals(&mut failed, &previous, &model.layout);
+    assert_eq!(failed, vec![record(terminal.clone())]);
     let mut layout = Arc::new(model.layout);
     pending.push(record(notes));
     assert_eq!(

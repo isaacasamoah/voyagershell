@@ -280,6 +280,9 @@ impl Owner {
             }
             (result, _) => result,
         };
+        if result.is_err() && records_created(scope.as_ref(), &request.action) {
+            forget_created_terminals(&mut self.created_vessels, &held, &candidate);
+        }
         let landed = result
             .map_err(|error| unbound(created_notes, error))
             .map(|revision| {
@@ -310,22 +313,7 @@ impl Owner {
                     );
                     self.unconfirmed.remove(&vessel_id.0);
                 }
-                if (scope.is_some()
-                    || matches!(
-                        request.action,
-                        Action::CreateVessel { .. }
-                            | Action::CreateVoyageFromSource { .. }
-                            | Action::CreateFleetWithVessel { .. }
-                    ))
-                    && matches!(
-                        request.action,
-                        Action::CreateVoyage { .. }
-                            | Action::CreateVoyageFromSource { .. }
-                            | Action::CreateFleet { .. }
-                            | Action::CreateFleetWithVessel { .. }
-                            | Action::CreateVessel { .. }
-                    )
-                {
+                if records_created(scope.as_ref(), &request.action) {
                     record_created_terminals(&mut self.created_vessels, &held, &candidate);
                 }
                 if revision > self.version.document {
@@ -701,6 +689,9 @@ impl Owner {
         )?;
         let pending = begin_save(core, &edit.candidate, self.version)
             .map_err(|error| unbound(edit.created_notes, error))?;
+        if records_created(scope, &request.action) {
+            record_created_terminals(&mut self.created_vessels, &self.layout, &edit.candidate);
+        }
         post(&self.sender, pending, |result| Message::Saved {
             result: result.map(|saved| saved.version),
         });
@@ -919,21 +910,51 @@ pub(super) fn record_created_terminals(
     previous: &Layout,
     current: &Layout,
 ) {
-    pending.extend(
-        current
-            .vessels
-            .iter()
-            .filter(|item| {
-                voyager_contract::launch::is_terminal_backed(&item.type_id)
-                    && !previous.vessels.iter().any(|old| old.id == item.id)
-            })
-            .map(|item| CreatedTerminal {
-                id: item.id.clone(),
-                launch: item.launch.clone().unwrap_or_default(),
-                backend: None,
-                shell_intent: None,
-            }),
-    );
+    let created: Vec<CreatedTerminal> = current
+        .vessels
+        .iter()
+        .filter(|item| {
+            voyager_contract::launch::is_terminal_backed(&item.type_id)
+                && !previous.vessels.iter().any(|old| old.id == item.id)
+                && !pending.iter().any(|known| known.id == item.id)
+        })
+        .map(|item| CreatedTerminal {
+            id: item.id.clone(),
+            launch: item.launch.clone().unwrap_or_default(),
+            backend: None,
+            shell_intent: None,
+        })
+        .collect();
+    pending.extend(created);
+}
+
+fn records_created(scope: Option<&Context>, action: &Action) -> bool {
+    (scope.is_some()
+        || matches!(
+            action,
+            Action::CreateVessel { .. }
+                | Action::CreateVoyageFromSource { .. }
+                | Action::CreateFleetWithVessel { .. }
+        ))
+        && matches!(
+            action,
+            Action::CreateVoyage { .. }
+                | Action::CreateVoyageFromSource { .. }
+                | Action::CreateFleet { .. }
+                | Action::CreateFleetWithVessel { .. }
+                | Action::CreateVessel { .. }
+        )
+}
+
+pub(super) fn forget_created_terminals(
+    pending: &mut Vec<CreatedTerminal>,
+    previous: &Layout,
+    current: &Layout,
+) {
+    pending.retain(|item| {
+        previous.vessels.iter().any(|old| old.id == item.id)
+            || !current.vessels.iter().any(|new| new.id == item.id)
+    });
 }
 
 pub(super) fn eligible_contents(
