@@ -20,6 +20,25 @@ pub const HOLD: &str = "arm";
 const ATTACH: &str = "terminal.attach";
 const HELD_MS: u64 = 1500;
 
+#[derive(Debug, PartialEq)]
+enum Reading {
+    Product,
+    Fixture,
+}
+
+struct Evidence {
+    ready: bool,
+    drawn: bool,
+}
+
+fn reading(evidence: &Evidence) -> Reading {
+    if evidence.ready && evidence.drawn {
+        Reading::Product
+    } else {
+        Reading::Fixture
+    }
+}
+
 fn home_ids(native: &Native) -> Result<Vec<PlacementId>> {
     let (_, layout) = native.document()?.context("Missing saved layout")?;
     Ok(layout
@@ -72,14 +91,32 @@ fn create_during(
     let arm = native
         .system
         .arm_core(ATTACH, Fault::Hold { ms: HELD_MS })?;
+    let ready = native
+        .observe("the app prepared before the click", |_| Some(()))
+        .is_ok();
     open(native)?;
-    let held = native
-        .watch(|native| native.system.arm_spent(&arm))?
-        .with_context(|| {
-            format!(
-                "Opening Home never opened a terminal through {ATTACH}, so this case did not reach the state it judges"
+    let Some(held) = native.watch(|native| native.system.arm_spent(&arm))? else {
+        let homes = home_ids(native)?;
+        let drawn = native
+            .observe("the Home view drawn after the click", |seen| {
+                (seen.document.view == WorkspaceView::Home
+                    && homes.iter().any(|id| seen.shows(&Target::split_right(id))))
+                .then_some(())
+            })
+            .is_ok();
+        let evidence = Evidence { ready, drawn };
+        anyhow::ensure!(
+            reading(&evidence) == Reading::Product,
+            "Opening Home never opened a terminal through {ATTACH}, so this case did not reach the state it judges"
+        );
+        return Verdict::new()
+            .expect(
+                "a click on the avatar that the app accepted and drew, with the app prepared before it, opened the Home Vessels through terminal.attach",
+                false,
             )
-        })?;
+            .observed("preparedBeforeTheClick", ready)?
+            .observed("homeDrawnAfterTheClick", drawn);
+    };
     let sent = now_millis();
     let created = send_line(native, &caller, &request)?;
     let added = native
@@ -155,4 +192,27 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             })
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_click_the_app_took_after_it_was_ready_that_opens_no_terminal_is_the_product() {
+        assert_eq!(
+            reading(&Evidence {
+                ready: true,
+                drawn: true
+            }),
+            Reading::Product
+        );
+    }
+
+    #[test]
+    fn a_click_the_app_never_took_or_took_before_it_was_ready_blames_the_fixture() {
+        for (ready, drawn) in [(true, false), (false, true), (false, false)] {
+            assert_eq!(reading(&Evidence { ready, drawn }), Reading::Fixture);
+        }
+    }
 }

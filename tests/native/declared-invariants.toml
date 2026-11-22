@@ -224,8 +224,8 @@ owner = "desktop-presentation"
 source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'"
 features = ["avatar"]
 guard = ["type:desktop/src/avatar/click.rs#Click"]
-check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-minimizes", "journey:socket-dock/avatar-click-right-after-a-drag-opens-home"]
-gap = "The clause that a second click restores the workspace has no case yet. The unit that gives every user invariant in scope a journey (DI13) adds it."
+check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-minimizes"]
+gap = "The clause that a second click restores the workspace has no case yet. The unit that gives every user invariant in scope a journey (DI13) adds it. The clause about a click made while a dock waits is shown for a dock away from home only, because a dock onto home opens the Home view by itself and the screen cannot tell a waiting click from a dropped one there."
 confidence = "stated"
 
 [[invariant]]

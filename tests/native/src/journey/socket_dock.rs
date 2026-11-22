@@ -21,7 +21,6 @@ cases! {
     RereadKeepsClickedPane => "reread-keeps-clicked-pane",
     RedockTakesKeyboard => "redock-takes-keyboard",
     DockHomeKeepsKeyboard => "dock-home-keeps-keyboard",
-    AvatarClickAfterDragOpensHome => "avatar-click-right-after-a-drag-opens-home",
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
     AvatarClickAwayMinimizes => "avatar-click-away-minimizes",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
@@ -477,49 +476,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("after", &after)?
             .observed("clicked", &other_screen)?
             .observed("other", &left_screen)
-    })?;
-
-    cases.check(native, Case::AvatarClickAfterDragOpensHome, |native| {
-        show_fleet(native)?;
-        let fleet = native
-            .document()?
-            .context("Missing saved layout")?
-            .1
-            .selected_fleet
-            .context("The layout has no selected Fleet")?;
-        native.drag(
-            &Target::AVATAR,
-            &Target::name(&RenameTarget::Fleet { id: fleet.clone() }),
-        )?;
-        native.settle(
-            "the avatar docked on the Fleet",
-            |seen| (seen.document.context == Context::Fleet { id: fleet.clone() }).then_some(()),
-            |_| true,
-        )?;
-        let arm = native.system.arm_core(SAVE, Fault::Hold { ms: HELD_MS })?;
-        native.drag(&Target::AVATAR, &Target::WORKSPACE_DOCK)?;
-        native.click(&Target::AVATAR)?;
-        let clicked = now_millis();
-        let opened = native
-            .settle(
-                "the Home view shown with the avatar docked home",
-                |seen| Some((seen.document.view.clone(), seen.document.context.clone())),
-                |(view, context)| *view == WorkspaceView::Home && *context == Context::Workspace,
-            )
-            .ok();
-        let released = held_release(native, &arm)?;
-        native.keep_window("avatar-click-right-after-a-drag-opens-home")?;
-        Verdict::new()
-            .expect(
-                "the Core relay held the dock's save, so the click came while the dock was unanswered",
-                released.is_some_and(|released| clicked < released),
-            )
-            .expect(
-                "the click made right after the drag showed the Home view with the avatar docked home",
-                opened.is_some(),
-            )
-            .observed("clickedAtMs", clicked)?
-            .observed("releasedAtMs", released)
     })?;
 
     cases.check(native, Case::AvatarClickAtHomeOpensHome, |native| {

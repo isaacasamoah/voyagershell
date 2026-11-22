@@ -862,8 +862,11 @@ canvas's own read after the attach.
 - `created-during-avatar-home-click-is-drawn` docks the avatar at home if it is
   not there, shows the Fleet view, closes the app and launches it again, so the
   Home view's terminals are not yet attached. It arms the same hold, clicks the
-  avatar, waits for the held attach and sends the create. It passes and ends
-  inconclusive on the same terms as the first case.
+  avatar, waits for the held attach and sends the create. When no attach comes,
+  the case decides from evidence. If the app was prepared before the click and
+  the saved document and the drawn frame both show the Home view, the app took
+  the click and opened no terminal, and the case fails on the product. If the
+  click never reached the app, it ends inconclusive and blames the fixture.
 
 #### Scripted tool calls
 
@@ -1259,13 +1262,15 @@ then fails on the expectation `the Vessel created during the Home preparation is
 drawn with its terminal`, because the read during the Home preparation brings
 the new Vessel without opening it.
 
-The `socket-dock` journey also covers the home dock and the click on the avatar at home. `dock-home-keeps-keyboard` creates two shells in the Home fleet, clicks the second, drags the avatar onto the home dock and expects the canvas focus and the typed line to stay on the second shell. It closes its two shells before it ends. `avatar-click-at-home-opens-home` relaunches under client decorations and expects a click on the avatar at home to show the Home view and to send no minimise request. `avatar-click-right-after-a-drag-opens-home` drags the avatar onto the home dock with Core's save of that dock held and clicks at once, and expects the Home view once the reply returns. `avatar-click-away-minimizes` does the same onto a Fleet and expects one iconic change-state request. The journey declares an armed Core relay for this, and nothing is held unless a case arms a hold. `voyager-creates-and-maximizes` runs last. A late frame after its maximize request fails it on main, and a failed case ends the journey and skips every case after it.
+The `socket-dock` journey also covers the home dock and the click on the avatar at home. `dock-home-keeps-keyboard` creates two shells in the Home fleet, clicks the second, drags the avatar onto the home dock and expects the canvas focus and the typed line to stay on the second shell. It closes its two shells before it ends. `avatar-click-at-home-opens-home` relaunches under client decorations and expects a click on the avatar at home to show the Home view and to send no minimise request. `avatar-click-away-minimizes` docks the avatar on a Fleet, waits for the reply, clicks and expects one iconic change-state request. It then relaunches, holds Core's save of the next dock, drags the avatar onto a Fleet, clicks at once and expects one such request after the reply returns. There is no home-side case for a click made while a dock waits: a dock onto home opens the Home view itself, so the screen cannot tell a waiting click from a dropped one. The journey declares an armed Core relay for this, and nothing is held unless a case arms a hold. `voyager-creates-and-maximizes` runs last. A late frame after its maximize request fails it on main, and a failed case ends the journey and skips every case after it.
 
 The `socket-dock-home` patch puts back the focus a dock home gave before. The canvas moves the keyboard to the first Vessel shown, as on any other dock. `dock-home-keeps-keyboard` then fails on the expectation `the canvas focus stayed on the Home Vessel the user had clicked`, because the focus moved to another Home Vessel.
 
 The `avatar-click-home` patch makes a click on the avatar at home minimize the workspace as it does anywhere else. `avatar-click-at-home-opens-home` then fails on the expectation `a click on the avatar at home showed the Home view`, because the click sent a minimise request instead.
 
-The `avatar-home-prepare` patch puts back the canvas as main has it. An avatar reply is accepted while the canvas is drawing, and the notice inspect skips a Home whose Vessels are not open. `created-during-avatar-home-click-is-drawn` is then expected to fail on `Opening Home never opened a terminal through terminal.attach`, and `dock-home-keeps-keyboard` on its script-error expectation. These two results are predictions until the control runs.
+The `avatar-click-wait` patch puts back the old guard, so a click made while a dock waits for its reply is dropped. `avatar-click-away-minimizes` is then expected to fail on the expectation `a click right after the drag onto a Fleet sent one iconic change-state request for the window`. This result is a prediction until the control runs.
+
+The `avatar-home-prepare` patch puts back the canvas as main has it. An avatar reply is accepted while the canvas is drawing, and the notice inspect skips a Home whose Vessels are not open. `created-during-avatar-home-click-is-drawn` is then expected to fail on the expectation `a click on the avatar that the app accepted and drew, with the app prepared before it, opened the Home Vessels through terminal.attach`, and `dock-home-keeps-keyboard` on its script-error expectation. These two results are predictions until the control runs.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
