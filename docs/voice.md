@@ -91,12 +91,12 @@ chat.
 
 ## Small talk
 
-After hearing, one text call to the Omni engine decides who answers. `speech::Route`
+After hearing, one text call to the Omni engine decides who answers. `voice_route::Route`
 is the result. It is either `Chat`, which holds the voice's own reply, or `Voyager`.
 Only `Route::parse` builds one, and every way it can go wrong gives `Voyager`, so a
 request is never dropped.
 
-The call sends `speech::route_prompt` with a few worked examples and then the heard
+The call sends `voice_route::route_prompt` with a few worked examples and then the heard
 words. The prompt is a short routing rule followed by `spoken::TALK`, read from its one
 owner, so the voice's replies follow the same spoken guide as Voyager's. The answer is
 held to one of two JSON shapes, `{"kind":"work"}` or `{"kind":"chat","say":"..."}`. A
@@ -389,8 +389,9 @@ trim but never trim out the accepted message.
 
 ## The seam
 
-`app/src/speech.rs` holds the traits `Hearing`, `Routing` and `Speaking`, the `Route` that
-routing gives, the `Engine` that pairs them, the clip table and the speech filter.
+`app/src/speech.rs` holds the traits `Hearing` and `Speaking`, the `Engine` that pairs
+them, the clip table and the speech filter. `app/src/voice_route.rs` holds `Routing`, the
+`Route` it gives and the routing prompt.
 `SpokenText` and its `Piece`s can only be built by the filter, so unfiltered reply text
 never reaches an engine. The filter keeps every paragraph, drops code, tables, links,
 paths and long ids, says plain numbers as words, and stops only at the safety ceiling.

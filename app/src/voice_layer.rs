@@ -4,10 +4,11 @@ use crate::{
     omni::{self, Clips, Omni, Running, Settings},
     replies::Replies,
     speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Route, Routing, Speaking, SpokenText,
-        Utterance, acknowledge, heard_nothing,
+        Acknowledgement, Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance,
+        acknowledge, heard_nothing,
     },
     voice_parts::{Audio, Finish, Floor, Phase, Speaker, Trace, Voyager},
+    voice_route::{Route, Routing},
     voice_speaker,
 };
 use std::{

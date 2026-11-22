@@ -3,9 +3,9 @@ use crate::{
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
-        Clip, Fault, Hearing, Phrase, Piece, ROUTE_EXAMPLES, Route, Routing, Speaking, Utterance,
-        clean_heard, hearing_prompt, route_prompt,
+        Clip, Fault, Hearing, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
     },
+    voice_route::{ROUTE_EXAMPLES, Route, Routing, route_prompt},
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

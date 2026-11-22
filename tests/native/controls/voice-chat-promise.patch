@@ -1,8 +1,8 @@
-diff --git a/app/src/speech.rs b/app/src/speech.rs
-index 7474616f..ec29c240 100644
---- a/app/src/speech.rs
-+++ b/app/src/speech.rs
-@@ -184,7 +184,7 @@ enum Answer {
+diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
+index b8b6e018..54fcdd90 100644
+--- a/app/src/voice_route.rs
++++ b/app/src/voice_route.rs
+@@ -18,7 +18,7 @@ enum Answer {
  impl Route {
      pub fn parse(heard: &str, answer: &str, chat_probability: Option<f64>) -> Route {
          let Ok(Answer::Chat { say }) = serde_json::from_str(answer) else {

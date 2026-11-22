@@ -1,8 +1,8 @@
-diff --git a/app/src/speech.rs b/app/src/speech.rs
-index 332642e3..90b6d331 100644
---- a/app/src/speech.rs
-+++ b/app/src/speech.rs
-@@ -183,7 +183,7 @@ impl Route {
+diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
+index b8b6e018..5ae7edcd 100644
+--- a/app/src/voice_route.rs
++++ b/app/src/voice_route.rs
+@@ -20,7 +20,7 @@ impl Route {
          let Ok(Answer::Chat { say }) = serde_json::from_str(answer) else {
              return Route::Voyager;
          };
