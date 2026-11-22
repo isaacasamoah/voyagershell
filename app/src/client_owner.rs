@@ -267,7 +267,12 @@ impl Owner {
                         Error::Uncertain(message) => Unsaved::Unconfirmed(message),
                     })
                 };
-                noticed = self.adoptions.settle(save, saved, &mut self.live_bindings);
+                noticed = self.adoptions.settle(
+                    self.sockets.binding(),
+                    save,
+                    saved,
+                    &mut self.live_bindings,
+                );
             }
         }
         if !self.door.flying() && !self.exits.is_empty() {

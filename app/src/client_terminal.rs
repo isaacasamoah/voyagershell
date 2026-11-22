@@ -316,7 +316,7 @@ mod tests {
         model
             .apply_from(
                 Some(&VesselId("content-9".into())),
-                voyager_contract::launch::Defaults::Plain,
+                voyager_contract::caller::Caller::Agent,
                 Action::CreateVessel {
                     type_id: "terminal".into(),
                     destination: ContentDestination::Placement {

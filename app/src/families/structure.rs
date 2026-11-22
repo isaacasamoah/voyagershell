@@ -2,7 +2,7 @@ use crate::{core::Error, core_shapes::Terminal, observation, panels, scope, work
 use std::{collections::HashMap, sync::Arc};
 use voyager_contract::{
     Action, Context, CoreTerminalId, DirectorySource, Layout, PlacementId, Request, VesselId,
-    VoyageId, WorkspaceView, launch::Defaults,
+    VoyageId, WorkspaceView, caller::Caller,
 };
 
 pub(crate) trait Calls {
@@ -147,7 +147,7 @@ pub(crate) fn edit(
     calls: &mut impl Calls,
     layout: &Layout,
     program: Option<&VesselId>,
-    defaults: Defaults,
+    caller: Caller,
     request: &Request,
     unconfirmed: &HashMap<String, String>,
 ) -> Result<Edit, Error> {
@@ -171,7 +171,7 @@ pub(crate) fn edit(
             },
             None,
         ) => candidate.start_new_shell(vessel_id, expected_backend, &request.request_id),
-        _ => candidate.apply_from(program, defaults, request.action.clone()),
+        _ => candidate.apply_from(program, caller, request.action.clone()),
     }
     .map_err(refused)?;
     calls.closing(&candidate.layout)?;

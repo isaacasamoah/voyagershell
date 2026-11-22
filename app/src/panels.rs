@@ -186,7 +186,13 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                     }
                 }
             }
-            insert(group_mut(layout, &owner)?, &owner, insertion, panel)?;
+            insert(
+                group_mut(layout, &owner)?,
+                &owner,
+                insertion,
+                panel,
+                Maximize::Clear,
+            )?;
         }
         Action::RevealPlacement { id } => {
             let owner = owner_of(layout, &id)?;
@@ -556,11 +562,18 @@ pub(crate) fn insertion_cwd(
         .ok_or_else(|| "Panel owner has no configured folder".into())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Maximize {
+    Clear,
+    Keep,
+}
+
 pub(crate) fn insert(
     group: GroupMut<'_>,
     owner: &PlacementOwner,
     insertion: PlacementInsertion,
     panel: Placement,
+    maximize: Maximize,
 ) -> Result<(), String> {
     match insertion {
         PlacementInsertion::Beside { id, side } => {
@@ -592,7 +605,9 @@ pub(crate) fn insert(
         }
     }
     group.members.push(panel);
-    *group.maximized = None;
+    if maximize == Maximize::Clear {
+        *group.maximized = None;
+    }
     Ok(())
 }
 

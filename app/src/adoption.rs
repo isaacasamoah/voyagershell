@@ -1,4 +1,4 @@
-use crate::workspace::Model;
+use crate::{voyager_binding::Binding, workspace::Model};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -6,6 +6,7 @@ use std::{
 };
 use voyager_contract::{
     CoreTerminalId, Layout,
+    caller::Caller,
     launch::Launch,
     place::{LABEL, Place},
 };
@@ -20,6 +21,8 @@ pub(crate) struct Origin {
     cwd: String,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    parent: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,6 +32,7 @@ pub(crate) struct Labelled {
     pub(crate) cwd: String,
     pub(crate) launch: Launch,
     pub(crate) name: Option<String>,
+    pub(crate) parent: Option<CoreTerminalId>,
 }
 
 impl Labelled {
@@ -47,6 +51,7 @@ impl Labelled {
                 .map_err(|error| format!("Terminal {address} was not placed: {error}")),
             cwd: origin.cwd,
             name: origin.name,
+            parent: origin.parent.map(CoreTerminalId),
             launch: match program {
                 Some(program) if crate::agent_programs::is_agent_program(&program) => {
                     Launch::Program {
@@ -91,6 +96,7 @@ impl Adoptions {
 
     pub(crate) fn settle<Revision: Copy>(
         &mut self,
+        binding: &Binding,
         save: impl FnOnce(&Layout, Revision) -> Result<Revision, Unsaved>,
         (layout, version, fresh): (&mut Arc<Layout>, &mut Revision, &mut bool),
         live: &mut Vec<CoreTerminalId>,
@@ -101,6 +107,10 @@ impl Adoptions {
         let mut placed = Vec::new();
         let mut shown = None;
         for labelled in std::mem::take(&mut self.pending) {
+            let caller = match &labelled.parent {
+                Some(parent) if binding.names(parent) => Caller::Voyager,
+                _ => Caller::Agent,
+            };
             let result = labelled.place.clone().and_then(|place| {
                 candidate
                     .adopt(
@@ -109,6 +119,7 @@ impl Adoptions {
                         labelled.cwd.clone(),
                         labelled.launch.clone(),
                         labelled.name.clone(),
+                        caller,
                     )
                     .map_err(|error| {
                         format!("Terminal {} was not placed: {error}", labelled.terminal.0)
@@ -196,7 +207,9 @@ mod tests {
             cwd: "/work".into(),
             launch: Launch::Terminal,
             name: None,
+            parent: None,
         };
+        let binding = Binding::unbound();
         let notice = Arc::new(Mutex::new(None));
         let mut adoptions = Adoptions::new(notice.clone());
         let mut layout = Arc::new(model.layout);
@@ -204,13 +217,13 @@ mod tests {
         adoptions.found([labelled.clone()]);
         let refused = |_: &Layout, _| Err(Unsaved::Refused("moved".into()));
         let saved = (&mut layout, &mut version, &mut fresh);
-        assert!(!adoptions.settle(refused, saved, &mut live));
+        assert!(!adoptions.settle(&binding, refused, saved, &mut live));
         assert!(adoptions.waiting());
         assert!(!fresh);
         fresh = true;
         let unsettled = |_: &Layout, _| Err(Unsaved::Unconfirmed("lost".into()));
         let saved = (&mut layout, &mut version, &mut fresh);
-        assert!(adoptions.settle(unsettled, saved, &mut live));
+        assert!(adoptions.settle(&binding, unsettled, saved, &mut live));
         assert!(!adoptions.waiting());
         assert!(!fresh);
         assert!(live.is_empty());
@@ -245,7 +258,7 @@ mod tests {
             .notification(event(
                 2,
                 "t3",
-                json!({"argv":task,"cwd":"/work","name":"arch","labels":{"voyager.place":"fleet:fleet-2"}}),
+                json!({"argv":task,"cwd":"/work","name":"arch","parent":"t1","labels":{"voyager.place":"fleet:fleet-2"}}),
             ))
             .unwrap();
         facts
@@ -261,6 +274,8 @@ mod tests {
         assert_eq!(found[0].cwd, "/work");
         assert_eq!(found[0].name.as_deref(), Some("arch"));
         assert_eq!(found[1].name, None);
+        assert_eq!(found[0].parent, Some(CoreTerminalId("t1".into())));
+        assert_eq!(found[1].parent, None);
         assert_eq!(
             found[0].launch,
             Launch::Program {
@@ -286,16 +301,19 @@ mod tests {
         facts
             .notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":9,"terminals":[
                 {"address":"t1","state":"live","labels":{"voyager.place":"fleet:fleet-2"}},
-                {"address":"t5","state":"live","argv":["bash"],"labels":{"voyager.place":"portal:voyage-1"}},
+                {"address":"t5","state":"live","argv":["bash"],"parent":"t1","labels":{"voyager.place":"portal:voyage-1"}},
                 {"address":"t6","state":"finished","labels":{"voyager.place":"fleet:fleet-2"}},
                 {"address":"t7","state":"live","labels":{}}
             ]}}))
             .unwrap();
-        let resynced: Vec<String> = labelled(&mut facts)
+        let resynced: Vec<(String, Option<CoreTerminalId>)> = labelled(&mut facts)
             .into_iter()
-            .map(|labelled| labelled.terminal.0)
+            .map(|labelled| (labelled.terminal.0, labelled.parent))
             .collect();
-        assert_eq!(resynced, vec!["t5".to_owned()]);
+        assert_eq!(
+            resynced,
+            vec![("t5".to_owned(), Some(CoreTerminalId("t1".into())))]
+        );
     }
 
     fn crew() -> (
@@ -316,9 +334,14 @@ mod tests {
     }
 
     fn labelled_at(text: &str) -> Labelled {
+        labelled_from(text, None)
+    }
+
+    fn labelled_from(text: &str, parent: Option<&str>) -> Labelled {
         let origin: Origin = serde_json::from_value(json!({
             "argv": ["bash"],
             "cwd": "/work",
+            "parent": parent,
             "labels": {LABEL: text}
         }))
         .unwrap();
@@ -326,6 +349,14 @@ mod tests {
     }
 
     fn settled(layout: &Layout, pending: Vec<Labelled>) -> (Layout, Option<String>) {
+        settled_with(&Binding::unbound(), layout, pending)
+    }
+
+    fn settled_with(
+        binding: &Binding,
+        layout: &Layout,
+        pending: Vec<Labelled>,
+    ) -> (Layout, Option<String>) {
         let notice = Arc::new(Mutex::new(None));
         let mut adoptions = Adoptions::new(notice.clone());
         let mut shared = Arc::new(layout.clone());
@@ -333,7 +364,12 @@ mod tests {
             (1, true, Vec::new());
         adoptions.found(pending);
         let save = |_: &Layout, revision: u64| Ok(revision + 1);
-        adoptions.settle(save, (&mut shared, &mut version, &mut fresh), &mut live);
+        adoptions.settle(
+            binding,
+            save,
+            (&mut shared, &mut version, &mut fresh),
+            &mut live,
+        );
         let shown = notice.lock().unwrap().clone();
         (Layout::clone(&shared), shown)
     }
@@ -436,5 +472,50 @@ mod tests {
         let (layout, _) = settled(&model.layout, vec![bad, good]);
         assert_eq!(layout.vessels.len(), model.layout.vessels.len() + 1);
         assert_eq!(layout.voyages[0].fleets[0].placements.len(), 2);
+    }
+
+    fn maximized_crew() -> (
+        Model,
+        voyager_contract::FleetId,
+        voyager_contract::PlacementId,
+    ) {
+        let (mut model, fleet, first) = crew();
+        let mut terminal = labelled_from(&format!("fleet:{}:right:{}", fleet.0, first.0), None);
+        terminal.terminal = CoreTerminalId("t20".into());
+        let (layout, _) = settled(&model.layout, vec![terminal]);
+        model.layout = layout;
+        model
+            .apply(voyager_contract::Action::SetPlacementMaximized {
+                id: first.clone(),
+                maximized: true,
+            })
+            .unwrap();
+        (model, fleet, first)
+    }
+
+    #[test]
+    fn a_labelled_terminal_keeps_the_maximize_unless_core_names_voyager_its_starter() {
+        let binding = Binding::unbound();
+        binding.bind(CoreTerminalId("t1".into())).unwrap();
+        for (parent, keeps) in [(None, true), (Some("t2"), true), (Some("t1"), false)] {
+            for side in [true, false] {
+                let (model, fleet, first) = maximized_crew();
+                let text = if side {
+                    format!("fleet:{}:left:{}", fleet.0, first.0)
+                } else {
+                    format!("fleet:{}", fleet.0)
+                };
+                let (layout, shown) =
+                    settled_with(&binding, &model.layout, vec![labelled_from(&text, parent)]);
+                let case = format!("parent {parent:?}, side {side}");
+                assert_eq!(shown, None, "{case}");
+                let placed = &layout.voyages[0].fleets[0];
+                assert_eq!(placed.placements.len(), 3, "{case}");
+                let new = &placed.placements[2].id;
+                assert!(crate::panels::contains(&placed.root, new), "{case}");
+                let expected = keeps.then(|| first.clone());
+                assert_eq!(placed.maximized_placement, expected, "{case}");
+            }
+        }
     }
 }
