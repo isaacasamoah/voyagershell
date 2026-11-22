@@ -33,7 +33,7 @@ index 5907f9cc..21c896d9 100644
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index b1fa18c8..425099d8 100644
+index c4bb2dc5..2ae25197 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
@@ -50,7 +50,7 @@ index b1fa18c8..425099d8 100644
    workspace.automaticRefresh = true;
    try {
      workspace.run({ operation: "inspect" }, cx);
-@@ -65,11 +60,8 @@ export function acceptDockResult(workspace, cx) {
+@@ -71,11 +66,8 @@ export function acceptDockResult(workspace, cx) {
    if (raw !== null) {
      const result = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -58,13 +58,13 @@ index b1fa18c8..425099d8 100644
 +    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
        workspace.dockReceipt = result.requestId;
 -      workspace.refreshRequested = true;
--      if (!workspace.busy) inspectNotice(workspace, cx);
+-      inspectOutsideRender(workspace, cx);
 -    }
    }
    if (workspace.busy) return;
    const dock = workspace_notice().dockRevision;
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index d8f4cdd7..57aa71f0 100644
+index ae619bdf..b55989e6 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
 @@ -72,8 +72,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
@@ -77,7 +77,7 @@ index d8f4cdd7..57aa71f0 100644
    )
      return;
    workspace.automaticRefresh = true;
-@@ -89,11 +88,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -99,11 +98,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    if (raw !== null) {
      const result: unknown = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -85,7 +85,7 @@ index d8f4cdd7..57aa71f0 100644
 +    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
        workspace.dockReceipt = result.requestId;
 -      workspace.refreshRequested = true;
--      if (!workspace.busy) inspectNotice(workspace, cx);
+-      inspectOutsideRender(workspace, cx);
 -    }
    }
    if (workspace.busy) return;
