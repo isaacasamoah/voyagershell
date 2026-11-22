@@ -186,6 +186,14 @@ only to Voyager, which must name a Fleet as its destination, and a Portal
 destination is refused. The field stands in
 for the rank record that Release 0.2 adds.
 
+`create-vessel` resolves an agent launch that names no permissions in one of two
+ways. `Binding::launch_defaults` in `app/src/voyager_binding.rs` asks the same
+record whether the calling Vessel's terminal is the bound one. A bound Voyager,
+and the person, get the agent table's default. Any other Vessel gets the plain
+mode, with the program's own arguments and no permission flags, the same as a
+plain program start through Core. Naming `permissions` selects that row of the
+table for either.
+
 The app reads the file once, when it starts. After that it holds the value in
 memory, and only its own write changes it, so an edit to the file while the app
 runs has no effect. A hand-edited file takes effect at the next app start,

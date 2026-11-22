@@ -9,9 +9,38 @@ const ID_LIMIT: usize = 128;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 #[schemars(transform = place_schema)]
-pub struct Place {
-    pub owner: PlacementOwner,
-    pub insertion: PlacementInsertion,
+pub enum Place {
+    Fleet {
+        id: FleetId,
+        beside: Option<(Side, PlacementId)>,
+    },
+    Portal {
+        voyage: VoyageId,
+    },
+}
+
+impl Place {
+    pub fn into_parts(self) -> (PlacementOwner, PlacementInsertion) {
+        match self {
+            Self::Fleet { id, beside: None } => {
+                (PlacementOwner::Fleet { id }, PlacementInsertion::Empty)
+            }
+            Self::Fleet {
+                id,
+                beside: Some((side, placement)),
+            } => (
+                PlacementOwner::Fleet { id },
+                PlacementInsertion::Beside {
+                    id: placement,
+                    side,
+                },
+            ),
+            Self::Portal { voyage } => (
+                PlacementOwner::Portals { voyage },
+                PlacementInsertion::Empty,
+            ),
+        }
+    }
 }
 
 fn place_schema(schema: &mut schemars::Schema) {
@@ -75,26 +104,19 @@ impl std::str::FromStr for Place {
         };
         let parts: Vec<&str> = value.split(':').collect();
         match parts.as_slice() {
-            ["fleet", fleet] => Ok(Self {
-                owner: PlacementOwner::Fleet {
-                    id: FleetId(id(value, fleet)?.into()),
-                },
-                insertion: PlacementInsertion::Empty,
+            ["fleet", fleet] => Ok(Self::Fleet {
+                id: FleetId(id(value, fleet)?.into()),
+                beside: None,
             }),
-            ["fleet", fleet, edge, placement] => Ok(Self {
-                owner: PlacementOwner::Fleet {
-                    id: FleetId(id(value, fleet)?.into()),
-                },
-                insertion: PlacementInsertion::Beside {
-                    side: side(value, edge)?,
-                    id: PlacementId(id(value, placement)?.into()),
-                },
+            ["fleet", fleet, edge, placement] => Ok(Self::Fleet {
+                id: FleetId(id(value, fleet)?.into()),
+                beside: Some((
+                    side(value, edge)?,
+                    PlacementId(id(value, placement)?.into()),
+                )),
             }),
-            ["portal", voyage] => Ok(Self {
-                owner: PlacementOwner::Portals {
-                    voyage: VoyageId(id(value, voyage)?.into()),
-                },
-                insertion: PlacementInsertion::Empty,
+            ["portal", voyage] => Ok(Self::Portal {
+                voyage: VoyageId(id(value, voyage)?.into()),
             }),
             ["portal", ..] => Err(format!(
                 "{LABEL}={value} places a Portal by portal:<voyage id> only"
@@ -106,12 +128,13 @@ impl std::str::FromStr for Place {
 
 impl From<Place> for String {
     fn from(place: Place) -> Self {
-        match (place.owner, place.insertion) {
-            (PlacementOwner::Fleet { id }, PlacementInsertion::Empty) => format!("fleet:{}", id.0),
-            (PlacementOwner::Fleet { id }, PlacementInsertion::Beside { id: beside, side }) => {
-                format!("fleet:{}:{}:{}", id.0, side_name(side), beside.0)
-            }
-            (PlacementOwner::Portals { voyage }, _) => format!("portal:{}", voyage.0),
+        match place {
+            Place::Fleet { id, beside: None } => format!("fleet:{}", id.0),
+            Place::Fleet {
+                id,
+                beside: Some((side, placement)),
+            } => format!("fleet:{}:{}:{}", id.0, side_name(side), placement.0),
+            Place::Portal { voyage } => format!("portal:{}", voyage.0),
         }
     }
 }
@@ -120,28 +143,20 @@ impl From<Place> for String {
 mod tests {
     use super::*;
 
-    fn fleet(id: &str, insertion: PlacementInsertion) -> Place {
-        Place {
-            owner: PlacementOwner::Fleet {
-                id: FleetId(id.into()),
-            },
-            insertion,
+    fn fleet(id: &str, beside: Option<(Side, &str)>) -> Place {
+        Place::Fleet {
+            id: FleetId(id.into()),
+            beside: beside.map(|(side, placement)| (side, PlacementId(placement.into()))),
         }
     }
 
     #[test]
     fn a_place_names_a_fleet_a_side_of_one_of_its_placements_or_a_voyage_portal_and_nothing_else() {
-        assert_eq!(
-            "fleet:fleet-4".parse(),
-            Ok(fleet("fleet-4", PlacementInsertion::Empty))
-        );
+        assert_eq!("fleet:fleet-4".parse(), Ok(fleet("fleet-4", None)));
         assert_eq!(
             "portal:voyage-2".parse(),
-            Ok(Place {
-                owner: PlacementOwner::Portals {
-                    voyage: VoyageId("voyage-2".into())
-                },
-                insertion: PlacementInsertion::Empty,
+            Ok(Place::Portal {
+                voyage: VoyageId("voyage-2".into())
             })
         );
         for (name, edge) in [
@@ -151,13 +166,7 @@ mod tests {
             ("bottom", Side::Bottom),
         ] {
             let text = format!("fleet:fleet-4:{name}:placement-9");
-            let place = fleet(
-                "fleet-4",
-                PlacementInsertion::Beside {
-                    id: PlacementId("placement-9".into()),
-                    side: edge,
-                },
-            );
+            let place = fleet("fleet-4", Some((edge, "placement-9")));
             assert_eq!(text.parse(), Ok(place.clone()), "{text}");
             assert_eq!(String::from(place), text);
         }
@@ -200,6 +209,18 @@ mod tests {
         );
         let beside: Place = serde_json::from_str("\"fleet:f:bottom:p\"").unwrap();
         assert_eq!(
+            beside.clone().into_parts(),
+            (
+                PlacementOwner::Fleet {
+                    id: FleetId("f".into())
+                },
+                PlacementInsertion::Beside {
+                    id: PlacementId("p".into()),
+                    side: Side::Bottom
+                }
+            )
+        );
+        assert_eq!(
             serde_json::to_string(&beside).unwrap(),
             "\"fleet:f:bottom:p\""
         );
@@ -220,16 +241,7 @@ mod tests {
             assert!(invalid.parse::<Place>().is_err(), "{invalid}");
         }
         let named_like_a_side = "fleet:left:left:left".parse::<Place>().unwrap();
-        assert_eq!(
-            named_like_a_side,
-            fleet(
-                "left",
-                PlacementInsertion::Beside {
-                    id: PlacementId("left".into()),
-                    side: Side::Left,
-                }
-            )
-        );
+        assert_eq!(named_like_a_side, fleet("left", Some((Side::Left, "left"))));
         assert_eq!(String::from(named_like_a_side), "fleet:left:left:left");
     }
 }

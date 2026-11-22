@@ -189,9 +189,9 @@ mod tests {
         let fleet = model.layout.voyages[0].fleets[0].id.clone();
         let labelled = Labelled {
             terminal: CoreTerminalId("t9".into()),
-            place: Ok(Place {
-                owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
-                insertion: voyager_contract::PlacementInsertion::Empty,
+            place: Ok(Place::Fleet {
+                id: fleet,
+                beside: None,
             }),
             cwd: "/work".into(),
             launch: Launch::Terminal,
@@ -268,10 +268,13 @@ mod tests {
             }
         );
         assert_eq!(
-            found[0].place.as_ref().map(|place| &place.owner),
-            Ok(&voyager_contract::PlacementOwner::Fleet {
-                id: voyager_contract::FleetId("fleet-2".into())
-            })
+            found[0].place.clone().map(Place::into_parts),
+            Ok((
+                voyager_contract::PlacementOwner::Fleet {
+                    id: voyager_contract::FleetId("fleet-2".into())
+                },
+                voyager_contract::PlacementInsertion::Empty
+            ))
         );
         assert_eq!(found[1].launch, Launch::Terminal);
         assert!(

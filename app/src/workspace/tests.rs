@@ -1,9 +1,9 @@
 use super::*;
 
 fn empty(owner: &PlacementOwner) -> Place {
-    Place {
-        owner: owner.clone(),
-        insertion: PlacementInsertion::Empty,
+    match owner.clone() {
+        PlacementOwner::Fleet { id } => Place::Fleet { id, beside: None },
+        PlacementOwner::Portals { voyage } => Place::Portal { voyage },
     }
 }
 
@@ -610,7 +610,7 @@ fn program(argv: &[&str]) -> Option<Launch> {
 }
 
 #[test]
-fn an_agent_created_by_another_vessel_starts_plain_unless_it_names_permissions() {
+fn plain_defaults_start_an_agent_plain_unless_it_names_permissions_and_table_defaults_do_not() {
     use voyager_contract::launch::Permissions;
     let other = VesselId("content-9".into());
     let voyager = VesselId(VOYAGER_VESSEL.into());
@@ -693,25 +693,25 @@ fn only_the_vessel_on_the_bound_terminal_keeps_the_table_default() {
     }
     let binding = crate::voyager_binding::Binding::unbound();
     assert_eq!(
-        launch_defaults(&model.layout, Some(&ids[0]), &binding),
+        binding.launch_defaults(&model.layout, Some(&ids[0])),
         Defaults::Plain
     );
     binding.bind(CoreTerminalId("t1".into())).unwrap();
     assert_eq!(
-        launch_defaults(&model.layout, Some(&ids[0]), &binding),
+        binding.launch_defaults(&model.layout, Some(&ids[0])),
         Defaults::Table
     );
     assert_eq!(
-        launch_defaults(&model.layout, Some(&ids[1]), &binding),
+        binding.launch_defaults(&model.layout, Some(&ids[1])),
         Defaults::Plain
     );
     assert_eq!(
-        launch_defaults(&model.layout, None, &binding),
+        binding.launch_defaults(&model.layout, None),
         Defaults::Table
     );
     let named_voyager = VesselId(VOYAGER_VESSEL.into());
     assert_eq!(
-        launch_defaults(&model.layout, Some(&named_voyager), &binding),
+        binding.launch_defaults(&model.layout, Some(&named_voyager)),
         Defaults::Plain
     );
 }

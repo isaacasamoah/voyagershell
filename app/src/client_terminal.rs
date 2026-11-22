@@ -305,6 +305,14 @@ mod tests {
             id: fleet.id.clone(),
         };
         let beside = fleet.placements[0].id.clone();
+        let first = fleet.placements[0].vessel.clone();
+        model
+            .layout
+            .vessels
+            .iter_mut()
+            .find(|vessel| vessel.id == first)
+            .unwrap()
+            .cwd = "/work/elsewhere".into();
         model
             .apply_from(
                 Some(&VesselId("content-9".into())),
@@ -323,7 +331,7 @@ mod tests {
             )
             .unwrap();
         let created = model.layout.vessels.last().unwrap();
-        assert_eq!(created.cwd, "/work/crew");
+        assert_eq!(created.cwd, "/work/elsewhere");
         let params = run_params(
             vec!["bash".into()],
             &created.cwd,
@@ -331,7 +339,7 @@ mod tests {
             Some("/opt/voyager:/usr/bin".into()),
         );
         let sent = serde_json::to_value(&params).unwrap();
-        assert_eq!(sent["cwd"], "/work/crew");
+        assert_eq!(sent["cwd"], "/work/elsewhere");
         assert_eq!(sent["env"], json!({"PATH": "/opt/voyager:/usr/bin"}));
         assert_eq!(
             sent["labels"],

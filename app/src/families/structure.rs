@@ -160,7 +160,7 @@ pub(crate) fn edit(
             expected_backend,
         } => candidate.start_new_shell(vessel_id, expected_backend, &request.request_id),
         _ => {
-            let defaults = crate::workspace::launch_defaults(layout, program, binding);
+            let defaults = binding.launch_defaults(layout, program);
             candidate.apply_from(program, defaults, request.action.clone())
         }
     }

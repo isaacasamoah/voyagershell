@@ -9,27 +9,6 @@ use voyager_contract::{
 
 pub(crate) const VOYAGER_VESSEL: &str = "voyager";
 
-pub(crate) fn launch_defaults(
-    layout: &Layout,
-    caller: Option<&VesselId>,
-    binding: &crate::voyager_binding::Binding,
-) -> Defaults {
-    let Some(caller) = caller else {
-        return Defaults::Table;
-    };
-    let is_voyager = layout
-        .vessels
-        .iter()
-        .find(|vessel| &vessel.id == caller)
-        .and_then(|vessel| vessel.backend.as_ref())
-        .is_some_and(|terminal| binding.names(terminal));
-    if is_voyager {
-        Defaults::Table
-    } else {
-        Defaults::Plain
-    }
-}
-
 pub(crate) fn is_voyager(vessel: &Vessel) -> bool {
     vessel.id.0 == VOYAGER_VESSEL
 }
@@ -264,7 +243,7 @@ impl Model {
         launch: Launch,
         core_name: Option<String>,
     ) -> Result<bool, String> {
-        let Place { owner, insertion } = place;
+        let (owner, insertion) = place.into_parts();
         let owner = &owner;
         if self
             .layout
@@ -294,14 +273,11 @@ impl Model {
         if let PlacementInsertion::Beside { id, .. } = &insertion
             && !panels::contains(&panels::visible(target.root, target.members), id)
         {
-            return Err(match owner {
-                PlacementOwner::Fleet { id: fleet } => {
-                    format!("Fleet {} has no visible placement {}", fleet.0, id.0)
-                }
-                PlacementOwner::Portals { voyage } => {
-                    format!("Voyage {} has no visible Portal {}", voyage.0, id.0)
-                }
-            });
+            let scope = match owner {
+                PlacementOwner::Fleet { id } => format!("Fleet {}", id.0),
+                PlacementOwner::Portals { voyage } => format!("Voyage {}", voyage.0),
+            };
+            return Err(format!("{scope} has no visible placement {}", id.0));
         }
         let members = target.members;
         let core_name = core_name

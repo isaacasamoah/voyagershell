@@ -204,7 +204,10 @@ every Vessel, and without one only to Voyager. `create-vessel` adds a Vessel of 
 `insertion` is `{"kind":"empty"}` for an empty Fleet, or
 `{"kind":"beside","id":"<placement id>","side":"<side>"}` beside a placement.
 The current Fleet is the one `voyager status` and the focus reply show. A
-destination in the Portals is refused. `set-placement-maximized` takes
+destination in the Portals is refused. An agent `launch` from a Vessel other
+than Voyager that names no `permissions` starts the agent in its plain mode,
+with the arguments a plain `hc run` of it would carry and no bypass flag. Name
+`permissions` to get the matching row of the agent table. `set-placement-maximized` takes
 `"id":"<placement id>"` and `"maximized":true` to maximize it, or `false` to
 restore it. `resize-placement-split` takes the Fleet as `"owner":{"kind":"fleet","id":"<fleet id>"}`,
 a `"path"` of `"first"` and `"second"` steps from the Fleet's root split to the
