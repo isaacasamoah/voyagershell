@@ -31,7 +31,12 @@ import {
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
-import { openOrRetry, reopens, terminalStatus } from "./terminal-open.js";
+import {
+  openOrRetry,
+  ownCreated,
+  reopens,
+  terminalStatus,
+} from "./terminal-open.js";
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
@@ -524,17 +529,7 @@ export default class Canvas extends View {
           result.fresh
         ) {
           try {
-            const creates = [
-              "create-voyage",
-              "create-voyage-from-source",
-              "create-fleet-with-vessel",
-              "create-fleet",
-              "create-vessel",
-            ].includes(action.operation);
-            const allowed = new Set();
-            if (creates)
-              for (const item of result.layout.vessels)
-                if (!previousContents.has(item.id)) allowed.add(item.id);
+            const allowed = ownCreated(action, previousContents, result.layout);
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
             const current = this.layout;
@@ -787,6 +782,7 @@ export default class Canvas extends View {
   ) {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
+    for (const id of this.created) allowed.add(id);
     const errors = [];
     const visited = new Set();
     for (const vessel of shownPanels(layout)) {
@@ -794,9 +790,7 @@ export default class Canvas extends View {
       const content = layout.vessels.find((item) => item.id === vessel.vessel);
       if (!content || !terminalBacked(content.typeId)) continue;
       const opening = this.openings.get(vessel.vessel);
-      const created =
-        allowed.has(vessel.vessel) || this.created.has(vessel.vessel);
-      if (created && reopens(content, opening)) {
+      if (allowed.has(vessel.vessel) && reopens(content, opening)) {
         this.openings.delete(vessel.vessel);
         this.terminals.delete(vessel.vessel);
       }
@@ -810,7 +804,7 @@ export default class Canvas extends View {
         existingOnly &&
         (!content?.backend || content.startPending) &&
         !retry.has(vessel.vessel) &&
-        !created
+        !allowed.has(vessel.vessel)
       ) {
         if (!this.openings.has(vessel.vessel))
           this.openings.set(vessel.vessel, { status: "unbound" });

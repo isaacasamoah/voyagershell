@@ -1,11 +1,10 @@
 diff --git a/app/src/client_structure.rs b/app/src/client_structure.rs
-index 7b0d84d1..d772eb64 100644
 --- a/app/src/client_structure.rs
 +++ b/app/src/client_structure.rs
-@@ -687,8 +687,8 @@ impl Owner {
-         )?;
-         let pending = begin_save(core, &edit.candidate, self.version)
-             .map_err(|error| unbound(edit.created_notes, error))?;
+@@ -686,8 +686,8 @@
+         if records_created(scope, &request.action) {
+             record_created_terminals(&mut self.created_vessels, &self.layout, &edit.candidate);
+         }
 -        post(&self.sender, pending, |result| Message::Saved {
 -            result: result.map(|saved| saved.version),
 +        let _ = self.sender.try_send(Message::Saved {
