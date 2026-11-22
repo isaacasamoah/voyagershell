@@ -144,6 +144,11 @@ fn main() -> ExitCode {
                 Ok(text) => println!("{text}"),
                 Err(error) => eprintln!("{error}"),
             }
+            if let SocketRequest::Workspace { request } = &request
+                && let Some(sentence) = voyager_app::change_sentence::sentence(request, &reply)
+            {
+                eprintln!("{sentence}");
+            }
             code(&reply)
         }
         Err((code, message)) => {

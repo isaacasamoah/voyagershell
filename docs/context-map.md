@@ -65,6 +65,7 @@ Owns files:
 - `app/tests/voyager_reply.rs`
 - `app/src/spoken.rs`
 - `app/src/bin/voyager.rs`
+- `app/src/change_sentence.rs`
 - `contract/src/socket.rs`
 - `contract/src/reply.rs`
 - `app/src/front_door.rs`
