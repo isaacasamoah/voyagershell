@@ -1,5 +1,5 @@
 diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
-index b8b6e018..54fcdd90 100644
+index 199d24e9..9646bf2b 100644
 --- a/app/src/voice_route.rs
 +++ b/app/src/voice_route.rs
 @@ -18,7 +18,7 @@ enum Answer {
@@ -10,4 +10,4 @@ index b8b6e018..54fcdd90 100644
 +            return SpokenText::from_reply("Sure, I'll do that now.").map_or(Route::Voyager, Route::Chat);
          };
          let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
-         if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) {
+         if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)
