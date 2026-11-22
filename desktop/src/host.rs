@@ -431,6 +431,9 @@ fn load(
         })
         .function("notice", move |_| {
             let notice = notice.get();
+            crate::diagnostics::redraw::event("script_read_notice", || {
+                serde_json::json!({"revision": notice.revision})
+            });
             Ok(HostValue::Object(vec![
                 (
                     "closeRevision".into(),
