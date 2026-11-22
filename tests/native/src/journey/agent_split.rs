@@ -1,9 +1,10 @@
 use super::adopt_by_label::{address, bound_to, typed};
-use super::socket_dock::{from_another_vessel, members};
+use super::arrangement::{same_rect, union};
+use super::socket_dock::{from_another_vessel, maximized, members, set_maximized};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, bound_terminal, fleets, voyages};
-use crate::sandbox::SECOND_PROJECT;
+use crate::sandbox::{CORE, SECOND_PROJECT};
 use crate::system::until;
 use crate::x11::Key;
 use anyhow::{Context as _, Result};
@@ -25,6 +26,9 @@ cases! {
     PersonKeepsTableDefault => "person-keeps-table-default",
     VoyagerResizesASplit => "voyager-resizes-a-split",
     AgentResizeRefused => "agent-resize-refused",
+    AgentSplitKeepsMaximize => "agent-split-keeps-maximize",
+    NewPieceShowsAfterUnmaximize => "new-piece-shows-after-unmaximize",
+    VoyagerSplitClearsMaximize => "voyager-split-clears-maximize",
 }
 
 pub const CONTROL: Case = Case::CreateVesselSplitsBeside;
@@ -43,6 +47,8 @@ const RESIZE_REFUSED: &str = "is offered only to Voyager; nothing was queued";
 const RESIZED: u16 = 7000;
 const REFUSED_SHARE: u16 = 3000;
 const SHARE_TOLERANCE: f32 = 0.03;
+const KEPT: &str = "the agent's split saved with the maximized Vessel drawn alone";
+const CLEARED: &str = "Voyager's split saved with the maximize cleared and both Vessels drawn";
 const BYPASS: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CODEX: &str = "codex";
 const UNNAMED_CODEX: &[u8] = br#"{"default":"terminal","entries":[{"id":"terminal","name":"Terminal","launch":{"kind":"terminal"}},{"id":"codex","name":"Codex","launch":{"kind":"codex"}}]}"#;
@@ -90,6 +96,32 @@ struct Created {
 struct Divided {
     share: Option<SplitShare>,
     fraction: f32,
+}
+
+#[derive(Clone, PartialEq, Serialize)]
+struct View {
+    placement: PlacementId,
+    maximized: Option<PlacementId>,
+    held: bool,
+    drawn: Vec<(String, Rect)>,
+}
+
+impl View {
+    fn drew(&self, placement: &PlacementId) -> bool {
+        self.drawn.iter().any(|(key, _)| key == &placement.0)
+    }
+
+    fn alone(&self, maximized: &PlacementId, area: &Rect) -> bool {
+        matches!(self.drawn.as_slice(), [(key, drawn)] if key == &maximized.0 && same_rect(drawn, area))
+    }
+
+    fn kept(&self, maximized: &PlacementId, area: &Rect) -> bool {
+        self.held && self.maximized.as_ref() == Some(maximized) && self.alone(maximized, area)
+    }
+
+    fn cleared(&self, was: &PlacementId) -> bool {
+        self.held && self.maximized.is_none() && self.drew(was) && self.drew(&self.placement)
+    }
 }
 
 #[derive(Serialize)]
@@ -395,6 +427,102 @@ fn arguments(argv: &Value) -> Vec<String> {
         .collect()
 }
 
+fn terminal_of(layout: &Layout, placement: &PlacementId) -> Option<String> {
+    content_of(layout, placement)
+        .and_then(|content| content.backend.as_ref())
+        .map(|backend| backend.0.clone())
+}
+
+fn view(seen: &Seen, fleet: &FleetId, placement: &PlacementId) -> View {
+    let placed = members(seen.document, fleet);
+    let mut drawn: Vec<(String, Rect)> = seen
+        .frame
+        .elements
+        .iter()
+        .filter(|element| {
+            element.role == Role::Terminal && placed.iter().any(|member| member.0 == element.key)
+        })
+        .map(|element| (element.key.clone(), element.bounds))
+        .collect();
+    drawn.sort_by(|a, b| a.0.cmp(&b.0));
+    View {
+        placement: placement.clone(),
+        maximized: maximized(seen.document, fleet),
+        held: held_by(seen.document, fleet, placement).is_some(),
+        drawn,
+    }
+}
+
+fn settled(
+    native: &Native,
+    fleet: &FleetId,
+    placement: &PlacementId,
+    expected: &str,
+    wanted: impl Fn(&View) -> bool,
+) -> Result<View> {
+    native
+        .settle(expected, |seen| Some(view(seen, fleet, placement)), wanted)
+        .or_else(|_| native.observe(expected, |seen| Some(view(seen, fleet, placement))))
+}
+
+fn joined(native: &Native, fleet: &FleetId, before: &[PlacementId]) -> Result<PlacementId> {
+    native.observe("the created Vessel saved in the Fleet", |seen| {
+        members(seen.document, fleet)
+            .into_iter()
+            .find(|id| !before.contains(id))
+    })
+}
+
+fn maximize(
+    native: &Native,
+    voyager: &str,
+    fleet: &FleetId,
+    placement: &PlacementId,
+    request: &str,
+) -> Result<()> {
+    let (_, layout) = native.document()?.context("Missing saved layout")?;
+    if maximized(&layout, fleet).as_ref() != Some(placement) {
+        from_another_vessel(native, voyager, request, set_maximized(placement, true))?;
+    }
+    native
+        .settle(
+            "the placement saved as maximized by Voyager",
+            |seen| Some(maximized(seen.document, fleet)),
+            |held| held.as_ref() == Some(placement),
+        )
+        .map(drop)
+}
+
+fn started_from(native: &Native, terminal: &str, name: &str, place: &str) -> Result<String> {
+    native.system.execute(
+        "env",
+        &[
+            &format!("HC_TERMINAL_ID={terminal}"),
+            CORE,
+            "run",
+            "--bg",
+            "--cwd",
+            SECOND_PROJECT,
+            "--name",
+            name,
+            "--label",
+            &format!("voyager.place={place}"),
+            "bash",
+        ],
+        None,
+    )?;
+    address(native, name)
+}
+
+fn drawn_within(inner: &Rect, outer: &Rect) -> bool {
+    inner.width > 0.0
+        && inner.height > 0.0
+        && inner.x >= outer.x - LOGICAL_TOLERANCE
+        && inner.y >= outer.y - LOGICAL_TOLERANCE
+        && inner.x + inner.width <= outer.x + outer.width + LOGICAL_TOLERANCE
+        && inner.y + inner.height <= outer.y + outer.height + LOGICAL_TOLERANCE
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let first = Terminal::first(native)?;
     let anchor = first.placement().clone();
@@ -407,10 +535,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         .find(|item| item.fleets.iter().any(|member| member.id == fleet))
         .map(|item| item.id.clone())
         .context("The first Fleet has no Voyage")?;
-    let caller = content_of(&layout, &anchor)
-        .and_then(|content| content.backend.as_ref())
-        .map(|backend| backend.0.clone())
-        .context("The first Vessel has no terminal")?;
+    let caller = terminal_of(&layout, &anchor).context("The first Vessel has no terminal")?;
 
     let landed = cases.make(native, Case::LabelSplitsEachSide, |native| {
         first.enter(native, SECOND_PROJECT)?;
@@ -819,5 +944,204 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("refused", &output)?
             .observed("drawn", &drawn)
+    })?;
+
+    let kept = cases.make(native, Case::AgentSplitKeepsMaximize, |native| {
+        let voyager = bound_terminal(native).context("voyager.json names no terminal")?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let shell_terminal = terminal_of(&layout, &left);
+        let before = native.observe("both Vessels of the second Fleet drawn", |seen| {
+            let drawn = view(seen, &second, &left).drawn;
+            (drawn.len() == 2).then_some(drawn)
+        })?;
+        let area = union(&before).context("No Vessel of the second Fleet is drawn")?;
+        let shell = Terminal::bind(native, &left)?;
+        maximize(native, &voyager, &second, &left, "keep-max-side")?;
+        let side = labelled(
+            native,
+            &shell,
+            "keep-side",
+            &format!("fleet:{}:right:{}", second.0, left.0),
+        )?;
+        let side = settled(native, &second, &side, KEPT, |view| view.kept(&left, &area))?;
+        maximize(native, &voyager, &second, &left, "keep-max-fleet")?;
+        let plain = labelled(native, &shell, "keep-fleet", &format!("fleet:{}", second.0))?;
+        let plain = settled(native, &second, &plain, KEPT, |view| view.kept(&left, &area))?;
+        maximize(native, &voyager, &second, &left, "keep-max-beside")?;
+        let (_, standing) = native.document()?.context("Missing saved layout")?;
+        let output = from_another_vessel(
+            native,
+            &caller,
+            "keep-beside",
+            create(&second, "terminal", beside(&right, Side::Top), None),
+        )?;
+        let (reply, code) = answered(&output);
+        let made = match code.as_str() {
+            "0" => {
+                let created = joined(native, &second, &members(&standing, &second))?;
+                Some(settled(native, &second, &created, KEPT, |view| {
+                    view.kept(&left, &area)
+                })?)
+            }
+            _ => None,
+        };
+        native.keep_window("agent-split-keeps-maximize")?;
+        let views: Vec<&View> = [&side, &plain].into_iter().chain(&made).collect();
+        let every =
+            |holds: &dyn Fn(&View) -> bool| views.len() == 3 && views.iter().all(|&view| holds(view));
+        let verdict = Verdict::new()
+            .expect(
+                "neither the labelling shell nor the create-vessel caller is Voyager's terminal",
+                shell_terminal.as_deref().is_some_and(|terminal| terminal != voyager)
+                    && caller != voyager,
+            )
+            .expect(
+                "voyager do workspace applied create-vessel beside a placement from that Vessel and exited 0",
+                code == "0" && reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "after each agent split the saved layout still names the same maximized Vessel",
+                every(&|view| view.maximized.as_ref() == Some(&left)),
+            )
+            .expect(
+                "each new Vessel is saved in the Fleet's split tree",
+                every(&|view| view.held),
+            )
+            .expect(
+                "the canvas draws only the maximized Vessel, filling the area both Vessels filled",
+                every(&|view| view.alone(&left, &area)),
+            )
+            .observed("area", area)?
+            .observed("side", &side)?
+            .observed("fleet", &plain)?
+            .observed("beside", &made)?
+            .observed("reply", &output)?;
+        Ok((verdict, Some((area, side.placement.clone()))))
+    })?;
+    let Some((area, piece)) = kept else {
+        return Ok(());
+    };
+
+    cases.check(native, Case::NewPieceShowsAfterUnmaximize, |native| {
+        let voyager = bound_terminal(native).context("voyager.json names no terminal")?;
+        let output = from_another_vessel(
+            native,
+            &voyager,
+            "keep-restore",
+            set_maximized(&left, false),
+        )?;
+        let (reply, code) = answered(&output);
+        let restored = native
+            .observe("the Fleet restored with the new Vessel drawn", |seen| {
+                maximized(seen.document, &second).is_none().then_some(())?;
+                Some((
+                    Target::terminal(&piece).find(seen.frame)?.bounds,
+                    Target::terminal(&left).find(seen.frame)?.bounds,
+                ))
+            })
+            .ok();
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let printed = match restored {
+            Some(_) => {
+                let shell = Terminal::bind(native, &piece)?;
+                shell.line(native, "echo PIECE-$((6*7))")?;
+                shell.printed(native, "PIECE-42")?
+            }
+            None => false,
+        };
+        native.keep_window("new-piece-shows-after-unmaximize")?;
+        Verdict::new()
+            .expect(
+                "voyager do workspace applied the restore from Voyager's terminal and exited 0",
+                code == "0" && reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "the saved layout holds no maximized Vessel",
+                maximized(&layout, &second).is_none(),
+            )
+            .expect(
+                "the new Vessel is drawn with a non-empty frame inside the area the Fleet's Vessels filled",
+                restored.is_some_and(|(drawn, _)| drawn_within(&drawn, &area)),
+            )
+            .expect(
+                "the new Vessel is drawn right of the Vessel that was maximized, without overlapping it",
+                restored.is_some_and(|(drawn, was)| drawn_beside(Side::Right, &drawn, &was)),
+            )
+            .expect("the new Vessel's shell printed PIECE-42", printed)
+            .observed("area", area)?
+            .observed("restored", restored)?
+            .observed("reply", &output)
+    })?;
+
+    cases.check(native, Case::VoyagerSplitClearsMaximize, |native| {
+        let voyager = bound_terminal(native).context("voyager.json names no terminal")?;
+        maximize(native, &voyager, &second, &left, "clear-max-beside")?;
+        let (_, standing) = native.document()?.context("Missing saved layout")?;
+        let output = from_another_vessel(
+            native,
+            &voyager,
+            "clear-beside",
+            create(&second, "terminal", beside(&right, Side::Bottom), None),
+        )?;
+        let (reply, code) = answered(&output);
+        let made = match code.as_str() {
+            "0" => {
+                let created = joined(native, &second, &members(&standing, &second))?;
+                Some(settled(native, &second, &created, CLEARED, |view| {
+                    view.cleared(&left)
+                })?)
+            }
+            _ => None,
+        };
+        maximize(native, &voyager, &second, &left, "clear-max-label")?;
+        let terminal = started_from(
+            native,
+            &voyager,
+            "voyager-side",
+            &format!("fleet:{}:bottom:{}", second.0, left.0),
+        )?;
+        let parent = native
+            .system
+            .rpc("terminal.get", json!({"terminal":terminal}))?["parent"]
+            .clone();
+        let from_voyager = parent == voyager.as_str();
+        let placed = native.observe(
+            "the shell started from Voyager's terminal saved as a Vessel",
+            |seen| bound_to(seen.document, &terminal).map(|placed| placed.id),
+        )?;
+        let started = settled(native, &second, &placed, CLEARED, |view| {
+            view.cleared(&left)
+        })?;
+        native.keep_window("voyager-split-clears-maximize")?;
+        Verdict::new()
+            .expect(
+                "voyager do workspace applied create-vessel beside a placement from Voyager's terminal and exited 0",
+                code == "0" && reply["reply"]["status"] == "applied",
+            )
+            .expect(
+                "after Voyager's create-vessel the saved layout holds the new Vessel in the Fleet's split tree and no maximized Vessel",
+                made.as_ref()
+                    .is_some_and(|view| view.held && view.maximized.is_none()),
+            )
+            .expect(
+                "after Voyager's create-vessel the canvas draws the Vessel that was maximized and the new Vessel",
+                made.as_ref()
+                    .is_some_and(|view| view.drew(&left) && view.drew(&view.placement)),
+            )
+            .expect(
+                "after a labelled shell started from Voyager's terminal the saved layout holds it in the Fleet's split tree and no maximized Vessel",
+                started.held && started.maximized.is_none(),
+            )
+            .expect(
+                "after a labelled shell started from Voyager's terminal the canvas draws the Vessel that was maximized and the new Vessel",
+                started.drew(&left) && started.drew(&started.placement),
+            )
+            .observed("beside", &made)?
+            .observed("labelled", &started)?
+            .observed(
+                "parent",
+                json!({"reported":parent,"voyager":voyager,"isVoyager":from_voyager}),
+            )?
+            .observed("reply", &output)
     })
 }
