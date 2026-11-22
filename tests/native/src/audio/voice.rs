@@ -34,6 +34,8 @@ pub struct Mark {
 pub struct Conversation {
     pub heard: Option<String>,
     pub acknowledgement: Option<String>,
+    pub hummed: bool,
+    pub chat: Option<String>,
     pub spoken: Score,
     pub first_sound_after_capture_ms: i64,
     pub capture_began_ms: u64,
@@ -306,6 +308,13 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
     Ok(seen)
 }
 
+const HUM: &str = "mm-hm";
+
+fn answers(mark: &Mark) -> bool {
+    mark.event == "chat-started"
+        || (mark.event == "acknowledgement-started" && mark.words.as_deref() != Some(HUM))
+}
+
 fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
     marks.iter().find(|mark| mark.event == event)
 }
@@ -337,14 +346,20 @@ fn converse_within(
     let clicked = now_millis();
     turn_on(native)?;
     stack.feed(system, speech)?;
-    let started = until("the acknowledgement to start", || {
+    let answer = until("the turn to be answered", || {
         let now = marks(&trace)?;
         Ok(now
             .get(before..)
-            .and_then(|fresh| mark_of(fresh, "acknowledgement-started"))
-            .and_then(|mark| mark.words.clone()))
+            .and_then(|fresh| fresh.iter().find(|mark| answers(mark)).cloned()))
     })?;
-    let reference = clip(&system.evidence.join("home"), &started)?;
+    let chat = (answer.event == "chat-started").then(|| answer.words.clone().unwrap_or_default());
+    let started = answer.words.clone().unwrap_or_default();
+    let judged = if chat.is_some() {
+        HUM
+    } else {
+        started.as_str()
+    };
+    let reference = clip(&system.evidence.join("home"), judged)?;
     let score = settle(
         PATIENCE,
         LOOK,
@@ -389,9 +404,15 @@ fn converse_within(
     let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
     let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
     let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
+    let hummed = marks
+        .iter()
+        .take_while(|mark| !answers(mark))
+        .any(|mark| mark.event == "acknowledgement-started" && mark.words.as_deref() == Some(HUM));
     Ok(Conversation {
         heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
-        acknowledgement: Some(started),
+        acknowledgement: chat.is_none().then_some(started),
+        hummed,
+        chat,
         spoken: score,
         first_sound_after_capture_ms: first_sound,
         capture_began_ms: began,

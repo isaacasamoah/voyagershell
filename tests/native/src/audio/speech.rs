@@ -48,12 +48,20 @@ pub const OPEN_THEN_DOCK: Speech = Speech {
     wav: include_bytes!("../../fixtures/speech/open-the-roadmap-then-dock.wav"),
 };
 
-pub const ALL: [&Speech; 5] = [
+pub const HELLO_HOW_ARE_YOU: Speech = Speech {
+    name: "hello-how-are-you",
+    words: "Hello, how are you?",
+    sha256: "9032d46b7de20c3ae2b0b0d0539890dd072239b52fb9c3f5acc46ba3d2270f18",
+    wav: include_bytes!("../../fixtures/speech/hello-how-are-you.wav"),
+};
+
+pub const ALL: [&Speech; 6] = [
     &OPEN_THE_ROADMAP,
     &RENAME_THE_FLEET,
     &RENAME_TO_HARBOR,
     &DOCK_ON_THIS_FLEET,
     &OPEN_THEN_DOCK,
+    &HELLO_HOW_ARE_YOU,
 ];
 
 const REQUESTS_TABLE: &str = include_str!("../../fixtures/hearing/hearing.tsv");

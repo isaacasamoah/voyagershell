@@ -504,6 +504,9 @@ mod tests {
                 "tests/native/controls/voice-limit.patch".to_owned(),
                 "tests/native/controls/voice-numbers.patch".to_owned(),
                 "tests/native/controls/voice-streams.patch".to_owned(),
+                "tests/native/controls/voice-chat-off.patch".to_owned(),
+                "tests/native/controls/voice-chat-promise.patch".to_owned(),
+                "tests/native/controls/voice-hum-off.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

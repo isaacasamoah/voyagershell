@@ -3,7 +3,8 @@ use crate::{
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
-        Clip, Fault, Hearing, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
+        Clip, Fault, Hearing, Phrase, Piece, ROUTE_EXAMPLES, Route, Routing, Speaking, Utterance,
+        clean_heard, hearing_prompt, route_prompt,
     },
 };
 use serde_json::{Value, json};
@@ -27,6 +28,7 @@ const SNAPSHOTS: &str = "models--LiquidAI--LFM3-Omni-2B-GGUF/snapshots";
 const VOICE: &str = "female";
 const READY_WITHIN: Duration = Duration::from_secs(120);
 const REQUEST_WITHIN: Duration = Duration::from_secs(30);
+const ROUTE_WITHIN: Duration = Duration::from_secs(3);
 const HEALTH_WITHIN: Duration = Duration::from_millis(800);
 const WARM_SAMPLES: usize = 8_000;
 const LIVENESS_EVERY: Duration = Duration::from_secs(1);
@@ -254,6 +256,7 @@ impl Omni {
 
     pub fn warm(&self) -> Result<(), Fault> {
         self.speech("Ready.")?;
+        let _ = self.route("Hello.");
         self.hear(
             &Utterance {
                 samples: vec![0; WARM_SAMPLES],
@@ -300,6 +303,100 @@ impl Hearing for Omni {
                 Fault::Failed("The voice engine heard nothing it could write down".into())
             })?;
         Ok(clean_heard(text))
+    }
+}
+
+fn answer_text(say: Option<&str>) -> String {
+    match say {
+        Some(say) => json!({"kind": "chat", "say": say}).to_string(),
+        None => json!({"kind": "work"}).to_string(),
+    }
+}
+
+fn route_messages(heard: &str) -> Value {
+    let mut messages = vec![json!({"role": "system", "content": route_prompt()})];
+    for (said, say) in ROUTE_EXAMPLES {
+        messages.push(json!({"role": "user", "content": said}));
+        messages.push(json!({"role": "assistant", "content": answer_text(say)}));
+    }
+    messages.push(json!({"role": "user", "content": heard}));
+    Value::Array(messages)
+}
+
+fn route_body(heard: &str) -> Value {
+    json!({
+        "temperature": 0,
+        "max_tokens": 60,
+        "logprobs": true,
+        "top_logprobs": 8,
+        "response_format": {"type": "json_schema", "json_schema": {
+            "name": "route",
+            "strict": true,
+            "schema": {"anyOf": [
+                {
+                    "type": "object",
+                    "properties": {"kind": {"enum": ["work"]}},
+                    "required": ["kind"],
+                    "additionalProperties": false
+                },
+                {
+                    "type": "object",
+                    "properties": {"kind": {"enum": ["chat"]}, "say": {"type": "string"}},
+                    "required": ["kind", "say"],
+                    "additionalProperties": false
+                }
+            ]}
+        }},
+        "messages": route_messages(heard)
+    })
+}
+
+fn chat_probability(answer: &Value) -> Option<f64> {
+    let tokens = answer["choices"][0]["logprobs"]["content"].as_array()?;
+    let kind = tokens.iter().find(|token| {
+        matches!(
+            token["token"]
+                .as_str()
+                .map(|word| word.trim().trim_matches('"')),
+            Some("chat" | "work")
+        )
+    })?;
+    let mut chat = 0.0;
+    let mut work = 0.0;
+    for option in kind["top_logprobs"].as_array()? {
+        let chance = option["logprob"].as_f64()?.exp();
+        match option["token"].as_str()?.trim().trim_matches('"') {
+            "chat" => chat += chance,
+            "work" => work += chance,
+            _ => {}
+        }
+    }
+    (chat + work > 0.0).then(|| chat / (chat + work))
+}
+
+impl Routing for Omni {
+    fn route(&self, heard: &str) -> Result<Route, Fault> {
+        let body = route_body(heard).to_string();
+        let response = http1::request(
+            self.port,
+            "POST",
+            "/v1/chat/completions",
+            body.as_bytes(),
+            ROUTE_WITHIN,
+        )
+        .map_err(|error| Fault::Failed(format!("The voice engine did not route: {error}")))?;
+        if response.status != 200 {
+            return Err(Fault::Failed(format!(
+                "The voice engine refused routing with status {}",
+                response.status
+            )));
+        }
+        let answer: Value = serde_json::from_slice(&response.body)
+            .map_err(|_| Fault::Failed("The voice engine sent an unreadable route".into()))?;
+        let content = answer["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or_default();
+        Ok(Route::parse(heard, content, chat_probability(&answer)))
     }
 }
 
@@ -390,6 +487,56 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn token(word: &str, others: &[(&str, f64)]) -> Value {
+        json!({"token": word, "logprob": 0.0, "top_logprobs": others
+            .iter()
+            .map(|(other, chance)| json!({"token": other, "logprob": chance.ln()}))
+            .collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn the_chat_probability_is_read_at_the_kind_token_and_not_at_the_words_after_it() {
+        let answer = json!({"choices": [{"logprobs": {"content": [
+            token("{\"", &[]),
+            token("kind", &[]),
+            token("chat", &[("chat", 0.9), ("work", 0.1)]),
+            token("work", &[("work", 1.0)]),
+        ]}}]});
+        let chance = chat_probability(&answer).unwrap();
+        assert!((chance - 0.9).abs() < 1e-9, "{chance}");
+    }
+
+    #[test]
+    fn an_answer_without_logprobs_has_no_probability() {
+        assert_eq!(chat_probability(&json!({"choices": [{}]})), None);
+    }
+
+    #[test]
+    fn a_work_answer_has_no_room_for_words() {
+        let body = route_body("Open the roadmap.");
+        let shapes = body["response_format"]["json_schema"]["schema"]["anyOf"]
+            .as_array()
+            .unwrap();
+        let work = shapes
+            .iter()
+            .find(|shape| shape["properties"]["kind"]["enum"][0] == "work")
+            .unwrap();
+        assert_eq!(work["required"], json!(["kind"]));
+        assert_eq!(work["additionalProperties"], json!(false));
+        assert_eq!(work["properties"].as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_route_request_is_the_prompt_then_the_examples_then_the_words() {
+        let messages = route_messages("Hello.");
+        let list = messages.as_array().unwrap();
+        assert_eq!(list.len(), 2 + 2 * ROUTE_EXAMPLES.len());
+        assert_eq!(list[0]["content"], route_prompt());
+        assert_eq!(list[1]["content"], ROUTE_EXAMPLES[0].0);
+        assert_eq!(list[4]["content"], r#"{"kind":"work"}"#);
+        assert_eq!(list[list.len() - 1]["content"], "Hello.");
     }
 
     #[test]
