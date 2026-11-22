@@ -457,13 +457,35 @@ mod tests {
     }
 
     #[test]
-    fn a_program_ending_inside_a_live_terminal_the_user_opened_keeps_the_vessel() {
+    fn a_terminal_the_user_opened_keeps_a_fresh_shell_when_its_program_ends_at_runtime_and_on_reopen()
+     {
         let mut model = workspace();
         let live = [CoreTerminalId("t0".into())];
         let terminals = [terminal("t0", "live", "")];
         assert!(!close_exited(&mut model, &exited(&terminals), &live).unwrap());
         assert!(holds(&model.layout, "t0"));
         assert!(model.layout.voyages[0].fleets[0].root.is_some());
+        let (ready, closed) = prepare_reopen(
+            &mut model.layout,
+            &[
+                terminal("t0", "finished", "exited"),
+                terminal("t1", "live", ""),
+                terminal("t2", "live", ""),
+            ],
+        );
+        assert!(!closed);
+        assert_eq!(ready.len(), 1);
+        let fresh = model
+            .layout
+            .vessels
+            .iter()
+            .find(|item| item.id == ready[0])
+            .unwrap();
+        assert!(!fresh.adopted);
+        assert_eq!(fresh.backend, None);
+        assert_eq!(fresh.launch, Some(Launch::Terminal));
+        assert!(model.layout.voyages[0].fleets[0].root.is_some());
+        assert_eq!(model.layout.voyages[0].fleets[0].placements.len(), 1);
     }
 
     fn record(model: &mut Model, fleet: (usize, usize), serial: usize, vessel: Vessel) {
