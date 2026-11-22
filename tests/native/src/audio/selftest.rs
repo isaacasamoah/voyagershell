@@ -139,6 +139,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         second_assets: None,
         voice: None,
         evidence: Some(&evidence),
+        command: true,
     }
     .command(&[
         "/usr/bin/dbus-run-session",

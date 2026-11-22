@@ -247,7 +247,7 @@ fn entry() -> Result<i32> {
     readiness["verifierSha256"] = json!(system::digest(&verifier)?);
     let host = sandbox::host_resources()?;
     let own = sandbox::text(&verifier)?;
-    let confine = |evidence: Option<&Path>, inner: &[&str]| {
+    let confine = |evidence: Option<&Path>, with_command: bool, inner: &[&str]| {
         Sandbox {
             verifier: &verifier,
             candidate: Some(&candidate.path),
@@ -257,12 +257,13 @@ fn entry() -> Result<i32> {
             second_assets: second_assets.as_deref(),
             voice: voice_engine.as_deref(),
             evidence,
+            command: with_command,
         }
         .command(inner)
     };
     if command == "doctor" {
         let resources = serde_json::to_string(&host)?;
-        let canary = confine(None, &[&own, "internal-canary", &resources])?;
+        let canary = confine(None, true, &[&own, "internal-canary", &resources])?;
         let output = sandbox::process(&canary).output()?;
         ensure!(
             output.status.success(),
@@ -318,6 +319,7 @@ fn entry() -> Result<i32> {
     let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"probeFrames":probe_frames,"audio":audio,"voiceEngine":voice_engine,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().or_else(|| journey.core_delay().map(str::to_owned)).map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"role":get("--role").ok().map(|text| manifest::Role::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
+        journey.beside_command(),
         &[
             "/usr/bin/dbus-run-session",
             "--",
@@ -651,6 +653,10 @@ const SOURCES: &[(&str, &[u8])] = &[
     (
         "src/journey/voyage_close.rs",
         include_bytes!("journey/voyage_close.rs"),
+    ),
+    (
+        "src/journey/voyager_command.rs",
+        include_bytes!("journey/voyager_command.rs"),
     ),
     (
         "src/journey/workspace.rs",

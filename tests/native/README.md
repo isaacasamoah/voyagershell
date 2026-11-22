@@ -1278,6 +1278,11 @@ the expectation `the canvas focus returned to the docked Vessel`, because a
 second dock on the Vessel the canvas already shows does not change the context,
 and the typed line runs in the clicked shell.
 
+The `voyager-command` journey runs the app in a sandbox that holds no `voyager`
+command beside the candidate, which every other journey has. Its patch makes the
+launch bring up Voyager without checking for the command. `command-missing-line-drawn`
+then fails, because the status line never says Voyager cannot reply.
+
 The `agent-split` patch offers `create-vessel` only to Voyager again.
 `create-vessel-splits-beside` then fails on the expectation `voyager do
 workspace applied create-vessel beside a placement from that Vessel and exited

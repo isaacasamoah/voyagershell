@@ -363,6 +363,19 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
+id = "voyager-command-missing"
+name = "Voyager without its command"
+path = "Start the app with no voyager command beside it and read, on the status line, that Voyager cannot reply, with no Voyager bound."
+sources = ["app/src/client_voyager.rs", "app/src/launch.rs", "docs/voice.md"]
+journeys = ["voyager-command"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"
+
+[[feature]]
 id = "verification-environment"
 name = "Verification environment"
 path = "Run the verifier's own unit tests and the journey battery and get a verdict that leaves nothing behind."

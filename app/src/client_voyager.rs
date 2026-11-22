@@ -29,6 +29,10 @@ impl Owner {
         }
         self.voyager_started = true;
         self.sockets.binding().forget();
+        if crate::launch::command_path().is_none() {
+            self.say("COMMAND-MISSING-WORDS-PENDING".to_owned());
+            return;
+        }
         if let Err(error) = self.bring_up_voyager() {
             self.say(format!("Voyager was not started: {error:?}"));
         }

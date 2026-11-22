@@ -1606,8 +1606,10 @@ features:
           - 'journey:outcomes/close-refused-says-why'
           - 'journey:workspace/rename-empty-refused'
           - 'journey:voice/refusal-is-in-the-chat'
+          - 'journey:voyager-command/command-missing-line-drawn'
+          - 'journey:voyager-command/no-voyager-bound'
         formal: []
-        journeys: [outcomes, voice, workspace]
+        journeys: [outcomes, voice, voyager-command, workspace]
     docs: ['.agents/skills/verify/features/outcomes.md', docs/terminal.md, docs/workspace.md]
     sources: [app/src/client_reply.rs, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts, contract/generated/workspace.ts]
     code: [app/src/client_reply.rs, contract/generated/workspace.ts, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts]
@@ -1793,6 +1795,36 @@ features:
       - contract/src/place.rs
       - contract/src/socket.rs
       - docs/voyager-command.md
+  - id: voyager-command-missing
+    name: 'Voyager without its command'
+    summary: 'Start the app with no voyager command beside it and read, on the status line, that Voyager cannot reply, with no Voyager bound.'
+    group: assistant
+    owner: application-queue
+    proof: native
+    state: {behavior: covered, performance: none, visual: none, debug: covered}
+    platforms: [linux]
+    checks: []
+    native_journeys: [voyager-command]
+    python_journeys: []
+    invariants:
+      - id: refusal-says-why
+        kind: user
+        says: 'An action the app declines leaves the state unchanged and shows the owner''s reason, to the person and to an agent caller alike.'
+        owner: application-queue
+        guards: []
+        checks:
+          - 'journey:outcomes/refused-shows-reason'
+          - 'journey:outcomes/tool-refusal-carries-reason'
+          - 'journey:outcomes/close-refused-says-why'
+          - 'journey:workspace/rename-empty-refused'
+          - 'journey:voice/refusal-is-in-the-chat'
+          - 'journey:voyager-command/command-missing-line-drawn'
+          - 'journey:voyager-command/no-voyager-bound'
+        formal: []
+        journeys: [outcomes, voice, voyager-command, workspace]
+    docs: [docs/voice.md, docs/workspace.md]
+    sources: [app/src/client_voyager.rs, app/src/launch.rs, docs/voice.md]
+    code: [app/src/client_voyager.rs, app/src/launch.rs, docs/voice.md]
   - id: verification-environment
     name: 'Verification environment'
     summary: 'Run the verifier''s own unit tests and the journey battery and get a verdict that leaves nothing behind.'
@@ -1871,6 +1903,7 @@ features:
       - tests/native/src/journey/socket_dock.rs
       - tests/native/src/journey/voice.rs
       - tests/native/src/journey/voyage_close.rs
+      - tests/native/src/journey/voyager_command.rs
       - tests/native/src/journey/workspace.rs
       - tests/native/src/journey/workspace/avatar.rs
       - tests/native/src/journey/workspace/model.rs

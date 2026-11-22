@@ -50,6 +50,7 @@ pub struct Sandbox<'a> {
     pub second_assets: Option<&'a Path>,
     pub voice: Option<&'a Path>,
     pub evidence: Option<&'a Path>,
+    pub command: bool,
 }
 
 impl Sandbox<'_> {
@@ -71,6 +72,7 @@ impl Sandbox<'_> {
         }
         let command_line = self
             .candidate
+            .filter(|_| self.command)
             .map(|candidate| candidate.with_file_name("voyager"));
         if let Some(command_line) = command_line.filter(|path| path.is_file()) {
             command.extend(["--ro-bind".into(), text(&command_line)?, COMMAND.into()]);
@@ -371,6 +373,7 @@ mod tests {
                 second_assets: None,
                 voice: None,
                 evidence,
+                command: true,
             }
             .command(inner)
         }
