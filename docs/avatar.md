@@ -234,7 +234,7 @@ supplies actual Voyage-owned Portals and the shared content renderer. Portal
 targets and Go there now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
-An avatar reply that carries a layout is accepted after the script's first await, in a task, because the first part of `cx.spawn` still runs while the canvas draws and focus may not move there. A reply that opens Home is prepared by the notice inspect. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening, so a click during launch work prepares once when that work ends.
+An avatar reply is accepted in render, as the canvas always did, so the layout, the dock receipt and the avatar's projection change together with the reply. A press on the avatar that begins in the gap between the reply and a later layout change is cancelled by that change, so the layout must not lag the reply. The one focus call that accepting can make, for a focused Vessel the new layout no longer shows, may not run while the canvas draws. It runs in a spawned task after one await, and only if the focus is still where the accept left it and no chat, rename or dialog has opened since. A reply that opens Home is prepared by the notice inspect, which the avatar reply calls after the accept. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening. When the canvas is busy the reply leaves the refresh wanted, and the one place busy ends reads it, so a click during launch work prepares once when that work ends.
 
 ## Working-core integration
 

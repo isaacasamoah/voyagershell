@@ -865,14 +865,15 @@ test("a dock follows once for each dock revision, once no request is preparing",
   let result = null;
   let dockRevision = "0";
   let noticeRevision = "0";
-  const { Canvas, acceptDockResult, inspectNotice } = new Function(
+  const { Canvas, acceptDockResult, inspectNotice, moveFocus } = new Function(
     "View",
     "take_result",
     "validateResponse",
     "window",
     "workspace_notice",
+    "invoke",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
-      "\nreturn { Canvas, acceptDockResult, inspectNotice };",
+      "\nreturn { Canvas, acceptDockResult, inspectNotice, moveFocus };",
   )(
     class {},
     () => {
@@ -890,10 +891,12 @@ test("a dock follows once for each dock revision, once no request is preparing",
       dockRevision,
       activityRevision: "0",
     }),
+    async () => ({ status: "applied" }),
   );
   const focused = [];
   const prepared = [];
   const accepted = [];
+  const focusCalls = [];
   let renderPhase = false;
   const cx = {
     spawn(callback) {
@@ -915,6 +918,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   const build = () => {
     const built = Object.assign(new Canvas(), {
       version: "1",
+      focus: { focus: () => focusCalls.push("root") },
       refreshRequested: false,
       workspaceNotice: {
         revision: "0",
@@ -1033,18 +1037,12 @@ test("a dock follows once for each dock revision, once no request is preparing",
   view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
   view.openings = open("content-2");
   avatarReply("avatar-home");
-  assert.deepEqual(
-    accepted,
-    [],
-    "an avatar reply is not accepted while the canvas is drawing",
-  );
-  await settle();
   assert.equal(
-    accepted.includes("render"),
+    accepted.includes("task"),
     false,
-    "an avatar reply is accepted in a task, where focus may move, and not in render",
+    "an avatar reply is accepted in render, as before, so its layout and receipt land with the reply",
   );
-  assert.equal(accepted[0], "task");
+  assert.equal(accepted[0], "render");
   assert.equal(view.dockReceipt, "avatar-home");
   assert.equal(
     inspects,
@@ -1054,7 +1052,6 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(view.refreshRequested, false);
   view.openings = open("content-2", "content-10");
   avatarReply("avatar-home-open");
-  await settle();
   assert.equal(
     inspects,
     0,
@@ -1063,11 +1060,10 @@ test("a dock follows once for each dock revision, once no request is preparing",
   view.openings = open("content-2");
   view.busy = true;
   avatarReply("avatar-home-busy");
-  await settle();
-  assert.deepEqual(
-    accepted,
-    ["task"],
-    "an avatar reply during another request is accepted at once",
+  assert.equal(
+    accepted[0],
+    "render",
+    "a reply during another request is accepted at once",
   );
   assert.equal(inspects, 0, "it reads nothing while the other request runs");
   assert.equal(
@@ -1089,6 +1085,47 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "when the request ends the wanted refresh opens the Vessels once",
   );
   assert.equal(view.refreshRequested, false);
+  view.openings = open("content-2", "content-10");
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel");
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "the root focus does not move while the canvas is drawing",
+  );
+  assert.equal(
+    view.focused,
+    "placement-11",
+    "the focus state moves to the opening Vessel at once",
+  );
+  await settle();
+  assert.deepEqual(
+    focusCalls,
+    ["root"],
+    "the root focus moves once, in a task, when nothing else moved the focus",
+  );
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel-again");
+  moveFocus(view, { placement: "placement-3" }, cx);
+  await settle();
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "a click elsewhere between the accept and the task keeps the focus where the person put it",
+  );
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel-third");
+  view.chat = { open: true };
+  await settle();
+  view.chat = undefined;
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "a chat opened between the accept and the task keeps its input focus",
+  );
   next = reply("placement-3");
   result = JSON.stringify(reply("placement-3"));
   dockRevision = "5";

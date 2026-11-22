@@ -43,6 +43,7 @@ import {
   inspectNotice,
   focusedPlacement,
   moveFocus,
+  refocus,
   renderPanel,
 } from "./panel-view.js";
 import {
@@ -637,7 +638,7 @@ export default class Canvas extends View {
       !window.has_active_dialog()
     ) {
       moveFocus(this, "opening", task);
-      this.focus.focus();
+      refocus(this, task);
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))

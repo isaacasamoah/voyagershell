@@ -65,21 +65,10 @@ export function acceptDockResult(workspace, cx) {
   if (raw !== null) {
     const result = JSON.parse(raw);
     if (!validateResponse(result)) throw Error("Invalid native dock response");
-    if (!("layout" in result)) workspace.acceptSnapshot(result, cx);
-    else {
-      cx.spawn(async (task) => {
-        await Promise.resolve();
-        if (
-          workspace.acceptSnapshot(result, task) &&
-          result.status === "applied"
-        ) {
-          workspace.dockReceipt = result.requestId;
-          workspace.refreshRequested = true;
-          if (!workspace.busy) inspectNotice(workspace, task);
-        }
-        task.notify();
-      });
-      return;
+    if (workspace.acceptSnapshot(result, cx) && result.status === "applied") {
+      workspace.dockReceipt = result.requestId;
+      workspace.refreshRequested = true;
+      if (!workspace.busy) inspectNotice(workspace, cx);
     }
   }
   if (workspace.busy) return;
@@ -111,6 +100,20 @@ function focusDocked(workspace, cx) {
 const focusedPlacements = new WeakMap();
 export function focusedPlacement(workspace) {
   return focusedPlacements.get(workspace) ?? null;
+}
+export function refocus(workspace, cx) {
+  const target = workspace.focused;
+  cx.spawn(async () => {
+    await Promise.resolve();
+    if (
+      workspace.focused === target &&
+      !workspace.chat?.open &&
+      !workspace.editing &&
+      !workspace.layoutName &&
+      !window.has_active_dialog()
+    )
+      workspace.focus.focus();
+  });
 }
 export function moveFocus(workspace, target, cx) {
   const id =
