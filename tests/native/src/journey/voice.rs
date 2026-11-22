@@ -220,10 +220,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the request plays the asking clip at the speaker",
                 said.spoken.matches()
-                    && said
-                        .acknowledgement
-                        .as_deref()
-                        .is_some_and(|key| key.contains("asking")),
+                    && matches!(
+                        said.acknowledgement.as_deref(),
+                        Some("asking" | "okay-asking")
+                    ),
             )
             .expect(
                 "the voice gives no chat reply",
