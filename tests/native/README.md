@@ -270,7 +270,8 @@ that terminal's `HC_TERMINAL_ID`, which is not Voyager's.
   reports as the foreground program got no arguments, and the second saved
   launch and the stand-in's arguments are the read-only row of
   `content/agent-programs.json`, with no bypass flag.
-- `person-keeps-table-default` focuses a shell, opens the creation picker with
+- `person-keeps-table-default` writes a launch entry for `codex` that names no
+  model, effort or permissions, focuses a shell, opens the creation picker with
   the keyboard shortcut and clicks Create Codex, as the person would. It passes
   when the saved launch of the new Vessel is the agent table's default for
   `codex`, with its model, effort and bypass flag, and the stand-in `codex`

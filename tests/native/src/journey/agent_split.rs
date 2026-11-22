@@ -45,6 +45,7 @@ const REFUSED_SHARE: u16 = 3000;
 const SHARE_TOLERANCE: f32 = 0.03;
 const BYPASS: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CODEX: &str = "codex";
+const UNNAMED_CODEX: &[u8] = br#"{"default":"terminal","entries":[{"id":"terminal","name":"Terminal","launch":{"kind":"terminal"}},{"id":"codex","name":"Codex","launch":{"kind":"codex"}}]}"#;
 const TABLE_DEFAULT: [&str; 7] = [
     "codex",
     "--no-daemon",
@@ -670,6 +671,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::PersonKeepsTableDefault, |native| {
         let (_, layout) = native.document()?.context("Missing saved layout")?;
         let before = members(&layout, &fleet);
+        native.edit_profile_file("launches.json", UNNAMED_CODEX)?;
         Terminal::bind(native, &left)?.focus(native)?;
         native.press(Key::Char('o').ctrl().shift())?;
         native.click(&Target::worker(CODEX))?;
@@ -681,7 +683,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let table: Vec<String> = TABLE_DEFAULT.iter().map(|argument| (*argument).to_owned()).collect();
         Verdict::new()
             .expect(
-                "the person's Create Codex saved the launch the agent table resolves, permission flag included",
+                "the person's Create Codex, from a launch entry that names no permissions, saved the table's default launch, permission flag included",
                 created.launch == Some(Launch::Program { argv: table.clone() }),
             )
             .expect(
