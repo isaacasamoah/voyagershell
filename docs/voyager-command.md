@@ -246,7 +246,9 @@ socket.
   words, as in "...but it was refused because the workspace changed first, so
   nothing changed.", and leaves it out when it holds an id, a number or an
   internal term. The JSON on
-  standard output is unchanged.
+  standard output is unchanged. The sentence is on standard error, so pipe
+  standard output alone into `jq`. Do not use `2>&1` there, because the
+  sentence is not JSON.
 - The exit code is 0 when the change applied, 1 when it was refused and 2 when
   its result is uncertain. After an uncertain result, run `voyager status`
   before you repeat anything.
