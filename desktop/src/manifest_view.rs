@@ -15,8 +15,8 @@ static SENT: AtomicU64 = AtomicU64::new(0);
 
 fn unavailable_words(name: Option<&str>) -> String {
     match name {
-        Some(name) => format!("PLACEHOLDER-UNAVAILABLE-NAMED {name}"),
-        None => "PLACEHOLDER-UNAVAILABLE-UNNAMED".into(),
+        Some(name) => format!("{name} isn't installed. Anything it saved is still there."),
+        None => "This Vessel type isn't installed. Anything it saved is still there.".into(),
     }
 }
 pub(crate) struct ManifestView {
@@ -166,11 +166,17 @@ mod tests {
 
     #[test]
     fn a_missing_type_with_a_kept_name_is_named() {
-        assert!(unavailable_words(Some("Dashboard")).contains("Dashboard"));
+        assert_eq!(
+            unavailable_words(Some("Dashboard")),
+            "Dashboard isn't installed. Anything it saved is still there."
+        );
     }
 
     #[test]
     fn a_missing_type_with_no_kept_name_shows_no_name() {
-        assert!(unavailable_words(None).contains("UNNAMED"));
+        assert_eq!(
+            unavailable_words(None),
+            "This Vessel type isn't installed. Anything it saved is still there."
+        );
     }
 }

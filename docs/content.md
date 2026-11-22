@@ -160,7 +160,10 @@ the edited ones. Nothing reads or rewrites the Notes data in the profile's
 A saved placement of type `notes` stays in the layout. The `Vessel` component
 draws it, and `Registry::installed` finds no manifest for it, because the old
 package has no `manifest.json`. `ManifestView` then draws its unavailable-type
-view in the placement's frame. The words of that view are a placeholder. The
+view in the placement's frame. The view says "This Vessel type isn't installed.
+Anything it saved is still there." and uses the type's display name in place of
+"This Vessel type" only when the registry keeps a manifest for it, which is the
+case for a removed manifest package and never for the old Notes package. The
 panel's close control removes the placement and leaves the Vessel's data in
 place.
 
