@@ -272,8 +272,10 @@ still leave a pause while the next sentence renders, most often after a short fi
 sentence. On the development laptop's CPU engine one such wait was 1.0 s at a load of 12
 and 0.5 s at a low load, and a run at a load of up to 66 had waits of 7.7 and 3.9 s. No
 wait was seen on a GPU engine. The engine's own speech pauses up to 660 ms between and
-inside sentences, measured over 12 joined replies. A click-off stops the piece
-that is playing at once and plays no more. A piece that fails to render ends the reply
+inside sentences, measured over 12 joined replies. A click-off lets the whole
+reply that is playing finish, every piece of it, including pieces still rendering, and
+then voice is off. Only the app quitting cuts it, and a reply that arrives after the click
+is not played. A piece that fails to render ends the reply
 there and reports its reason, as a failed render did before. The reply is added to the
 chat once, when its first piece starts. The trace marks `speech-started` with the whole
 spoken text once, `speaker-opened` once for the stream, `piece-rendered` with each
