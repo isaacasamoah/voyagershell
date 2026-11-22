@@ -241,7 +241,9 @@ socket.
 - Each change prints one plain sentence on standard error, before the
   JSON, such as `Renamed the Fleet to Notes.`. It names things as the person does and
   carries no id or revision. Say it to the person as it is. A refused or
-  uncertain change says so and never claims the change happened. The JSON on
+  uncertain change says so and never claims the change happened. A refused
+  change adds the app's reason when that reason is in plain words, and leaves
+  it out when it holds an id, a number or an internal term. The JSON on
   standard output is unchanged.
 - The exit code is 0 when the change applied, 1 when it was refused and 2 when
   its result is uncertain. After an uncertain result, run `voyager status`
