@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     audio_io::{FRAME, SpeechDetector},
     speech::Standing,
-    voice_parts::{Frames, SendFailure},
+    voice_parts::{Clips, Frames, SendFailure},
 };
 use std::{
     collections::VecDeque,
@@ -66,8 +66,11 @@ struct Voice {
 }
 
 impl Speaker for Voice {
-    fn play(self: Box<Self>, clip: &Clip) -> Finish {
-        self.played.lock().unwrap().push(clip.pcm.len());
+    fn play(self: Box<Self>, clips: Clips) -> Finish {
+        self.played
+            .lock()
+            .unwrap()
+            .extend(clips.map(|clip| clip.pcm.len()));
         Box::new(move |cut| self.cut.lock().unwrap().push(cut()))
     }
 }

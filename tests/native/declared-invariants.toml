@@ -252,7 +252,19 @@ source = "Isaac, 22 Nov 2026, after the Sunday user test: sometimes in long resp
 features = ["voice"]
 guard = ["type:app/src/speech.rs#Piece"]
 type_gap = "Only the speech filter builds a Piece, one sentence or part of one of at most 25 words, so the engine is never asked to read a whole reply at once. Nothing in the types stops another path from sending the engine long text, and how clearly a piece is read depends on the engine."
-check = ["journey:voice/long-reply-is-clear", "journey:voice/long-sentence-splits-at-a-comma", "journey:voice/long-sentence-is-cut-at-the-limit", "journey:voice/numbers-are-spoken-as-words", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order"]
+check = ["journey:voice/long-reply-is-clear", "journey:voice/long-sentence-splits-at-a-comma", "journey:voice/long-sentence-is-cut-at-the-limit", "journey:voice/numbers-are-spoken-as-words", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit", "test:app/src/speech.rs#a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker"]
+confidence = "stated"
+
+[[invariant]]
+id = "voice-reply-plays-without-gaps"
+says = "A spoken reply plays as one stream from its first sentence to its last, so the pause between two sentences is no longer than the speech's own pause."
+kind = "user"
+owner = "conversation-provider"
+source = "Build commodore, 22 Nov 2026, after a loaded run took 10.5 s to play a two-second sentence through its own player: feed every piece of a reply into one speaker stream, one player per reply"
+features = ["voice"]
+guard = ["type:app/src/voice_parts.rs#Clips"]
+type_gap = "The speaker takes the whole reply as one stream of clips, so a reply opens one player. Nothing in the types stops a caller from opening a speaker per piece, and when the engine renders a sentence slower than the last one plays, the stream waits and the pause grows."
+check = ["journey:voice/long-reply-plays-without-a-gap", "test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker"]
 confidence = "stated"
 
 [[invariant]]

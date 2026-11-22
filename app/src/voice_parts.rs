@@ -50,9 +50,10 @@ pub trait Frames {
 }
 
 pub type Finish = Box<dyn FnOnce(&dyn Fn() -> bool) + Send>;
+pub type Clips = Box<dyn Iterator<Item = Clip> + Send>;
 
 pub trait Speaker: Send {
-    fn play(self: Box<Self>, clip: &Clip) -> Finish;
+    fn play(self: Box<Self>, clips: Clips) -> Finish;
 }
 
 pub trait Audio: Send + Sync {
@@ -115,8 +116,8 @@ impl Audio for System {
 }
 
 impl Speaker for Playing {
-    fn play(mut self: Box<Self>, clip: &Clip) -> Finish {
-        Playing::play(&mut self, clip.pcm.clone());
+    fn play(mut self: Box<Self>, clips: Clips) -> Finish {
+        Playing::play(&mut self, clips.map(|clip| clip.pcm));
         Box::new(move |cut| {
             let _ = self.finish(cut);
         })

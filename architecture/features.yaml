@@ -983,7 +983,15 @@ features:
           - 'journey:voice/numbers-are-spoken-as-words'
           - 'test:app/src/speech.rs#a_sentence_over_the_piece_limit_splits_at_its_last_comma_within_the_limit'
           - 'test:app/src/speech.rs#a_sentence_over_the_piece_limit_with_no_comma_is_cut_at_the_limit_and_says_so'
-          - 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order'
+          - 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker'
+        formal: []
+        journeys: [voice]
+      - id: voice-reply-plays-without-gaps
+        kind: user
+        says: 'A spoken reply plays as one stream from its first sentence to its last, so the pause between two sentences is no longer than the speech''s own pause.'
+        owner: conversation-provider
+        guards: ['type:app/src/voice_parts.rs#Clips']
+        checks: ['journey:voice/long-reply-plays-without-a-gap', 'test:app/src/voice_speaker.rs#a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker']
         formal: []
         journeys: [voice]
       - id: voice-is-click-to-talk

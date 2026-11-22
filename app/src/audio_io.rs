@@ -224,10 +224,14 @@ impl Playing {
         })
     }
 
-    pub fn play(&mut self, pcm: Vec<u8>) {
+    pub fn play(&mut self, pieces: impl Iterator<Item = Vec<u8>> + Send + 'static) {
         if let Some(mut input) = self.input.take() {
             self.writer = Some(thread::spawn(move || {
-                let _ = input.write_all(&pcm);
+                for pcm in pieces {
+                    if input.write_all(&pcm).is_err() {
+                        break;
+                    }
+                }
             }));
         }
     }
@@ -238,7 +242,8 @@ impl Playing {
             if cut() {
                 self.child.kill()?;
                 self.child.wait()?;
-                break;
+                self.writer = None;
+                return Ok(());
             }
             thread::sleep(PLAYING_LOOK);
         }

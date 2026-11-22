@@ -35,6 +35,7 @@ cases! {
     LongSentenceSplitsAtAComma => "long-sentence-splits-at-a-comma",
     LongSentenceIsCutAtTheLimit => "long-sentence-is-cut-at-the-limit",
     NumbersAreSpokenAsWords => "numbers-are-spoken-as-words",
+    LongReplyPlaysWithoutAGap => "long-reply-plays-without-a-gap",
     TwoTurnsWithEcho => "two-turns-with-echo",
     ClickOffLetsTheReplyFinish => "click-off-lets-the-reply-finish",
     ClickOffKeepsTheMicrophoneClosed => "click-off-keeps-the-microphone-closed",
@@ -54,6 +55,7 @@ const REFUSED: &str = "Not sent";
 const LONG_SPOKEN: &str = "Here's where things stand. The canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today. Want me to walk through any of it?";
 const LONG_START: &str = "Here's where things stand.";
 const LONG_ERROR_PERCENT: usize = 10;
+const LONGEST_PAUSE_MS: u64 = 800;
 const PIECE_WORDS: usize = 25;
 const COMMA_PIECES: [&str; 2] = [
     "The voice work is split into three pieces, and the first one is in review, the second is being tested right now,",
@@ -573,6 +575,26 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                         .all(|text| !text.chars().any(|c| c.is_ascii_digit())),
             )
             .observed("spokenTexts", &long.spoken_texts)
+    })?;
+    cases.check(native, Case::LongReplyPlaysWithoutAGap, |native| {
+        let opened = voice::marks_between(
+            &long.marks,
+            "speaker-opened",
+            "speech-started",
+            "speech-ended",
+        );
+        let longest = voice::longest_pause_ms(native, "long-reply", &long)?;
+        Verdict::new()
+            .expect(
+                "the whole long reply plays through one speaker stream",
+                opened == 1,
+            )
+            .expect(
+                "no pause inside the long reply is longer than 800 ms",
+                longest <= LONGEST_PAUSE_MS,
+            )
+            .observed("speakerStreams", opened)?
+            .observed("longestPauseMs", longest)
     })?;
     cases.check(native, Case::TwoTurnsWithEcho, |native| {
         let echo = voice::echo(native)?;

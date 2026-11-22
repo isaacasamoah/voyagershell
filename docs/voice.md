@@ -263,12 +263,18 @@ is "fifty percent". It leaves other text with digits as it is, such as a time li
 
 The reply thread renders the first piece before it takes the floor, as it did the whole
 reply before. While a piece plays, a second thread renders the next one, so only the
-first render comes before the first sound. Each piece plays through its own speaker
-stream, and the floor stays taken until the last one ends. A click-off stops the piece
+first render comes before the first sound. The whole reply plays through one speaker
+stream: `Speaker::play` takes the reply as a stream of clips, `voice_parts::Clips`, and
+writes each clip to the same player as soon as it is rendered. A reply therefore starts
+one player, with no process start between sentences. The floor stays taken until the
+last clip has played. When the engine renders the next sentence slower than the last one
+plays, the stream waits, and the pause grows by that wait. On a run at a load of up to 66
+on 24 cores the longest pauses were 7.7 and 3.9 s, and at a load of about 14 at most 0.9 s. A click-off stops the piece
 that is playing at once and plays no more. A piece that fails to render ends the reply
 there and reports its reason, as a failed render did before. The reply is added to the
 chat once, when its first piece starts. The trace marks `speech-started` with the whole
-spoken text once and `piece-started` with each piece's words.
+spoken text once, `speaker-opened` once for the stream, and `piece-started` with each
+piece's words when that piece is handed to the player.
 
 First audio is the wait for the render of what plays first. With one synthesis it was
 the whole render: 11.9 to 28.2 s, median 17.1 s, on the CPU engine of

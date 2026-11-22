@@ -7,7 +7,7 @@ use crate::{
 use std::{
     collections::HashMap,
     sync::{
-        Arc,
+        Arc, Mutex, PoisonError,
         mpsc::{self, Receiver},
     },
     thread,
@@ -143,7 +143,7 @@ fn say(parts: &Parts, line: Line) {
     (parts.status)(Phase::Speaking, None);
     let notice = match first {
         Err(reason) => Some(reason),
-        Ok(first) => play_all(parts, &line, first, &rest_of(parts, &line)),
+        Ok(first) => play_all(parts, &line, first, rest_of(parts, &line)),
     };
     let after = if (parts.on)() {
         Phase::Connecting
@@ -157,43 +157,46 @@ fn play_all(
     parts: &Parts,
     line: &Line,
     (first, words): (Clip, String),
-    rest: &Receiver<Rendered>,
+    rest: Receiver<Rendered>,
 ) -> Option<String> {
-    let mut playing = (first, words);
-    let mut started = false;
-    let notice = loop {
-        let (clip, words) = &playing;
-        let speaker = match parts.audio.speaker(clip.rate) {
-            Err(error) => break Some(format!("The speaker could not be opened: {error}")),
-            Ok(speaker) => speaker,
-        };
-        if !started {
-            parts
-                .trace
-                .mark_words("speech-started", &label_of(line, words));
-        }
-        if matches!(line, Line::Reply(_)) {
-            parts.trace.mark_words("piece-started", words);
-        }
-        let finish = speaker.play(clip);
-        if !started {
-            note_unspoken(parts, line);
-            started = true;
-        }
-        finish(&|| (parts.stopped)());
-        if (parts.stopped)() {
-            break None;
-        }
-        match rest.recv() {
-            Err(_) => break None,
-            Ok(Err(reason)) => break Some(reason),
-            Ok(Ok(next)) => playing = next,
-        }
+    let speaker = match parts.audio.speaker(first.rate) {
+        Err(error) => return Some(format!("The speaker could not be opened: {error}")),
+        Ok(speaker) => speaker,
     };
-    if started {
-        parts.trace.mark("speech-ended");
+    let reply = matches!(line, Line::Reply(_));
+    parts
+        .trace
+        .mark_words("speech-started", &label_of(line, &words));
+    parts.trace.mark("speaker-opened");
+    if reply {
+        parts.trace.mark_words("piece-started", &words);
     }
-    notice
+    let failure: Arc<Mutex<Option<String>>> = Arc::default();
+    let reported = failure.clone();
+    let trace = parts.trace.clone();
+    let rate = first.rate;
+    let next = rest.into_iter().map_while(move |rendered| {
+        let reason = match rendered {
+            Ok((clip, words)) if clip.rate == rate => {
+                if reply {
+                    trace.mark_words("piece-started", &words);
+                }
+                return Some(clip);
+            }
+            Ok(_) => "The voice engine changed its sample rate within a reply".to_owned(),
+            Err(reason) => reason,
+        };
+        *reported.lock().unwrap_or_else(PoisonError::into_inner) = Some(reason);
+        None
+    });
+    let finish = speaker.play(Box::new(std::iter::once(first).chain(next)));
+    note_unspoken(parts, line);
+    finish(&|| (parts.stopped)());
+    parts.trace.mark("speech-ended");
+    failure
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
 }
 
 #[cfg(test)]
@@ -207,7 +210,7 @@ mod tests {
         io,
         sync::{
             Mutex,
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
         },
     };
     use voyager_contract::reply::ReplyEvent;
@@ -219,12 +222,21 @@ mod tests {
     );
 
     impl Speaker for Voice {
-        fn play(self: Box<Self>, clip: &Clip) -> crate::voice_parts::Finish {
-            self.0.lock().unwrap().push(clip.pcm.len());
+        fn play(
+            self: Box<Self>,
+            mut clips: crate::voice_parts::Clips,
+        ) -> crate::voice_parts::Finish {
+            if let Some(clip) = clips.next() {
+                self.0.lock().unwrap().push(clip.pcm.len());
+            }
             Box::new(move |cut| {
                 if self.2.load(Ordering::SeqCst) {
                     thread::sleep(Duration::from_millis(300));
                 }
+                self.0
+                    .lock()
+                    .unwrap()
+                    .extend(clips.map(|clip| clip.pcm.len()));
                 self.1.lock().unwrap().push(cut());
             })
         }
@@ -234,6 +246,7 @@ mod tests {
         Arc<Mutex<Vec<usize>>>,
         Arc<Mutex<Vec<bool>>>,
         Arc<AtomicBool>,
+        Arc<AtomicUsize>,
     );
 
     impl Audio for Out {
@@ -242,6 +255,7 @@ mod tests {
         }
 
         fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
+            self.3.fetch_add(1, Ordering::SeqCst);
             Ok(Box::new(Voice(
                 self.0.clone(),
                 self.1.clone(),
@@ -292,6 +306,7 @@ mod tests {
 
     struct Rig {
         played: Arc<Mutex<Vec<usize>>>,
+        opened: Arc<AtomicUsize>,
         replies: Replies,
         floor: Arc<Floor>,
         phases: Arc<Mutex<Vec<Phase>>>,
@@ -305,6 +320,7 @@ mod tests {
     impl Rig {
         fn start(standing: Standing) -> Self {
             let played = Arc::new(Mutex::default());
+            let opened = Arc::new(AtomicUsize::new(0));
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
             let replies = Replies::default();
@@ -333,7 +349,12 @@ mod tests {
                         })
                         .collect(),
                 ),
-                audio: Arc::new(Out(played.clone(), cut.clone(), slow.clone())),
+                audio: Arc::new(Out(
+                    played.clone(),
+                    cut.clone(),
+                    slow.clone(),
+                    opened.clone(),
+                )),
                 voyager: Arc::new(Here(standing, played.clone(), noted.clone())),
                 replies: replies.clone(),
                 trace: Trace::off(),
@@ -344,6 +365,7 @@ mod tests {
             });
             Self {
                 played,
+                opened,
                 replies,
                 floor,
                 phases,
@@ -400,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn a_long_reply_is_played_one_piece_at_a_time_in_order() {
+    fn a_long_reply_is_played_one_piece_at_a_time_in_order_through_one_speaker() {
         let rig = Rig::start(Standing::Idle);
         rig.say("p1", true, "One two. Three four five!\n\nSix?");
         rig.wait_for(3);
@@ -409,6 +431,7 @@ mod tests {
             .map(str::len)
             .to_vec();
         assert_eq!(rig.played.lock().unwrap().clone(), pieces);
+        assert_eq!(rig.opened.load(Ordering::SeqCst), 1);
         assert_eq!(
             rig.phases.lock().unwrap().clone(),
             vec![Phase::Speaking, Phase::Connecting]
@@ -463,6 +486,11 @@ mod tests {
         rig.on.store(false, Ordering::SeqCst);
         wait_for_finish(&rig);
         assert_eq!(rig.cut.lock().unwrap().clone(), vec![false]);
+        assert_eq!(
+            rig.played.lock().unwrap().clone(),
+            vec!["Renamed it.".len(), "Then I tidied the tabs.".len()],
+            "every piece of the playing reply is played after the click"
+        );
         thread::sleep(Duration::from_millis(250));
         assert_eq!(rig.phases.lock().unwrap().last(), Some(&Phase::Ready));
     }

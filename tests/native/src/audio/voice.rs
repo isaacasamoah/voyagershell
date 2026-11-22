@@ -894,6 +894,57 @@ pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
         .collect()
 }
 
+pub fn marks_between(marks: &[Mark], event: &str, from: &str, to: &str) -> usize {
+    let start = marks.iter().position(|mark| mark.event == from);
+    let end = marks.iter().position(|mark| mark.event == to);
+    match (start, end) {
+        (Some(start), Some(end)) if start <= end => marks[start..=end]
+            .iter()
+            .filter(|mark| mark.event == event)
+            .count(),
+        _ => 0,
+    }
+}
+
+pub fn longest_pause_ms(native: &Native, name: &str, said: &Conversation) -> Result<u64> {
+    let stack = stack(native)?;
+    let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
+    let offset = |event: &str| {
+        mark_of(&said.marks, event)
+            .map(|mark| mark.at_ms.saturating_sub(said.capture_began_ms))
+            .with_context(|| format!("The app marked no {event}"))
+    };
+    let per_ms = (super::speech::RATE / 1000) as usize;
+    let from = usize::try_from(offset("speech-started")?)?.saturating_mul(per_ms);
+    let to = usize::try_from(offset("speech-ended")?)?
+        .saturating_mul(per_ms)
+        .min(heard.0.len());
+    Ok(longest_quiet_inside(heard.0.get(from..to).unwrap_or_default(), per_ms * 20) * 20)
+}
+
+fn longest_quiet_inside(samples: &[i16], frame: usize) -> u64 {
+    let loud: Vec<bool> = samples
+        .chunks(frame)
+        .map(|chunk| {
+            let energy: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (energy / chunk.len() as f64).sqrt() >= QUIET_RMS
+        })
+        .collect();
+    let (Some(first), Some(last)) = (
+        loud.iter().position(|is_loud| *is_loud),
+        loud.iter().rposition(|is_loud| *is_loud),
+    ) else {
+        return 0;
+    };
+    let mut longest = 0;
+    let mut quiet = 0;
+    for is_loud in &loud[first..=last] {
+        quiet = if *is_loud { 0 } else { quiet + 1 };
+        longest = longest.max(quiet);
+    }
+    longest
+}
+
 pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Result<Vec<String>> {
     let stack = stack(native)?;
     let heard = Samples::decode(&fs::read(stack.folder().join(format!("{name}.wav")))?)?;
@@ -1063,6 +1114,53 @@ mod tests {
         assert_eq!(
             digits_as_words("38 checks, 0.25 and 4:20."),
             "thirty eight checks, zero point two five and 4:20."
+        );
+    }
+
+    #[test]
+    fn the_longest_pause_counts_only_the_quiet_between_sounds() {
+        let frame = 960;
+        let sound = vec![3000i16; frame * 10];
+        let samples: Vec<i16> = [
+            vec![0; frame * 30],
+            sound.clone(),
+            vec![0; frame * 12],
+            sound.clone(),
+            vec![0; frame * 5],
+            sound,
+            vec![0; frame * 40],
+        ]
+        .concat();
+        assert_eq!(longest_quiet_inside(&samples, frame), 12);
+        assert_eq!(longest_quiet_inside(&[0; 9600], frame), 0);
+    }
+
+    #[test]
+    fn marks_are_counted_only_between_their_bounds() {
+        let mark = |event: &str| Mark {
+            event: event.to_owned(),
+            at_ms: 0,
+            words: None,
+        };
+        let marks = [
+            mark("speaker-opened"),
+            mark("speech-started"),
+            mark("speaker-opened"),
+            mark("speech-ended"),
+            mark("speaker-opened"),
+        ];
+        assert_eq!(
+            marks_between(&marks, "speaker-opened", "speech-started", "speech-ended"),
+            1
+        );
+        assert_eq!(
+            marks_between(
+                &marks[..2],
+                "speaker-opened",
+                "speech-started",
+                "speech-ended"
+            ),
+            0
         );
     }
 
