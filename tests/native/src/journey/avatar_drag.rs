@@ -608,7 +608,7 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
         .is_ok();
     let redrawn = rested(native, streaming, &orbit, &frozen)?.is_some();
     native.keep_window("drag-docks")?;
-    Verdict::new()
+    Ok(Verdict::new()
         .expect(
             "a drag over streaming terminals that ends on a Vessel docks the avatar there",
             landed,
@@ -616,7 +616,7 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
         .expect(
             "once the drag ended, a streaming terminal drew its current output",
             redrawn,
-        )
+        ))
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {

@@ -22,7 +22,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
 };
 use view::AvatarView;
 use voyager_app::client::Client;
