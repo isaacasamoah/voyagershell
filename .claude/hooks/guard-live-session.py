@@ -5,7 +5,8 @@ import sys
 
 LIVE = ("HC_SESSION", "HC_SOCKET", "HC_TERMINAL_ID")
 PREFIX = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
-LEAD = r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
+SESSION_FORM = "env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ..."
+LEAD =r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
 WRAP = r"(?:(?:then|do|else|env|exec|nohup|nice|time|timeout\s+\S+|-u\s+\S+|-i|--unset[=\s]\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*"
 HC = r"(?:[^\s;&|'\"]*/)?hc"
 APP = r"[^\s;&|'\"]*voyager-shell"
@@ -103,6 +104,11 @@ def check(command, environment):
         own = targets_own_session(command) and cleared(command, "HC_SOCKET")
         safe = own or all(cleared(command, name) for name in live)
         if not safe:
+            if hc:
+                return (
+                    f"This shell carries {', '.join(live)} for Isaac's live Core session. "
+                    f"Name your own session: `{SESSION_FORM}`."
+                )
             return (
                 f"This shell carries {', '.join(live)} for Isaac's live Core session. "
                 f"Clear them inline: `{PREFIX} <command>`, or name your own session with "
