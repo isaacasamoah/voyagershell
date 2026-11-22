@@ -9,7 +9,11 @@ fn profile(name: &str) -> PathBuf {
 }
 
 fn ship<'a>(path: &'a str, bytes: &'a [u8]) -> Shipped<'a> {
-    Shipped { path, bytes }
+    Shipped {
+        path,
+        bytes,
+        absent: Absent::Write,
+    }
 }
 
 fn stamp(path: &Path) -> SystemTime {
@@ -37,9 +41,9 @@ fn a_file_is_judged_by_its_record_then_by_the_versions_shipped_before_records() 
 #[test]
 fn an_untouched_file_updates_and_an_edited_one_stays_active_with_a_diff() {
     let root = profile("update");
-    install(&root, &[ship("a.js", b"a1\n"), ship("b.js", b"b1\n")], &[]).unwrap();
+    install(&root, &[ship("a.js", b"a1\n"), ship("b.js", b"b1\n")]).unwrap();
     fs::write(root.join("b.js"), "b mine\n").unwrap();
-    let notices = install(&root, &[ship("a.js", b"a2\n"), ship("b.js", b"b2\n")], &[]).unwrap();
+    let notices = install(&root, &[ship("a.js", b"a2\n"), ship("b.js", b"b2\n")]).unwrap();
     assert_eq!(fs::read(root.join("a.js")).unwrap(), b"a2\n");
     assert_eq!(fs::read(root.join("b.js")).unwrap(), b"b mine\n");
     assert_eq!(notices.len(), 1);
@@ -58,13 +62,13 @@ fn an_untouched_file_updates_and_an_edited_one_stays_active_with_a_diff() {
 fn a_second_start_writes_nothing() {
     let root = profile("idempotent");
     let files = [ship("a.js", b"a1\n"), ship("b.js", b"b1\n")];
-    install(&root, &files, &[]).unwrap();
+    install(&root, &files).unwrap();
     fs::write(root.join("b.js"), "mine\n").unwrap();
     let again = [ship("a.js", b"a2\n"), ship("b.js", b"b2\n")];
-    install(&root, &again, &[]).unwrap();
+    install(&root, &again).unwrap();
     let paths = ["a.js", "b.js", "installed.json", "updates/b.js.diff"];
     let before = paths.map(|path| (fs::read(root.join(path)).unwrap(), stamp(&root.join(path))));
-    let second = install(&root, &again, &[]).unwrap();
+    let second = install(&root, &again).unwrap();
     let after = paths.map(|path| (fs::read(root.join(path)).unwrap(), stamp(&root.join(path))));
     assert_eq!(before, after);
     assert_eq!(second.len(), 1);
@@ -75,7 +79,7 @@ fn a_second_start_writes_nothing() {
 fn an_edit_with_no_record_is_kept_and_flagged_and_gets_no_record() {
     let root = profile("unrecorded");
     fs::write(root.join("a.js"), "mine\n").unwrap();
-    let notices = install(&root, &[ship("a.js", b"a1\n")], &[]).unwrap();
+    let notices = install(&root, &[ship("a.js", b"a1\n")]).unwrap();
     assert_eq!(fs::read(root.join("a.js")).unwrap(), b"mine\n");
     assert_eq!(notices[0].reason, Reason::Unrecorded);
     let record = fs::read_to_string(root.join(RECORD)).unwrap();
@@ -94,7 +98,7 @@ fn the_history_holds_the_versions_shipped_before_records() {
 fn an_unrecorded_file_equal_to_the_new_version_gets_its_record() {
     let root = profile("adopt");
     fs::write(root.join("a.js"), "a1\n").unwrap();
-    assert!(install(&root, &[ship("a.js", b"a1\n")], &[]).unwrap().is_empty());
+    assert!(install(&root, &[ship("a.js", b"a1\n")]).unwrap().is_empty());
     assert!(
         fs::read_to_string(root.join(RECORD))
             .unwrap()
@@ -113,11 +117,10 @@ fn a_dropped_file_is_deleted_only_when_untouched() {
             ship("b.js", b"b\n"),
             ship("c.js", b"c\n"),
         ],
-        &[],
     )
     .unwrap();
     fs::write(root.join("b.js"), "mine\n").unwrap();
-    install(&root, &[ship("c.js", b"c\n")], &[]).unwrap();
+    install(&root, &[ship("c.js", b"c\n")]).unwrap();
     assert!(!root.join("a.js").exists());
     assert_eq!(fs::read(root.join("b.js")).unwrap(), b"mine\n");
     assert!(root.join("c.js").exists());
@@ -137,7 +140,7 @@ fn a_record_cannot_name_a_file_outside_the_profile() {
         format!("{{\"version\":1,\"files\":{{\"../outside.txt\":\"{hash}\"}}}}"),
     )
     .unwrap();
-    install(&inner, &[], &[]).unwrap();
+    install(&inner, &[]).unwrap();
     assert!(outside.exists());
     fs::remove_dir_all(root).unwrap();
 }
@@ -156,26 +159,20 @@ fn a_file_changed_during_the_swap_is_put_back_and_kept() {
 }
 
 #[test]
-fn a_retired_prefix_leaves_dropped_files_in_place_and_stops_tracking_them() {
-    let root = profile("retired-kept");
-    install(
-        &root,
-        &[ship("p/a.js", b"a\n"), ship("c.js", b"c\n")],
-        &[],
-    )
-    .unwrap();
-    install(&root, &[ship("c.js", b"c\n")], &["p/"]).unwrap();
-    assert_eq!(fs::read(root.join("p/a.js")).unwrap(), b"a\n");
-    let record = fs::read_to_string(root.join(RECORD)).unwrap();
-    assert!(!record.contains("p/a.js") && record.contains("c.js"));
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn without_a_retired_prefix_the_untouched_dropped_file_is_removed() {
-    let root = profile("retired-removed");
-    install(&root, &[ship("p/a.js", b"a\n"), ship("c.js", b"c\n")], &[]).unwrap();
-    install(&root, &[ship("c.js", b"c\n")], &[]).unwrap();
+fn a_missing_file_of_a_kept_package_is_not_repaired_and_a_removed_one_stays_recorded() {
+    let root = profile("keep");
+    install(&root, &[ship("p/a.js", b"a\n")]).unwrap();
+    fs::remove_file(root.join("p/a.js")).unwrap();
+    let keep = [Shipped {
+        absent: Absent::Keep,
+        ..ship("p/a.js", b"a\n")
+    }];
+    install(&root, &keep).unwrap();
     assert!(!root.join("p/a.js").exists());
+    assert!(
+        fs::read_to_string(root.join(RECORD))
+            .unwrap()
+            .contains("p/a.js")
+    );
     fs::remove_dir_all(root).unwrap();
 }

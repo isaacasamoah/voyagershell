@@ -42,18 +42,16 @@ The pull request "Adapt the Core connection behind one typed seam" (#151) had th
 
 `forbid_literal` keeps a vocabulary string in one file. Each rule lists these fields.
 
-- `literals` is the list of exact string contents to find, such as `notes`.
+- `literals` is the list of exact string contents to find, such as a type id.
 - `owner` is the one file allowed to hold them.
 - `roots` and `exclude` are path patterns that bound the files checked. `*` matches within one folder and `**` matches across folders, so `app/src/**` covers nested modules.
 - `tests` is required, and is `skip` or `scan`.
 
-The rule checks Rust files only. It reads string literals after comments are removed, so a literal in a comment, or a longer string such as `"notes.md"`, does not count. A string written with escapes is not found.
+The rule checks Rust files only. It reads string literals after comments are removed, so a literal in a comment, or a longer string that contains a listed literal, does not count. A string written with escapes is not found.
 
 Test scope is explicit. With `tests: skip`, the rule ignores a file named `tests.rs`, `*_test.rs`, `*_tests.rs` or under a `tests/` folder, and any code under `#[cfg(test)]` or `#[test]` in other files. With `tests: scan`, test code counts like any other code. A rule without `tests` is refused.
 
 A violation is `<rule id>: "<literal>" in <file>` with the number of occurrences. A recorded entry carries a numeric `limit`. The count may fall, and a lower count asks for a lower limit. A higher count fails.
-
-Rule `notes-type-has-one-home` keeps the Notes type id in `NOTES_TYPE` in `app/src/vessel_type.rs`. Its test scope is `skip` because fixtures name the type they create. The base of the pull request "Give Core terminal states, agent programs and the Notes type id one home" (#149) spread `"notes"` across `client`, `content`, `context`, `panels` and `voyage_close`.
 
 ## Families
 

@@ -2464,11 +2464,6 @@ session, evidence and desktop environment to leave a review app open. This mode
 captures the window and closes its input helper. It retains the app and its
 processes, records no passed journey, and marks `reviewOnly` in its receipt.
 
-The `notes-configuration` native journey still checks the former heading and
-cold-Quit behavior. Its runtime acceptance is pending an update for the current
-Notes and detach requirements. Passing route checks only confirms routing and
-fixture source checks; it does not accept that journey.
-
 The `terminal-scrolling` journey covers primary-screen history, alternate-screen
 arrow fallback, program mouse reporting and same-program reattachment. It uses
 the ordinary compositor input path, or `--isolated-x11 XVFB_PID` for a separately

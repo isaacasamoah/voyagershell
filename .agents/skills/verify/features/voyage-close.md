@@ -64,8 +64,7 @@ stopped`, with one of B's shells observed live.
 
 ## Gotchas
 
-The journey drives no refusal of a confirm. The only driven refusal was a
-Notes save conflict, and Notes is not core. Escape on the dialog, the
+The journey drives no refusal of a confirm. Escape on the dialog, the
 incomplete phase after an uncertain stop, closing the only open Voyage, a
 terminal Portal of the closing Voyage and an agent Vessel coming back as a
 plain shell are not driven. No case compares pixels. Linux evidence does not

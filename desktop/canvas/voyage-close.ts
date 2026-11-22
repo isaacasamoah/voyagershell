@@ -129,9 +129,7 @@ export class VoyageClose {
       .child(
         div()
           .text_size(12)
-          .child(
-            "Stop this Voyage's programs. Other Voyages stay open.",
-          ),
+          .child("Stop this Voyage's programs. Other Voyages stay open."),
       );
     const inventory = div()
       .id("voyage-close-contents")

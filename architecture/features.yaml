@@ -4,7 +4,7 @@ features:
     summary: 'Create a Voyage from the canvas, switch between Voyages and rename one.'
     group: workspace-layout
     owner: desktop-presentation
-    shared_with: [application-queue, placement, content]
+    shared_with: [application-queue, placement]
     proof: native
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
@@ -59,19 +59,10 @@ features:
           - 'journey:workspace/sidebar-drag-moves-window'
         formal: []
         journeys: [workspace]
-    docs: [docs/content.md, docs/terminal.md, docs/workspace.md]
-    sources:
-      - 'desktop/canvas/main.*'
-      - 'desktop/canvas/navigation-view.*'
-      - desktop/canvas/voyage-colours.ts
-      - app/src/workspace.rs
-      - app/src/content/rename.rs
-      - app/src/scope.rs
-      - app/src/families/structure.rs
-      - app/src/client_structure.rs
+    docs: [docs/terminal.md, docs/workspace.md]
+    sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', desktop/canvas/voyage-colours.ts, app/src/workspace.rs, app/src/scope.rs, app/src/families/structure.rs, app/src/client_structure.rs]
     code:
       - app/src/client_structure.rs
-      - app/src/content/rename.rs
       - app/src/families/structure.rs
       - app/src/scope.rs
       - app/src/workspace.rs
@@ -576,11 +567,8 @@ features:
       - app/src/content/manifest/read.rs
       - app/src/content/manifest/registry.rs
       - app/src/content/manifest/tests.rs
-      - app/src/content/markdown.rs
       - app/src/content/package.rs
-      - app/src/content/rename.rs
       - app/src/content/requests.rs
-      - app/src/content/view.rs
       - app/src/panels.rs
       - app/src/workspace.rs
       - desktop/canvas/panel-view.ts
@@ -799,7 +787,7 @@ features:
     code: [desktop/src/terminal_input.rs, desktop/src/terminal_screen.rs]
   - id: clipboard
     name: Clipboard
-    summary: 'Copy text out of and paste text into a terminal, canvas or note.'
+    summary: 'Copy text out of a terminal or the chat composer and paste text into a terminal.'
     group: platform
     owner: desktop-presentation
     proof: native
@@ -807,7 +795,7 @@ features:
     platforms: [linux]
     checks: []
     native_journeys: [terminal-input]
-    python_journeys: [notes-lifetime]
+    python_journeys: [conversation-ux]
     invariants:
       - id: terminal-input-arrives-intact
         kind: user
@@ -829,29 +817,6 @@ features:
     docs: [docs/terminal.md]
     sources: [desktop/src/text.rs, desktop/src/terminal_input.rs]
     code: [desktop/src/terminal_input.rs, desktop/src/text.rs]
-  - id: notes
-    name: Notes
-    summary: 'Open a note, type into it and find it again after a restart.'
-    group: notes
-    owner: desktop-presentation
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
-    platforms: [linux]
-    checks: []
-    native_journeys: []
-    python_journeys: [notes, notes-lifetime]
-    invariants:
-      - id: live-edit-keeps-last-good
-        kind: user
-        says: 'A valid edit to a theme, canvas script or Vessel package shows while the app runs, with no relaunch. A broken edit shows its error and leaves the last usable version running.'
-        owner: content
-        guards: []
-        checks: ['journey:profile/live-edit-recolours', 'journey:manifest-vessel/a-broken-manifest-keeps-the-last-good-type-listed']
-        formal: []
-        journeys: [manifest-vessel, profile]
-    docs: [docs/terminal.md]
-    sources: [desktop/src/notes.rs, 'desktop/src/notes_*.rs']
-    code: [desktop/src/notes.rs, desktop/src/notes_draft.rs, desktop/src/notes_input.rs, desktop/src/notes_scope.rs, desktop/src/notes_session.rs]
   - id: avatar
     name: 'Avatar docking / drag'
     summary: 'Drag the avatar around the window and dock it to a Vessel.'
@@ -958,7 +923,7 @@ features:
     platforms: [linux]
     checks: []
     native_journeys: [chat]
-    python_journeys: [conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content]
+    python_journeys: [conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop]
     invariants:
       - id: context-follows-dock
         kind: user

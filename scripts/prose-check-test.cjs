@@ -174,7 +174,7 @@ test("a missing base is a usage error without a stack trace", () => {
 const REPOSITORY = path.join(__dirname, "..");
 const RULE_FILE_KINDS = [
   "AGENTS.md",
-  "content/notes/AGENTS.md",
+  "desktop/canvas/AGENTS.md",
   "CONSTRAINTS.md",
   "CONTRIBUTING.md",
   "tests/native/README.md",

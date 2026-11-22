@@ -1,9 +1,9 @@
 diff --git a/app/src/families/voyage_close.rs b/app/src/families/voyage_close.rs
 --- a/app/src/families/voyage_close.rs
 +++ b/app/src/families/voyage_close.rs
-@@ -429,7 +429,7 @@
-         }
-     }
+@@ -278,7 +278,7 @@ impl Closing {
+ pub(crate) fn execute(calls: &impl Calls, confirmed: Confirmed) -> Result<(), Error> {
+     let Confirmed { plan, target } = confirmed;
      let mut stopped = 0;
 -    for entry in &plan.entries {
 +    for entry in plan.entries.iter().take(1) {

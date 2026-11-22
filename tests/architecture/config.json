@@ -8,18 +8,13 @@
   "scriptScopes": {
     "file": "desktop/script-types.json",
     "packages": {
-      "canvas": "desktop/canvas",
-      "notes": "content/notes"
+      "canvas": "desktop/canvas"
     }
   },
   "generators": {
     "app/core-schema.cjs": ["app/core-schema.json"],
     "contract/build.cjs": ["contract/generated"],
-    "desktop/typecheck.cjs": [
-      "desktop/script-types.json",
-      "desktop/canvas",
-      "content/notes"
-    ]
+    "desktop/typecheck.cjs": ["desktop/script-types.json", "desktop/canvas"]
   },
   "locationRoots": ["profile"],
   "structLiterals": [

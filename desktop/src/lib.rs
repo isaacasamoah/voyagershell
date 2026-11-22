@@ -58,11 +58,7 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
     let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
-    let profile_updates = voyager_app::content::install::install(
-        &profile,
-        &shipped::files(),
-        shipped::RETIRED_KEPT,
-    )?;
+    let profile_updates = voyager_app::content::install::install(&profile, &shipped::files())?;
     let content_owner = voyager_app::content::Owner::open(&profile)?;
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(package.join("canvas.json"))?)

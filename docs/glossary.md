@@ -40,7 +40,7 @@ Retired words fail `npm run vocabulary:check`.
 | Reply marker | The token [vy] that Voyager starts every reply with. The app keeps only the text after the first one where it stores the reply, and removes any later one, before the reply is spoken or noted in the chat. | Application queue and front door |  |
 | Uncertain effect | An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically. | Application queue and front door |  |
 | Vessel | One piece of content with its own identity, configuration, state and revision, of one Vessel type. A Placement puts it on screen. | Content | `content instance`, `content id` |
-| Vessel package | The source folder under vessels/ in the profile that provides one scripted Vessel type. Its manifest is vessel.json. | Content | `content package`, `mod` |
-| Vessel type | The kind of a Vessel, keyed by type_id. The built-in types are terminal, notes and agents. | Content | `content type` |
+| Vessel package | The source folder under vessels/ in the profile that provides one scripted Vessel type. Its manifest is manifest.json. | Content | `content package`, `mod` |
+| Vessel type | The kind of a Vessel, keyed by type_id. The built-in types are terminal, agent and agents. | Content | `content type` |
 | Voyage | A space for one project. It holds Fleets and a Portal column. | Placement | `realm` |
 | VOYAGER_BACKGROUND | The environment variable the app sets to 1 in Voyager's launch settings. It tells the user's own agent instructions that this session has no human reader, so they skip their personal reply prefix. | Application queue and front door |  |

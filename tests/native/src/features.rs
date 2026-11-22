@@ -307,13 +307,13 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
-id = "notes"
-name = "Notes"
-path = "Type in a note."
-sources = ["desktop/src/notes.rs"]
+id = "clipboard"
+name = "Clipboard"
+path = "Copy text out of a terminal."
+sources = ["desktop/src/text.rs"]
 journeys = []
 platforms = ["linux"]
-python = ["notes"]
+python = ["conversation-ux"]
 behavior = "python-only"
 performance = "none"
 visual = "none"
@@ -323,7 +323,7 @@ debug = "none"
     fn files() -> Vec<String> {
         [
             "desktop/src/terminal_scroll.rs",
-            "desktop/src/notes.rs",
+            "desktop/src/text.rs",
             "docs/a.md",
         ]
         .map(String::from)
@@ -331,7 +331,9 @@ debug = "none"
     }
 
     fn python() -> BTreeSet<String> {
-        ["terminal-scrolling", "notes"].map(String::from).into()
+        ["terminal-scrolling", "conversation-ux"]
+            .map(String::from)
+            .into()
     }
 
     fn check(text: &str) -> Result<()> {
@@ -370,31 +372,31 @@ debug = "none"
 
     #[test]
     fn unknown_python_journey_fails() {
-        let bad = SEED.replacen("python = [\"notes\"]", "python = [\"ghost\"]", 1);
+        let bad = SEED.replacen("python = [\"conversation-ux\"]", "python = [\"ghost\"]", 1);
         assert!(failure(&bad).contains("ghost"));
     }
 
     #[test]
     fn dead_glob_fails() {
-        let bad = SEED.replacen("desktop/src/notes.rs", "desktop/src/nothing_*.rs", 1);
+        let bad = SEED.replacen("desktop/src/text.rs", "desktop/src/nothing_*.rs", 1);
         assert!(failure(&bad).contains("nothing_*.rs"));
     }
 
     #[test]
     fn duplicate_id_fails() {
-        let bad = SEED.replacen("id = \"notes\"", "id = \"terminal-scrolling\"", 1);
+        let bad = SEED.replacen("id = \"clipboard\"", "id = \"terminal-scrolling\"", 1);
         assert!(failure(&bad).contains("Duplicate feature id terminal-scrolling"));
     }
 
     #[test]
     fn covered_tier_without_journey_fails() {
         let bad = SEED.replacen("behavior = \"python-only\"", "behavior = \"covered\"", 1);
-        assert!(failure(&bad).contains("notes"));
+        assert!(failure(&bad).contains("clipboard"));
     }
 
     #[test]
     fn unknown_field_fails() {
-        let bad = SEED.replacen("name = \"Notes\"", "name = \"Notes\"\nbogus = 1", 1);
+        let bad = SEED.replacen("name = \"Clipboard\"", "name = \"Clipboard\"\nbogus = 1", 1);
         assert!(failure(&bad).contains("bogus"));
     }
 
@@ -402,7 +404,7 @@ debug = "none"
     fn table_lists_every_feature_with_status() {
         let table = Registry::parse(SEED).unwrap().table();
         assert!(table.contains("| Terminal scroll | covered | none | none | covered |"));
-        assert!(table.contains("| Notes | python-only | none | none | none |"));
+        assert!(table.contains("| Clipboard | python-only | none | none | none |"));
     }
 
     fn readme(table: &str) -> String {
@@ -414,7 +416,7 @@ debug = "none"
         let registry = Registry::parse(SEED).unwrap();
         let fresh = splice(&readme("old\n"), &registry.table()).unwrap();
         assert_eq!(splice(&fresh, &registry.table()).unwrap(), fresh);
-        let stale = fresh.replace("| Notes | python-only", "| Notes | covered");
+        let stale = fresh.replace("| Clipboard | python-only", "| Clipboard | covered");
         assert_ne!(splice(&stale, &registry.table()).unwrap(), stale);
         assert!(splice("no markers", &registry.table()).is_err());
     }

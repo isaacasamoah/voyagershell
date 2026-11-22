@@ -50,9 +50,9 @@ rules:
   - id: one-vocabulary
     check: forbid_terms
     table: vocabulary.yaml
-  - id: notes-type-has-one-home
+  - id: agents-type-has-one-home
     check: forbid_literal
-    literals: [notes]
+    literals: [agents]
     owner: app/src/vessel_type.rs
     roots: ['app/src/**', 'contract/src/**', 'desktop/src/**']
     tests: skip

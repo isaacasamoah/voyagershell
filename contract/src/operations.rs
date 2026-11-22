@@ -371,13 +371,7 @@ pub const AVATAR: Module = Module {
 
 pub const CANVAS_MODULES: [&Module; 5] =
     [&THEME, &AVATAR, &WORKSPACE, &CONTENT_VIEW, &CONVERSATION];
-pub const MODULES: [&Module; 5] = [
-    &THEME,
-    &AVATAR,
-    &WORKSPACE,
-    &CONTENT_VIEW,
-    &CONVERSATION,
-];
+pub const MODULES: [&Module; 5] = [&THEME, &AVATAR, &WORKSPACE, &CONTENT_VIEW, &CONVERSATION];
 
 #[cfg(test)]
 mod tests {

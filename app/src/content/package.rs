@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn removed_path(package: &Path) -> PathBuf {
+pub(crate) fn removed_path(package: &Path) -> PathBuf {
     package.with_file_name(format!(
         ".{}.removed",
         package.file_name().unwrap_or_default().to_string_lossy()

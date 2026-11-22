@@ -1761,11 +1761,15 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   buttons.clear();
   render({}, undefined, { kind: "fleet", id: "fleet" });
   assert.ok(buttons.has("vessel-bash"));
-  assert.ok(!buttons.has("vessel-dashboard") && !buttons.has("vessel-home-agent"));
+  assert.ok(
+    !buttons.has("vessel-dashboard") && !buttons.has("vessel-home-agent"),
+  );
   buttons.clear();
   collapsed.add("expanded-agents-home");
   render({}, undefined, { kind: "fleet", id: "home-fleet" });
-  assert.ok(buttons.has("vessel-home-agent") && buttons.has("vessel-dashboard"));
+  assert.ok(
+    buttons.has("vessel-home-agent") && buttons.has("vessel-dashboard"),
+  );
   layout.voyages[0].portalLayout.root = null;
   buttons.clear();
   render();
@@ -1773,7 +1777,10 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     !buttons.has("vessel-dashboard"),
     "Closed documents are not active work",
   );
-  layout.voyages[0].portalLayout.root = { kind: "leaf", placement: "dashboard" };
+  layout.voyages[0].portalLayout.root = {
+    kind: "leaf",
+    placement: "dashboard",
+  };
   processes[1].state = "finished";
   buttons.clear();
   render();

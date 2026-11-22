@@ -1,3 +1,4 @@
+use super::package::removed_path;
 use diff::unified;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -11,10 +12,17 @@ const RECORD: &str = "installed.json";
 const UPDATES: &str = "updates";
 const HISTORY: &str = include_str!("pre-record-history.tsv");
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Absent {
+    Write,
+    Keep,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Shipped<'a> {
     pub path: &'a str,
     pub bytes: &'a [u8],
+    pub absent: Absent,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,6 +52,14 @@ enum Stance {
     Untouched,
     Edited { installed: u64 },
     Unrecorded,
+}
+
+pub fn package_absent(package: &Path) -> Absent {
+    if package.exists() || removed_path(package).exists() {
+        Absent::Keep
+    } else {
+        Absent::Write
+    }
 }
 
 pub fn fingerprint(bytes: &[u8]) -> u64 {
@@ -252,7 +268,7 @@ fn hold(
     }
 }
 
-pub fn install(profile: &Path, files: &[Shipped], kept: &[&str]) -> io::Result<Vec<Update>> {
+pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
     let record_path = profile.join(RECORD);
     let (record, original) = Record::read(&record_path);
     let before = history();
@@ -271,10 +287,16 @@ pub fn install(profile: &Path, files: &[Shipped], kept: &[&str]) -> io::Result<V
             found.is_some_and(|found| before.contains(&(file.path, found))),
         );
         match stance {
-            Stance::Absent => {
-                write_new(&target, file.bytes)?;
-                next.insert(file.path.to_owned(), format!("{shipped:016x}"));
-            }
+            Stance::Absent => match (file.absent, installed) {
+                (Absent::Write, _) => {
+                    write_new(&target, file.bytes)?;
+                    next.insert(file.path.to_owned(), format!("{shipped:016x}"));
+                }
+                (Absent::Keep, Some(installed)) => {
+                    next.insert(file.path.to_owned(), format!("{installed:016x}"));
+                }
+                (Absent::Keep, None) => {}
+            },
             Stance::Current => {
                 next.insert(file.path.to_owned(), format!("{shipped:016x}"));
             }
@@ -310,10 +332,7 @@ pub fn install(profile: &Path, files: &[Shipped], kept: &[&str]) -> io::Result<V
     }
     let shipped_paths = files.iter().map(|file| file.path).collect::<HashSet<_>>();
     for path in record.files.keys() {
-        if shipped_paths.contains(path.as_str())
-            || !plain(path)
-            || kept.iter().any(|prefix| path.starts_with(prefix))
-        {
+        if shipped_paths.contains(path.as_str()) || !plain(path) {
             continue;
         }
         let target = profile.join(path);

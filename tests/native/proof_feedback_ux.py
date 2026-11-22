@@ -3,10 +3,9 @@ import os
 import time
 from pathlib import Path
 
-from proof_foundation_notes import wait
 from proof_process import observe_core_exit, process_identity
 from proof_split_resize import splitter_point
-from proof_workspace import core_rpc, named_button
+from proof_workspace import core_rpc, named_button, wait
 
 
 def prove(
@@ -352,7 +351,7 @@ def prove(
         )
         before_portals = document()
         button("Show Portals")
-        choice = one("Create Notes Portal")
+        choice = one("Create Agents Portal")
         trigger = one("Hide Portals")
         assert choice["role"] in ("menu item", "menu_item")
         assert choice["y"] >= trigger["y"] + trigger["height"] - 2, (choice, trigger)
@@ -362,7 +361,7 @@ def prove(
         capture("feedback-empty-p-chooser")
         tap(65307)
         wait(
-            lambda: fields("Create Notes Portal"),
+            lambda: fields("Create Agents Portal"),
             lambda items: not items,
             "cancelled Portal chooser",
         )
@@ -378,7 +377,7 @@ def prove(
         )
         button("Hide Portals")
         button("Show Portals")
-        button("Create Notes Portal", menu=True)
+        button("Create Agents Portal", menu=True)
         created = ready(lambda value: len(value["voyages"][0]["portals"]) == 1)
         rename(
             created["value"]["voyages"][0]["portals"][0]["name"],
@@ -401,7 +400,7 @@ def prove(
             lambda item: abs(item["width"] - box["width"]) <= 2,
             "retained Portal width",
         )
-        assert not fields("Create Notes Portal")
+        assert not fields("Create Agents Portal")
         assert document()["value"]["voyages"][0]["portalLayout"]["width"] == width
         observed.update(portal=created, homeMoved=moved, sidebar=sidebar, rail=rail)
         capture("feedback-retained-portal-and-controls")
