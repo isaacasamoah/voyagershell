@@ -1,6 +1,13 @@
 # Terminal output redraws the whole canvas
 
-Status: **paused for budget, 22 Nov evening.** Cause traced. Four prototypes built; three measured once each. No recommendation yet: one measured round is not enough, and the numbers point at a second cost the plan did not expect. Branch `experiment/canvas-redraw`, off main b2cc7447.
+Branch `experiment/canvas-redraw`, off main b2cc7447. Experiment only, with no product PR.
+
+## Answer in brief
+
+- **Cause.** A terminal Pane's `cx.notify()` makes GPUI dirty every ancestor view. The cached canvas ScriptView then misses its cache and rebuilds, lays out and paints its whole element tree, and every terminal under it renders again. Herdr App avoids this because no terminal sits inside a JavaScript view.
+- **How much of a frame that is.** It is less than expected. With 8 busy terminals the canvas's own work is 4.3 ms of a 12.6 ms frame. With 20 it is 10.0 ms of 21.2 ms. The rest of the frame is the busy terminals' own rendering and GPUI's per-view work, and no change to the canvas removes those.
+- **Best prototype.** P3, cached canvas boundaries, keeps a terminal's output to its own Vessel's subtree. It removes most of the canvas cost: the canvas's own prepaint falls from 4.3 to 0.9 ms per frame, and from 10.0 to 2.2 ms. The whole frame improves only about 8 to 10% with 20 busy terminals (19.8 to 20.4 ms becomes 18.2 to 18.3 ms), and it is within noise with 8. Drag lag does not change materially. Cached Panes alone (P1), the terminal layer in Herdr's shape (P2) and boundaries with uncached Panes (P4) gave nothing measurable.
+- **Recommendation.** Do not take the canvas restructure for the drag. For the drag, the small change is the avatar-motion v2 recommendation: hold terminal output while the avatar moves. P3 is a medium change (about 200 lines once cleaned up, no SDK patch) for a modest gain in every busy frame, and it can wait. The larger targets these runs found are the busy terminals' own per-frame cost, and Core's echo delay of 110 to 150 ms when typing with 8 busy terminals.
 
 ## Goal
 
@@ -33,91 +40,124 @@ Herdr App keeps terminals out of its JavaScript views altogether.
 
 Voyager differs: its canvas is a JavaScript ScriptView that owns placement layout and places terminals as components inside it. That is why a terminal's output reaches the whole canvas.
 
-## Prototype plan
+## Method
 
-Each prototype is a patch against main b2cc7447, built through `heavy` with `--features voyager-desktop/frame-profiler`, and measured with the avatar-motion Wayland harness (`experiments/avatar-motion/` from `experiment/avatar-motion` bd1023b0). The measurements are:
+All runs use the avatar-motion Wayland harness (`experiments/avatar-motion/`, from `experiment/avatar-motion` bd1023b0), extended on this branch. It runs the release candidate built with `--features voyager-desktop/frame-profiler` in a private Core session and profile, on headless mutter (2560 by 1600 at 60 Hz, NVIDIA GPU). Each build went through `heavy`, and each run through `heavy perf`.
 
-- frame (draw) time and phase times with 8 and with 20 visible busy terminals,
-- avatar drag latency and frames shown under the same loads,
-- typing latency in a quiet terminal while the others stream (harness extension needed).
+Changes to the harness:
 
-Prototypes:
+- **Tiled terminals.** Each new terminal splits the largest one, along its longer side. Before this change, each terminal split the newest one in half, so at 8 or 20 terminals most were 18 px slivers stacked on each other. The avatar-motion experiment's "eight visible terminals" had that same layout, so it understated the drawing load. Now 8 streams give 10 terminals of about 295 by 175 to 391 px, and 20 streams give 22 terminals of 142 to 295 by 176 px, in the default 1450 by 940 window.
+- **Load levels.** `idle` has one quiet terminal and the typing terminal. `streaming` has 8 terminals looping coloured, cargo-like lines. `streaming20` has 20 of them, all in the shown Fleet.
+- **Drag.** The same 950-move glide as avatar-motion: 250 Hz relative motion through RemoteDesktop, 228 frames.
+- **Typing.** The typing terminal runs a raw-mode echo loop. Before each drag the harness clicks it and types 40 keys, 150 ms apart. A frame-profiler-only line in `Pane::pump` stamps when each echo is parsed. Key to screen is split into three parts: key handled by the app (the journal's `key_down`), echo back from Core (the parse stamp), and echo drawn (the first present whose draw starts after the parse). The first key after the focus click is lost in every run, so each run counts 39 of 40 keys.
+- **Frame time.** This is the workspace window's draw time in the typing window, with no pointer moving. Drag frames give the same picture.
 
-- **P1, cached Panes.** Draw each Pane as a cached view inside the canvas (`terminal.rs:627`). The canvas still rebuilds on every terminal frame, but the other Panes replay instead of rendering. One line, no SDK change. It shows how much of the cost is Pane repaint and how much is the canvas tree.
-- **P2, terminals outside the canvas tree (Herdr's shape).** The canvas's `Terminal` component becomes a placeholder that records its bounds and clip. A layer in `CanvasHost`, after the cached ScriptView, draws each Pane as a cached view at those bounds in the same frame. A Pane notify then dirties only that Pane and CanvasHost; the canvas replays. Known costs to assess: z-order (canvas content meant to sit over a terminal, such as menus, Portal overlays and drag ghosts, would draw under it), pointer hit order, and clearing entries when the canvas stops placing a terminal.
-- **P3, cached canvas subtrees.** Keep terminals in the canvas, but let the canvas wrap each Vessel placement in a cached boundary, so a terminal frame rebuilds only its own placement's chrome plus the canvas root. Needs either a native component or a gpui-shell materialize change (SDK patch). Built only if P1 and P2 leave the question open.
+Runs, in the order they ran, under `/var/tmp/voyager-crew/scratch/canvas-redraw/wayland/`:
 
-Not prototyped: a GPUI patch that repaints a dirty child inside a replayed parent. It would change GPUI's frame replay model (prepaint and paint ranges, dispatch tree reuse, element id and content mask stacks), which is a rewrite-sized SDK change.
+- `base-b`, `p1-b`, `p2-b`, `p3-b`. P1's run overlapped another crew's load (5-minute load average 13.7, against 6.6 to 7.1), so it is excluded.
+- `p2-probe`.
+- `base-c`, `p1-c`, `p3-c`, on a quiet machine, given a free slot by Build.
+- `p4-d`, `p4-e`, quiet.
 
-## Harness changes
+`p4-b` and `p4-c` failed at setup. A copy step interrupted earlier had left a truncated 16 KB binary. It was restored from the same build (sha256 `ac578920d551…`) before `p4-d` and `p4-e`.
 
-The avatar-motion Wayland harness (`experiments/avatar-motion/`) gained these, on this branch:
+## Question 2. Ways to keep a terminal update to its own Pane
 
-- **Tiled terminals.** Each new terminal splits the largest one, along its longer side. Before this change, every terminal split the newest one in half, so at 8 or 20 terminals most were 18 px slivers stacked on each other. The earlier drag experiment's "eight visible terminals" had that same layout, so it understated the drawing load. Now 8 streams give 10 terminals of about 295 by 175 to 391 px, and 20 streams give 22 terminals of 142 to 295 by 176 px, in the default 1450 by 940 window.
-- **Twenty streams.** The `streaming20` level adds terminals until 20 stream at once, all in the shown Fleet.
-- **Typing.** A `typing` terminal runs a raw-mode echo loop. Before each drag, the harness clicks that terminal and types 40 keys, 150 ms apart. A frame-profiler-only line in `Pane::pump` stamps when the echo is parsed. The analysis splits key to screen into three parts: key handled by the app, echo back from Core, and echo drawn.
-- `VOYAGER_REDRAW_PROBE` passes through to the app.
+Each prototype is a patch in `experiments/canvas-redraw/` against this branch's measuring commit.
 
-## Measurements so far (one run each, not yet repeatable)
+- **P1, cached Panes.** Each Pane is drawn as a cached view inside the canvas. The canvas still rebuilds on every terminal frame, but quiet Panes replay.
+- **P2, terminal layer (Herdr's shape).** The canvas's `Terminal` component becomes a placeholder that records its bounds and clip. A layer in `CanvasHost`, after the cached ScriptView, draws each Pane at those bounds in the same frame. A Pane's notify no longer reaches the ScriptView.
+- **P3, cached canvas boundaries plus cached Panes.** This adds a native `Cached` component (`desktop/src/cached.rs`). It takes the canvas's `.content()` slot as a gpui-shell slot factory and builds it inside its own cached view. The canvas wraps each Vessel panel, the sidebar and the Fleet strip. An observer in `CanvasHost` invalidates every boundary when the script rebuilds. A terminal frame then rebuilds the canvas skeleton and its own panel, and the other panels replay.
+- **P4, P3 without cached Panes.**
 
-Run folders are under `/var/tmp/voyager-crew/scratch/canvas-redraw/wayland/`: `base-b`, `p1-b`, `p2-b` and `p3-b`, plus `p2-probe`. P1's run overlapped another crew's load: the 5-minute load average was 13.7 to 13.9, against 6.6 to 7.1 for the baseline. P1's numbers are therefore not trusted. Its idle drag p95 also rose to 89 ms.
+Frame time while typing, median / p95 in ms:
 
-Drag, 950 moves over 228 frames:
+| variant | 8 streams | 20 streams |
+|---|---|---|
+| baseline (b, c) | 12.2 / 17.8, 13.4 / 18.2 | 20.4 / 26.0, 19.8 / 25.4 |
+| P1 (c) | 12.1 / 17.3 | 19.1 / 24.5 |
+| P2 (b) | 11.9 / 16.8 | 21.6 / 24.2 |
+| P3 (b, c) | 12.0 / 16.7, 12.0 / 16.7 | 18.3 / 23.4, 18.2 / 23.6 |
+| P4 (d, e) | 12.2 / 17.3, 12.4 / 17.9 | 21.8 / 24.9, 21.5 / 24.7 |
 
-| variant | load | latency median / p95 ms | frames shown | frame median ms |
-|---|---|---|---|---|
-| baseline | idle | 15.0 / 23.0 | 226 | 0.83 |
-| baseline | 8 streams | 44.6 / 71.2 | 113 | 13.5 |
-| baseline | 20 streams | 94.0 / 154.6 | 58 | 24.3 |
-| P1 cached Panes (load) | 8 / 20 | 234 / 280 median | 26 / 21 | 20.7 / 33.5 |
-| P2 terminal layer | 8 streams | 41.4 / 62.7 | 120 | 12.4 |
-| P2 terminal layer | 20 streams | 80.5 / 135.6 | 66 | 21.5 |
-| P3 boundaries + cached Panes | 8 streams | 42.3 / 73.3 | 119 | 12.4 |
-| P3 boundaries + cached Panes | 20 streams | 87.1 / 140.7 | 62 | 23.4 |
+At idle every variant takes 2.5 to 3.3 ms.
 
-Typing, 40 keys. Times are medians in ms, except the frame column, which gives median / p95:
+Avatar drag latency, median / p95 in ms, with frames shown of 228:
 
-| variant | load | key to screen | key handled | echo back | echo drawn | frame |
-|---|---|---|---|---|---|---|
-| baseline | idle | 5.9 | 1.2 | 1.9 | 3.9 | 3.2 / 3.6 |
-| baseline | 8 streams | 140.2 | 9.1 | 123.4 | 15.9 | 12.2 / 17.8 |
-| baseline | 20 streams | 57.2 | 21.9 | 26.3 | 28.7 | 20.4 / 26.0 |
-| P2 | 8 / 20 streams | 137.8 / 59.6 | 12.2 / 20.8 | 120.3 / 30.2 | 16.8 / 30.2 | 11.9 / 21.6 |
-| P3 | 8 / 20 streams | 138.5 / 51.3 | 9.7 / 23.1 | 121.2 / 24.5 | 15.6 / 28.8 | 12.0 / 18.3 |
+| variant | idle | 8 streams | 20 streams |
+|---|---|---|---|
+| baseline (b, c) | 15.0 / 23.0 (226), 14.2 / 22.2 (226) | 44.6 / 71.2 (113), 47.6 / 80.5 (106) | 94.0 / 154.6 (58), 85.2 / 137.2 (64) |
+| P1 (c) | 14.6 / 22.5 (227) | 43.4 / 72.1 (115) | 89.1 / 139.4 (62) |
+| P2 (b) | 14.8 / 22.5 (226) | 41.4 / 62.7 (120) | 80.5 / 135.6 (66) |
+| P3 (b, c) | 14.6 / 22.3 (227), 14.4 / 22.1 (226) | 42.3 / 73.3 (119), 46.5 / 72.9 (108) | 87.1 / 140.7 (62), 92.5 / 158.3 (58) |
+| P4 (d, e) | 14.8 / 22.5 (227), 14.0 / 21.8 (227) | 45.6 / 118.5 (106), 42.5 / 70.0 (116) | 102.0 / 165.5 (55), 92.5 / 142.6 (58) |
 
-What these show so far:
+Typing, key to screen median in ms, with its three parts (handled / echo back / drawn):
 
-1. **The canvas rebuild is real, but it is only part of each frame.** In the baseline at 8 streams, the ScriptView's own prepaint is 4.3 ms of a 12.6 ms frame (typing window, mean per frame). At 20 streams it is 10.0 ms of 21.2 ms. Pane paint, GPUI's cache replay and other work below the profiler's 0.5 ms view floor make up the rest.
-2. **P3 removes most of the canvas's own cost.** ScriptView prepaint per frame falls from 4.3 to 0.9 ms at 8 streams and from 10.0 to 2.2 ms at 20 streams. The panel boundaries render on 54 of 346 frames, so the others replay. The frame still falls only from 12.6 to 12.4 ms and from 21.2 to 19.3 ms. The time not attributed to any view rises by about as much as the canvas saved: from 2.4 to 5.0 ms, and from 3.0 to 8.8 ms. A likely cause, inferred and not yet isolated, is that P3 includes P1. With every terminal busy, every cached Pane is dirty, so caching only adds a separate layout and state bookkeeping per Pane. Replaying about 24 cached boundaries also has a cost. P4, which keeps the boundaries but leaves Panes uncached, was built to test this but not measured.
-3. **P2 showed no gain, for a reason not found.** P2 moves terminals out of the canvas tree, Herdr's shape, yet its ScriptView still misses its cache on nearly every frame: 3.7 to 3.9 ms of prepaint per frame. Ruled out by measurement: script rebuilds (the probe counts about 9 a second during a drag, from hover changes, and 0 to 0.2 a second while typing), workspace notices (0), and accessibility mode (inactive). Ruled out by reading source: GPUI's ancestor walk, gpui-shell observers and `window.refresh` callers. Its structural costs are below. Given those costs, finding this cause has low priority.
-4. **Typing with 8 streams waits on the echo, not on drawing.** The app handles the key in 9 ms and draws the echo in 16 ms. The echo comes back from Core 110 to 150 ms after the key, on every key. With 20 streams it comes back in 25 to 30 ms. This is outside the canvas question and not explained. A likely place to look is Core's per-terminal output batching or credit under load. It is worth its own investigation, because it is the largest part of the typing delay a user sees.
-5. **Drag lag follows frame time.** None of the variants changes the drag much (44.6 to 41 ms median at 8 streams). The avatar-motion v2 recommendation, which pauses terminals during a drag, remains the direct fix for the drag. The canvas work lowers the cost of every frame, with or without a drag.
+| variant | idle | 8 streams | 20 streams |
+|---|---|---|---|
+| baseline (b, c) | 5.9, 5.1 | 140.2 (9.1 / 123.4 / 15.9), 144.8 (8.3 / 127.3 / 17.6) | 57.2 (21.9 / 26.3 / 28.7), 60.7 (22.2 / 34.0 / 27.7) |
+| P1 (c) | 5.1 | 141.7 (11.0 / 123.9 / 16.7) | 52.6 (21.5 / 24.1 / 27.4) |
+| P2 (b) | 5.9 | 137.8 (12.2 / 120.3 / 16.8) | 59.6 (20.8 / 30.2 / 30.2) |
+| P3 (b, c) | 5.6, 5.1 | 138.5 (9.7 / 121.2 / 15.6), 136.1 (11.3 / 117.5 / 15.8) | 51.3 (23.1 / 24.5 / 28.8), 53.4 (20.7 / 23.1 / 26.7) |
+| P4 (d, e) | 6.0, 5.1 | 131.9 (7.0 / 113.8 / 16.5), 147.6 (10.5 / 129.0 / 17.3) | 61.0 (22.9 / 32.4 / 28.6), 55.3 (21.7 / 26.5 / 27.7) |
 
-## Prototype costs as product changes (preliminary)
+What the profile shows. Figures are journal view times, means per frame in the typing window of the b runs. A view's time is recorded only when its own work reaches 0.5 ms:
 
-- **P1, cached Panes.** 1 line in `desktop/src/terminal.rs`. No SDK change. It probably makes frames slower when terminals are busy (see item 2). To be confirmed in a quiet run.
-- **P2, terminal layer (Herdr's shape).** About 120 lines: `desktop/src/terminal_layer.rs`, plus `terminal.rs` and `host.rs`. No SDK change. Its risks break agreed behaviour. Terminals draw over everything in the canvas: the avatar, menus, the chat overlay, Portal overlays and drag previews. Terminal hitboxes sit on top of the canvas. Keys from a focused terminal no longer reach canvas key handlers, such as the maximize shortcut. A product version needs the canvas split into a layer under the terminals and a layer over them. That is a large canvas architecture change, and this prototype measured no gain.
-- **P3 / P4, cached canvas boundaries.** About 100 lines: a native `Cached` component in `desktop/src/cached.rs`, which takes the canvas's `.content()` slot as a lazy factory. Plus a registry line in `lib.rs`, an observer in `host.rs` that invalidates boundaries when the script rebuilds, and three wrap sites in `desktop/canvas/main.ts`. No SDK patch: it uses gpui-shell's slot factories. Prototype shortcuts are still to settle:
-  - The emitted `main.js` was edited by hand, and TypeScript was not regenerated or typechecked.
-  - Boundaries are kept in a thread-local map and never pruned.
-  - A theme change applied inside render does not invalidate the boundaries.
-  - Every script rebuild invalidates every boundary. That is conservative and correct, but it costs the same as today on hover.
-  - Cached views need a parent with a definite size, so content-sized regions such as the context bar cannot be wrapped.
-  - Accessibility mode should bypass the boundaries, as CanvasHost already does for the canvas.
+1. **The canvas's own work is part of each frame, not most of it.** In the baseline, ScriptView prepaint and paint take 4.3 + 0.9 ms of a 12.6 ms frame with 8 streams, and 10.0 + 1.9 ms of 21.2 ms with 20. Busy Pane paints take about 2.4 ms with 8 streams. The rest is below the timing floor: Pane work, GPUI's cache replay and scene building.
+2. **P3 takes the canvas out, and the frame keeps most of its cost.** ScriptView prepaint falls from 4.3 to 0.9 ms and from 10.0 to 2.2 ms. Panel boundaries re-render on 54 of 346 frames with 8 streams. The time below the floor rises by nearly as much, from 2.4 to 5.0 ms and from 3.0 to 8.8 ms. That is the busy Panes' own layout, prepaint and paint, plus replaying about 24 cached boundaries. When every terminal is busy, every Pane and every panel boundary is dirty on most frames, so caching saves little. This is inferred from the phase times and the record counts. It was not isolated in a single run.
+3. **P4 is slower than P3 at 20 streams** (21.5 to 21.8 ms against 18.2 to 18.3 ms), in two runs each. Caching the Pane inside each boundary therefore matters once boundaries exist. The mechanism was not isolated.
+4. **P2 removed nothing.** Its ScriptView still missed its cache on nearly every frame: 3.7 to 3.9 ms of prepaint per frame, against 4.1 to 4.3 ms in the baseline. These were ruled out by measurement in `p2-probe`: script rebuilds (about 9 a second during a drag, from hover changes, and 0 to 0.2 a second while typing), workspace notices (0) and accessibility mode (inactive). These were ruled out by reading source: GPUI's ancestor walk, gpui-shell observers, `window.refresh` callers and the split component's measuring. The cause was not found.
+5. **Drag lag follows the frame and the pointer path, not the canvas alone.** No variant moves drag latency beyond run-to-run spread. The avatar-motion report's v1 and v2, which stop canvas pointer handlers and hold terminals during a drag, remain the direct fix: 57 ms became 21 ms in that report's sliver layout.
+6. **Typing with 8 busy terminals waits on the echo, not on drawing.** The app handles the key in 7 to 12 ms and draws the echo in 16 to 18 ms. The echo comes back from Core 110 to 150 ms after the key, on every key, in every variant. With 20 busy terminals it comes back in 23 to 34 ms. This is outside the canvas and not explained. A likely place to look is Core's per-terminal output scheduling or credit under load.
+
+## Question 3. Cost of each as a product change
+
+| | Files | Size | SDK change | Risk to existing behaviour | Measured gain |
+|---|---|---|---|---|---|
+| P1 | `desktop/src/terminal.rs` | 1 line | none | Low. Accessibility mode should bypass the cache, as `CanvasHost` does. | none |
+| P2 | new `desktop/src/terminal_layer.rs`, `terminal.rs`, `host.rs` | about 120 lines as prototyped. A product version is a large canvas restructure. | none for the prototype | High. Terminals draw over the avatar, menus, the chat overlay, Portal overlays and drag previews. Terminal hitboxes sit above the canvas. Keys from a focused terminal stop reaching canvas key handlers, such as the maximize shortcut. Fixing that means splitting the canvas into layers under and over the terminals. | none |
+| P3 | new `desktop/src/cached.rs`, `lib.rs`, `host.rs`, `terminal.rs`, `desktop/canvas/main.ts` | about 100 lines as prototyped, about 200 once finished | none (uses gpui-shell slot factories) | Medium. See the list below. | 8 to 10% of the frame at 20 busy terminals; none at 8 |
+| P4 | as P3, without the `terminal.rs` line | about 100 lines | none | as P3 | none |
+
+To finish P3 as a product change:
+
+- Regenerate and typecheck the canvas TypeScript. The prototype edited the emitted `main.js` by hand.
+- Own the boundary map per window and prune removed entries. The prototype uses a thread-local map that is never pruned.
+- Invalidate boundaries on every path that can make the script dirty. A theme change applied inside render is missed today.
+- Bypass boundaries in accessibility mode.
+- Wrap only regions with a definite size. Cached views need a sized parent, so the content-sized context bar stays unwrapped.
+- Add a native check that a panel's controls, hover and drag still work inside a boundary.
+
+Every script rebuild invalidates every boundary. That is correct and conservative, and on hover it costs what it costs today.
+
+## Question 4. Recommendation and scope
+
+- **For the avatar drag:** do the avatar-motion v2 change. Stop canvas pointer handlers once the avatar drag moves, and hold terminal output while it moves. That is a **small** change of about 40 lines. Nothing measured here changes the drag more.
+- **For the canvas redraw:** don't do it now. P3 is the only shape that kept a terminal's output to its own Vessel. It is a **medium** change, about 200 lines in the desktop crate with no SDK patch, and it buys about 2 ms per frame with 20 busy terminals and nothing measurable with 8. P2, Herdr's shape, would be a **rewrite** of how the canvas layers its content, and it measured no gain.
+- **Worth measuring next, in order of what a user feels:**
+  1. Core's echo delay when typing with 8 busy terminals, 110 to 150 ms of a 140 ms key to screen.
+  2. The busy terminals' own per-frame cost: dirty Pane layout, prepaint and paint, and their frame rate. Busy terminals repaint on most frames (33 to 57 frames a second in the typing windows). Capping how often a terminal the user is not working in repaints could lower every busy frame. That is untested.
+
+## Gaps
+
+- **Repeats.** Two quiet runs per variant at most. P1 and P2 have one valid run each. The tables give ranges, not confidence intervals.
+- **Surface.** Linux, headless mutter on Wayland, 60 Hz. No X11 or macOS numbers. Latency ends at the client's present.
+- **Attribution.** Below the 0.5 ms floor the journal does not attribute work to a view. The split between Pane work and cache replay is inferred.
+- **P2's cache miss** is unexplained. A per-frame dirty-view probe inside GPUI would settle it. That needs a patched gpui-pre.
+- **Layout.** Terminals are tiled by halving the largest one. A user's real layout of many terminals may be smaller or partly hidden.
+- **Visual check.** No screenshot confirms that P2 and P3 draw correctly. The harness's drag and typing checks passed in every valid run.
 
 ## Files on the branch
 
-- `experiments/canvas-redraw/p1-cached-panes.patch`, `p2-terminal-layer.patch`, `p3-cached-boundaries.patch` and `p4-boundaries-uncached-panes.patch`. Each applies to the branch's measuring commit.
+- `experiments/avatar-motion/wayland-drag.py`, `analyse.py`, `compare.py` and `wayland-run.sh`: the harness changes above.
+- `desktop/src/terminal.rs`: the frame-profiler-only echo stamp.
+- `experiments/canvas-redraw/p1-cached-panes.patch`, `p2-terminal-layer.patch`, `p3-cached-boundaries.patch` and `p4-boundaries-uncached-panes.patch`.
 - `experiments/canvas-redraw/probe-canvas-invalidation.patch` is P2's `host.rs` with the invalidation probes added. Use it in place of P2's `host.rs` hunk.
-- Built binaries are under `/var/tmp/voyager-crew/scratch/canvas-redraw/variants/`: baseline, p1, p2, p2-probe, p3 and p4.
+- `experiments/canvas-redraw/results.md`: the comparison tables printed by `compare.py` for every run.
 
-## Next steps after the reset
-
-1. Run P4 once, and run a second interleaved round of baseline, P1, P3 and P4 on a quiet machine. Builds go only through heavy, niced, at most 4 jobs. Runs go after the voice tests.
-2. If P4 beats P3, attribute the remaining frame time at 20 streams: Pane paint against replay.
-3. Answer question 4 with a recommendation and its scope. On the evidence so far, the likely answer is P4 as a medium change (about 100 lines, no SDK patch), with the drag pause from avatar-motion v2 still needed for the drag.
-4. Record the Core echo delay at 8 streams as its own question.
+To repeat a run, build a variant with the frame profiler, then run `experiments/avatar-motion/wayland-run.sh <folder with voyager-shell and voyager> <label> idle,streaming,streaming20` and `python3 -I experiments/avatar-motion/compare.py <scratch>/wayland <labels…>`.
 
 ## Budget note
 
-At 15:16 the budget meter read `level=tight raw_pct=82`. Voyager paused the work, then resumed it, saying the allowance had been reset. The meter had not yet shown a reset when work resumed. Voyager paused the work again later on 22 Nov, until the weekly reset.
+On 22 Nov the meter read `level=tight raw_pct=82` at 15:16. Voyager paused the work twice for budget and resumed it on Isaac's word. Builds and runs were held for Build's voice runs, and each perf run went only in a gap Build gave.
