@@ -264,7 +264,7 @@ is "fifty percent". It leaves other text with digits as it is, such as a time li
 The reply thread renders the first piece before it takes the floor, as it did the whole
 reply before. While a piece plays, a second thread renders the next one, so only the
 first render comes before the first sound. The whole reply plays through one speaker
-stream: `Speaker::play` takes the reply as a stream of clips, `voice_parts::Clips`, and
+stream. `Speaker::play` takes the reply as a stream of clips, `voice_parts::Clips`, and
 writes each clip to the same player as soon as it is rendered. A reply therefore starts
 one player, with no process start between sentences. The floor stays taken until the
 last clip has played. The speaker never pauses while the next sentence is ready. A slow engine can
@@ -283,10 +283,10 @@ piece's words when its render ends, and `piece-started` with each piece's words 
 piece is handed to the player.
 
 First audio is the wait for the render of what plays first. With one synthesis it was
-the whole render: 11.9 to 28.2 s, median 17.1 s, on the CPU engine of
-a machine at a load of 17 to 22 on 24 cores, and 2.2 to 4.5 s, median 3.9 s, on the GPU.
-One piece at a time it was the first piece's render: 0.86 to 12.0 s, median 3.5 s, on
-that CPU, and 0.20 to 0.81 s, median 0.57 s, on the GPU. On the GPU no piece waited for
+the whole render, 11.9 to 28.2 s with a median of 17.1 s on the CPU engine of a machine
+at a load of 17 to 22 on 24 cores, and 2.2 to 4.5 s with a median of 3.9 s on the GPU.
+One piece at a time it was the first piece's render, 0.86 to 12.0 s with a median of
+3.5 s on that CPU, and 0.20 to 0.81 s with a median of 0.57 s on the GPU. On the GPU no piece waited for
 the next render. On the loaded CPU 15 of 18 runs had no wait, and the other three waited
 at most 1.2, 3.9 and 8.6 s once, when one 13-word sentence took 10.2 s to render 4.8 s
 of audio.
