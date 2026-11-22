@@ -220,6 +220,9 @@ types into the first terminal, as an agent in that Vessel would.
   with a `create-fleet` request at the saved layout version. It passes when
   the status names the first Vessel, the new Fleet is saved and drawn as a tab,
   and the command exits 0, its applied code.
+  `voyager status` also prints a `picture` of the whole workspace beside the
+  status fields. This journey reads only the status fields, so the picture's
+  content is covered by the unit tests and the replays, not by a journey.
 - `command-removes-placement` runs `voyager do workspace` with a
   `remove-placement` request for the stand-in agent's placement. It passes when
   the placement leaves the saved layout and the canvas, the command exits 0, the
