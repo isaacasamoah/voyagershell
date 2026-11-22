@@ -329,9 +329,14 @@ fn load(
             Ok(async move {
                 let request: Request = serde_json::from_str(&request)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                let operation = serde_json::to_value(&request).ok().and_then(|v| v["action"]["operation"].as_str().map(str::to_owned).or_else(|| v["operation"].as_str().map(str::to_owned)));
+                let started = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
                 let reply = voyager_contract::Reply::from(client.call(request));
                 let encoded = serde_json::to_string(&reply)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                let value: serde_json::Value = serde_json::from_str(&encoded).unwrap_or_default();
+                let maximized: Vec<_> = value["layout"]["voyages"].as_array().into_iter().flatten().flat_map(|v| v["fleets"].as_array().into_iter().flatten()).map(|f| (f["id"].clone(), f["maximizedPlacement"].clone())).collect();
+                eprintln!("{}", serde_json::json!({"late_redraw":"call","started_ms":started,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"operation":operation,"status":value["status"],"version":value["version"],"maximized":maximized}));
                 Ok(HostValue::from(encoded))
             })
         })
@@ -569,6 +574,7 @@ impl CanvasHost {
                 let updated = this.update(cx, |canvas, cx| {
                     match next {
                         Ok(notice) => {
+                            eprintln!("{}", serde_json::json!({"late_redraw":"notice_received","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"revision":notice.revision,"navigation":notice.navigation_revision}));
                             after = Some(notice);
                             changed_revision.set(notice);
                             if let Some(activity) = activity {

@@ -996,7 +996,9 @@ impl Native {
         let window = self.x11()?.geometry(self.window)?;
         let frame = inspection::read(&self.inspection())?.filter(|frame| drawn_for(frame, window));
         let saved = self.document()?;
-        Ok(glance(frame.as_ref(), saved.as_ref(), read))
+        let glanced = glance(frame.as_ref(), saved.as_ref(), read);
+        eprintln!("{}", serde_json::json!({"late_redraw":"look","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"frame":frame.as_ref().map(|f| f.sequence),"prepared":frame.as_ref().map(|f| f.prepared),"document":saved.as_ref().map(|s| s.0),"glance":match &glanced { Glance::Absent => "absent", Glance::Preparing => "preparing", Glance::Ready(_) => "ready" }}));
+        Ok(glanced)
     }
 
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {

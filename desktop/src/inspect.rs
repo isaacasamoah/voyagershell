@@ -126,6 +126,8 @@ impl Ledger {
         let (elements, ambiguous): (Vec<_>, Vec<_>) =
             identities.into_values().partition(|drawn| drawn.len() == 1);
         let listed = |groups: Vec<Vec<&Element>>| groups.into_iter().flatten().cloned().collect();
+        let terminals: Vec<_> = self.slots.values().filter_map(|drawn| match drawn { Drawn::Control { element, .. } if element.role == voyager_contract::inspection::Role::Terminal => Some(element.key.clone()), _ => None }).collect();
+        eprintln!("{}", serde_json::json!({"late_redraw":"frame","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"sequence":self.sequence,"prepared":prepared,"terminals":terminals}));
         Some(Frame {
             sequence: self.sequence,
             window,

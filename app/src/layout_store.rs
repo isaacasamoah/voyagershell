@@ -224,7 +224,12 @@ pub(crate) fn save(
         Err(Error::Uncertain(message)) => {
             settle_save(core, layout, revision, message).map(LayoutRevision::structural)
         }
-        saved => Ok(LayoutRevision::structural(saved?.version)),
+        saved => {
+            let saved = LayoutRevision::structural(saved?.version);
+            let maximized: Vec<_> = layout.voyages.iter().flat_map(|v| &v.fleets).map(|f| (f.id.0.clone(), f.maximized_placement.as_ref().map(|p| p.0.clone()))).collect();
+            eprintln!("{}", serde_json::json!({"late_redraw":"saved","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"document":saved.document,"maximized":maximized}));
+            Ok(saved)
+        }
     }
 }
 

@@ -137,7 +137,8 @@ impl Notices {
 
     pub(super) fn send(&self, revision: LayoutRevision, close_revision: u64) {
         if let Some(listener) = &self.listener {
-            let _ = listener.try_send(self.current(revision, close_revision));
+            let sent = listener.try_send(self.current(revision, close_revision)).is_ok();
+            eprintln!("{}", serde_json::json!({"late_redraw":"notice_sent","wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),"revision":revision.structure,"document":revision.document,"delivered":sent}));
         }
     }
 }
