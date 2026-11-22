@@ -500,6 +500,7 @@ export default class Canvas extends View {
       let prepared = false;
       try {
         result = await invoke(action, expectedVersion);
+        trace("invoked", action.operation);
         accepted = this.acceptSnapshot(result, task);
         trace(
           "accepted",
@@ -647,6 +648,7 @@ export default class Canvas extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
+    trace("accept_layout", result.version);
     this.created = new Set(result.createdVessels);
     if (!this.focused && result.layout.view === "fleet")
       moveFocus(this, "opening", task);
@@ -661,10 +663,12 @@ export default class Canvas extends View {
       moveFocus(this, "opening", task);
       this.focus.focus();
     }
+    trace("accept_focus", "");
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
       if (voyage.cwd)
         this.worktrees?.inspect(voyage.id, voyage.cwd, result.version, task);
+    trace("accept_worktrees", "");
     this.observedPanels = (this.observedPanels || []).filter((panel) =>
       panelGroups(result.layout).some((group) =>
         group.members.some(
@@ -679,6 +683,7 @@ export default class Canvas extends View {
         ),
       ),
     );
+    trace("accept_panels", "");
     task.spawn((cx) => this.readProcesses(cx));
     this.observation = null;
     task.spawn((cx) => this.readObservation(cx));
@@ -691,6 +696,7 @@ export default class Canvas extends View {
       this.contextFacts = null;
       task.spawn((cx) => this.readContext(cx));
     }
+    trace("accept_spawned", "");
     this.fresh = result.fresh;
     this.status = outcome(result);
     const retain = (target, name) => {
@@ -1745,6 +1751,7 @@ export default class Canvas extends View {
       );
       if (!this.busy) this.inspectNotice(cx);
     }
+    trace("render_prelude", "");
     const colors = projection();
     const shell = div()
       .track_focus(this.focus)
@@ -1781,6 +1788,7 @@ export default class Canvas extends View {
       .bg(colors.background)
       .text_color(colors.foreground)
       .child(Prepared.new(!this.busy));
+    trace("render_shell", "");
     const layout = this.layout;
     if (!layout?.canvas || (!layout.voyages.length && !layout.home))
       return shell
@@ -1799,42 +1807,61 @@ export default class Canvas extends View {
       composeRegions(
         canvas,
         (region) => {
-          switch (region) {
-            case "sidebar":
-              return this.sidebarRegion(layout, voyage);
-            case "fleet-strip":
-              return this.fleetRegion(layout, voyage, fleet);
-            case "active-fleet":
-              return this.activeRegion(layout, fleet);
-            case "context-bar":
-              return this.contextRegion(layout, voyage, fleet);
-            case "portals": {
-              if (!voyage?.portalLayout?.visible) return null;
-              const group = panelGroups(layout).find(
-                (group) =>
-                  group.owner.kind === "portals" &&
-                  group.owner.voyage === voyage.id,
-              );
-              if (!group) return null;
-              return div()
-                .flex()
-                .flex_col()
-                .size_full()
-                .bg(colors.background)
-                .child(
-                  PortalArea.new(`portal-area-${voyage.id}`, {})
-                    .child(this.groupRegion(group))
-                    .child(Marker.new("portal-area", voyage.id)),
-                );
-            }
-          }
+          trace("region_start", region);
+          const built = this.renderRegion(
+            region,
+            layout,
+            voyage,
+            fleet,
+            colors,
+          );
+          trace("region_end", region);
+          return built;
         },
         (underlay, panels) => {
           if (!voyage) throw Error("Portal owner is unavailable.");
-          return this.portalColumn(underlay, panels, voyage);
+          trace("portal_column_start", "");
+          const column = this.portalColumn(underlay, panels, voyage);
+          trace("portal_column_end", "");
+          return column;
         },
       ),
     );
+    trace("render_regions", "");
+    return this.finishRender(shell, layout, colors);
+  }
+  renderRegion(region, layout, voyage, fleet, colors) {
+    switch (region) {
+      case "sidebar":
+        return this.sidebarRegion(layout, voyage);
+      case "fleet-strip":
+        return this.fleetRegion(layout, voyage, fleet);
+      case "active-fleet":
+        return this.activeRegion(layout, fleet);
+      case "context-bar":
+        return this.contextRegion(layout, voyage, fleet);
+      case "portals": {
+        if (!voyage?.portalLayout?.visible) return null;
+        const group = panelGroups(layout).find(
+          (group) =>
+            group.owner.kind === "portals" && group.owner.voyage === voyage.id,
+        );
+        if (!group) return null;
+        return div()
+          .flex()
+          .flex_col()
+          .size_full()
+          .bg(colors.background)
+          .child(
+            PortalArea.new(`portal-area-${voyage.id}`, {})
+              .child(this.groupRegion(group))
+              .child(Marker.new("portal-area", voyage.id)),
+          );
+      }
+    }
+    return null;
+  }
+  finishRender(shell, layout, colors) {
     if (!this.sidebar && this.chat.present) {
       const chat = this.chat.render(colors, layout.context, true);
       if (chat)
@@ -1855,6 +1882,8 @@ export default class Canvas extends View {
           else this.finishDrag(x, y, task);
         }),
       );
-    return this.layer(shell, layout);
+    const layered = this.layer(shell, layout);
+    trace("render_layered", "");
+    return layered;
   }
 }
