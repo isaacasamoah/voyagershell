@@ -8,7 +8,7 @@ use std::{
     io::{self, Write},
     path::PathBuf,
     sync::{
-        Mutex, MutexGuard,
+        Arc, Mutex, MutexGuard, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -124,16 +124,28 @@ impl Speaker for Playing {
     }
 }
 
+struct Sink {
+    path: PathBuf,
+    lock: Mutex<()>,
+}
+
 #[derive(Clone)]
-pub struct Trace(Option<PathBuf>);
+pub struct Trace(Option<Arc<Sink>>);
 
 impl Trace {
     pub fn from_environment() -> Self {
-        Self(std::env::var_os(TRACE_VARIABLE).map(PathBuf::from))
+        Self(std::env::var_os(TRACE_VARIABLE).map(|path| Self::sink(PathBuf::from(path))))
     }
 
     pub fn off() -> Self {
         Self(None)
+    }
+
+    fn sink(path: PathBuf) -> Arc<Sink> {
+        Arc::new(Sink {
+            path,
+            lock: Mutex::new(()),
+        })
     }
 
     pub fn mark(&self, event: &str) {
@@ -145,19 +157,63 @@ impl Trace {
     }
 
     fn record(&self, event: &str, words: Option<&str>) {
-        let Some(path) = &self.0 else {
+        let Some(sink) = &self.0 else {
             return;
         };
         let at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|elapsed| elapsed.as_millis())
             .unwrap_or(0);
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-            let line = match words {
-                Some(words) => serde_json::json!({"event": event, "atMs": at, "words": words}),
-                None => serde_json::json!({"event": event, "atMs": at}),
-            };
-            let _ = writeln!(file, "{line}");
+        let line = match words {
+            Some(words) => serde_json::json!({"event": event, "atMs": at, "words": words}),
+            None => serde_json::json!({"event": event, "atMs": at}),
+        };
+        let line = format!("{line}\n");
+        let _held = sink.lock.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&sink.path)
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marks_from_many_threads_each_land_as_one_whole_line() {
+        let path =
+            std::env::temp_dir().join(format!("voyager-trace-lines-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let trace = Trace(Some(Trace::sink(path.clone())));
+        let writers: Vec<_> = (0..8)
+            .map(|writer| {
+                let trace = trace.clone();
+                thread::spawn(move || {
+                    for index in 0..200 {
+                        trace.mark_words(
+                            "piece-rendered",
+                            &format!("Writer {writer}, piece {index}: \"quoted\" words."),
+                        );
+                        trace.mark("listening");
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 8 * 200 * 2);
+        for line in lines {
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert!(parsed["event"].is_string(), "{line}");
         }
     }
 }

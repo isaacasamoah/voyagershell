@@ -433,7 +433,8 @@ is local and nothing runs until a click.
 Audio stays in memory. The layer never writes samples to disk, to the log or to
 Core's scrollback. The engine's own log lines carry no audio. The verifier sets
 `VOYAGER_VOICE_TRACE` to a file that records event names and times, and for its own
-synthetic speech the words heard. The app never sets it, so a real session records
+synthetic speech the words heard. Every mark is written as one whole line under one lock, so marks from the
+listener, the reply thread and the render thread never interleave. The app never sets it, so a real session records
 no words.
 
 ## How it is checked
