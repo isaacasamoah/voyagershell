@@ -158,22 +158,24 @@ def summarise_typing(window, all_records, parsed):
     workspace = max(windows, key=windows.get) if windows else None
     draws = [d for d in draws if d["window"] == workspace]
     presents = sorted((r for r in inside if r.get("category") == "submit_paired" and r["window"] == workspace), key=lambda r: r["t1"])
-    latency, echo_wait, missing = [], [], 0
-    cursor = 0
-    for key in keys:
-        while cursor < len(parsed) and parsed[cursor] < key:
-            cursor += 1
-        if cursor == len(parsed):
+    latency, echo_wait, drawn, handled, missing = [], [], [], [], 0
+    key_downs = sorted(r["t0"] for r in inside if r.get("category") == "input" and r.get("kind") == "key_down")
+    for index, key in enumerate(keys):
+        limit = keys[index + 1] if index + 1 < len(keys) else key + 500e6
+        echo = next((value for value in parsed if key <= value < limit), None)
+        if echo is None:
             missing += 1
             continue
-        echo = parsed[cursor]
-        cursor += 1
         shown = next((p["t1"] for p in presents if p["draw_t0"] >= echo), None)
         if shown is None:
             missing += 1
             continue
         echo_wait.append(echo - key)
         latency.append(shown - key)
+        drawn.append(shown - echo)
+        down = next((value for value in key_downs if key <= value < limit), None)
+        if down is not None:
+            handled.append(down - key)
     during = [p for p in presents if first <= p["t1"] <= last]
     durations = [d["duration_ns"] for d in draws if first <= d["t0"] <= last]
     phases = {
@@ -192,6 +194,8 @@ def summarise_typing(window, all_records, parsed):
         "missing": missing,
         "keyLatencyMs": {"median": ms(quantile(latency, 0.5)), "p95": ms(quantile(latency, 0.95)), "max": ms(max(latency) if latency else None)},
         "echoParsedMs": {"median": ms(quantile(echo_wait, 0.5)), "p95": ms(quantile(echo_wait, 0.95))},
+        "keyHandledMs": {"median": ms(quantile(handled, 0.5)), "p95": ms(quantile(handled, 0.95))},
+        "echoDrawnMs": {"median": ms(quantile(drawn, 0.5)), "p95": ms(quantile(drawn, 0.95))},
         "drawMs": {"median": ms(quantile(durations, 0.5)), "p95": ms(quantile(durations, 0.95)), "max": ms(max(durations) if durations else None)},
         "phasesMedianMs": phases,
         "presentsPerSecond": round(len(during) / (span / 1e9), 1),

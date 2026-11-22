@@ -98,6 +98,7 @@ class Run:
                 VOYAGER_FRAME_PROFILE_WINDOW=str(self.window),
                 VOYAGER_FRAME_PROFILE_RECORDS="2000000",
                 VOYAGER_FRAME_PROFILE_SECONDS="900",
+                **({"VOYAGER_REDRAW_PROBE": "1"} if os.environ.get("VOYAGER_REDRAW_PROBE") else {}),
             ),
             cwd=self.project,
         )
@@ -316,6 +317,20 @@ def typing(run, pointer, case, offset, running, key):
     time.sleep(0.5)
 
 
+def terminals(run):
+    return {element.get("key"): element["bounds"] for element in (run.frame() or {}).get("elements", []) if element.get("role") == "terminal"}
+
+
+def start_tiled(run, name, fleet, program):
+    before = terminals(run)
+    key, bounds = max(before.items(), key=lambda item: item[1]["width"] * item[1]["height"])
+    side = "right" if bounds["width"] >= bounds["height"] else "bottom"
+    run.hc("run", "--bg", "--no-notify", "--name", name, "--label", f"voyager.place=fleet:{fleet}:{side}:{key}", "bash", "-c", program)
+    wait(lambda: set(terminals(run)) - set(before), f"the tiled Vessel {name}")
+    time.sleep(0.3)
+    return next(iter(set(terminals(run)) - set(before)))
+
+
 def start_load(run, name, fleet, program):
     arguments = ["run", "--bg", "--no-notify", "--name", name]
     if fleet:
@@ -356,11 +371,8 @@ def main():
         home = run.fleets()[0][0]
         typer = None
         if any(level.startswith("streaming") for level in wanted):
-            before = {element.get("key") for element in (run.frame() or {}).get("elements", []) if element.get("role") == "terminal"}
-            start_load(run, "typing", home, TYPER)
-            wait(lambda: run.count("terminal") > len(before), "the typing Vessel")
+            typer = start_tiled(run, "typing", home, TYPER)
             time.sleep(1.0)
-            typer = next(element.get("key") for element in run.frame().get("elements", []) if element.get("role") == "terminal" and element.get("key") not in before)
         hidden = []
         if "fleets" in wanted:
             for _ in range(HIDDEN_FLEETS):
@@ -374,24 +386,24 @@ def main():
             wait(lambda: run.selected() == home, "the first Fleet shown")
             print(json.dumps({"hidden": hidden}), flush=True)
         if "idle" in wanted:
-            glide(run, pointer, "idle", offset, 0)
             if typer:
                 typing(run, pointer, "idle", offset, 0, typer)
+            glide(run, pointer, "idle", offset, 0)
         if "streaming" in wanted:
             for index in range(VISIBLE_STREAMS):
-                start_load(run, f"load-visible-{index}", home, STREAM)
-            wait(lambda: run.count("terminal") > VISIBLE_STREAMS + 1, "the streaming Vessels")
+                start_tiled(run, f"load-visible-{index}", home, STREAM)
             time.sleep(SETTLE_S)
-            glide(run, pointer, "streaming", offset, VISIBLE_STREAMS)
+            (run.out / "layout-streaming.json").write_text(json.dumps(terminals(run)))
             typing(run, pointer, "streaming", offset, VISIBLE_STREAMS, typer)
+            glide(run, pointer, "streaming", offset, VISIBLE_STREAMS)
         if "streaming20" in wanted:
             already = VISIBLE_STREAMS if "streaming" in wanted else 0
             for index in range(already, MANY_VISIBLE_STREAMS):
-                start_load(run, f"load-visible-{index}", home, STREAM)
-            wait(lambda: run.count("terminal") > MANY_VISIBLE_STREAMS + 1, "the twenty streaming Vessels")
+                start_tiled(run, f"load-visible-{index}", home, STREAM)
             time.sleep(SETTLE_S)
-            glide(run, pointer, "streaming20", offset, MANY_VISIBLE_STREAMS)
+            (run.out / "layout-streaming20.json").write_text(json.dumps(terminals(run)))
             typing(run, pointer, "streaming20", offset, MANY_VISIBLE_STREAMS, typer)
+            glide(run, pointer, "streaming20", offset, MANY_VISIBLE_STREAMS)
         if "fleets" in wanted:
             for fleet_index, fleet in enumerate(hidden):
                 for index in range(STREAMS_PER_HIDDEN_FLEET):

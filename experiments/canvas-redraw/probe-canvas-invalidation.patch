@@ -1,0 +1,37 @@
+diff --git a/desktop/src/host.rs b/desktop/src/host.rs
+index 3b059a73..d28dd434 100644
+--- a/desktop/src/host.rs
++++ b/desktop/src/host.rs
+@@ -569,6 +569,8 @@ impl CanvasHost {
+                 let updated = this.update(cx, |canvas, cx| {
+                     match next {
+                         Ok(notice) => {
++                            #[cfg(feature = "frame-profiler")]
++                            eprintln!("{}", serde_json::json!({"event": "voyager_probe", "what": "workspace_notice", "wall_ns": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)}));
+                             after = Some(notice);
+                             changed_revision.set(notice);
+                             if let Some(activity) = activity {
+@@ -759,6 +761,15 @@ impl CanvasHost {
+ impl Render for CanvasHost {
+     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+         crate::diagnostics::redraw::record("canvas_renders", 1);
++        if let Some(root) = self.root.as_ref()
++            && let Ok(script) = root.read(cx).content().clone().downcast::<gpui_shell::ScriptView>()
++            && script.read(cx).is_dirty()
++        {
++            crate::terminal_layer::reset();
++            #[cfg(feature = "frame-profiler")]
++                            eprintln!("{}", serde_json::json!({"event": "voyager_probe", "what": "script_dirty_at_render", "wall_ns": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)}));
++
++        }
+         let content = self.root.as_ref().map(|root| {
+             let view = root.read(cx).content().clone();
+             if window.is_a11y_active() {
+@@ -784,6 +795,7 @@ impl Render for CanvasHost {
+             .size_full()
+             .bg(rgb(0x111316))
+             .children(content)
++            .child(crate::terminal_layer::Layer)
+             .children(crate::window_frame::grips(window))
+             .children(self.profile_updates.view(cx.listener(|host, _, _, cx| {
+                 host.profile_updates.dismiss();

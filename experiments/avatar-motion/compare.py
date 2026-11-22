@@ -31,8 +31,8 @@ def main():
 def typing():
     root = Path(sys.argv[1])
     print()
-    print("| run | load | keys | key-to-screen median | p95 | max | echo parsed median | draw median | draw p95 | prepaint | paint | frames/s |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    print("| run | load | keys | key-to-screen median | p95 | key handled median / p95 | echo back median | echo drawn median / p95 | frame median | frame p95 | prepaint | paint | frames/s |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for label in sys.argv[2:]:
         summary = json.loads((root / label / "summary.json").read_text())
         cases = {case["case"]: case for case in summary if case.get("kind") == "typing"}
@@ -42,8 +42,9 @@ def typing():
                 continue
             k = case["keyLatencyMs"]
             print(
-                f"| {label} | {name} | {case['keys'] - case['missing']}/{case['keys']} | {k['median']:.1f} | {k['p95']:.1f} | {k['max']:.1f} | "
-                f"{case['echoParsedMs']['median']:.1f} | {case['drawMs']['median']:.2f} | {case['drawMs']['p95']:.2f} | "
+                f"| {label} | {name} | {case['keys'] - case['missing']}/{case['keys']} | {k['median']:.1f} | {k['p95']:.1f} | "
+                f"{case['keyHandledMs']['median']} / {case['keyHandledMs']['p95']} | {case['echoParsedMs']['median']:.1f} | "
+                f"{case['echoDrawnMs']['median']} / {case['echoDrawnMs']['p95']} | {case['drawMs']['median']:.2f} | {case['drawMs']['p95']:.2f} | "
                 f"{case['phasesMedianMs']['prepaint']} | {case['phasesMedianMs']['paint']} | {case['presentsPerSecond']} |"
             )
 

@@ -1,0 +1,185 @@
+diff --git a/desktop/src/host.rs b/desktop/src/host.rs
+index 3b059a73..4b22a35a 100644
+--- a/desktop/src/host.rs
++++ b/desktop/src/host.rs
+@@ -759,6 +759,12 @@ impl CanvasHost {
+ impl Render for CanvasHost {
+     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+         crate::diagnostics::redraw::record("canvas_renders", 1);
++        if let Some(root) = self.root.as_ref()
++            && let Ok(script) = root.read(cx).content().clone().downcast::<gpui_shell::ScriptView>()
++            && script.read(cx).is_dirty()
++        {
++            crate::terminal_layer::reset();
++        }
+         let content = self.root.as_ref().map(|root| {
+             let view = root.read(cx).content().clone();
+             if window.is_a11y_active() {
+@@ -784,6 +790,7 @@ impl Render for CanvasHost {
+             .size_full()
+             .bg(rgb(0x111316))
+             .children(content)
++            .child(crate::terminal_layer::Layer)
+             .children(crate::window_frame::grips(window))
+             .children(self.profile_updates.view(cx.listener(|host, _, _, cx| {
+                 host.profile_updates.dismiss();
+diff --git a/desktop/src/lib.rs b/desktop/src/lib.rs
+index fb58c9ad..e69d222c 100644
+--- a/desktop/src/lib.rs
++++ b/desktop/src/lib.rs
+@@ -29,6 +29,7 @@ mod speech;
+ mod split;
+ mod status;
+ mod terminal;
++mod terminal_layer;
+ mod terminal_screen;
+ mod text;
+ mod window_frame;
+diff --git a/desktop/src/terminal.rs b/desktop/src/terminal.rs
+index ff04599b..d341e48d 100644
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -126,7 +126,7 @@ async fn yield_to_ui() {
+     .await;
+ }
+ 
+-struct Pane {
++pub(crate) struct Pane {
+     screen: Screen,
+     viewer: Viewer,
+     focus: FocusHandle,
+@@ -631,7 +631,16 @@ impl ComponentMaterializer for TerminalMaterializer {
+             .downcast_ref::<ComponentArgument>()
+             .ok_or_else(|| anyhow::anyhow!("Terminal requires state"))?;
+         let pane = request.with_state::<Entity<Pane>, _>(argument, Clone::clone)?;
+-        request.finish(div().size_full().child(pane))
++        let placed = pane.clone();
++        request.finish(div().size_full().child(
++            gpui::canvas(
++                move |bounds, window, _| {
++                    crate::terminal_layer::place(placed.clone(), bounds, window.content_mask())
++                },
++                |_, _, _, _| {},
++            )
++            .size_full(),
++        ))
+     }
+ }
+ 
+diff --git a/desktop/src/terminal_layer.rs b/desktop/src/terminal_layer.rs
+new file mode 100644
+index 00000000..e7d97fdc
+--- /dev/null
++++ b/desktop/src/terminal_layer.rs
+@@ -0,0 +1,111 @@
++use std::{cell::RefCell, panic::Location};
++
++use gpui::{
++    AnyElement, App, Bounds, ContentMask, Element, ElementId, Entity, GlobalElementId,
++    InspectorElementId, IntoElement, LayoutId, Pixels, Position, Style, StyleRefinement, Window,
++    Styled as _, relative,
++};
++
++#[derive(Default)]
++struct Placed {
++    shown: Vec<(Entity<crate::terminal::Pane>, Bounds<Pixels>, ContentMask<Pixels>)>,
++    fresh: Vec<(Entity<crate::terminal::Pane>, Bounds<Pixels>, ContentMask<Pixels>)>,
++    reset: bool,
++}
++
++thread_local! {
++    static PLACED: RefCell<Placed> = RefCell::new(Placed::default());
++}
++
++pub(crate) fn reset() {
++    PLACED.with_borrow_mut(|placed| placed.reset = true);
++}
++
++pub(crate) fn place(pane: Entity<crate::terminal::Pane>, bounds: Bounds<Pixels>, mask: ContentMask<Pixels>) {
++    PLACED.with_borrow_mut(|placed| placed.fresh.push((pane, bounds, mask)));
++}
++
++pub(crate) struct Layer;
++
++impl IntoElement for Layer {
++    type Element = Self;
++
++    fn into_element(self) -> Self {
++        self
++    }
++}
++
++impl Element for Layer {
++    type RequestLayoutState = ();
++    type PrepaintState = Vec<(AnyElement, ContentMask<Pixels>)>;
++
++    fn id(&self) -> Option<ElementId> {
++        Some("terminal-layer".into())
++    }
++
++    fn source_location(&self) -> Option<&'static Location<'static>> {
++        None
++    }
++
++    fn request_layout(
++        &mut self,
++        _: Option<&GlobalElementId>,
++        _: Option<&InspectorElementId>,
++        window: &mut Window,
++        cx: &mut App,
++    ) -> (LayoutId, ()) {
++        let mut style = Style {
++            position: Position::Absolute,
++            ..Style::default()
++        };
++        style.size.width = relative(1.).into();
++        style.size.height = relative(1.).into();
++        (window.request_layout(style, [], cx), ())
++    }
++
++    fn prepaint(
++        &mut self,
++        _: Option<&GlobalElementId>,
++        _: Option<&InspectorElementId>,
++        _: Bounds<Pixels>,
++        _: &mut (),
++        window: &mut Window,
++        cx: &mut App,
++    ) -> Self::PrepaintState {
++        let shown = PLACED.with_borrow_mut(|placed| {
++            if placed.reset || !placed.fresh.is_empty() {
++                placed.shown = std::mem::take(&mut placed.fresh);
++                placed.reset = false;
++            }
++            placed.shown.clone()
++        });
++        shown
++            .into_iter()
++            .map(|(pane, bounds, mask)| {
++                let mut element = pane
++                    .cached(StyleRefinement::default().size_full())
++                    .into_any_element();
++                window.with_content_mask(Some(mask), |window| {
++                    element.layout_as_root(bounds.size.into(), window, cx);
++                    element.prepaint_at(bounds.origin, window, cx);
++                });
++                (element, mask)
++            })
++            .collect()
++    }
++
++    fn paint(
++        &mut self,
++        _: Option<&GlobalElementId>,
++        _: Option<&InspectorElementId>,
++        _: Bounds<Pixels>,
++        _: &mut (),
++        elements: &mut Self::PrepaintState,
++        window: &mut Window,
++        cx: &mut App,
++    ) {
++        for (element, mask) in elements {
++            window.with_content_mask(Some(*mask), |window| element.paint(window, cx));
++        }
++    }
++}

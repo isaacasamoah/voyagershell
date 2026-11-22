@@ -1,0 +1,13 @@
+diff --git a/desktop/src/terminal.rs b/desktop/src/terminal.rs
+index ff04599b..22274fbe 100644
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -631,7 +631,7 @@ impl ComponentMaterializer for TerminalMaterializer {
+             .downcast_ref::<ComponentArgument>()
+             .ok_or_else(|| anyhow::anyhow!("Terminal requires state"))?;
+         let pane = request.with_state::<Entity<Pane>, _>(argument, Clone::clone)?;
+-        request.finish(div().size_full().child(pane))
++        request.finish(div().size_full().child(pane.cached(gpui::StyleRefinement::default().size_full())))
+     }
+ }
+ 

@@ -1,0 +1,227 @@
+diff --git a/desktop/canvas/main.js b/desktop/canvas/main.js
+index 802fb29a..8394404c 100644
+--- a/desktop/canvas/main.js
++++ b/desktop/canvas/main.js
+@@ -19,7 +19,7 @@ import {
+ } from "voyager_workspace";
+ import { NameState, Name, ArrangementCapture } from "voyager_native";
+ import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
+-import { Occluding, Marker, Prepared } from "voyager_native";
++import { Occluding, Marker, Prepared, Cached } from "voyager_native";
+ import { Chat } from "./chat.js";
+ import {
+   changedBesidesRevision,
+@@ -1545,13 +1545,13 @@ export default class Canvas extends View {
+     return edges;
+   }
+   content(placement, scope, group) {
+-    return renderPanel(this, placement, scope, group);
++    return Cached.new(`panel-${placement.id}`).flex().flex_1().min_w(0).min_h(0).size_full().content(renderPanel(this, placement, scope, group));
+   }
+   sidebarRegion(layout, voyage) {
+-    return renderSidebar(this, layout, voyage);
++    return Cached.new("sidebar").flex().content(renderSidebar(this, layout, voyage));
+   }
+   fleetRegion(layout, voyage, fleet) {
+-    return renderFleets(this, layout, voyage, fleet);
++    return Cached.new("fleets").flex().content(renderFleets(this, layout, voyage, fleet));
+   }
+   groupRegion(group) {
+     const root = group.maximizedPlacement
+diff --git a/desktop/canvas/main.ts b/desktop/canvas/main.ts
+index 711a96f8..5068c321 100644
+--- a/desktop/canvas/main.ts
++++ b/desktop/canvas/main.ts
+@@ -19,7 +19,7 @@ import {
+ } from "voyager_workspace";
+ import { NameState, Name, ArrangementCapture } from "voyager_native";
+ import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
+-import { Occluding, Marker, Prepared } from "voyager_native";
++import { Occluding, Marker, Prepared, Cached } from "voyager_native";
+ import { Chat } from "./chat.js";
+ import {
+   changedBesidesRevision,
+@@ -1769,11 +1769,11 @@ export default class Canvas extends View {
+     scope: VesselContext,
+     group: PanelGroup,
+   ): NativeElement {
+-    return renderPanel(this, placement, scope, group);
++    return Cached.new(`panel-${placement.id}`).flex().flex_1().min_w(0).min_h(0).size_full().content(renderPanel(this, placement, scope, group));
+   }
+ 
+   sidebarRegion(layout: Layout, voyage: Voyage | undefined): NativeElement {
+-    return renderSidebar(this, layout, voyage);
++    return Cached.new("sidebar").flex().content(renderSidebar(this, layout, voyage));
+   }
+ 
+   fleetRegion(
+@@ -1781,7 +1781,7 @@ export default class Canvas extends View {
+     voyage: Voyage | undefined,
+     fleet: Fleet | undefined,
+   ): NativeElement {
+-    return renderFleets(this, layout, voyage, fleet);
++    return Cached.new("fleets").flex().content(renderFleets(this, layout, voyage, fleet));
+   }
+ 
+   groupRegion(group: PanelGroup): NativeElement {
+diff --git a/desktop/src/cached.rs b/desktop/src/cached.rs
+new file mode 100644
+index 00000000..0c046b45
+--- /dev/null
++++ b/desktop/src/cached.rs
+@@ -0,0 +1,99 @@
++use std::{cell::RefCell, collections::HashMap, sync::Arc};
++
++use gpui::{
++    App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render,
++    StyleRefinement, Styled as _, Window, div,
++};
++use gpui_shell::{
++    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
++    ComponentElementFactory, ComponentMaterializer, ComponentPayload, ComponentRegistry,
++    ConstructorDescriptor, MaterializeRequest, RegistryError,
++};
++
++struct Boundary {
++    factory: Option<ComponentElementFactory>,
++}
++
++impl Render for Boundary {
++    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
++        crate::diagnostics::redraw::record("boundary_renders", 1);
++        let root = div().size_full().flex().flex_col();
++        match self.factory.as_ref().map(|factory| factory.build(window, cx)) {
++            Some(Ok(element)) => root.child(element),
++            Some(Err(error)) => root.child(format!("{error:#}")),
++            None => root,
++        }
++    }
++}
++
++thread_local! {
++    static BOUNDARIES: RefCell<HashMap<String, Entity<Boundary>>> = RefCell::new(HashMap::new());
++}
++
++pub(crate) fn invalidate(cx: &mut App) {
++    let boundaries: Vec<_> = BOUNDARIES.with_borrow(|held| held.values().cloned().collect());
++    for boundary in boundaries {
++        boundary.update(cx, |_, cx| cx.notify());
++    }
++}
++
++struct Cached;
++
++impl ComponentMaterializer for Cached {
++    fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
++        let key = request
++            .payload()
++            .downcast_ref::<String>()
++            .cloned()
++            .ok_or_else(|| anyhow::anyhow!("Cached requires a key"))?;
++        let factory = request.take_slot_factory("content");
++        let boundary = request.with_window_app(|_, cx| {
++            let held = BOUNDARIES.with_borrow(|held| held.get(&key).cloned());
++            Ok(match held {
++                Some(boundary) => {
++                    boundary.update(cx, |boundary, _| boundary.factory = factory);
++                    boundary
++                }
++                None => {
++                    let boundary = cx.new(|_| Boundary { factory });
++                    BOUNDARIES.with_borrow_mut(|held| held.insert(key.clone(), boundary.clone()));
++                    boundary
++                }
++            })
++        })?;
++        request.finish(div().child(boundary.cached(StyleRefinement::default().size_full())))
++    }
++}
++
++pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
++    registry.register(
++        ComponentDescriptor::new("Cached", Arc::new(Cached)).with_constructors(vec![
++            ConstructorDescriptor::new(
++                "Cached",
++                vec![ArgumentDescriptor::new("key", ArgumentSchema::String)],
++                |arguments| match arguments {
++                    [ComponentArgument::String(key)] => Ok(ComponentPayload::new(key.clone())),
++                    _ => Err("Cached(key) expects a string".into()),
++                },
++            ),
++        ]),
++    )?;
++    Ok(())
++}
++
++pub(crate) fn observe(
++    root: &Entity<gpui_shell::ShellRoot>,
++    cx: &mut App,
++) -> Option<gpui::Subscription> {
++    let script = root
++        .read(cx)
++        .content()
++        .clone()
++        .downcast::<gpui_shell::ScriptView>()
++        .ok()?;
++    Some(cx.observe(&script, |script, cx| {
++        if script.read(cx).is_dirty() {
++            invalidate(cx);
++        }
++    }))
++}
+diff --git a/desktop/src/host.rs b/desktop/src/host.rs
+index 3b059a73..93ed90d0 100644
+--- a/desktop/src/host.rs
++++ b/desktop/src/host.rs
+@@ -732,6 +732,9 @@ impl CanvasHost {
+                 }
+             }
+         });
++        let cached_observer = root
++            .as_ref()
++            .and_then(|root| crate::cached::observe(root, cx));
+         Self {
+             root,
+             _watch: watch,
+@@ -746,7 +749,7 @@ impl CanvasHost {
+             decorated,
+             profile_updates: crate::banner::Updates::new(profile_updates),
+             accessibility: window.is_a11y_active(),
+-            _observers: Vec::new(),
++            _observers: cached_observer.into_iter().collect(),
+         }
+     }
+ 
+diff --git a/desktop/src/lib.rs b/desktop/src/lib.rs
+index fb58c9ad..ba12685b 100644
+--- a/desktop/src/lib.rs
++++ b/desktop/src/lib.rs
+@@ -5,6 +5,7 @@ mod avatar_pack;
+ mod avatar_sharp;
+ mod banner;
+ mod bridge;
++mod cached;
+ #[cfg(all(test, target_os = "linux"))]
+ mod canvas_test;
+ mod content_budget;
+@@ -237,6 +238,7 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
+     arrangement::register(&mut registry).context("Arrangement registration")?;
+     split::register(&mut registry).context("Split registration")?;
+     occluding::register(&mut registry).context("Native overlay registration")?;
++    cached::register(&mut registry).context("Cached registration")?;
+     inspect::register(&mut registry).context("Inspection registration")?;
+     terminal::register(&mut registry, viewers).context("Terminal registration")?;
+     registry.freeze().context("Native registry")
+diff --git a/desktop/src/terminal.rs b/desktop/src/terminal.rs
+index ff04599b..22274fbe 100644
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -631,7 +631,7 @@ impl ComponentMaterializer for TerminalMaterializer {
+             .downcast_ref::<ComponentArgument>()
+             .ok_or_else(|| anyhow::anyhow!("Terminal requires state"))?;
+         let pane = request.with_state::<Entity<Pane>, _>(argument, Clone::clone)?;
+-        request.finish(div().size_full().child(pane))
++        request.finish(div().size_full().child(pane.cached(gpui::StyleRefinement::default().size_full())))
+     }
+ }
+ 
