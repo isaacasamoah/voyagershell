@@ -1,4 +1,6 @@
-use super::structure_calls::{eligible_contents, grant_new_shell, record_created_terminals};
+use super::structure_calls::{
+    eligible_contents, grant_new_shell, record_created_terminals, settle_created_terminals,
+};
 use super::*;
 use crate::core::Core;
 use crate::families::structure::{reopen_backend, require_live, visible_content};
@@ -403,6 +405,69 @@ fn explicit_new_shell_preserves_placement_and_grants_only_a_fresh_shell() {
 }
 
 #[test]
+fn a_create_is_listed_while_its_save_flies_and_kept_only_when_it_lands_applied() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Voyage".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let after = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    let held = Arc::new(model.layout.clone());
+    model
+        .apply(Action::CreateVessel {
+            launch: None,
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Placement {
+                owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
+                insertion: voyager_contract::PlacementInsertion::Beside {
+                    id: after,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+        })
+        .unwrap();
+    let candidate = Arc::new(model.layout);
+    let created = candidate.vessels.last().unwrap().id.clone();
+    let refused = Err(Error::Rejected {
+        kind: "conflict".into(),
+        message: "the saved layout changed".into(),
+    });
+    let uncertain = Err(Error::Uncertain("no reply to the save".into()));
+    for (landing, kept) in [
+        (Ok(9), vec![created.clone()]),
+        (refused, vec![]),
+        (uncertain, vec![]),
+    ] {
+        let mut pending = Vec::new();
+        record_created_terminals(&mut pending, &held, &candidate);
+        assert_eq!(
+            eligible_contents(&held, None, &pending),
+            Vec::<VesselId>::new(),
+            "a reply whose layout lacks the new Vessel lists nothing while the save flies"
+        );
+        assert_eq!(
+            eligible_contents(&candidate, None, &pending),
+            vec![created.clone()],
+            "a reply whose layout already holds the new Vessel lists it while the save flies"
+        );
+        settle_created_terminals(&mut pending, &held, &candidate, &landing);
+        assert_eq!(
+            eligible_contents(&candidate, None, &pending),
+            kept,
+            "after the save lands {landing:?}"
+        );
+        assert_eq!(
+            pending.len(),
+            kept.len(),
+            "after the save lands {landing:?}"
+        );
+    }
+}
+
+#[test]
 fn automatic_terminal_eligibility_excludes_notes() {
     let mut model = Model::default();
     model
@@ -453,6 +518,11 @@ fn automatic_terminal_eligibility_excludes_notes() {
         })
         .unwrap();
     let new_terminal = model.layout.vessels.last().unwrap().id.clone();
+    record_created_terminals(&mut pending, &previous, &model.layout);
+    assert_eq!(
+        pending,
+        vec![record(terminal.clone()), record(new_terminal.clone())]
+    );
     record_created_terminals(&mut pending, &previous, &model.layout);
     assert_eq!(
         pending,

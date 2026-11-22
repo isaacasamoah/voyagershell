@@ -1,3 +1,4 @@
+import type { Action } from "../../contract/generated/request";
 import type { Layout, Vessel } from "../../contract/generated/response";
 import type { TerminalResponse } from "../../contract/generated/terminalResponse";
 import { shownPanels } from "./panels.js";
@@ -59,4 +60,24 @@ export function terminalStatus(
   if (outcome?.status === "unbound") return "No terminal is bound.";
   if (!content.backend && !outcome) return "No terminal is bound.";
   return "Connecting terminal";
+}
+
+const CREATES = new Set([
+  "create-voyage",
+  "create-voyage-from-source",
+  "create-fleet-with-vessel",
+  "create-fleet",
+  "create-vessel",
+]);
+
+export function ownCreated(
+  action: Action,
+  before: Set<string>,
+  layout: Layout,
+): Set<string> {
+  return new Set(
+    CREATES.has(action.operation)
+      ? layout.vessels.map((item) => item.id).filter((id) => !before.has(id))
+      : [],
+  );
 }

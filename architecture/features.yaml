@@ -1630,7 +1630,7 @@ features:
     code: [app/src/activity.rs, app/src/client.rs, app/src/client_core.rs, app/src/client_owner.rs, app/src/families/terminal.rs, desktop/canvas/agents.js, desktop/canvas/agents.ts]
   - id: adopted-vessels
     name: 'Labelled programs as Vessels'
-    summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, split a named placement on any side with the label or with create-vessel, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook.'
+    summary: 'From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, split a named placement on any side with the label or with create-vessel, dock onto it, create a Fleet with the voyager command, remove a placement with it, see a Vessel it creates while the canvas prepares the Home view drawn and read the dock with voyager focus or its Claude hook.'
     group: content-model
     owner: application-queue
     shared_with: [placement, core-adapter]
@@ -1638,7 +1638,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: [adopt-by-label, socket-dock, agent-split]
+    native_journeys: [adopt-by-label, socket-dock, agent-split, home-create]
     python_journeys: []
     invariants:
       - id: restart-reopens-plain-shells
@@ -1666,6 +1666,14 @@ features:
         checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane', 'journey:socket-dock/redock-takes-keyboard']
         formal: []
         journeys: [socket-dock]
+      - id: created-while-preparing-is-drawn
+        kind: user
+        says: 'A Vessel that Voyager creates while the canvas is still preparing the view it shows is drawn with its terminal. The canvas opens every Vessel that the owner reports as created in any reply it takes, not only in the reply to its own request.'
+        owner: desktop-presentation
+        guards: ['type:desktop/canvas/main.ts#Canvas']
+        checks: ['journey:home-create/created-while-preparing-is-drawn']
+        formal: []
+        journeys: [home-create]
       - id: adopted-agents-follow-their-label
         kind: user
         says: 'An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel.'
@@ -1808,6 +1816,7 @@ features:
       - tests/native/src/journey/arrangement.rs
       - tests/native/src/journey/chat.rs
       - tests/native/src/journey/core_events.rs
+      - tests/native/src/journey/home_create.rs
       - tests/native/src/journey/input.rs
       - tests/native/src/journey/layout.rs
       - tests/native/src/journey/layout_compat.rs

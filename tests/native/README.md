@@ -789,7 +789,8 @@ A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
 on the command line replaces it. `slow-save` declares `doc.set=1500`, `outcomes` declares
-`terminal.kill=21000` and `slow-list` declares `terminal.list=2000`.
+`terminal.kill=21000`, `slow-list` declares `terminal.list=2000` and
+`home-create` declares `arm`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can
@@ -842,6 +843,22 @@ script spans 8 s, which is longer than one canvas loop under the hold, so an
 inspect is sent during a process read. That is inferred from the loop's timing.
 The journey does not hold a process Read, the list before a worktree removal,
 the plan of a Voyage close or a create from a live directory.
+
+The `home-create` journey proves that a Vessel Voyager creates while the canvas
+prepares the view it shows is drawn. It declares `arm`. It waits for the first
+terminal, reads the expected version while the owner is idle and arms one hold
+of 1500 ms on `terminal.attach`. It then clicks Home. The canvas prepares the
+Home view and opens Voyager's Portal terminal, whose attach Core answers and the
+relay holds. The owner waits for that attach, so the create that the case sends
+through the `voyager` command from Voyager's terminal is applied before the
+canvas's own read after the attach.
+
+- `created-while-preparing-is-drawn` passes when the relay released the held
+  attach after the create was sent, the create was applied, and the new Home
+  Vessel is drawn with its terminal while the Home view is shown. It ends the run
+  `inconclusive`, blamed on the verifier, when the Home click opens no terminal
+  through `terminal.attach`, because the case then did not reach the state it
+  judges.
 
 #### Scripted tool calls
 
@@ -1230,6 +1247,12 @@ instead, so Create Codex from an entry that names no permissions starts the
 stand-in with no arguments. A candidate built with it must fail
 `person-keeps-table-default` on the expectations for that entry and on those
 only. The shipped entry names its arguments, so its expectations still hold.
+
+The `home-create` patch makes the canvas open only the created Vessels named in
+the reply to its own request, as it did before. `created-while-preparing-is-drawn`
+then fails on the expectation `the Vessel created during the Home preparation is
+drawn with its terminal`, because the read during the Home preparation brings
+the new Vessel without opening it.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

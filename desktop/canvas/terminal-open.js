@@ -38,3 +38,17 @@ export function terminalStatus(content, outcome) {
   if (!content.backend && !outcome) return "No terminal is bound.";
   return "Connecting terminal";
 }
+const CREATES = new Set([
+  "create-voyage",
+  "create-voyage-from-source",
+  "create-fleet-with-vessel",
+  "create-fleet",
+  "create-vessel",
+]);
+export function ownCreated(action, before, layout) {
+  return new Set(
+    CREATES.has(action.operation)
+      ? layout.vessels.map((item) => item.id).filter((id) => !before.has(id))
+      : [],
+  );
+}

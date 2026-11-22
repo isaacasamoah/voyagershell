@@ -1,0 +1,24 @@
+diff --git a/desktop/canvas/main.js b/desktop/canvas/main.js
+index 73e03d4f..e5c8807e 100644
+--- a/desktop/canvas/main.js
++++ b/desktop/canvas/main.js
+@@ -782,7 +782,6 @@ export default class Canvas extends View {
+   ) {
+     const layout = this.layout;
+     if (!layout) throw Error("Workspace snapshot is unavailable.");
+-    for (const id of this.created) allowed.add(id);
+     const errors = [];
+     const visited = new Set();
+     for (const vessel of shownPanels(layout)) {
+diff --git a/desktop/canvas/main.ts b/desktop/canvas/main.ts
+index 28939b84..8c5c5b62 100644
+--- a/desktop/canvas/main.ts
++++ b/desktop/canvas/main.ts
+@@ -938,7 +938,6 @@ export default class Canvas extends View {
+   ): Promise<void> {
+     const layout = this.layout;
+     if (!layout) throw Error("Workspace snapshot is unavailable.");
+-    for (const id of this.created) allowed.add(id);
+     const errors: string[] = [];
+     const visited = new Set<string>();
+     for (const vessel of shownPanels(layout)) {

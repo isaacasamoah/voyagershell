@@ -3,6 +3,7 @@ mod agent_split;
 mod arrangement;
 mod chat;
 mod core_events;
+mod home_create;
 mod input;
 mod layout;
 mod layout_compat;
@@ -143,6 +144,7 @@ journeys! {
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     SocketDock => "socket-dock" in socket_dock, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AgentSplit => "agent-split" in agent_split, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    HomeCreate => "home-create" in home_create, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
@@ -168,6 +170,7 @@ impl Journey {
             Self::SlowSave => Some(slow_save::HOLD),
             Self::Outcomes => Some(outcomes::HOLD),
             Self::SlowList => Some(slow_list::HOLD),
+            Self::HomeCreate => Some(home_create::HOLD),
             _ => None,
         }
     }
