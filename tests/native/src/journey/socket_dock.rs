@@ -513,7 +513,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let still_up = native.observe("the window still drawing the workspace", |seen| {
             seen.shows(&Target::HOME).then_some(())
         });
-        let labels = native.drawn_labels(&Target::STATUS, CANVAS_REFRESH)?;
         native.keep_window("avatar-click-at-home-opens-home")?;
         Verdict::new()
             .expect(
@@ -533,11 +532,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 !minimises(&sent),
             )
             .expect("the window stayed up", still_up.is_ok())
-            .expect(
-                "the click left no render error in the status line",
-                !render_error(&labels),
-            )
-            .observed("statusLabels", &labels)?
             .observed("requests", &sent)
     })?;
 
@@ -690,7 +684,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
-fn render_error(labels: &[String]) -> bool {
+pub(super) fn render_error(labels: &[String]) -> bool {
     labels.iter().any(|label| {
         label.contains("cannot run during render") || label.contains("during the `render` phase")
     })

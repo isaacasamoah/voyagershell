@@ -33,6 +33,7 @@ pub const CANVAS_REFRESH: Owed = Owed::secs(3);
 pub const AGENTS_ROW: Owed = Owed::secs(1);
 pub const VESSEL_CLOSED: Owed = Owed::secs(1);
 pub const FLOAT_SPACING: Owed = Owed::millis(90);
+pub const STATUS_AFTER_CLICK: Owed = Owed::millis(600);
 pub const ENGINE_START: Owed = Owed::secs(90);
 pub const QUIET_MIC: Owed = Owed::secs(2);
 pub const LONG_SILENCE: Owed = Owed::secs(12);

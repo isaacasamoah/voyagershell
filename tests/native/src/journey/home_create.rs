@@ -1,8 +1,8 @@
-use super::socket_dock::{request_line, send_line, show_fleet, voyager_caller};
+use super::socket_dock::{render_error, request_line, send_line, show_fleet, voyager_caller};
 use super::{Cases, Verdict, cases};
 use crate::core_relay::Fault;
 use crate::inspection::Target;
-use crate::native::{Native, Terminal, bound_terminal, now_millis};
+use crate::native::{Native, STATUS_AFTER_CLICK, Terminal, bound_terminal, now_millis};
 use anyhow::{Context as _, Result};
 use voyager_contract::{
     Action, ContentDestination, Context, PlacementId, PlacementInsertion, PlacementOwner, Side,
@@ -52,6 +52,7 @@ fn home_ids(native: &Native) -> Result<Vec<PlacementId>> {
 fn create_during(
     native: &mut Native,
     id: &str,
+    status_after_open: bool,
     open: impl FnOnce(&mut Native) -> Result<()>,
 ) -> Result<Verdict> {
     Terminal::first(native)?;
@@ -95,6 +96,11 @@ fn create_during(
         .observe("the app prepared before the click", |_| Some(()))
         .is_ok();
     open(native)?;
+    let status = if status_after_open {
+        Some(native.drawn_labels(&Target::STATUS, STATUS_AFTER_CLICK)?)
+    } else {
+        None
+    };
     let Some(held) = native.watch(|native| native.system.arm_spent(&arm))? else {
         let homes = home_ids(native)?;
         let drawn = native
@@ -146,7 +152,7 @@ fn create_during(
             .find(|line| line["arm"].as_u64() == Some(arm.id) && line["event"] == "released")
             .and_then(|line| line["releasedAtMs"].as_u64()))
     })?;
-    Verdict::new()
+    let verdict = Verdict::new()
         .expect(
             "the create was sent while the Home preparation's terminal attach was held",
             released.is_some_and(|at| at > sent),
@@ -158,7 +164,17 @@ fn create_during(
         .expect(
             "the Vessel created during the Home preparation is drawn with its terminal",
             added.is_some(),
-        )
+        );
+    let verdict = match &status {
+        Some(labels) => verdict
+            .expect(
+                "the click left no render error in the status line",
+                !render_error(labels),
+            )
+            .observed("statusLabels", labels)?,
+        None => verdict,
+    };
+    verdict
         .observed("held", &held)?
         .observed("sentAtMs", sent)?
         .observed("releasedAtMs", released)?
@@ -167,7 +183,7 @@ fn create_during(
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::CreatedWhilePreparingIsDrawn, |native| {
-        create_during(native, "home-create-while-preparing", |native| {
+        create_during(native, "home-create-while-preparing", false, |native| {
             native.click(&Target::HOME)
         })
     })?;
@@ -187,7 +203,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             show_fleet(native)?;
             native.close()?;
             native.launch()?;
-            create_during(native, "home-create-during-avatar-click", |native| {
+            create_during(native, "home-create-during-avatar-click", true, |native| {
                 native.click(&Target::AVATAR)
             })
         },
