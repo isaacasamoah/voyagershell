@@ -6,7 +6,7 @@ import sys
 LIVE = ("HC_SESSION", "HC_SOCKET", "HC_TERMINAL_ID")
 PREFIX = "env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET -u WAYLAND_DISPLAY -u DISPLAY"
 SESSION_FORM = "env -u HC_SOCKET -u HC_TERMINAL_ID HC_SESSION=voyager-trial hc ..."
-LEAD =r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
+LEAD = r"(?:^|[;&|(`\n]|\$\(|-c\s+['\"])\s*"
 WRAP = r"(?:(?:then|do|else|env|exec|nohup|nice|time|timeout\s+\S+|-u\s+\S+|-i|--unset[=\s]\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*"
 HC = r"(?:[^\s;&|'\"]*/)?hc"
 APP = r"[^\s;&|'\"]*voyager-shell"
