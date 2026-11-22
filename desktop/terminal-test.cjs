@@ -46,7 +46,7 @@ function fixture(
   createdWorkspace = false,
   createdVessels = [],
 ) {
-  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus };`;
+  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus, inspectNotice };`;
   const layout = {
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
@@ -73,7 +73,7 @@ function fixture(
   const actions = [];
   const choices = [];
   const versions = [];
-  const { Canvas, moveFocus } = new Function(
+  const { Canvas, moveFocus, inspectNotice } = new Function(
     "View",
     "invoke",
     "openTerminal",
@@ -142,6 +142,7 @@ function fixture(
   task.spawn = cx.spawn;
   return {
     view,
+    inspectNotice,
     task,
     cx,
     pending,
@@ -319,9 +320,9 @@ test("one fresh shell intent replaces its old opening without retrying a refusal
 });
 
 test("explicit Refresh retries a known refusal after inspection", async () => {
-  const { view, task, cx, pending, count } = fixture("rejected");
+  const { view, inspectNotice, task, cx, pending, count } = fixture("rejected");
   await assert.rejects(view.prepare(task), /open failed/);
-  view.inspectNotice(cx);
+  inspectNotice(view, cx);
   await pending.at(-1);
   assert.equal(count(), 1, "An owner notice must not retry a refused start");
   view.run({ operation: "inspect" }, cx);
@@ -1047,7 +1048,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   let dockResult = null;
   let activityRevision;
   let activityReads = 0;
-  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus };`;
+  const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus, inspectNotice };`;
   let ownerRevision = "7";
   let packageRevision = "0";
   const targets = [];
@@ -1084,7 +1085,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       return div();
     },
   };
-  const { Canvas, moveFocus } = new Function(
+  const { Canvas, moveFocus, inspectNotice } = new Function(
     "View",
     "div",
     "Button",
@@ -1468,7 +1469,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   assert.equal(view.workspaceNotice.revision, "10");
   view.version = "11";
   view.busy = false;
-  view.inspectNotice({});
+  inspectNotice(view, {});
   assert.equal(
     actions.length,
     2,
