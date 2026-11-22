@@ -244,7 +244,7 @@ after three short sentences and offers more, and the rest comes only if the pers
 
 The background Voyager gets both through `spoken::policy_rule`, which adds the voice
 rules for a prompt that starts with `[spoken]`. It answers aloud with no paths or
-code. It claims only what a tool's output showed, does only what was asked, and
+code. It acts only on what was asked, claims only what a tool's output showed, and
 never points to the chat. A spoken reply is the whole answer. Claude Code ignores the launch
 prompt on a resumed conversation, so the focus hook repeats the rule at every prompt.
 The whole hook reminder is under 700 characters, and a test holds it there, because it

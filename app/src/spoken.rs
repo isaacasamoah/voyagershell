@@ -33,13 +33,13 @@ pub fn has_reply_marker(text: &str) -> bool {
     strip_reply_marker(text).len() != text.len()
 }
 
-pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Say why when something fails. Talk like a technical friend. Lead with the answer, yes or no first. Plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked, so a done move is \"Done, you're there.\"";
+pub const STYLE: &str = "Best friend energy, always accurate, always approachable and human. Say why when something fails. Talk like a technical friend. Lead with the answer, yes or no first. Plain words, contractions. Skip ids, revisions, layout terms and how the app took it unless asked.";
 
 pub const BRIEF: &str = "Stop after three short sentences, then offer more.";
 
 pub fn policy_rule() -> String {
     format!(
-        "{STYLE} A {MARKER} prompt came by voice. Act, then answer aloud, no paths or code. {BRIEF} Claim only what a tool's output showed. Do only what was asked. Never point to the chat."
+        "{STYLE} A {MARKER} prompt came by voice. Act only on what was asked, then answer aloud, no paths or code. {BRIEF} Claim only what a tool's output showed. Do only what was asked. Never point to the chat."
     )
 }
 
@@ -150,7 +150,7 @@ mod tests {
         assert!(rule.starts_with(STYLE));
         assert!(rule.contains(&format!(" A {MARKER} prompt came by voice.")));
         assert!(rule.contains(BRIEF));
-        assert!(rule.contains("no paths or code"));
+        assert!(rule.contains("Act only on what was asked, then answer aloud, no paths or code."));
         assert!(rule.contains("Say why when something fails."));
         assert!(rule.contains("Claim only what a tool's output showed. Do only what was asked."));
         assert!(rule.ends_with("Never point to the chat."));
@@ -164,7 +164,6 @@ mod tests {
             "Lead with the answer, yes or no first.",
             "contractions",
             "Skip ids, revisions, layout terms",
-            "Done, you're there.",
         ] {
             assert!(STYLE.contains(words), "{words}");
         }
