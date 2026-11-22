@@ -249,6 +249,7 @@ placement on a chosen side, through the `voyager.place` label or through
 split. The label cases type into the first terminal, as an agent in that Vessel
 would. The `create-vessel` and resize cases send `voyager do workspace` with
 that terminal's `HC_TERMINAL_ID`, which is not Voyager's.
+No case runs `voyager status`, so the status picture does not reach this journey.
 
 - `label-splits-each-side` moves the first shell to the second project folder
   and starts `bash` with `voyager.place=fleet:<id>:<side>:<placement id>` for
