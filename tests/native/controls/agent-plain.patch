@@ -1,13 +1,13 @@
-diff --git a/app/src/workspace.rs b/app/src/workspace.rs
-index 527c3eba..f75ab1d8 100644
---- a/app/src/workspace.rs
-+++ b/app/src/workspace.rs
-@@ -26,7 +26,7 @@ pub(crate) fn launch_defaults(
-     if is_voyager {
-         Defaults::Table
-     } else {
--        Defaults::Plain
-+        Defaults::Table
+diff --git a/app/src/voyager_binding.rs b/app/src/voyager_binding.rs
+index 92f64c0e..60f23831 100644
+--- a/app/src/voyager_binding.rs
++++ b/app/src/voyager_binding.rs
+@@ -64,7 +64,7 @@ impl Binding {
+         if is_voyager {
+             crate::agent_programs::Defaults::Table
+         } else {
+-            crate::agent_programs::Defaults::Plain
++            crate::agent_programs::Defaults::Table
+         }
      }
- }
  
