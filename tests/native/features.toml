@@ -274,7 +274,7 @@ debug = "none"
 [[feature]]
 id = "scripts-live-edit"
 name = "Scripts live edit"
-path = "Edit a canvas script and see the change appear live. The only proof is the canvas script unit tests in npm test. No journey edits a running canvas since the canvas-stack journey went with Notes."
+path = "Edit a canvas script and see the change appear live. This has never had a journey. The canvas script unit tests in npm test are its only proof. A native live-canvas-edit journey is the priority follow-up that owns it."
 sources = ["desktop/canvas/main.ts", "contract/src/operations.rs", "desktop/src/bridge.rs", "desktop/script-types.json"]
 journeys = ["canvas-stack"]
 platforms = ["linux"]
