@@ -161,6 +161,21 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   one whose last Vessel was closed. It shows an empty canvas that offers "Choose
   content".
 
+After a `workspace` request the command prints one plain sentence on standard
+error, before the JSON reply on standard output. `app/src/change_sentence.rs`
+builds it from the request the command sent and the typed reply, never from
+reply text, and names things from the layout in the reply. Selecting a Fleet
+prints `Opened the Build Fleet.` A refusal prints `I asked to open the Build
+Fleet, but it was refused because Fleet is closed, so nothing changed.` An
+unknown result prints `I asked to open the Build Fleet, but I can't tell yet
+whether it happened.` The reply types carry no refusal kind, only a message,
+so the command adds a reason only when that message is in plain words. A
+message with an id, a number or an internal term is left out. The reply holds
+the layout after the change, so a rename does not name the old name and a
+removal says `Removed that Vessel.` A reader that merges standard error into
+its capture must skip the sentence. The agent-split journey takes the JSON from
+the first line that starts with an opening brace.
+
 The socket binds the caller outside the payload. The envelope's caller is
 `Program { vessel }`, taken from the socket that accepted the connection. That
 identity is advisory, and nothing is enforced. Any process of the same user can
