@@ -280,8 +280,8 @@ impl Owner {
             }
             (result, _) => result,
         };
-        if result.is_err() && records_created(scope.as_ref(), &request.action) {
-            forget_created_terminals(&mut self.created_vessels, &held, &candidate);
+        if records_created(scope.as_ref(), &request.action) {
+            settle_created_terminals(&mut self.created_vessels, &held, &candidate, &result);
         }
         let landed = result
             .map_err(|error| unbound(created_notes, error))
@@ -312,9 +312,6 @@ impl Owner {
                         launch,
                     );
                     self.unconfirmed.remove(&vessel_id.0);
-                }
-                if records_created(scope.as_ref(), &request.action) {
-                    record_created_terminals(&mut self.created_vessels, &held, &candidate);
                 }
                 if revision > self.version.document {
                     self.version = self.version.after(revision, &held, &candidate);
@@ -946,15 +943,20 @@ fn records_created(scope: Option<&Context>, action: &Action) -> bool {
         )
 }
 
-pub(super) fn forget_created_terminals(
+pub(super) fn settle_created_terminals(
     pending: &mut Vec<CreatedTerminal>,
     previous: &Layout,
     current: &Layout,
+    saved: &Result<u64, Error>,
 ) {
-    pending.retain(|item| {
-        previous.vessels.iter().any(|old| old.id == item.id)
-            || !current.vessels.iter().any(|new| new.id == item.id)
-    });
+    if saved.is_ok() {
+        record_created_terminals(pending, previous, current);
+    } else {
+        pending.retain(|item| {
+            previous.vessels.iter().any(|old| old.id == item.id)
+                || !current.vessels.iter().any(|new| new.id == item.id)
+        });
+    }
 }
 
 pub(super) fn eligible_contents(
