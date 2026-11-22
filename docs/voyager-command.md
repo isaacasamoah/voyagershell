@@ -238,8 +238,8 @@ socket.
   shows "Choose content" until a labelled program arrives.
 - Give each change a new `requestId`. Repeating the same request returns its
   first result instead of acting twice.
-- Each change prints one plain sentence on standard error, after the JSON,
-  such as `Renamed the Fleet to Notes.`. It names things as the person does and
+- Each change prints one plain sentence on standard error, before the
+  JSON, such as `Renamed the Fleet to Notes.`. It names things as the person does and
   carries no id or revision. Say it to the person as it is. A refused or
   uncertain change says so and never claims the change happened. The JSON on
   standard output is unchanged.

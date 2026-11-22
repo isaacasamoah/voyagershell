@@ -140,14 +140,14 @@ fn main() -> ExitCode {
     };
     match send(&request) {
         Ok(reply) => {
-            match serde_json::to_string_pretty(&reply) {
-                Ok(text) => println!("{text}"),
-                Err(error) => eprintln!("{error}"),
-            }
             if let SocketRequest::Workspace { request } = &request
                 && let Some(sentence) = voyager_app::change_sentence::sentence(request, &reply)
             {
                 eprintln!("{sentence}");
+            }
+            match serde_json::to_string_pretty(&reply) {
+                Ok(text) => println!("{text}"),
+                Err(error) => eprintln!("{error}"),
             }
             code(&reply)
         }
