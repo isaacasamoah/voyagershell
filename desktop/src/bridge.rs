@@ -267,8 +267,8 @@ mod tests {
             ),
             (include_str!("avatar.rs"), &[&operations::AVATAR]),
             (
-                include_str!("notes.rs"),
-                &[&operations::CONTENT_VIEW, &operations::VESSEL],
+                include_str!("content_host.rs"),
+                &[&operations::CONTENT_VIEW],
             ),
         ];
         for (source, modules) in sources {

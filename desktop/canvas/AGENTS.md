@@ -2,10 +2,10 @@
 
 `main.ts` controls the native workspace view, retained content preparation and
 versioned action dispatch. `main.js` is its emitted profile entry. Keep the
-existing Terminal, Notes, divider, avatar and conversation identities when
+existing Terminal, divider, avatar and conversation identities when
 changing presentation. Rust owns placement, content, context and persistence.
 
-`panel-view.ts` renders one Terminal or Notes panel and its common controls.
+`panel-view.ts` renders one Terminal or Vessel panel and its common controls.
 `navigation-view.ts` renders the sidebar, Fleet tabs and bottom context.
 `panels.ts` selects the current groups and visible members from the owner's
 projection. It does not own another layout or repeat Rust placement policy.
@@ -76,7 +76,7 @@ package on error and grants no canvas, process or private-conversation authority
 to a Vessel package.
 
 The canvas manifest `canvas.json` declares the `contentConfiguration` version it
-reads. Together with the matching Notes declaration, this enables Notes
+reads. Together with the matching Vessel type declaration, this enables
 configuration discovery and actions. Preserve optional Vessel.configuration when
 validating or composing the workspace. Rust validates and writes. An older
 strict canvas may reject newer saved data; preserve both and explicitly update or
@@ -87,6 +87,6 @@ restore compatible source.
 
 Each panel title bar has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-placement`. It removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
 
-The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-placement` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
+The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-placement` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Agents remain recoverable without a backend. Never restart an ended process implicitly.
 
 `processes(version)` is a fixed read-only canvas binding returning the generated ProcessResponse. It runs off the UI executor. The Home Agents view uses the same snapshot and program-reported activity. Silence is not success, and an ordinary shell is not an agent.

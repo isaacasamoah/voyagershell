@@ -62,7 +62,6 @@ export class CreationPicker {
   current: Opening | null = null;
   catalog: Catalog | null = null;
   ready = false;
-  notes = false;
   agents = false;
   declared: { id: string; name: string }[] = [];
   problems: string[] = [];
@@ -81,7 +80,6 @@ export class CreationPicker {
     this.current = requested;
     this.catalog = null;
     this.ready = false;
-    this.notes = false;
     this.agents = false;
     this.declared = [];
     this.problems = [];
@@ -125,10 +123,7 @@ export class CreationPicker {
                   kind.typeId === "agents" &&
                   kind.availability.status === "ready",
               );
-              this.notes = value.types.some(
-                (kind) => kind.typeId === "notes" && Boolean(kind.state),
-              );
-              const builtin = ["terminal", "agents", "notes"];
+              const builtin = ["terminal", "agents"];
               this.declared = value.types
                 .filter(
                   (kind) =>
@@ -208,22 +203,11 @@ export class CreationPicker {
         }
         for (const error of this.catalog.errors)
           content.child(div().text_size(10).text_color("#ffcad3").child(error));
-      } else if (!this.error && !this.notes)
+      } else if (!this.error)
         content.child(
           div()
             .text_size(11)
             .child(this.error || "Loading choices"),
-        );
-      if (this.notes)
-        content.child(
-          menuButton("create-notes-vessel", `Create Notes ${entity}`)
-            .child(Marker.new("create-notes"))
-            .child("Notes")
-            .on_click((_event, cx) => {
-              if (this.current !== opening) return;
-              this.current = null;
-              create(chosen(opening.destination, "notes"), opening.version, cx);
-            }),
         );
       for (const declared of this.declared)
         content.child(

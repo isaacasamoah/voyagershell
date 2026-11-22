@@ -33,49 +33,6 @@ Occluding.new().w(30).id("unsupported");
   assert.ok(diagnostics.every((entry) => entry.file.fileName === filename));
 });
 
-test("Notes checks its actual private native and content signatures", () => {
-  const filename = path.join(
-    __dirname,
-    "../target/script-types/notes-signatures.ts",
-  );
-  const valid = `import { Title, TitleState, Body, BodyState, SessionState, RetainedTitleState, RetainedTitle, RetainedBodyState, RetainedBody } from "voyager_input";
-import { invoke, changed } from "voyager_vessel";
-import type { Request } from "../../contract/generated/contentRequest";
-Title.new(TitleState.new("")).w_full();
-Body.new(BodyState.new("")).min_h(180);
-SessionState.new().status();
-const heading: boolean = SessionState.new().show_heading();
-RetainedTitle.new(RetainedTitleState.new()).w_full();
-RetainedBody.new(RetainedBodyState.new()).min_h(180);
-invoke("{}", "request", "");
-changed(null);
-const request: Request = { version: "1", operation: "content.update", requestId: "r", vesselId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
-`;
-  fs.writeFileSync(filename, valid);
-  assert.deepEqual(
-    compile([filename], "notes").map((entry) => entry.code),
-    [],
-  );
-  fs.writeFileSync(
-    filename,
-    valid +
-      `TitleState.new(12);
-Title.new(TitleState.new("")).missing_property();
-invoke("{}", "request");
-const invalid: Request = { ...request, data: { title: 12, text: "Body" } };
-import { TerminalState } from "voyager_native";
-RetainedTitleState.new().set_value("Overwrite during staging");
-RetainedBodyState.new().focus();
-`,
-  );
-  const diagnostics = compile([filename], "notes");
-  assert.deepEqual(
-    diagnostics.map((entry) => entry.code),
-    [2345, 2339, 2554, 2322, 2307, 2339, 2339],
-  );
-  assert.ok(diagnostics.every((entry) => entry.file.fileName === filename));
-});
-
 test("the real generated APIs reject wrong workspace and native calls", () => {
   const filename = path.join(__dirname, "../target/script-types/rejected.ts");
   fs.writeFileSync(

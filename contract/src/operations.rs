@@ -334,35 +334,11 @@ pub const CONVERSATION: Module = Module {
 pub const CONTENT_VIEW: Module = Module {
     name: "voyager_content_view",
     entries: &[
-        component("Notes", &[field("vesselId", Ty::Text)]),
         component(
             "Vessel",
             &[field("vesselId", Ty::Text), field("typeId", Ty::Text)],
         ),
         promise("descriptions", &[], Ty::Text),
-    ],
-};
-
-pub const VESSEL: Module = Module {
-    name: "voyager_vessel",
-    entries: &[
-        function("identity", &[], Ty::Text),
-        function("request_id", &[], Ty::Text),
-        promise(
-            "changed",
-            &[Parameter {
-                name: "after",
-                ty: Ty::Nullable(&Ty::Decimal),
-                max_bytes: None,
-            }],
-            Ty::Text,
-        ),
-        promise(
-            "invoke",
-            &[text("request"), text("requestId"), text("expectedRevision")],
-            Ty::Text,
-        ),
-        function("theme", &[], Ty::Palette),
     ],
 };
 
@@ -395,14 +371,12 @@ pub const AVATAR: Module = Module {
 
 pub const CANVAS_MODULES: [&Module; 5] =
     [&THEME, &AVATAR, &WORKSPACE, &CONTENT_VIEW, &CONVERSATION];
-pub const VESSEL_MODULES: [&Module; 1] = [&VESSEL];
-pub const MODULES: [&Module; 6] = [
+pub const MODULES: [&Module; 5] = [
     &THEME,
     &AVATAR,
     &WORKSPACE,
     &CONTENT_VIEW,
     &CONVERSATION,
-    &VESSEL,
 ];
 
 #[cfg(test)]

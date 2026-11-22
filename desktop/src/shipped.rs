@@ -1,4 +1,4 @@
-use voyager_app::content::install::{Absent, Shipped};
+use voyager_app::content::install::Shipped;
 
 const FILES: &[(&str, &[u8])] = &[
     (
@@ -197,37 +197,66 @@ const FILES: &[(&str, &[u8])] = &[
         "themes/voyager.json",
         include_bytes!("../themes/voyager.json").as_slice(),
     ),
-    (
-        "vessels/notes/main.js",
-        include_bytes!("../../content/notes/main.js").as_slice(),
-    ),
-    (
-        "vessels/notes/ui.js",
-        include_bytes!("../../content/ui.js").as_slice(),
-    ),
-    (
-        "vessels/notes/vessel.json",
-        include_bytes!("../../content/notes/vessel.json").as_slice(),
-    ),
-    (
-        "vessels/notes/validate.js",
-        include_bytes!("../../contract/generated/validate.js").as_slice(),
-    ),
 ];
 
-const NOTES_PACKAGE: &str = "vessels/notes/";
-
-pub fn files(notes: Absent) -> Vec<Shipped<'static>> {
+pub fn files() -> Vec<Shipped<'static>> {
     FILES
         .iter()
         .map(|(path, bytes)| Shipped {
             path,
             bytes,
-            absent: if path.starts_with(NOTES_PACKAGE) {
-                notes
-            } else {
-                Absent::Write
-            },
         })
         .collect()
+}
+
+pub const RETIRED_KEPT: &[&str] = &["vessels/notes/"];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use voyager_app::content::install::{fingerprint, install};
+
+    const OLD: [&str; 4] = ["main.js", "ui.js", "vessel.json", "validate.js"];
+
+    #[test]
+    fn a_start_keeps_every_retired_notes_file_data_and_project_note() {
+        let root = std::env::temp_dir().join(format!("voyager-retired-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let profile = root.join("profile");
+        let package = profile.join("vessels/notes");
+        fs::create_dir_all(&package).unwrap();
+        fs::create_dir_all(profile.join("data")).unwrap();
+        let project = root.join("project/notes");
+        fs::create_dir_all(&project).unwrap();
+        let mut record = serde_json::Map::new();
+        for name in OLD {
+            let bytes = format!("shipped {name}\n");
+            fs::write(package.join(name), &bytes).unwrap();
+            record.insert(
+                format!("vessels/notes/{name}"),
+                format!("{:016x}", fingerprint(bytes.as_bytes())).into(),
+            );
+        }
+        fs::write(
+            profile.join("installed.json"),
+            serde_json::json!({"version": 1, "files": record}).to_string(),
+        )
+        .unwrap();
+        fs::write(package.join("main.js"), "personal edit\n").unwrap();
+        fs::write(package.join("AGENTS.md"), "personal guide\n").unwrap();
+        fs::write(profile.join("data/note-1.json"), "{\"title\":\"T\",\"text\":\"x\"}").unwrap();
+        fs::write(project.join("Title.md"), "# Title\n").unwrap();
+        install(&profile, &files(), RETIRED_KEPT).unwrap();
+        for name in OLD {
+            assert!(package.join(name).is_file(), "{name}");
+        }
+        assert_eq!(fs::read(package.join("main.js")).unwrap(), b"personal edit\n");
+        assert_eq!(fs::read(package.join("AGENTS.md")).unwrap(), b"personal guide\n");
+        assert!(profile.join("data/note-1.json").is_file());
+        assert_eq!(fs::read(project.join("Title.md")).unwrap(), b"# Title\n");
+        install(&profile, &files(), RETIRED_KEPT).unwrap();
+        assert!(package.join("ui.js").is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
 }
