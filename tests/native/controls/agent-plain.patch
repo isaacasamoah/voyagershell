@@ -1,0 +1,13 @@
+diff --git a/app/src/voyager_binding.rs b/app/src/voyager_binding.rs
+index 14265fdb..dab15022 100644
+--- a/app/src/voyager_binding.rs
++++ b/app/src/voyager_binding.rs
+@@ -64,7 +64,7 @@ impl Binding {
+         if is_voyager {
+             voyager_contract::launch::Defaults::Table
+         } else {
+-            voyager_contract::launch::Defaults::Plain
++            voyager_contract::launch::Defaults::Table
+         }
+     }
+ 

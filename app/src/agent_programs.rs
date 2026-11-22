@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use std::sync::LazyLock;
 use voyager_contract::launch::{
-    AgentProgram, AgentTable, Effort, Launch, LaunchEntry, LaunchSettings, LaunchSpec,
+    AgentProgram, AgentTable, Defaults, Effort, Launch, LaunchEntry, LaunchSettings, LaunchSpec,
     PROGRAM_KIND, Permissions, TERMINAL_KIND,
 };
 
@@ -85,9 +85,20 @@ pub fn argv(
     effort: Option<Effort>,
     permissions: Option<Permissions>,
 ) -> Result<Vec<String>, String> {
+    argv_with(kind, model, effort, permissions, Defaults::Table)
+}
+
+fn argv_with(
+    kind: &str,
+    model: Option<&str>,
+    effort: Option<Effort>,
+    permissions: Option<Permissions>,
+    defaults: Defaults,
+) -> Result<Vec<String>, String> {
     let agent = find(kind).ok_or_else(|| format!("Unknown agent program {kind}"))?;
     let launch = &agent.launch;
-    let mut args = if launch.argv.is_empty() {
+    let plain = defaults == Defaults::Plain && permissions.is_none();
+    let mut args = if plain || launch.argv.is_empty() {
         agent.programs.first().cloned().into_iter().collect()
     } else {
         launch.argv.clone()
@@ -96,6 +107,7 @@ pub fn argv(
         return Err(format!("{} needs an executable", agent.name));
     }
     match (&launch.model, model) {
+        (Some(_), None) if plain => {}
         (Some(setting), model) => {
             let model = model.unwrap_or(&setting.default);
             if model.trim().is_empty() || model.contains('\0') {
@@ -107,6 +119,7 @@ pub fn argv(
         (None, None) => {}
     }
     match (&launch.effort, effort) {
+        (Some(_), None) if plain => {}
         (Some(setting), effort) => {
             let effort = serde_json::to_value(effort.unwrap_or(setting.default))
                 .map_err(|error| error.to_string())?;
@@ -120,6 +133,7 @@ pub fn argv(
         (None, None) => {}
     }
     match (&launch.permissions, permissions) {
+        (Some(_), None) if plain => {}
         (Some(setting), permissions) => {
             let flags = match permissions.unwrap_or(setting.default) {
                 Permissions::Yolo => &setting.yolo,
@@ -134,7 +148,7 @@ pub fn argv(
     Ok(args)
 }
 
-pub fn resolve(spec: &LaunchSpec) -> Result<Launch, String> {
+pub fn resolve(spec: &LaunchSpec, defaults: Defaults) -> Result<Launch, String> {
     match spec {
         LaunchSpec::Terminal => Ok(Launch::Terminal),
         LaunchSpec::Program { argv } => Ok(Launch::Program { argv: argv.clone() }),
@@ -143,9 +157,8 @@ pub fn resolve(spec: &LaunchSpec) -> Result<Launch, String> {
             model,
             effort,
             permissions,
-        } => {
-            argv(kind, model.as_deref(), *effort, *permissions).map(|argv| Launch::Program { argv })
-        }
+        } => argv_with(kind, model.as_deref(), *effort, *permissions, defaults)
+            .map(|argv| Launch::Program { argv }),
     }
 }
 
@@ -163,7 +176,7 @@ pub(crate) fn upgrade_stored_launches(raw: &mut Value) {
         }
         let upgraded = serde_json::from_value::<LaunchSpec>(launch.clone())
             .ok()
-            .and_then(|spec| resolve(&spec).ok())
+            .and_then(|spec| resolve(&spec, Defaults::Table).ok())
             .and_then(|launch| serde_json::to_value(launch).ok())
             .unwrap_or_else(|| json!({"kind": TERMINAL_KIND}));
         *launch = upgraded;

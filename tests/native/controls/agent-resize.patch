@@ -1,0 +1,14 @@
+diff --git a/app/src/vessel_socket.rs b/app/src/vessel_socket.rs
+index cd8f7817..27f0696a 100644
+--- a/app/src/vessel_socket.rs
++++ b/app/src/vessel_socket.rs
+@@ -186,6 +186,9 @@ fn beside_in_fleet(destination: &ContentDestination) -> bool {
+ }
+ 
+ fn offered(action: &Action, bound: bool) -> bool {
++    if matches!(action, Action::ResizePlacementSplit { .. }) {
++        return true;
++    }
+     match action {
+         Action::Inspect
+         | Action::CreateFleet { .. }

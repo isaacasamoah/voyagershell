@@ -240,6 +240,59 @@ types into the first terminal, as an agent in that Vessel would.
   milliseconds, including the shell's fork and exec. The numbers are a
   measurement of one machine, not a bar.
 
+The `agent-split` journey proves that any agent Vessel can split a named
+placement on a chosen side, through the `voyager.place` label or through
+`create-vessel` with a `beside` insertion, and that only Voyager resizes a
+split. The label cases type into the first terminal, as an agent in that Vessel
+would. The `create-vessel` and resize cases send `voyager do workspace` with
+that terminal's `HC_TERMINAL_ID`, which is not Voyager's.
+
+- `label-splits-each-side` moves the first shell to the second project folder
+  and starts `bash` with `voyager.place=fleet:<id>:<side>:<placement id>` for
+  `left`, `right`, `top` and `bottom`, each naming the first Vessel. It passes
+  when each new Vessel is saved in a split with the first Vessel on that side,
+  at an even share, and is drawn on that side of it.
+- `create-vessel-splits-beside` creates a terminal below the `right` Vessel.
+  It passes when the command exits 0, the new Vessel is saved below that
+  Vessel, its saved folder and the folder Core started it in are that
+  Vessel's folder, and a `create-vessel` with an `empty` insertion from the
+  same terminal is refused with exit 1 and leaves the Vessels and the split as
+  they were.
+- `bad-split-places-nothing` creates a second Fleet, then starts `bash` with
+  the side `middle`, with a placement that exists nowhere and with the second
+  Fleet and a placement of the first. It also sends `create-vessel` beside an
+  unknown placement. It passes when no new Vessel is saved or drawn, the
+  status line names each misplaced terminal, and the command's refusal is a
+  workspace reply with status `refused` and exit 1.
+- `agent-starts-plain` creates a `codex` agent beside a placement with no
+  permissions, then one with `"permissions":"read-only"`. It passes when the
+  first saved launch is exactly `codex` and the stand-in `codex` that Core
+  reports as the foreground program got no arguments, and the second saved
+  launch and the stand-in's arguments are the read-only row of
+  `content/agent-programs.json`, with no bypass flag.
+- `person-keeps-table-default` focuses a shell, opens the creation picker with
+  the keyboard shortcut and clicks Create Codex, as the person would, twice.
+  First with the Codex entry as shipped, which names its model, effort and
+  permissions, so the new Vessel must start with exactly those arguments, the
+  bypass flag included, as the person gets today. Then it writes a launch entry
+  for `codex` that names nothing and creates again, so the new Vessel starts
+  with the agent table's default only if the person keeps the table default.
+  Both exist because the shipped entry names everything and would hide a change
+  to the default. The saved launch of each new Vessel must be the table's
+  arguments, and the stand-in `codex` that Core reports as the foreground
+  program must have got them. The case covers the retained
+  `terminal-agent-create` journey's assertion that the person's Create Codex
+  gets the table default. That journey's other assertions, which need the
+  installed Codex, stay Python only.
+- `voyager-resizes-a-split` puts two Vessels side by side in the second Fleet
+  with the label and sends `resize-placement-split` for the Fleet's root split
+  from Voyager's terminal. It passes when the command exits 0 and the saved
+  share and the drawn divider move from even to 7000.
+- `agent-resize-refused` sends the same request with another share from the
+  first terminal. It passes when the command exits 1 with a refusal that ends
+  `is offered only to Voyager; nothing was queued`, and the saved and drawn
+  split keep Voyager's share.
+
 The `worktrees` journey proves that a Voyage on a git repository makes,
 guards and removes a linked worktree from its row's context menu. Before the
 first case it makes the fixture's second project folder a git repository with
@@ -584,7 +637,10 @@ The app starts its private conversation by running `codex app-server` from
 and runs as a relay. The relay connects to `/voyager/runtime/provider.sock`,
 sends a hello line with its PID and arguments, then copies the app's stdin lines
 to the socket and the socket's lines to its stdout. It does not exit when stdin
-closes, only when the socket closes or the app stops it.
+closes, only when the socket closes or the app stops it. Started with any first
+argument other than `app-server`, as an agent Vessel starts it, it prints
+`Stand-in codex started with:` and its arguments as JSON, then reads its input
+until it closes, so it stays the terminal's foreground program.
 
 `Provider::listen` in `src/provider.rs` owns that socket in the journey. It
 answers `initialize`, `thread/start` and `turn/start` at once, in the Codex
@@ -1128,6 +1184,25 @@ the expectation `the canvas focus returned to the docked Vessel`, because a
 second dock on the Vessel the canvas already shows does not change the context,
 and the typed line runs in the clicked shell.
 
+The `agent-split` patch offers `create-vessel` only to Voyager again.
+`create-vessel-splits-beside` then fails on the expectation `voyager do
+workspace applied create-vessel beside a placement from that Vessel and exited
+0`. The cases after it need the second Fleet that case sets up, so they are skipped and this
+control ends inconclusive by design, with `create-vessel-splits-beside` failed
+and blamed on the product in `checks.json`.
+`tests/native/controls/agent-resize.patch` offers `resize-placement-split`
+to every Vessel. A candidate built with it must fail `agent-resize-refused`.
+`tests/native/controls/agent-plain.patch` gives every caller the table default
+again, so a codex agent that another Vessel creates without naming permissions
+starts with the bypass flag. A candidate built with it must fail
+`agent-starts-plain` on the expectation that the saved agent's launch is
+exactly `codex`.
+`tests/native/controls/agent-person-plain.patch` gives the person the plain mode
+instead, so Create Codex from an entry that names no permissions starts the
+stand-in with no arguments. A candidate built with it must fail
+`person-keeps-table-default` on the expectations for that entry and on those
+only. The shipped entry names its arguments, so its expectations still hold.
+
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
 after a journey launches the candidate again.
@@ -1219,7 +1294,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/proc`, `/dev` and `/tmp` | New and private. |
 | `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
-| `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. |
+| `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. Under any first argument other than `app-server` it runs as a stand-in agent that prints its arguments. |
 | `/voyager/bin/claude` | The verifier binary itself, read-only. Under that name it runs as a stand-in agent. It prints the task it was given and echoes each line it reads, so a journey can start a known agent program with no model. |
 | `/voyager/bin/voyager` | The candidate's sibling `voyager` command, read-only, when the candidate's folder holds one. Its hash is not pinned. |
 | `/voyager/bin/hc-delay` | The verifier binary itself, read-only. Under that name it runs as the Core reply relay. It does nothing unless `--core-delay` names it as the app's Core bridge. |

@@ -60,6 +60,19 @@ fn settle_run(core: &mut Core, operation: &str, message: String) -> Result<Termi
     }
 }
 
+fn run_params(argv: Vec<String>, cwd: &str, operation: &str, path: Option<String>) -> RunParams {
+    RunParams {
+        argv,
+        cwd: Some(cwd.into()),
+        no_parent: true,
+        labels: HashMap::from([(LABEL.into(), operation.into())]),
+        env: path
+            .map(|path| HashMap::from([("PATH".into(), path)]))
+            .unwrap_or_default(),
+        ..Default::default()
+    }
+}
+
 pub(super) struct Owned<'a> {
     pub(super) core: &'a mut Core,
     pub(super) layout: &'a mut Arc<Layout>,
@@ -181,16 +194,7 @@ pub(super) fn start_terminal(
             }
         }
         let run = argv.map_err(rejected).and_then(|argv| {
-            let params = RunParams {
-                argv,
-                cwd: Some(cwd.clone()),
-                no_parent: true,
-                labels: HashMap::from([(LABEL.into(), operation.clone())]),
-                env: crate::launch::path_with_command()
-                    .map(|path| HashMap::from([("PATH".into(), path)]))
-                    .unwrap_or_default(),
-                ..Default::default()
-            };
+            let params = run_params(argv, &cwd, &operation, crate::launch::path_with_command());
             match core.terminal_run_with(params) {
                 Err(Error::Uncertain(message)) => settle_run(core, &operation, message),
                 run => run,
@@ -277,5 +281,71 @@ pub(super) fn attach_failure(error: Error, created: bool, address: &str) -> Erro
             "Terminal {address} started and its binding was saved, but viewer attachment is unconfirmed: {message}. No start was repeated"
         )),
         (false, error) => error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workspace::Model;
+    use serde_json::json;
+    use voyager_contract::{Action, ContentDestination, PlacementInsertion, PlacementOwner, Side};
+
+    #[test]
+    fn a_terminal_created_beside_a_placement_starts_in_its_cwd_with_only_path_in_env() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/work/crew".into(),
+            })
+            .unwrap();
+        let fleet = &model.layout.voyages[0].fleets[0];
+        let owner = PlacementOwner::Fleet {
+            id: fleet.id.clone(),
+        };
+        let beside = fleet.placements[0].id.clone();
+        let first = fleet.placements[0].vessel.clone();
+        model
+            .layout
+            .vessels
+            .iter_mut()
+            .find(|vessel| vessel.id == first)
+            .unwrap()
+            .cwd = "/work/elsewhere".into();
+        model
+            .apply_from(
+                Some(&VesselId("content-9".into())),
+                voyager_contract::launch::Defaults::Plain,
+                Action::CreateVessel {
+                    type_id: "terminal".into(),
+                    destination: ContentDestination::Placement {
+                        owner,
+                        insertion: PlacementInsertion::Beside {
+                            id: beside,
+                            side: Side::Right,
+                        },
+                    },
+                    launch: None,
+                },
+            )
+            .unwrap();
+        let created = model.layout.vessels.last().unwrap();
+        assert_eq!(created.cwd, "/work/elsewhere");
+        let params = run_params(
+            vec!["bash".into()],
+            &created.cwd,
+            "voyager-start-r1",
+            Some("/opt/voyager:/usr/bin".into()),
+        );
+        let sent = serde_json::to_value(&params).unwrap();
+        assert_eq!(sent["cwd"], "/work/elsewhere");
+        assert_eq!(sent["env"], json!({"PATH": "/opt/voyager:/usr/bin"}));
+        assert_eq!(
+            sent["labels"],
+            json!({"voyager-operation": "voyager-start-r1"})
+        );
+        let bare = serde_json::to_value(run_params(vec![], "/w", "o", None)).unwrap();
+        assert!(bare["env"].as_object().is_none_or(|env| env.is_empty()));
     }
 }

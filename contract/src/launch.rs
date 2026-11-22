@@ -42,6 +42,12 @@ pub struct LaunchRecord {
     pub permissions: Option<Permissions>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Defaults {
+    Table,
+    Plain,
+}
+
 pub const TERMINAL_TYPE: &str = "terminal";
 pub const AGENT_TYPE: &str = "agent";
 

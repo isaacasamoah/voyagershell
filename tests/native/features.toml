@@ -53,7 +53,7 @@ debug = "covered"
 [[feature]]
 id = "agent-vessels"
 name = "Agent Vessels"
-path = "Launch an agent Vessel and see it and its processes in the arrangement."
+path = "Launch an agent Vessel and see it and its processes in the arrangement. An agent that another Vessel creates, without naming its permissions, starts in its plain mode."
 sources = ["app/src/launch.rs", "desktop/canvas/agents.ts", "desktop/canvas/processes.ts"]
 journeys = []
 platforms = ["linux"]
@@ -352,9 +352,9 @@ debug = "covered"
 [[feature]]
 id = "adopted-vessels"
 name = "Labelled programs as Vessels"
-path = "From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook."
-sources = ["contract/src/place.rs", "contract/src/socket.rs", "app/src/activity.rs", "app/src/client_core.rs", "app/src/adoption.rs", "app/src/vessel_socket.rs", "app/src/focus_hook.rs", "app/src/bin/voyager.rs", "app/src/workspace.rs", "docs/voyager-command.md", "app/src/client_owner.rs"]
-journeys = ["adopt-by-label", "socket-dock"]
+path = "From a Vessel, start an agent with a voyager.place label and see it appear as a Vessel in that Fleet or as a Portal, split a named placement on any side with the label or with create-vessel, dock onto it, create a Fleet with the voyager command, remove a placement with it and read the dock with voyager focus or its Claude hook."
+sources = ["contract/src/place.rs", "contract/src/socket.rs", "app/src/activity.rs", "app/src/client_core.rs", "app/src/adoption.rs", "app/src/vessel_socket.rs", "app/src/focus_hook.rs", "app/src/bin/voyager.rs", "app/src/workspace.rs", "app/src/agent_programs.rs", "docs/voyager-command.md", "app/src/client_owner.rs"]
+journeys = ["adopt-by-label", "socket-dock", "agent-split"]
 platforms = ["linux"]
 python = []
 behavior = "covered"

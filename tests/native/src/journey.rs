@@ -1,4 +1,5 @@
 mod adopt_by_label;
+mod agent_split;
 mod arrangement;
 mod chat;
 mod core_events;
@@ -141,6 +142,7 @@ journeys! {
     SlowList => "slow-list" in slow_list, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     SocketDock => "socket-dock" in socket_dock, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    AgentSplit => "agent-split" in agent_split, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
@@ -492,6 +494,9 @@ mod tests {
                 "tests/native/controls/voice-turn.patch".to_owned(),
                 "tests/native/controls/voice-first-paragraph.patch".to_owned(),
                 "tests/native/controls/voice-reply-marker.patch".to_owned(),
+                "tests/native/controls/agent-resize.patch".to_owned(),
+                "tests/native/controls/agent-plain.patch".to_owned(),
+                "tests/native/controls/agent-person-plain.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

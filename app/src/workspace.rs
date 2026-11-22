@@ -2,7 +2,9 @@ use crate::panels;
 use voyager_contract::{
     Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, LastVessel,
     Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget,
-    Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView, launch::Launch,
+    Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView,
+    launch::{Defaults, Launch, LaunchSpec},
+    place::Place,
 };
 
 pub(crate) const VOYAGER_VESSEL: &str = "voyager";
@@ -235,12 +237,14 @@ impl Model {
 
     pub(crate) fn adopt(
         &mut self,
-        owner: &PlacementOwner,
+        place: Place,
         terminal: &CoreTerminalId,
         cwd: String,
         launch: Launch,
         core_name: Option<String>,
     ) -> Result<bool, String> {
+        let (owner, insertion) = place.into_parts();
+        let owner = &owner;
         if self
             .layout
             .vessels
@@ -249,23 +253,14 @@ impl Model {
         {
             return Ok(false);
         }
-        let open = self.layout.containers().any(|voyage| {
-            !voyage.closed
-                && match owner {
-                    PlacementOwner::Fleet { id } => voyage
-                        .fleets
-                        .iter()
-                        .any(|fleet| &fleet.id == id && !fleet.closed),
-                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
-                }
-        });
-        if !open {
-            return Err(match owner {
-                PlacementOwner::Fleet { id } => format!("no open Fleet {}", id.0),
-                PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
-            });
+        self.require_open(owner)?;
+        let target = panels::group(&self.layout, owner)?;
+        if let PlacementInsertion::Beside { id, .. } = &insertion
+            && !panels::contains(&panels::visible(target.root, target.members), id)
+        {
+            return Err(panels::no_visible_placement(owner, id));
         }
-        let members = panels::group(&self.layout, owner)?.members;
+        let members = target.members;
         let core_name = core_name
             .filter(|name| !name.is_empty() && members.iter().all(|panel| &panel.name != name));
         let named = core_name.is_some();
@@ -278,13 +273,14 @@ impl Model {
             content.backend = Some(terminal.clone());
             content.adopted = true;
         }
-        self.insert(owner, PlacementInsertion::Empty, panel)?;
+        self.insert(owner, insertion, panel)?;
         Ok(true)
     }
 
     pub(crate) fn apply_from(
         &mut self,
         program: Option<&VesselId>,
+        defaults: Defaults,
         action: Action,
     ) -> Result<(), String> {
         match action {
@@ -293,8 +289,52 @@ impl Model {
                 self.remember_fleet();
                 Ok(())
             }
+            Action::CreateVessel {
+                type_id,
+                destination,
+                launch,
+            } => self.create_vessel(type_id, destination, launch, defaults),
             action => self.apply(action),
         }
+    }
+
+    fn require_open(&self, owner: &PlacementOwner) -> Result<(), String> {
+        let open = self.layout.containers().any(|voyage| {
+            !voyage.closed
+                && match owner {
+                    PlacementOwner::Fleet { id } => voyage
+                        .fleets
+                        .iter()
+                        .any(|fleet| &fleet.id == id && !fleet.closed),
+                    PlacementOwner::Portals { voyage: id } => &voyage.id == id,
+                }
+        });
+        if open {
+            return Ok(());
+        }
+        Err(match owner {
+            PlacementOwner::Fleet { id } => format!("no open Fleet {}", id.0),
+            PlacementOwner::Portals { voyage } => format!("no open Voyage {}", voyage.0),
+        })
+    }
+
+    fn create_vessel(
+        &mut self,
+        type_id: String,
+        destination: ContentDestination,
+        launch: Option<LaunchSpec>,
+        defaults: Defaults,
+    ) -> Result<(), String> {
+        let ContentDestination::Placement { owner, insertion } = destination;
+        if !crate::content::valid_type_id(&type_id) {
+            return Err("Unsupported Vessel type".into());
+        }
+        self.require_open(&owner)?;
+        let launch = crate::launch::requested(&type_id, launch, defaults)?;
+        let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
+        let name = panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);
+        let panel = self.placement(cwd, type_id, name, launch)?;
+        self.insert(&owner, insertion, panel)
     }
 
     fn add_fleet(
@@ -624,7 +664,7 @@ impl Model {
                 if name.trim().is_empty() || !crate::content::valid_type_id(&type_id) {
                     return Err("Fleet name or Vessel type is invalid".into());
                 }
-                let launch = crate::launch::requested(&type_id, launch)?;
+                let launch = crate::launch::requested(&type_id, launch, Defaults::Table)?;
                 let cwd = match source {
                     voyager_contract::DirectorySource::Live { cwd, .. }
                     | voyager_contract::DirectorySource::Voyage { cwd, .. }
@@ -764,19 +804,9 @@ impl Model {
             }
             Action::CreateVessel {
                 type_id,
-                destination: ContentDestination::Placement { owner, insertion },
+                destination,
                 launch,
-            } => {
-                if !crate::content::valid_type_id(&type_id) {
-                    return Err("Unsupported Vessel type".into());
-                }
-                let launch = crate::launch::requested(&type_id, launch)?;
-                let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
-                let name =
-                    panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);
-                let panel = self.placement(cwd, type_id, name, launch)?;
-                self.insert(&owner, insertion, panel)?;
-            }
+            } => self.create_vessel(type_id, destination, launch, Defaults::Table)?,
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();
                 if name.is_empty() || name.len() > 128 {

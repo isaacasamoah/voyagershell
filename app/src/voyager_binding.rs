@@ -47,6 +47,27 @@ impl Binding {
         self.terminal.lock().ok().and_then(|bound| bound.clone())
     }
 
+    pub(crate) fn launch_defaults(
+        &self,
+        layout: &voyager_contract::Layout,
+        caller: Option<&voyager_contract::VesselId>,
+    ) -> voyager_contract::launch::Defaults {
+        let Some(caller) = caller else {
+            return voyager_contract::launch::Defaults::Table;
+        };
+        let is_voyager = layout
+            .vessels
+            .iter()
+            .find(|vessel| &vessel.id == caller)
+            .and_then(|vessel| vessel.backend.as_ref())
+            .is_some_and(|terminal| self.names(terminal));
+        if is_voyager {
+            voyager_contract::launch::Defaults::Table
+        } else {
+            voyager_contract::launch::Defaults::Plain
+        }
+    }
+
     pub fn names(&self, terminal: &CoreTerminalId) -> bool {
         self.terminal
             .lock()

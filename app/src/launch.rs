@@ -1,5 +1,5 @@
 use std::{collections::HashSet, io::Read as _, path::Path};
-use voyager_contract::launch::{Catalog, Launch, LaunchSettings, LaunchSpec};
+use voyager_contract::launch::{Catalog, Defaults, Launch, LaunchSettings, LaunchSpec};
 
 pub(crate) const VOYAGER_ENTRY: &str = "voyager";
 
@@ -58,11 +58,15 @@ pub fn spec_argv(spec: &LaunchSpec) -> Result<Vec<String>, String> {
     }
 }
 
-pub(crate) fn requested(type_id: &str, spec: Option<LaunchSpec>) -> Result<Option<Launch>, String> {
+pub(crate) fn requested(
+    type_id: &str,
+    spec: Option<LaunchSpec>,
+    defaults: Defaults,
+) -> Result<Option<Launch>, String> {
     use voyager_contract::launch::{AGENT_TYPE, TERMINAL_TYPE};
     match (type_id, spec) {
         (AGENT_TYPE, Some(spec @ LaunchSpec::Agent { .. })) => {
-            crate::agent_programs::resolve(&spec).map(Some)
+            crate::agent_programs::resolve(&spec, defaults).map(Some)
         }
         (AGENT_TYPE, _) => Err("An agent Vessel needs an agent launch".into()),
         (_, None) => Ok(None),
@@ -71,7 +75,7 @@ pub(crate) fn requested(type_id: &str, spec: Option<LaunchSpec>) -> Result<Optio
         }
         (TERMINAL_TYPE, Some(spec)) => {
             spec_argv(&spec)?;
-            crate::agent_programs::resolve(&spec).map(Some)
+            crate::agent_programs::resolve(&spec, defaults).map(Some)
         }
         (_, Some(_)) => Err("Only terminal content accepts a program launch".into()),
     }

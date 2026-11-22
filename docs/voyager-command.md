@@ -34,14 +34,21 @@ Start it with `hc run` and label it with the place it belongs:
 ```sh
 hc run --bg --name fix --label voyager.place=fleet:<fleet id> claude "Fix the failing test in x.rs. Report with hc send $HC_TERMINAL_ID when done."
 hc run --bg --name notes --label voyager.place=portal:<voyage id> bash
+hc run --bg --name review --label voyager.place=fleet:<fleet id>:right:<placement id> claude "Review x.rs."
 ```
 
 - `fleet:<fleet id>` places it in that Fleet. `portal:<voyage id>` places it
   as a Portal across that Voyage. Take the ids from `voyager status`.
+- `fleet:<fleet id>:<side>:<placement id>` splits that placement of the Fleet
+  and puts the program on the chosen side of it. `<side>` is `left`, `right`,
+  `top` or `bottom`. The placement must belong to that Fleet. Ids hold only
+  letters, digits, `.`, `_` and `-`, so a colon always separates the parts.
+  Splitting does not resize anything. Only Voyager and the person resize.
 - VoyagerShell adds the Vessel when Core reports the new terminal. A known
   agent program, such as `claude` or `codex`, shows as an agent Vessel. Any
   other program shows as a terminal Vessel.
-- An invalid value, or a Fleet or Voyage that is not open, places nothing.
+- An invalid value, a side that is not one of the four, a placement that is
+  not in the named Fleet, or a Fleet or Voyage that is not open, places nothing.
   VoyagerShell shows the reason in its status line. Start the program again
   with a corrected label.
 - A terminal without the label stays hidden, as before.
@@ -190,24 +197,34 @@ directory. A Fleet for an agent stays `create-fleet`, which opens empty.
 voyager do workspace '{"requestId":"fleet-1","expectedVersion":"<version>","action":{"operation":"create-fleet-with-vessel","voyage":"<voyage id>","name":"Review","source":{"kind":"voyage","voyageId":"<voyage id>","cwd":"<voyage cwd>"},"typeId":"terminal"}}'
 ```
 
-`create-vessel` and `set-placement-maximized` are offered only to Voyager too.
-`create-vessel` adds a Vessel of the named `typeId` to a Fleet. Its
+`set-placement-maximized` and `resize-placement-split` are offered only to
+Voyager too. `create-vessel` with a `beside` insertion in a Fleet is offered to
+every Vessel, and without one only to Voyager. `create-vessel` adds a Vessel of the named `typeId` to a Fleet. Its
 `destination` names the owner as `{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":...}`.
 `insertion` is `{"kind":"empty"}` for an empty Fleet, or
 `{"kind":"beside","id":"<placement id>","side":"<side>"}` beside a placement.
 The current Fleet is the one `voyager status` and the focus reply show. A
-destination in the Portals is refused. `set-placement-maximized` takes
+destination in the Portals is refused. An agent `launch` from a Vessel other
+than Voyager that names no `permissions` starts the agent in its plain mode,
+with the arguments a plain `hc run` of it would carry and no bypass flag. Name
+`permissions` to get the matching row of the agent table. `set-placement-maximized` takes
 `"id":"<placement id>"` and `"maximized":true` to maximize it, or `false` to
-restore it. The app still decides whether the target and the Fleet are valid,
-as it does for the avatar.
+restore it. `resize-placement-split` takes the Fleet as `"owner":{"kind":"fleet","id":"<fleet id>"}`,
+a `"path"` of `"first"` and `"second"` steps from the Fleet's root split to the
+split to resize (an empty path is the root split), and `"share"`, the first
+child's part of the split in ten-thousandths, from 1 to 9999. The app still
+decides whether the target and the Fleet are valid, as it does for the avatar.
 
 ```sh
 voyager do workspace '{"requestId":"vessel-1","expectedVersion":"<version>","action":{"operation":"create-vessel","typeId":"terminal","destination":{"kind":"placement","owner":{"kind":"fleet","id":"<fleet id>"},"insertion":{"kind":"empty"}}}}'
 voyager do workspace '{"requestId":"max-1","expectedVersion":"<version>","action":{"operation":"set-placement-maximized","id":"<placement id>","maximized":true}}'
+voyager do workspace '{"requestId":"resize-1","expectedVersion":"<version>","action":{"operation":"resize-placement-split","owner":{"kind":"fleet","id":"<fleet id>"},"path":[],"share":6000}}'
 ```
 
 From any other Vessel each is refused with "<operation> is offered only to
-Voyager", the exit code is 1 and nothing is queued.
+Voyager", the exit code is 1 and nothing is queued. `create-vessel` is offered
+to any Vessel when its insertion is `beside` a placement of a Fleet, as shown
+below.
 
 `remove-placement` takes `"id":"<placement id>"` from `voyager status`. It
 takes that placement off the canvas and nothing else. The Vessel's content,
@@ -235,12 +252,15 @@ with exit code 1 and nothing queued, and the message says who may use it.
 | You want to | Use | Who may |
 | --- | --- | --- |
 | Add a terminal or agent Vessel to a Fleet | `hc run --label voyager.place=fleet:<fleet id>` | any Vessel |
+| Split a placement with a terminal or agent Vessel | `hc run --label voyager.place=fleet:<fleet id>:<side>:<placement id>` | any Vessel |
+| Split a placement with a Vessel of any ready type | `create-vessel` with a `beside` insertion | any Vessel |
 | Open a Fleet or Voyage | `select-fleet`, `select-voyage` | any Vessel |
 | Make a Fleet that holds one new Vessel of any ready type | `create-fleet-with-vessel` | Voyager only |
-| Add a Vessel of any ready type to a Fleet | `create-vessel` | Voyager only |
+| Add a Vessel of any ready type to a Fleet without naming a placement | `create-vessel` with an `empty` insertion | Voyager only |
 | Maximize or restore a placement | `set-placement-maximized` | Voyager only |
+| Resize a split | `resize-placement-split` | Voyager only |
 | Take the user to a Vessel | `dock` | Voyager only |
-| Add a Vessel to a Portal column, hide, reveal or resize a placement | The person | the person |
+| Add a Vessel to a Portal column, hide or reveal a placement | The person | the person |
 
 Tell the person when a task needs the last row. Do not try to work round it.
 
@@ -272,7 +292,8 @@ reply of the create request. An applied reply means the app took the dock.
 Run `voyager focus` to read it back. Its `scope` names the placement you docked
 on.
 
-Add a Vessel of the type `flag` beside a placement of a Fleet. Take the Fleet
+Add a Vessel of the type `flag` beside a placement of a Fleet. Any Vessel may
+do this. Take the Fleet
 id and the placement id from the reply of the create request above, or from
 `voyager status`. `side` is `left`, `right`, `top` or `bottom`.
 
