@@ -2,7 +2,7 @@ use super::layout::{avatar_bounds, avatar_on_dock};
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::{Target, region};
 use crate::native::{
-    DRAG_REST, Held, LOOK, Moved, Native, Stopwatch, Terminal, Wheel, changed, fleets, voyages,
+    DRAG_REST, Held, LOOK, Moved, Native, Terminal, Wheel, changed, fleets, now_millis, voyages,
 };
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Geometry, Pixels};
@@ -46,6 +46,7 @@ const SCROLL_PAGES: usize = 80;
 const STAIRS_DONE: &str = "stairs-42";
 const STREAM: &str = r#"while :; do seq -f $'\e[32mCompiling\e[0m crate-%g v0.1.0 (/voyager/home/project/crates/core) \e[2mwarning: unused variable\e[0m' 1 2000; done"#;
 
+#[derive(PartialEq)]
 struct Orbit {
     centre: (f32, f32),
     reach: (f32, f32),
@@ -115,7 +116,8 @@ fn line(from: (i16, i16), to: (i16, i16)) -> Vec<(i16, i16)> {
     (1..=APPROACH)
         .map(|step| {
             let part = |from: i16, to: i16| {
-                (f32::from(from) + (f32::from(to) - f32::from(from)) * step as f32 / APPROACH as f32)
+                (f32::from(from)
+                    + (f32::from(to) - f32::from(from)) * step as f32 / APPROACH as f32)
                     .round() as i16
             };
             (part(from.0, to.0), part(from.1, to.1))
@@ -138,7 +140,10 @@ fn under_rest(pause: u64) -> bool {
 fn stairs(terminal: &Terminal, native: &Native) -> Result<(u16, String)> {
     let columns = terminal.columns(native)?;
     let count = STAIRS.min(columns.saturating_sub(2));
-    ensure!(count > 10, "The terminal is {columns} columns wide, too narrow for the staircase");
+    ensure!(
+        count > 10,
+        "The terminal is {columns} columns wide, too narrow for the staircase"
+    );
     let pad = KEPT_BYTES / usize::from(count) / 3;
     let command = format!(
         "sleep 2; p=$(printf '\\e[m%.0s' {{1..{pad}}}); b=$(printf '#%.0s' {{1..{count}}}); printf '\\e[H\\e[2J\\e[3J\\n'; for i in {{1..{count}}}; do printf '%s%s\\n' \"$p\" \"${{b:0:i}}\"; sleep 0.02; done; echo; echo stairs-$((6*7)); echo"
@@ -162,6 +167,7 @@ fn circle_until_printed<'a>(
     orbit: &Orbit,
     printed: impl Fn(&str) -> bool,
 ) -> Result<(Held<'a>, Drag, Pixels)> {
+    terminal.settled(native, "the terminal before the drag", |_| true)?;
     let mut held = native.hold(&Target::AVATAR)?;
     let mut moves = held.glide(&orbit.approach())?;
     let frozen = orbit.look(native, terminal)?;
@@ -192,12 +198,16 @@ fn circle_until_printed<'a>(
     Ok((held, drag, frozen))
 }
 
-fn rested(native: &Native, terminal: &Terminal, orbit: &Orbit, frozen: &Pixels) -> Result<bool> {
-    Ok(poll(PATIENCE, LOOK, true, || {
+fn rested(
+    native: &Native,
+    terminal: &Terminal,
+    orbit: &Orbit,
+    frozen: &Pixels,
+) -> Result<Option<u64>> {
+    poll(PATIENCE, LOOK, true, || {
         let look = orbit.look(native, terminal)?;
-        Ok(changed(frozen, &look).map(|_| ()))
-    })?
-    .is_some())
+        Ok(changed(frozen, &look).map(|_| now_millis()))
+    })
 }
 
 fn stairs_done(screen: &str) -> bool {
@@ -234,9 +244,9 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
     let (held, drag, frozen) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
-    let resting = Stopwatch::start();
     let shown = rested(native, terminal, &orbit, &frozen)?;
-    let delay = resting.lap();
+    let rested_at = drag.moves.last().map_or(0, |last| last.at_ms);
+    let delay = shown.map(|shown| shown.saturating_sub(rested_at));
     let look = orbit.look(native, terminal)?;
     native.keep("caught-up", &look)?;
     held.release()?;
@@ -251,11 +261,11 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         )
         .expect(
             "with the avatar held still, the pane drew the program's output",
-            shown,
+            shown.is_some(),
         )
         .expect(
             "the pane drew it only after the pointer had rested 120 ms",
-            !delay.within(DRAG_REST),
+            delay.is_some_and(|delay| !under_rest(delay)),
         )
         .expect(
             "no pause between pointer moves reached the 120 ms rest",
@@ -315,6 +325,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let mut found = vec![false; usize::from(count) + 1];
     let mut previous: Option<Vec<u16>> = None;
     for _ in 0..SCROLL_PAGES {
+        terminal.settled(native, "the scrolled terminal", |_| true)?;
         let widths = terminal.widths(native, None)?;
         if previous.as_ref() == Some(&widths) {
             break;
@@ -330,7 +341,9 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         previous = Some(widths);
         native.wheel(&terminal.target(), Wheel::Up, SCROLL_CLICKS)?;
     }
-    let missing: Vec<usize> = (1..=usize::from(count)).filter(|row| !found[*row]).collect();
+    let missing: Vec<usize> = (1..=usize::from(count))
+        .filter(|row| !found[*row])
+        .collect();
     let broken: Vec<(u16, u16)> = pages.iter().filter_map(|page| page.broken).collect();
     native.keep_window("drag-kept")?;
     let record = native.system.evidence.join("drag-kept.json");
@@ -418,8 +431,16 @@ fn throughput(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         runs.push(fast(terminal, native, &orbit, false)?);
         runs.push(fast(terminal, native, &orbit, true)?);
     }
-    let mut rest: Vec<u64> = runs.iter().filter(|run| !run.dragged).map(|run| run.millis).collect();
-    let mut dragged: Vec<u64> = runs.iter().filter(|run| run.dragged).map(|run| run.millis).collect();
+    let mut rest: Vec<u64> = runs
+        .iter()
+        .filter(|run| !run.dragged)
+        .map(|run| run.millis)
+        .collect();
+    let mut dragged: Vec<u64> = runs
+        .iter()
+        .filter(|run| run.dragged)
+        .map(|run| run.millis)
+        .collect();
     let (fastest, slowest) = (
         rest.iter().copied().min().unwrap_or_default(),
         rest.iter().copied().max().unwrap_or_default(),
@@ -445,7 +466,10 @@ fn throughput(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
 
 fn path(native: &Native) -> Result<Vec<(i16, i16)>> {
     let (from, scale) = native.observe("the avatar at rest and the window scale", |seen| {
-        Some((centre_of(region(seen.frame, &avatar_bounds(seen)?)), seen.frame.window.scale))
+        Some((
+            centre_of(region(seen.frame, &avatar_bounds(seen)?)),
+            seen.frame.window.scale,
+        ))
     })?;
     let scaled = |(x, y): (f32, f32)| ((x * scale).round() as i16, (y * scale).round() as i16);
     let start = scaled((CENTRE.0, CENTRE.1 + REACH.1));
@@ -481,7 +505,15 @@ fn start(native: &Native, name: &str, fleet: &FleetId) -> Result<()> {
         .execute(
             "hc",
             &[
-                "run", "--bg", "--no-notify", "--name", name, "--label", &label, "bash", "-c",
+                "run",
+                "--bg",
+                "--no-notify",
+                "--name",
+                name,
+                "--label",
+                &label,
+                "bash",
+                "-c",
                 STREAM,
             ],
             None,
@@ -553,7 +585,10 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
     });
     let orbit = Orbit::around(native, &streaming.target())?;
     let onto = native.observe("the Vessel to dock on", |seen| {
-        Some(centre_of(region(seen.frame, &vessel.find(seen.frame)?.bounds)))
+        Some(centre_of(region(
+            seen.frame,
+            &vessel.find(seen.frame)?.bounds,
+        )))
     })?;
     let mut held = native.hold(&Target::AVATAR)?;
     held.glide(&orbit.approach())?;
@@ -571,7 +606,7 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
             (seen.document.context == docked && avatar_on_dock(seen)).then_some(())
         })
         .is_ok();
-    let redrawn = rested(native, streaming, &orbit, &frozen)?;
+    let redrawn = rested(native, streaming, &orbit, &frozen)?.is_some();
     native.keep_window("drag-docks")?;
     Verdict::new()
         .expect(
@@ -592,9 +627,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         .map(|fleet| fleet.id.clone())
         .context("The layout has no Fleet")?;
     cases.check(native, Case::Still, |native| still(native, &terminal))?;
-    cases.check(native, Case::CaughtUp, |native| caught_up(native, &terminal))?;
+    cases.check(native, Case::CaughtUp, |native| {
+        caught_up(native, &terminal)
+    })?;
     cases.check(native, Case::Kept, |native| kept(native, &terminal))?;
-    cases.check(native, Case::Throughput, |native| throughput(native, &terminal))?;
+    cases.check(native, Case::Throughput, |native| {
+        throughput(native, &terminal)
+    })?;
     let mut hidden = Vec::new();
     for _ in 0..HIDDEN_FLEETS {
         hidden.push(create_fleet(native, &home)?);
@@ -624,7 +663,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     }
     show(native, &home)?;
     let loaded = VISIBLE_STREAMS + HIDDEN_FLEETS * STREAMS_PER_HIDDEN_FLEET;
-    cases.check(native, Case::Fleets, |native| follows(native, Case::Fleets, loaded))?;
+    cases.check(native, Case::Fleets, |native| {
+        follows(native, Case::Fleets, loaded)
+    })?;
     let placement = native.observe("a streaming Vessel's placement", |seen| {
         fleets(seen.document)
             .find(|fleet| fleet.id == home)?
@@ -634,5 +675,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .map(|placed| placed.id.clone())
     })?;
     let streamer = Terminal::bind(native, &placement)?;
-    cases.check(native, Case::Docks, |native| docks(native, &terminal, &streamer))
+    cases.check(native, Case::Docks, |native| {
+        docks(native, &terminal, &streamer)
+    })
 }
