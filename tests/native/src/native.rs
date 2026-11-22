@@ -4,7 +4,7 @@ mod settle;
 mod terminal;
 
 pub use avatar::{Reference, Sharpness};
-pub use input::Wheel;
+pub use input::{Moved, Wheel, wall_nanos};
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed, FLOAT_SPACING,
     LONG_SILENCE, Owed, PAST_CORE_DEADLINE, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, Stopwatch,
@@ -223,6 +223,7 @@ pub struct Native {
     pub hc: Pinned,
     pub script: Option<Script>,
     pub probe_frames: bool,
+    pub frame_window: bool,
     pub audio_requested: bool,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
@@ -279,6 +280,7 @@ impl Native {
             hc,
             script: None,
             probe_frames: false,
+            frame_window: false,
             audio_requested: false,
             audio: None,
             voice_engine: None,
@@ -618,6 +620,7 @@ impl Native {
         fs::create_dir_all(&profile)?;
         let inspection = self.inspection();
         let stop = self.system.evidence.join(frames::STOP);
+        let window = self.system.evidence.join(frames::WINDOW);
         let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
         if self.probe_frames {
             extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
@@ -626,6 +629,14 @@ impl Native {
                 "VOYAGER_FRAME_PROFILE_STOP",
                 stop.to_str().context("Invalid frame stop path")?,
             ));
+            if self.frame_window {
+                extra_env.push((
+                    "VOYAGER_FRAME_PROFILE_WINDOW",
+                    window.to_str().context("Invalid frame window path")?,
+                ));
+                extra_env.push(("VOYAGER_FRAME_PROFILE_RECORDS", "2000000"));
+                extra_env.push(("VOYAGER_FRAME_PROFILE_SECONDS", "900"));
+            }
         }
         let engine = self
             .voice_engine

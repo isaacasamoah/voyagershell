@@ -2,6 +2,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 
 pub const STOP: &str = "frames.stop";
+pub const WINDOW: &str = "frames.window";
 pub const RECORD: &str = "frames.jsonl";
 const END: &str = "voyager_frame_work_end";
 

@@ -1,0 +1,13 @@
+diff --git a/desktop/src/avatar.rs b/desktop/src/avatar.rs
+index ae347cb0..eb76c0a1 100644
+--- a/desktop/src/avatar.rs
++++ b/desktop/src/avatar.rs
+@@ -493,7 +493,7 @@ impl Avatar {
+             }
+         }
+         if drag.moved {
+-            drag.position = desktop - drag.offset;
++            drag.position = drag.start - drag.offset;
+             if self.floating == Some(drag.source) {
+                 let origin = drag.position - point(px(13.), px(13.));
+                 self.position_float(origin, window, cx);

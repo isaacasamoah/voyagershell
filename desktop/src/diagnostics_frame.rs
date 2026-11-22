@@ -99,6 +99,15 @@ pub(crate) fn start(cx: &mut gpui::App) {
     }
     let Some(stop) = stop else { return };
     let destination = stop.with_extension("jsonl");
+    let window = std::env::var_os("VOYAGER_FRAME_PROFILE_WINDOW").map(PathBuf::from);
+    let records: u64 = std::env::var("VOYAGER_FRAME_PROFILE_RECORDS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(20000);
+    let seconds: u64 = std::env::var("VOYAGER_FRAME_PROFILE_SECONDS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(120);
     let mut collector = cx.foreground_journal().collector();
     let _writer = std::thread::Builder::new()
         .name("frame-work".into())
@@ -117,11 +126,17 @@ pub(crate) fn start(cx: &mut gpui::App) {
             let mut sequence = 0;
             let mut lost = 0;
             let mut last_drain_wall_ns = None;
-            while started.elapsed() < Duration::from_secs(120) && sequence < 20000 && !stop.exists()
+            while started.elapsed() < Duration::from_secs(seconds)
+                && sequence < records
+                && !stop.exists()
             {
                 let drained = collector.collect_unseen();
                 last_drain_wall_ns = wall();
                 lost += drained.lost;
+                if window.as_ref().is_some_and(|window| !window.exists()) {
+                    std::thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
                 for entry in drained.entries {
                     let mut record = match entry {
                         ForegroundJournalEntry::Event(event) => event_data(event),
@@ -139,7 +154,7 @@ pub(crate) fn start(cx: &mut gpui::App) {
                         return;
                     }
                     sequence += 1;
-                    if sequence == 20000 {
+                    if sequence == records {
                         break;
                     }
                 }
@@ -151,8 +166,8 @@ pub(crate) fn start(cx: &mut gpui::App) {
                 json!({
                     "event": "voyager_frame_work_end", "records": sequence, "lost": lost,
                     "requested_stop": stop.exists(),
-                    "capped": sequence == 20000,
-                    "expired": started.elapsed() >= Duration::from_secs(120),
+                    "capped": sequence == records,
+                    "expired": started.elapsed() >= Duration::from_secs(seconds),
                     "last_drain_wall_ns": last_drain_wall_ns,
                     "coverage": "Observed prefix through last drain, not the process lifetime",
                 })

@@ -1,0 +1,18 @@
+diff --git a/desktop/src/avatar/view.rs b/desktop/src/avatar/view.rs
+index 8e4630a9..6e1d5976 100644
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -278,6 +278,13 @@ impl AvatarView {
+                 window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+                     if phase == gpui::DispatchPhase::Capture {
+                         let _ = moving.update(cx, |avatar, cx| avatar.moving(event, window, cx));
++                        if moving.upgrade().is_some_and(|avatar| {
++                            avatar.read(cx).drag.as_ref().is_some_and(|drag| {
++                                drag.moved && drag.source == window.window_handle()
++                            })
++                        }) {
++                            cx.stop_propagation();
++                        }
+                     }
+                 });
+                 let released = avatar.clone();

@@ -434,6 +434,7 @@ fn drive(plan: Plan) -> Result<i32> {
     let mut native = Native::new(system, plan.candidate, plan.second, plan.hc, plan.surface);
     native.script = plan.provider_script;
     native.probe_frames = plan.probe_frames;
+    native.frame_window = plan.journey.windowed_frames();
     native.audio_requested = plan.audio;
     native.voice_engine = plan.voice_engine;
     native.seed_documents(plan.documents);
@@ -579,6 +580,10 @@ const SOURCES: &[(&str, &[u8])] = &[
     (
         "src/journey/arrangement.rs",
         include_bytes!("journey/arrangement.rs"),
+    ),
+    (
+        "src/journey/avatar_drag.rs",
+        include_bytes!("journey/avatar_drag.rs"),
     ),
     ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
     (

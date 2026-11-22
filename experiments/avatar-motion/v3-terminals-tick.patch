@@ -1,0 +1,88 @@
+diff --git a/desktop/src/avatar.rs b/desktop/src/avatar.rs
+index ae347cb0..5bd0ab2e 100644
+--- a/desktop/src/avatar.rs
++++ b/desktop/src/avatar.rs
+@@ -27,6 +27,25 @@ use voyager_contract::{Action, Context as Scope, Outcome, Reply, Request, operat
+ 
+ struct Changed;
+ 
++thread_local! {
++    static DRAG_MOVED_AT: Cell<Option<Instant>> = const { Cell::new(None) };
++    static DRAG_EPOCH: Instant = Instant::now();
++}
++
++const DRAG_QUIET: std::time::Duration = std::time::Duration::from_millis(120);
++
++const DRAG_TERMINAL_TICK: std::time::Duration = std::time::Duration::from_millis(100);
++
++pub(crate) fn dragging() -> bool {
++    DRAG_MOVED_AT.with(|moved| moved.get().is_some_and(|at| at.elapsed() < DRAG_QUIET))
++}
++
++pub(crate) fn drag_tick() -> Option<u128> {
++    dragging().then(|| {
++        DRAG_EPOCH.with(|epoch| epoch.elapsed().as_millis() / DRAG_TERMINAL_TICK.as_millis())
++    })
++}
++
+ pub struct Avatar {
+     client: Client,
+     version: u64,
+@@ -493,6 +512,7 @@ impl Avatar {
+             }
+         }
+         if drag.moved {
++            DRAG_MOVED_AT.with(|moved| moved.set(Some(Instant::now())));
+             drag.position = desktop - drag.offset;
+             if self.floating == Some(drag.source) {
+                 let origin = drag.position - point(px(13.), px(13.));
+diff --git a/desktop/src/avatar/view.rs b/desktop/src/avatar/view.rs
+index 8e4630a9..6e1d5976 100644
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -278,6 +278,13 @@ impl AvatarView {
+                 window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+                     if phase == gpui::DispatchPhase::Capture {
+                         let _ = moving.update(cx, |avatar, cx| avatar.moving(event, window, cx));
++                        if moving.upgrade().is_some_and(|avatar| {
++                            avatar.read(cx).drag.as_ref().is_some_and(|drag| {
++                                drag.moved && drag.source == window.window_handle()
++                            })
++                        }) {
++                            cx.stop_propagation();
++                        }
+                     }
+                 });
+                 let released = avatar.clone();
+diff --git a/desktop/src/terminal.rs b/desktop/src/terminal.rs
+index e1f13f86..0be617d6 100644
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -149,6 +149,7 @@ struct Pane {
+     press: Option<click::Press>,
+     scroll_fraction: f32,
+     composition: input::Composition,
++    drag_tick: Option<u128>,
+     _task: Task<()>,
+     _focus: Vec<Subscription>,
+ }
+@@ -229,12 +230,19 @@ impl Pane {
+             press: None,
+             scroll_fraction: 0.,
+             composition: input::Composition::default(),
++            drag_tick: None,
+             _task: task,
+             _focus: subscriptions,
+         }
+     }
+ 
+     fn pump(&mut self, cx: &mut Context<Self>) -> bool {
++        if let Some(tick) = crate::avatar::drag_tick() {
++            if self.drag_tick == Some(tick) {
++                return true;
++            }
++            self.drag_tick = Some(tick);
++        }
+         crate::diagnostics::trace("pump_start", 0);
+         let start = Instant::now();
+         let previous_status = self.status.clone();

@@ -1,5 +1,6 @@
 mod adopt_by_label;
 mod arrangement;
+mod avatar_drag;
 mod chat;
 mod core_events;
 mod input;
@@ -144,6 +145,7 @@ journeys! {
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
 }
 
 impl Journey {
@@ -168,6 +170,10 @@ impl Journey {
             Self::SlowList => Some(slow_list::HOLD),
             _ => None,
         }
+    }
+
+    pub fn windowed_frames(self) -> bool {
+        self == Self::AvatarDrag
     }
 
     pub fn control_patch(self) -> String {

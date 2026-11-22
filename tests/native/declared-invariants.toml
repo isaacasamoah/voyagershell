@@ -355,6 +355,19 @@ gap = "No timing case and no envelope limit yet. Section 3c named no owner, so a
 confidence = "stated"
 
 [[invariant]]
+id = "avatar-drag-follows-pointer"
+says = "While the user drags the avatar, it is drawn under the pointer on every display frame, at idle and up to the load in the usage envelope."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 22 Nov 2026: moving the avatar is a primary action and should be smooth and fast even up to maximal load"
+features = ["avatar"]
+guard = ["type:desktop/src/avatar.rs#Drag"]
+type_gap = "Drag holds one position derived from the latest pointer move and the grab offset, so the drawn avatar follows the pointer. No type bounds how late a frame draws it."
+check = ["journey:avatar-drag/idle", "journey:avatar-drag/streaming", "journey:avatar-drag/fleets", "journey:avatar-drag/builds"]
+gap = "The cases prove the avatar reaches the pointer under each load and record every frame, but judge no frame budget. Under Xvfb and llvmpipe the present alone takes 40 to 117 ms, so a budget needs a GPU surface the environment does not have."
+confidence = "stated"
+
+[[invariant]]
 id = "reports-wait-for-the-user"
 says = "Reports to Voyager never interrupt the user's chat. Only click-yes cards and blockers raise a badge."
 kind = "user"

@@ -19,6 +19,19 @@ pub enum Wheel {
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
+pub struct Moved {
+    pub at_ns: u128,
+    pub x: i16,
+    pub y: i16,
+}
+
+pub fn wall_nanos() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_nanos())
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
 struct Aim {
     region: Geometry,
     avatar: Option<Geometry>,
@@ -298,6 +311,46 @@ impl Native {
             },
         )?;
         self.pointer()
+    }
+
+    pub fn glide<T>(
+        &self,
+        target: &Target,
+        path: &[(i16, i16)],
+        step: std::time::Duration,
+        held: impl FnOnce(&Self) -> Result<T>,
+    ) -> Result<(Vec<Moved>, T)> {
+        let aim = self.spot(target)?;
+        let start = self.on_screen(target, aim)?;
+        let window = self.x11()?.geometry(self.window)?;
+        let x11 = self.x11()?;
+        let moved = self.system.act(
+            json!({"input":"glide","button":1,"target":target,"start":start,"moves":path.len(),"stepMicros":step.as_micros()}),
+            || {
+                x11.move_to(start.0, start.1)?;
+                x11.hold(1)?;
+                let began = std::time::Instant::now();
+                let mut moved = Vec::with_capacity(path.len());
+                let glided = path.iter().enumerate().try_for_each(|(index, point)| {
+                    let due = step * u32::try_from(index).unwrap_or(u32::MAX);
+                    while began.elapsed() < due {
+                        std::hint::spin_loop();
+                    }
+                    let (x, y) = (window.x + point.0, window.y + point.1);
+                    let at_ns = wall_nanos();
+                    x11.move_to(x, y)?;
+                    moved.push(Moved { at_ns, x, y });
+                    Ok::<_, anyhow::Error>(())
+                });
+                if glided.is_err() {
+                    x11.release(1)?;
+                }
+                glided.map(|()| moved)
+            },
+        )?;
+        let observed = held(self);
+        x11.release(1)?;
+        Ok((moved, observed?))
     }
 
     pub fn drag_from_corner(&self, inset: i16, by: (i16, i16)) -> Result<()> {

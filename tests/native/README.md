@@ -300,6 +300,28 @@ Core's deadline, so a run takes about six minutes. The journey reads labels, so
 it does not judge the one frame that the canvas fails to draw when a notice
 arrives while it is idle.
 
+`avatar-drag` measures the frames of a held avatar drag under increasing load.
+Run it with `--probe frame`. It first makes three hidden Fleets through the
+create-Fleet control. Each case then starts its load through `hc run`, writes
+`frames.window`, and glides the held avatar along the same 950-point path at
+one move every 4 ms. `Native::glide` records the wall time of each injected
+move. The case keeps the moves, the window and the load in `drag-<case>.json`,
+and `experiments/avatar-motion/analyse.py` matches them against
+`frames.jsonl`.
+
+- `idle` drags with one quiet terminal.
+- `streaming` adds coloured build output in the eight visible terminals.
+- `fleets` adds four streaming terminals in each hidden Fleet.
+- `builds` adds one busy loop per processor.
+
+Each case passes when every move was sent, the avatar is drawn under the
+pointer before the release, and each load program was running when the glide
+began. The control
+`tests/native/controls/avatar-drag.patch` pins the avatar at its starting
+point, so `idle` fails. The journey records frame timing and does not judge it
+against a budget. Under Xvfb and llvmpipe the present alone takes 40 to 117 ms,
+so its numbers are not the app's numbers on a GPU.
+
 A held gesture keeps the primary button down across steps. `Native::hold`
 presses at a control's aim point and returns a `Held`. `Held::toward` moves in
 eight steps to a point that `Native::point_in` gives as fractions of a
@@ -1151,6 +1173,11 @@ before it wrote its end record, as `terminal-scrolling` does when it closes the 
 - The profiler creates its file once per process. A journey that starts the app a
   second time, such as `quit-restore`, records the first launch only.
 - The record is the observed prefix up to the stop, not the process lifetime.
+- A journey that measures a window of its own, such as `avatar-drag`, also sets
+  `VOYAGER_FRAME_PROFILE_WINDOW` to `frames.window` in the evidence folder and
+  raises the limits with `VOYAGER_FRAME_PROFILE_RECORDS` and
+  `VOYAGER_FRAME_PROFILE_SECONDS`. The profiler then keeps only the records it
+  drains while that file exists.
 
 `tests/native/controls/frame-stall.patch` plants a 50 ms sleep in the terminal
 snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's

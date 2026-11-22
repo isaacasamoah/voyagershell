@@ -1,0 +1,61 @@
+diff --git a/desktop/src/avatar.rs b/desktop/src/avatar.rs
+index ae347cb0..3b76e22b 100644
+--- a/desktop/src/avatar.rs
++++ b/desktop/src/avatar.rs
+@@ -27,6 +27,16 @@ use voyager_contract::{Action, Context as Scope, Outcome, Reply, Request, operat
+ 
+ struct Changed;
+ 
++thread_local! {
++    static DRAG_MOVED_AT: Cell<Option<Instant>> = const { Cell::new(None) };
++}
++
++const DRAG_QUIET: std::time::Duration = std::time::Duration::from_millis(120);
++
++pub(crate) fn dragging() -> bool {
++    DRAG_MOVED_AT.with(|moved| moved.get().is_some_and(|at| at.elapsed() < DRAG_QUIET))
++}
++
+ pub struct Avatar {
+     client: Client,
+     version: u64,
+@@ -493,6 +503,7 @@ impl Avatar {
+             }
+         }
+         if drag.moved {
++            DRAG_MOVED_AT.with(|moved| moved.set(Some(Instant::now())));
+             drag.position = desktop - drag.offset;
+             if self.floating == Some(drag.source) {
+                 let origin = drag.position - point(px(13.), px(13.));
+diff --git a/desktop/src/avatar/view.rs b/desktop/src/avatar/view.rs
+index 8e4630a9..6e1d5976 100644
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -278,6 +278,13 @@ impl AvatarView {
+                 window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+                     if phase == gpui::DispatchPhase::Capture {
+                         let _ = moving.update(cx, |avatar, cx| avatar.moving(event, window, cx));
++                        if moving.upgrade().is_some_and(|avatar| {
++                            avatar.read(cx).drag.as_ref().is_some_and(|drag| {
++                                drag.moved && drag.source == window.window_handle()
++                            })
++                        }) {
++                            cx.stop_propagation();
++                        }
+                     }
+                 });
+                 let released = avatar.clone();
+diff --git a/desktop/src/terminal.rs b/desktop/src/terminal.rs
+index e1f13f86..4f2aae31 100644
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -235,6 +235,9 @@ impl Pane {
+     }
+ 
+     fn pump(&mut self, cx: &mut Context<Self>) -> bool {
++        if crate::avatar::dragging() {
++            return true;
++        }
+         crate::diagnostics::trace("pump_start", 0);
+         let start = Instant::now();
+         let previous_status = self.status.clone();
