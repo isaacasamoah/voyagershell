@@ -4,12 +4,15 @@ use crate::{
     omni::{self, Clips, Omni, Running, Settings},
     replies::Replies,
     speech::{
-        Ack, Acknowledgement, Clip, Fault, Hearing, Kept, Phrase, Speaking, SpokenText, Utterance,
-        acknowledge, heard_nothing,
+        Ack, Acknowledgement, Clip, Fault, Hearing, Kept, Phrase, Speaking, SpokenText, Standing,
+        Utterance, acknowledge, heard_nothing,
     },
-    voice_parts::{Audio, Finish, Floor, Phase, Speaker, Trace, Voyager},
+    spoken,
+    voice_parts::{Audio, Finish, Floor, Frames, Phase, Reply, Speaker, Trace, Voyager},
     voice_route::{Route, Routing},
+    voice_settings::TalkOver,
     voice_speaker,
+    voice_talk_over::{Held, Interjection, Playing, interjection},
 };
 use std::{
     sync::{Arc, Condvar, Mutex},
@@ -21,6 +24,7 @@ pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
 const MICROPHONE_RETRY: Duration = Duration::from_secs(3);
 const REPLY_WAIT_FRAMES: usize = 150;
+const PLAY_OUT_LOOK: Duration = Duration::from_millis(20);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Snapshot {
@@ -219,6 +223,19 @@ enum Listened {
     StepAside,
     NoMicrophone(String),
     Turn(Utterance, Option<Box<dyn Speaker>>),
+    Decided(Decided),
+}
+
+enum Stage {
+    Playing(Playing),
+    Cut { at: usize },
+    Listening,
+    Answering(Decided),
+}
+
+enum Talked {
+    Through(Box<dyn Frames>),
+    Away(Listened),
 }
 
 impl Exchange<'_> {
@@ -246,7 +263,15 @@ impl Exchange<'_> {
             };
             let waited_long = waited > REPLY_WAIT_FRAMES && !gate.speaking();
             if waited > 0 && (gate.quiet() || waited_long) {
-                return Listened::StepAside;
+                let Some(reply) = self.floor.accept() else {
+                    return Listened::StepAside;
+                };
+                microphone = match self.talk_over(reply, microphone, &mut gate) {
+                    Talked::Through(microphone) => microphone,
+                    Talked::Away(listened) => return listened,
+                };
+                waited = 0;
+                continue;
             }
             let Ok(frame) = microphone.frame() else {
                 return Listened::NoMicrophone("The microphone stream ended".into());
@@ -266,6 +291,117 @@ impl Exchange<'_> {
                 }
                 None => {}
             }
+        }
+    }
+
+    fn play_from(&self, held: &mut Held, at: usize) -> Stage {
+        let speaker = match self.audio.speaker(held.rate()) {
+            Ok(speaker) => speaker,
+            Err(error) => {
+                held.failed = Some(format!("The speaker could not be opened: {error}"));
+                return Stage::Listening;
+            }
+        };
+        self.trace.mark("speaker-opened");
+        let mut playing = Playing::start(speaker, at);
+        playing.feed(held, self.trace);
+        self.shared.set(Phase::SpeakingOpen, None);
+        Stage::Playing(playing)
+    }
+
+    fn play_out(&self, stage: Stage, held: &mut Held) {
+        let Stage::Playing(mut playing) = stage else {
+            return;
+        };
+        self.shared.set(Phase::Speaking, None);
+        while !playing.ended() {
+            if self.shared.wanted() == Wanted::Shutdown {
+                playing.cut();
+                return;
+            }
+            playing.feed(held, self.trace);
+            thread::sleep(PLAY_OUT_LOOK);
+        }
+        self.trace.mark("speech-ended");
+    }
+
+    fn after_cut(&self, utterance: &Utterance, held: &mut Held, at: usize) -> Stage {
+        self.trace.mark("utterance-ended");
+        self.shared.set(Phase::Hearing, None);
+        let names = (self.vocabulary)();
+        let heard = match self.hearing.hear(utterance, &names) {
+            Ok(heard) => heard,
+            Err(fault) => return Stage::Answering(Decided::Missed(fault)),
+        };
+        self.trace.mark_words("heard", &heard);
+        if heard_nothing(&heard) {
+            return self.play_from(held, at);
+        }
+        match interjection(&heard) {
+            Interjection::Backchannel => self.play_from(held, at),
+            Interjection::Stop => Stage::Listening,
+            Interjection::Steer => Stage::Answering(Decided::Voyager(
+                spoken::cut_off_prompt(held.piece(at), held.unheard(at), &heard),
+                Ack::None,
+            )),
+        }
+    }
+
+    fn talk_over(&self, reply: Reply, mut microphone: Box<dyn Frames>, gate: &mut Gate) -> Talked {
+        let mut held = Held::new(reply);
+        self.trace.mark_words("speech-started", held.text());
+        let mut stage = self.play_from(&mut held, 0);
+        self.voyager.note(held.text());
+        loop {
+            match (self.shared.wanted(), stage) {
+                (_, Stage::Answering(decided)) => {
+                    return Talked::Away(Listened::Decided(decided));
+                }
+                (_, Stage::Listening) => {
+                    self.shared.set(Phase::Listening, held.failed.take());
+                    return Talked::Through(microphone);
+                }
+                (Wanted::Shutdown, Stage::Playing(playing)) => {
+                    playing.cut();
+                    return Talked::Away(Listened::Shutdown);
+                }
+                (Wanted::Shutdown, Stage::Cut { .. }) => return Talked::Away(Listened::Shutdown),
+                (Wanted::Off, current) => {
+                    drop(microphone);
+                    self.play_out(current, &mut held);
+                    return Talked::Away(Listened::Off);
+                }
+                (Wanted::On, current) => stage = current,
+            }
+            let Ok(frame) = microphone.frame() else {
+                drop(microphone);
+                self.play_out(stage, &mut held);
+                return Talked::Away(Listened::NoMicrophone("The microphone stream ended".into()));
+            };
+            let ended = matches!(gate.push(frame), Some(GateHeard::Ended(_)));
+            stage = match stage {
+                Stage::Playing(mut playing) => {
+                    playing.feed(&mut held, self.trace);
+                    if gate.speaking() {
+                        let at = playing.cut();
+                        self.trace.mark_words("speech-cut", held.piece(at));
+                        self.shared.set(Phase::Listening, None);
+                        Stage::Cut { at }
+                    } else if playing.ended() {
+                        self.trace.mark("speech-ended");
+                        Stage::Listening
+                    } else {
+                        Stage::Playing(playing)
+                    }
+                }
+                Stage::Cut { at } if ended => {
+                    let utterance = Utterance {
+                        samples: gate.take(),
+                    };
+                    self.after_cut(&utterance, &mut held, at)
+                }
+                waiting => waiting,
+            };
         }
     }
 
@@ -324,7 +460,7 @@ impl Exchange<'_> {
         }
         let text = match self.route(&heard) {
             Route::Chat(text) => text,
-            Route::Voyager(ack) => return Decided::Voyager(heard, ack),
+            Route::Voyager(ack) => return Decided::Voyager(spoken::prompt(&heard), ack),
         };
         let clips: Result<Vec<Clip>, Fault> = text
             .pieces()
@@ -334,14 +470,14 @@ impl Exchange<'_> {
             Ok(clips) => Decided::Chat(text, clips),
             Err(fault) => {
                 self.trace.mark_words("chat-failed", &fault.to_string());
-                Decided::Voyager(heard, Ack::None)
+                Decided::Voyager(spoken::prompt(&heard), Ack::None)
             }
         }
     }
 
     fn hand_off(
         &self,
-        heard: &str,
+        prompt: &str,
         held: Acknowledgement,
         speaker: Option<Box<dyn Speaker>>,
         notice: &mut Option<String>,
@@ -357,7 +493,7 @@ impl Exchange<'_> {
         if !held.send {
             return finish;
         }
-        match self.voyager.say(&crate::spoken::prompt(heard)) {
+        match self.voyager.say(prompt) {
             Ok(()) => self.trace.mark("sent"),
             Err(failure) => {
                 if failure.refused {
@@ -378,6 +514,16 @@ impl Exchange<'_> {
         self.trace.mark("utterance-ended");
         self.shared.set(Phase::Hearing, None);
         let decided = self.decide(&utterance);
+        self.act(turn, standing, decided, speaker);
+    }
+
+    fn act(
+        &self,
+        turn: u64,
+        standing: Standing,
+        decided: Decided,
+        speaker: Option<Box<dyn Speaker>>,
+    ) {
         let mut notice = None;
         let finish = match decided {
             Decided::Nothing => None,
@@ -394,10 +540,10 @@ impl Exchange<'_> {
                 self.voyager.note(text.as_str());
                 finish
             }
-            Decided::Voyager(heard, ack) => {
+            Decided::Voyager(prompt, ack) => {
                 self.trace.mark_words("acknowledgement-chosen", ack.key());
                 let held = acknowledge(standing, ack, turn);
-                self.hand_off(&heard, held, speaker, &mut notice)
+                self.hand_off(&prompt, held, speaker, &mut notice)
             }
         };
         self.shared.set(Phase::Acknowledging, notice.clone());
@@ -427,6 +573,9 @@ impl Exchange<'_> {
                     said_no_microphone = false;
                     self.answer(turn, utterance, speaker);
                     turn += 1;
+                }
+                Listened::Decided(decided) => {
+                    self.act(turn, self.voyager.standing(), decided, None);
                 }
                 Listened::NoMicrophone(reason) => {
                     self.shared.set(
@@ -510,6 +659,7 @@ where
         status: Arc::new(move |phase, notice| status.set(phase, notice)),
         stopped: Arc::new(move || stopped.has_stopped()),
         on: Arc::new(move || listening.is_on()),
+        talk_over: TalkOver::default(),
     });
     Exchange {
         hearing: ready.engine.as_ref(),

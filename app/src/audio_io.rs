@@ -126,6 +126,11 @@ impl Gate {
     pub fn utterance(self) -> Vec<i16> {
         self.kept.into_iter().flatten().collect()
     }
+
+    pub fn take(&mut self) -> Vec<i16> {
+        self.stage = Stage::Waiting { run: 0 };
+        self.kept.drain(..).flatten().collect()
+    }
 }
 
 fn above_floor(floors: &mut VecDeque<f32>, level: f32) -> bool {
@@ -764,6 +769,23 @@ mod tests {
         bytes[22] = 2;
         assert!(parse_wav(&bytes).is_none());
         assert!(parse_wav(b"nope").is_none());
+    }
+
+    #[test]
+    fn a_gate_that_gave_up_an_utterance_hears_the_next_one_without_settling_again() {
+        let mut gate = Gate::new(Box::new(Loudness));
+        let turn = |gate: &mut Gate| {
+            let frames = spoken(20).chain((0..PAUSE_FRAMES).map(|_| quiet()));
+            let ended: Vec<Heard> = frames.filter_map(|frame| gate.push(frame)).collect();
+            assert_eq!(ended.last(), Some(&Heard::Ended(End::Pause)));
+            gate.take().len()
+        };
+        for _ in 0..SETTLE_FRAMES {
+            gate.push(quiet());
+        }
+        let first = turn(&mut gate);
+        assert!(!gate.speaking());
+        assert_eq!(turn(&mut gate), first);
     }
 
     const SERVER: &str = r#"{"default_sink_name": "desk"}"#;

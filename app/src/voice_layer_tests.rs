@@ -11,11 +11,18 @@ use std::{
     time::Instant,
 };
 
+#[path = "voice_layer_talk_over_tests.rs"]
+mod talk_over;
+
 enum Step {
     Frame(Vec<i16>),
     Click,
     WantFloor,
     Fail,
+    Reply(Reply),
+    Wait(Duration),
+    See(Arc<Mutex<Vec<Phase>>>),
+    QuietUntil(Phase, usize),
 }
 
 enum Mic {
@@ -37,6 +44,26 @@ impl Frames for Script {
                 Some(Step::Click) => click(&self.shared),
                 Some(Step::WantFloor) => self.floor.wanted.store(true, Ordering::SeqCst),
                 Some(Step::Fail) => return Err(io::Error::other("ended")),
+                Some(Step::Reply(reply)) => {
+                    let floor = self.floor.clone();
+                    thread::spawn(move || drop(floor.offer(reply)));
+                    while !self.floor.is_wanted() {
+                        thread::yield_now();
+                    }
+                }
+                Some(Step::Wait(time)) => thread::sleep(time),
+                Some(Step::See(seen)) => {
+                    let phase = self.shared.state.lock().unwrap().snapshot.phase.clone();
+                    seen.lock().unwrap().push(phase);
+                }
+                Some(Step::QuietUntil(phase, frames)) => {
+                    let reached = self.shared.state.lock().unwrap().snapshot.phase == phase;
+                    if !reached && frames > 0 {
+                        self.steps.push_front(Step::QuietUntil(phase, frames - 1));
+                        thread::sleep(Duration::from_millis(1));
+                        return Ok(quiet());
+                    }
+                }
                 None => {
                     self.shared.update(|state| state.shutdown = true);
                     return Ok(quiet());
@@ -61,6 +88,32 @@ struct Fake {
     speakers: AtomicUsize,
     shared: Arc<Shared>,
     floor: Arc<Floor>,
+    live: bool,
+}
+
+struct Live {
+    played: Arc<Mutex<Vec<usize>>>,
+    cut: Arc<Mutex<Vec<bool>>>,
+}
+
+impl Speaker for Live {
+    fn play(self: Box<Self>, clips: Clips) -> Finish {
+        let played = self.played.clone();
+        let drained = thread::spawn(move || {
+            for clip in clips {
+                played.lock().unwrap().push(clip.pcm.len());
+            }
+        });
+        Box::new(move |cut| {
+            let mut stopped = false;
+            while !stopped && !drained.is_finished() {
+                thread::sleep(Duration::from_millis(1));
+                stopped = cut();
+            }
+            self.cut.lock().unwrap().push(stopped);
+            drained.join().unwrap();
+        })
+    }
 }
 
 struct Voice {
@@ -103,6 +156,12 @@ impl Audio for Fake {
 
     fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
         self.speakers.fetch_add(1, Ordering::SeqCst);
+        if self.live {
+            return Ok(Box::new(Live {
+                played: self.played.clone(),
+                cut: self.cut.clone(),
+            }));
+        }
         Ok(Box::new(Voice {
             played: self.played.clone(),
             cut: self.cut.clone(),
@@ -288,6 +347,7 @@ impl Rig {
                 speakers: AtomicUsize::new(0),
                 shared: shared.clone(),
                 floor: floor.clone(),
+                live: false,
             },
             voyager: Standin {
                 standing,

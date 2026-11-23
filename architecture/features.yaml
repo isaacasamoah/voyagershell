@@ -1172,11 +1172,13 @@ features:
       - app/src/voice_host.rs
       - app/src/voice_layer.rs
       - app/src/voice_layer_line_tests.rs
+      - app/src/voice_layer_talk_over_tests.rs
       - app/src/voice_layer_tests.rs
       - app/src/voice_parts.rs
       - app/src/voice_reply.rs
       - app/src/voice_route.rs
       - app/src/voice_session.rs
+      - app/src/voice_settings.rs
       - app/src/voice_speaker.rs
       - app/src/voice_talk_over.rs
       - app/src/voice_transcript.rs

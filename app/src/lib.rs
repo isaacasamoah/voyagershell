@@ -59,6 +59,7 @@ pub mod voice_parts;
 pub mod voice_reply;
 pub mod voice_route;
 mod voice_session;
+pub mod voice_settings;
 mod voice_speaker;
 pub mod voice_talk_over;
 mod voice_transcript;
