@@ -976,6 +976,12 @@ test("a dock follows once for each dock revision, once no request is preparing",
   dockRevision = "1";
   render();
   render();
+  assert.equal(
+    inspects,
+    0,
+    "a dock's follow does not start in render, because the request it starts asks for a redraw",
+  );
+  await settle();
   assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
   assert.equal(inspects, 1, "the avatar's dock runs only its own inspect");
   focused.length = 0;
@@ -988,6 +994,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   view.busy = false;
   render();
   render();
+  await settle();
   assert.deepEqual(
     focused,
     ["content-2"],
@@ -1002,6 +1009,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   dockRevision = "3";
   render();
   render();
+  await settle();
   assert.deepEqual(
     focused,
     ["content-2"],
@@ -1018,12 +1026,40 @@ test("a dock follows once for each dock revision, once no request is preparing",
   render();
   result = JSON.stringify(reply("placement-11"));
   render();
+  await settle();
   assert.deepEqual(
     focused,
     ["content-10"],
     "an avatar dock whose notice lands before its reply follows once",
   );
   assert.equal(inspects, 4, "that dock runs one inspect");
+  focused.length = 0;
+  next = reply("placement-3");
+  view.acceptSnapshot(next, cx);
+  inspects = 0;
+  dockRevision = "6";
+  render();
+  view.busy = true;
+  await settle();
+  assert.equal(
+    inspects,
+    0,
+    "a request that starts between a dock and its follow is not doubled",
+  );
+  assert.deepEqual(
+    focused,
+    [],
+    "the dock does not follow while that request runs",
+  );
+  view.busy = false;
+  render();
+  await settle();
+  assert.deepEqual(
+    focused,
+    ["content-2"],
+    "the dock follows once the request has ended, because the seen dock was put back",
+  );
+  assert.equal(inspects, 1, "and runs one inspect");
   await settle();
   const open = (...ids) =>
     new Map(ids.map((id) => [id, { status: "applied" }]));

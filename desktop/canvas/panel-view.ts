@@ -109,14 +109,26 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
   const dock = workspace_notice().dockRevision;
   const seen = seenDocks.get(workspace);
   if (seen === undefined) seenDocks.set(workspace, dock);
-  else if (seen !== dock) followDock(workspace, dock, cx);
+  else if (seen !== dock) followDock(workspace, seen, dock, cx);
 }
 
-function followDock(workspace: Canvas, dock: string, cx: UIContext) {
+function followDock(
+  workspace: Canvas,
+  seen: string,
+  dock: string,
+  cx: UIContext,
+) {
   seenDocks.set(workspace, dock);
-  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
-    focusDocked(workspace, task),
-  );
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    if (workspace.busy) {
+      if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
+      return;
+    }
+    workspace.run({ operation: "inspect" }, task, (_result, done) =>
+      focusDocked(workspace, done),
+    );
+  });
 }
 
 function focusDocked(workspace: Canvas, cx: AsyncContext) {
