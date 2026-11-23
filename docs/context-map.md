@@ -45,6 +45,8 @@ Owns files:
 - `app/src/client_content.rs`
 - `app/src/client_owner.rs`
 - `app/src/client_owner_tests.rs`
+- `app/src/core_session.rs`
+- `app/tests/core_session.rs`
 - `app/src/client_structure.rs`
 - `app/src/client_worktree.rs`
 - `app/src/client_reply.rs`
