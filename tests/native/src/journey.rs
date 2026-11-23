@@ -277,6 +277,17 @@ impl Selection {
             left_out: Vec::new(),
         }
     }
+
+    pub fn summary(&self) -> Option<String> {
+        self.partial.then(|| {
+            let count = self.left_out.len();
+            format!(
+                "PARTIAL: {count} {} left out, not a journey pass. Left out: {}",
+                if count == 1 { "case" } else { "cases" },
+                self.left_out.join(", ")
+            )
+        })
+    }
 }
 
 #[derive(Default, Serialize)]
@@ -800,6 +811,49 @@ mod tests {
     }
 
     #[test]
+    fn picking_redock_pulls_in_the_reread_case_that_moves_the_focus_off_the_docked_vessel()
+    -> Result<()> {
+        let selection = picked(Journey::SocketDock, &["redock-takes-keyboard"])?;
+        assert_eq!(selection.picked, ["redock-takes-keyboard"]);
+        assert_eq!(
+            selection.included,
+            ["socket-dock-takes-keyboard", "reread-keeps-clicked-pane"]
+        );
+        assert!(!selection.left_out.contains(&"reread-keeps-clicked-pane"));
+        Ok(())
+    }
+
+    #[test]
+    fn a_partial_run_says_in_its_summary_that_it_is_not_a_journey_pass() -> Result<()> {
+        let journey = Journey::SocketDock;
+        let selection = picked(journey, &["avatar-click-away-minimizes"])?;
+        let summary = selection.summary().expect("a partial run has a summary");
+        assert!(
+            summary.starts_with(&format!(
+                "PARTIAL: {} cases left out, not a journey pass",
+                selection.left_out.len()
+            )),
+            "{summary}"
+        );
+        for case in &selection.left_out {
+            assert!(summary.contains(case), "{summary}");
+        }
+        for case in selection.picked.iter().chain(&selection.included) {
+            assert!(!summary.contains(case), "{summary}");
+        }
+        assert_eq!(Selection::full(journey).summary(), None);
+        let last = journey.cases().len() - 1;
+        let almost = journey.cases()[..last].to_vec();
+        let one_out = picked(journey, &almost)?;
+        assert!(
+            one_out.summary().is_some_and(
+                |line| line.starts_with("PARTIAL: 1 case left out, not a journey pass")
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
     fn the_setup_cases_of_a_journey_run_when_another_case_is_picked_alone() -> Result<()> {
         let journey = Journey::ManifestVessel;
         let setup = journey.setup();
@@ -835,7 +889,7 @@ mod tests {
     #[test]
     fn left_out_cases_are_skipped_in_order_and_the_partial_run_says_what_ran() -> Result<()> {
         let journey = Journey::SocketDock;
-        let selection = picked(journey, &["redock-takes-keyboard"])?;
+        let selection = picked(journey, &["typing-right-after-a-dock-reaches-the-vessel"])?;
         let mut outcomes = Outcomes::new(journey, PathBuf::from("unsaved"), selection);
         for case in journey.cases() {
             judge(&mut outcomes, case, held())?;
@@ -844,10 +898,17 @@ mod tests {
         let statuses = statuses(&outcomes);
         assert_eq!(statuses[0], "socket-dock-takes-keyboard:passed");
         assert_eq!(statuses[1], "reread-keeps-clicked-pane:left-out");
-        assert_eq!(statuses[2], "redock-takes-keyboard:passed");
+        assert_eq!(statuses[2], "redock-takes-keyboard:left-out");
+        assert_eq!(
+            statuses[3],
+            "typing-right-after-a-dock-reaches-the-vessel:passed"
+        );
         let saved = serde_json::to_value(outcomes.selection())?;
         assert_eq!(saved["partial"], true);
-        assert_eq!(saved["picked"], json!(["redock-takes-keyboard"]));
+        assert_eq!(
+            saved["picked"],
+            json!(["typing-right-after-a-dock-reaches-the-vessel"])
+        );
         assert_eq!(saved["included"], json!(["socket-dock-takes-keyboard"]));
         assert_eq!(
             saved["leftOut"].as_array().map(Vec::len),

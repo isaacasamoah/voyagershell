@@ -2034,6 +2034,18 @@ has the status `left-out`. `manifest` refuses a run whose `checks.json` is parti
 the input lists it with `"partial": true`, refuses `"partial": true` on a full run, and then
 copies the selection into `verdict.json`, so a partial run is never cited as a full one.
 
+A partial run says so on its own summary line. It prints
+`PARTIAL: N cases left out, not a journey pass. Left out: ...` with every left-out case
+listed, to the error stream after the report, and `checks.json` carries the same text as
+`"summary"`. A partial run never goes on a `Journeys run:` line. Name only the journeys
+that ran in full there. A picked case can be cited as the case it is, with the run marked partial.
+
+The `socket-dock` journey declares that `redock-takes-keyboard` needs
+`reread-keeps-clicked-pane`. The reread case clicks the first Vessel, so the focus is off
+the docked Vessel when the redock starts. The redock case records that focus first and
+expects it to be on the first Vessel, because a repeated dock that did nothing would
+otherwise pass its focus and typing checks on a Vessel that already had the keyboard.
+
 ## Run roles and the verdict manifest
 
 `run --role head|trunk|control|mutant` writes `"role"` into `checks.json`. It says

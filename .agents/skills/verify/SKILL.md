@@ -102,8 +102,10 @@ refused with the journey's cases. Setup cases and the cases that a picked case n
 the journey declares them, run too. The run's `observations.json` and `checks.json` say
 which cases were picked, included and left out and that the run is partial, and a partial
 run is never a full pass. List it in the manifest input with `"partial": true`. If a picked
-case did not run, the run fails and names the earlier cases it left out. The README
-section "Running chosen cases" has the rest.
+case did not run, the run fails and names the earlier cases it left out. A partial run
+prints a `PARTIAL: N cases left out, not a journey pass` summary line that lists the cases left
+out, and it never goes on a `Journeys run:` line. The README section "Running chosen cases"
+has the rest.
 
 ## Verdict manifest
 

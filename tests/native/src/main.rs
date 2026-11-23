@@ -555,8 +555,15 @@ fn drive(plan: Plan) -> Result<i32> {
     if let Some(Ok(summary)) = frames {
         report["frames"] = summary;
     }
+    let summary = outcomes.selection().summary();
+    if let Some(line) = &summary {
+        report["summary"] = json!(line);
+    }
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
+    if let Some(line) = &summary {
+        eprintln!("{line}");
+    }
     match verdict {
         "passed" => Ok(0),
         "failed" => Ok(1),
