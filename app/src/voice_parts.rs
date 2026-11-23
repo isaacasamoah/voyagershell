@@ -141,6 +141,11 @@ impl Trace {
         Self(None)
     }
 
+    #[cfg(test)]
+    pub(crate) fn to_file(path: PathBuf) -> Self {
+        Self(Some(Self::sink(path)))
+    }
+
     fn sink(path: PathBuf) -> Arc<Sink> {
         Arc::new(Sink {
             path,

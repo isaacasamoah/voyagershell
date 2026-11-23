@@ -43,6 +43,7 @@ pub const REPLY_WAIT: Owed = Owed::secs(20);
 pub const LONG_REPLY_WAIT: Owed = Owed::secs(120);
 pub const FLOOR_WAIT: Owed = Owed::secs(60);
 pub const SEND_WAIT: Owed = Owed::secs(5);
+pub const CLIPS_KEPT: Owed = Owed::secs(60);
 pub const ROOM_FEED: Owed = Owed::secs(330);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

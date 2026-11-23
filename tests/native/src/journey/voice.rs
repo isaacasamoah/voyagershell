@@ -132,6 +132,12 @@ fn spoken(words: &str) -> String {
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
+    let driven = drive_cases(native, cases);
+    let kept = voice::keep_engine_log(native);
+    driven.and(kept)
+}
+
+fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     anyhow::ensure!(
         native.audio.is_some() && native.voice_engine.is_some(),
         "The voice journey needs --audio on and --voice-engine"
@@ -189,6 +195,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         return Ok(());
     };
     cases.check(native, Case::SmallTalkIsAnswered, |native| {
+        let replanted = voice::planted_hum_rendered_again(native)?;
+        if !(replanted.replaced && replanted.all_kept) {
+            return Verdict::new()
+                .expect(
+                    "the run-on Mm-hm planted in the clip cache is rendered again before the first turn",
+                    replanted.replaced,
+                )
+                .expect(
+                    "the app marks every clip kept before the first turn",
+                    replanted.all_kept,
+                )
+                .observed("plantedHum", replanted);
+        }
         let said = voice::converse(native, &HELLO_HOW_ARE_YOU, "small-talk")?;
         let reply = said.chat.clone().unwrap_or_default();
         let transcript = voice::transcribe(native, "small-talk")?;
@@ -212,6 +231,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.first_sound_after_capture_ms,
             )?
             .observed("conversation", json!(said))?
+            .observed("plantedHum", replanted)?
             .observed("speakerHeard", transcript)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {

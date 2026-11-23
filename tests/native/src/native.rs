@@ -6,10 +6,11 @@ mod terminal;
 pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use settle::{
-    AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed, FLOAT_SPACING,
-    FLOOR_WAIT, LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, PROBE_AFTER_DOCK,
-    PROBE_LATEST, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, STATUS_AFTER_CLICK, Stopwatch,
-    VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
+    AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed,
+    FLOAT_SPACING, FLOOR_WAIT, LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE,
+    PROBE_AFTER_DOCK, PROBE_LATEST, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT,
+    STATUS_AFTER_CLICK, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold,
+    now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -635,6 +636,9 @@ impl Native {
             .map(|folder| folder.to_string_lossy().into_owned());
         let trace = self.voice_trace();
         let trace = trace.to_string_lossy().into_owned();
+        if let (Some(folder), 1) = (&self.voice_engine, self.launches) {
+            crate::audio::voice::plant_run_on_hum(&self.system.evidence.join("home"), folder)?;
+        }
         if let Some(engine) = &engine {
             extra_env.push(("VOYAGER_OMNI_DIR", engine));
             extra_env.push(("VOYAGER_VOICE_TRACE", &trace));

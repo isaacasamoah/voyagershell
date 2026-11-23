@@ -217,9 +217,14 @@ fn sentence() -> Vec<Step> {
     steps
 }
 
-fn clips() -> HashMap<Phrase, Clip> {
+fn clips() -> Kept {
+    clips_without(None)
+}
+
+fn clips_without(left_out: Option<Phrase>) -> Kept {
     Phrase::ALL
         .into_iter()
+        .filter(|phrase| Some(*phrase) != left_out)
         .map(|phrase| {
             (
                 phrase,
@@ -241,7 +246,7 @@ struct Rig {
     voiced: Voiced,
     audio: Fake,
     voyager: Standin,
-    clips: HashMap<Phrase, Clip>,
+    clips: Kept,
     shared: Arc<Shared>,
     floor: Arc<Floor>,
 }
@@ -831,4 +836,163 @@ fn a_chat_reply_of_two_sentences_plays_each_sentence_in_order() {
     rig.serve("How are you?");
     assert_eq!(rig.played(), vec![CHAT_CLIP, CHAT_CLIP]);
     assert!(rig.said().is_empty());
+}
+
+#[derive(Default)]
+struct Gated {
+    released: Mutex<bool>,
+    opened: Condvar,
+    began: AtomicUsize,
+}
+
+impl Gated {
+    fn release(&self) {
+        *self.released.lock().unwrap() = true;
+        self.opened.notify_all();
+    }
+}
+
+impl Hearing for Gated {
+    fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
+        Ok(String::new())
+    }
+}
+
+impl Routing for Gated {
+    fn route(&self, _: &str) -> Result<Route, Fault> {
+        Ok(Route::Voyager)
+    }
+}
+
+impl Speaking for Gated {
+    fn render(&self, _: Phrase) -> Result<Clip, Fault> {
+        self.began.fetch_add(1, Ordering::SeqCst);
+        let released = self.released.lock().unwrap();
+        drop(self.opened.wait_while(released, |open| !*open).unwrap());
+        Ok(Clip {
+            rate: 24_000,
+            pcm: vec![0; 2],
+        })
+    }
+
+    fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
+        Err(Fault::Failed("no speech".into()))
+    }
+}
+
+struct Silent;
+
+impl Audio for Silent {
+    fn microphone(&self) -> io::Result<Box<dyn Frames>> {
+        Err(io::Error::other("no device"))
+    }
+
+    fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
+        Err(io::Error::other("no device"))
+    }
+
+    fn detector(&self) -> Box<dyn SpeechDetector> {
+        Box::new(crate::audio_io::Loudness)
+    }
+}
+
+fn until_true(what: &str, check: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !check() {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn voice_is_ready_while_a_clip_is_still_rendering_and_keeps_it_once_rendered() {
+    let root = std::env::temp_dir().join(format!("voyager-ready-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let settings = Settings {
+        cache: root.join("voice"),
+        directory: root.join("voice/omni"),
+        server: None,
+        gpu_layers: 0,
+        huggingface: root.join("hf"),
+    };
+    let files = omni::Files {
+        server: root.join("s"),
+        model: root.join("m"),
+        projector: root.join("p"),
+    };
+    let engine = Arc::new(Gated::default());
+    let owner = Arc::new(Shared::new(Phase::Starting));
+    let serving = {
+        let (owner, engine) = (owner.clone(), engine.clone());
+        let store = omni::Clips::new(&settings, &files);
+        thread::spawn(move || {
+            serve_ready(
+                &owner,
+                Ready {
+                    engine,
+                    store,
+                    voyager: Arc::new(Standin {
+                        standing: Standing::Idle,
+                        said: Mutex::default(),
+                        failure: None,
+                        notes: Mutex::default(),
+                    }),
+                    replies: Replies::default(),
+                    vocabulary: Arc::new(Vec::new),
+                    audio: Arc::new(Silent),
+                    trace: Trace::off(),
+                },
+            );
+        })
+    };
+    until_true("the first clip render to begin", || {
+        engine.began.load(Ordering::SeqCst) == 1
+    });
+    until_true("voice to be ready", || {
+        owner.state.lock().unwrap().snapshot.phase == Phase::Ready
+    });
+    assert_eq!(engine.began.load(Ordering::SeqCst), 1);
+    engine.release();
+    let store = omni::Clips::new(&settings, &files);
+    until_true("every clip to be kept", || {
+        Phrase::ALL
+            .into_iter()
+            .all(|phrase| store.load(phrase).is_some())
+    });
+    owner.update(|state| state.shutdown = true);
+    serving.join().unwrap();
+    owner.set(Phase::Stopped, None);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+fn hum_marks(left_out: Option<Phrase>) -> (usize, Vec<usize>) {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Slow(r#"{"kind": "work"}"#);
+    rig.clips = clips_without(left_out);
+    let name = format!("voyager-hum-{left_out:?}-{}.jsonl", std::process::id());
+    let path = std::env::temp_dir().join(name);
+    let trace = Trace::to_file(path.clone());
+    rig.shared.update(|state| state.snapshot.on = true);
+    let vocabulary: Vocabulary = Arc::new(Vec::new);
+    let hearing = Heard("Open the roadmap.");
+    Exchange {
+        trace: &trace,
+        ..rig.exchange(&hearing, &vocabulary)
+    }
+    .serve(Duration::from_millis(5));
+    let marks = std::fs::read_to_string(&path).unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    let started = r#""event":"acknowledgement-started""#;
+    let hums = marks
+        .lines()
+        .filter(|line| line.contains(started) && line.contains(r#""words":"mm-hm""#))
+        .count();
+    (hums, rig.played())
+}
+
+#[test]
+fn a_hum_that_is_not_kept_plays_nothing_and_marks_no_acknowledgement() {
+    let (hum, asking) = (mark(Phrase::Hum), mark(Phrase::Asking));
+    assert_eq!(hum_marks(Some(Phrase::Hum)), (0, vec![asking]));
+    assert_eq!(hum_marks(None), (1, vec![hum, asking]));
 }

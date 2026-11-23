@@ -1,16 +1,18 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
 use crate::native::{
-    Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis,
+    CLIPS_KEPT, Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED,
+    SEND_WAIT, now_millis,
 };
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub const APP_CLIENT: &str = "voyager-voice";
@@ -320,6 +322,77 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
 }
 
 const HUM: &str = "mm-hm";
+const HUM_WORDS: &str = "Mm-hm.";
+const ENGINE_MODEL: &str = "LFM3-Omni-2B-Q4_K_M.gguf";
+const PLANTED_HUM_MS: usize = 28_880;
+const PLANTED_TONE_HZ: f64 = 220.0;
+const PLANTED_LEVEL: f64 = 3000.0;
+
+fn planted_hum(home: &Path, engine: &Path) -> Result<PathBuf> {
+    let size = fs::metadata(engine.join(ENGINE_MODEL))
+        .with_context(|| format!("The engine folder holds no {ENGINE_MODEL}"))?
+        .len();
+    let hash: String = Sha256::digest(HUM_WORDS.as_bytes())[..4]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    Ok(home
+        .join(".cache/voyager/voice/clips")
+        .join(format!("omni-{size}-female"))
+        .join(format!("{HUM}-{hash}.wav")))
+}
+
+fn planted_samples() -> Vec<i16> {
+    let count = CLIP_RATE as usize * PLANTED_HUM_MS / 1000;
+    (0..count)
+        .map(|index| {
+            let phase =
+                std::f64::consts::TAU * PLANTED_TONE_HZ * index as f64 / f64::from(CLIP_RATE);
+            (phase.sin() * PLANTED_LEVEL) as i16
+        })
+        .collect()
+}
+
+pub fn plant_run_on_hum(home: &Path, engine: &Path) -> Result<()> {
+    let path = planted_hum(home, engine)?;
+    fs::create_dir_all(path.parent().context("The planted clip has no folder")?)?;
+    fs::write(&path, wav(CLIP_RATE, &planted_samples()))
+        .with_context(|| format!("The run-on Mm-hm was not planted at {}", path.display()))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Replanted {
+    pub replaced: bool,
+    pub all_kept: bool,
+    pub kept_ms: Option<usize>,
+    pub planted_ms: usize,
+}
+
+pub fn planted_hum_rendered_again(native: &Native) -> Result<Replanted> {
+    let engine = native
+        .voice_engine
+        .as_deref()
+        .context("The voice journey runs without an engine folder")?;
+    let path = planted_hum(&native.system.evidence.join("home"), engine)?;
+    let planted = wav(CLIP_RATE, &planted_samples());
+    let kept = poll(CLIPS_KEPT.within(), LOOK, true, || {
+        Ok(fs::read(&path).ok().filter(|bytes| *bytes != planted))
+    })?;
+    let trace = native.voice_trace();
+    let all_kept = kept.is_some()
+        && poll(CLIPS_KEPT.within(), LOOK, true, || {
+            Ok(mark_of(&marks(&trace)?, "clips-kept").map(|_| ()))
+        })?
+        .is_some();
+    Ok(Replanted {
+        replaced: kept.is_some(),
+        all_kept,
+        kept_ms: kept
+            .map(|bytes| bytes.len().saturating_sub(HEADER) * 1000 / (CLIP_RATE as usize * 2)),
+        planted_ms: PLANTED_HUM_MS,
+    })
+}
 
 fn answers(mark: &Mark) -> bool {
     mark.event == "chat-started"
@@ -971,7 +1044,7 @@ fn base64(bytes: &[u8]) -> String {
     text
 }
 
-fn wav_16k(narrow: &[i16]) -> Vec<u8> {
+fn wav(rate: u32, narrow: &[i16]) -> Vec<u8> {
     let data = u32::try_from(narrow.len() * 2).unwrap_or(u32::MAX);
     let mut wav = Vec::with_capacity(44 + narrow.len() * 2);
     wav.extend_from_slice(b"RIFF");
@@ -980,8 +1053,8 @@ fn wav_16k(narrow: &[i16]) -> Vec<u8> {
     wav.extend_from_slice(&16u32.to_le_bytes());
     wav.extend_from_slice(&1u16.to_le_bytes());
     wav.extend_from_slice(&1u16.to_le_bytes());
-    wav.extend_from_slice(&16_000u32.to_le_bytes());
-    wav.extend_from_slice(&32_000u32.to_le_bytes());
+    wav.extend_from_slice(&rate.to_le_bytes());
+    wav.extend_from_slice(&(rate * 2).to_le_bytes());
     wav.extend_from_slice(&2u16.to_le_bytes());
     wav.extend_from_slice(&16u16.to_le_bytes());
     wav.extend_from_slice(b"data");
@@ -998,7 +1071,7 @@ fn hear_16k(native: &Native, narrow: &[i16]) -> Result<String> {
         "max_tokens": 200,
         "messages": [
             {"role": "system", "content": "Perform ASR in English."},
-            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav_16k(narrow)), "format": "wav"}}]}
+            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav(16_000, narrow)), "format": "wav"}}]}
         ]
     })
     .to_string();
@@ -1163,7 +1236,7 @@ pub fn transcribe(native: &Native, name: &str) -> Result<String> {
         "max_tokens": 200,
         "messages": [
             {"role": "system", "content": "Transcribe the audio exactly as spoken. Output only the words, nothing else."},
-            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav_16k(&narrow)), "format": "wav"}}]}
+            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": base64(&wav(16_000, &narrow)), "format": "wav"}}]}
         ]
     })
     .to_string();
@@ -1260,6 +1333,12 @@ pub fn audio_in_text(native: &Native) -> Result<Value> {
         found.push(json!({"file":"the engine's Core terminal","signature":signature}));
     }
     Ok(json!({"scanned":scanned,"engineLines":engine.lines().count(),"found":found}))
+}
+
+pub fn keep_engine_log(native: &Native) -> Result<()> {
+    let path = native.system.evidence.join("voice-engine.log");
+    fs::write(&path, engine_screen(native)?)
+        .with_context(|| format!("The engine log was not kept at {}", path.display()))
 }
 
 fn engine_screen(native: &Native) -> Result<String> {

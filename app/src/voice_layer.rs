@@ -4,7 +4,7 @@ use crate::{
     omni::{self, Clips, Omni, Running, Settings},
     replies::Replies,
     speech::{
-        Acknowledgement, Clip, Fault, Hearing, Phrase, Speaking, SpokenText, Utterance,
+        Acknowledgement, Clip, Fault, Hearing, Kept, Phrase, Speaking, SpokenText, Utterance,
         acknowledge, heard_nothing,
     },
     voice_parts::{Audio, Finish, Floor, Phase, Speaker, Trace, Voyager},
@@ -12,7 +12,6 @@ use crate::{
     voice_speaker,
 };
 use std::{
-    collections::HashMap,
     sync::{Arc, Condvar, Mutex, mpsc},
     thread,
     time::Duration,
@@ -199,7 +198,7 @@ struct Exchange<'a> {
     hearing: &'a dyn Hearing,
     routing: &'a dyn Routing,
     speaking: &'a dyn Speaking,
-    clips: &'a HashMap<Phrase, Clip>,
+    clips: &'a Kept,
     audio: &'a dyn Audio,
     voyager: &'a dyn Voyager,
     vocabulary: &'a Vocabulary,
@@ -231,7 +230,7 @@ impl Exchange<'_> {
             Err(error) => return Listened::NoMicrophone(error.to_string()),
         };
         self.trace.mark("capture-open");
-        let rate = self.clips.values().next().map_or(24_000, |clip| clip.rate);
+        let rate = self.clips.rate().unwrap_or(24_000);
         let speaker = self.audio.speaker(rate).ok();
         let mut gate = Gate::new(self.audio.detector());
         let mut waited = 0;
@@ -272,7 +271,7 @@ impl Exchange<'_> {
     }
 
     fn play(&self, phrase: Phrase, ready: Option<Box<dyn Speaker>>) -> Option<Finish> {
-        self.play_clips(vec![self.clips.get(&phrase)?.clone()], ready)
+        self.play_clips(vec![self.clips.get(phrase)?], ready)
     }
 
     fn play_clips(&self, clips: Vec<Clip>, ready: Option<Box<dyn Speaker>>) -> Option<Finish> {
@@ -355,8 +354,10 @@ impl Exchange<'_> {
                 return (decided, None);
             }
             let hum = self.play(Phrase::Hum, speaker.take());
-            self.trace
-                .mark_words("acknowledgement-started", Phrase::Hum.key());
+            if hum.is_some() {
+                self.trace
+                    .mark_words("acknowledgement-started", Phrase::Hum.key());
+            }
             let decided = told.recv().unwrap_or_else(|_| {
                 Decided::Missed(Fault::Failed("The voice stopped deciding".into()))
             });
@@ -470,45 +471,78 @@ struct Engine {
     running: Running,
     files: omni::Files,
     omni: Arc<Omni>,
-    clips: Arc<HashMap<Phrase, Clip>>,
 }
 
 fn bring_up(client: &Client, settings: &Settings) -> Result<Engine, String> {
     let files = omni::locate(settings)?;
     let running = omni::launch(client, &files, settings).map_err(|fault| fault.to_string())?;
-    match prepare(&running, settings, &files) {
-        Ok((omni, clips)) => Ok(Engine {
+    let omni = Arc::new(Omni::new(running.port));
+    match omni.warm() {
+        Ok(()) => Ok(Engine {
             client: client.clone(),
             running,
             files,
             omni,
-            clips,
         }),
-        Err(reason) => {
+        Err(fault) => {
             if let Err(error) = omni::stop(client, &running, &files) {
                 eprintln!("Voice engine stop was not confirmed: {error}");
             }
-            Err(reason)
+            Err(fault.to_string())
         }
     }
 }
 
-type Prepared = (Arc<Omni>, Arc<HashMap<Phrase, Clip>>);
+struct Ready<E> {
+    engine: Arc<E>,
+    store: Clips,
+    voyager: Arc<dyn Voyager>,
+    replies: Replies,
+    vocabulary: Vocabulary,
+    audio: Arc<dyn Audio>,
+    trace: Trace,
+}
 
-fn prepare(
-    running: &Running,
-    settings: &Settings,
-    files: &omni::Files,
-) -> Result<Prepared, String> {
-    let engine = Arc::new(Omni::new(running.port));
-    engine.warm().map_err(|fault: Fault| fault.to_string())?;
-    let kept = Clips::new(settings, files);
-    omni::prepare_clips(engine.as_ref(), &kept).map_err(|fault| fault.to_string())?;
-    let clips = Phrase::ALL
-        .into_iter()
-        .filter_map(|phrase| kept.load(phrase).map(|clip| (phrase, clip)))
-        .collect();
-    Ok((engine, Arc::new(clips)))
+fn serve_ready<E>(owner: &Arc<Shared>, ready: Ready<E>)
+where
+    E: Hearing + Routing + Speaking + Send + Sync + 'static,
+{
+    let kept = Kept::default();
+    let (engine, filling, marking) = (ready.engine.clone(), kept.clone(), ready.trace.clone());
+    thread::spawn(
+        move || match omni::prepare_clips(engine.as_ref(), &ready.store, &filling) {
+            Ok(()) => marking.mark("clips-kept"),
+            Err(fault) => eprintln!("The voice clips were not all kept: {fault}"),
+        },
+    );
+    owner.set(Phase::Ready, None);
+    let floor = Arc::new(Floor::default());
+    let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
+    voice_speaker::spawn(voice_speaker::Parts {
+        speaking: ready.engine.clone(),
+        clips: kept.clone(),
+        audio: ready.audio.clone(),
+        voyager: ready.voyager.clone(),
+        replies: ready.replies,
+        trace: ready.trace.clone(),
+        floor: floor.clone(),
+        status: Arc::new(move |phase, notice| status.set(phase, notice)),
+        stopped: Arc::new(move || stopped.has_stopped()),
+        on: Arc::new(move || listening.is_on()),
+    });
+    Exchange {
+        hearing: ready.engine.as_ref(),
+        routing: ready.engine.as_ref(),
+        speaking: ready.engine.as_ref(),
+        clips: &kept,
+        audio: ready.audio.as_ref(),
+        voyager: ready.voyager.as_ref(),
+        vocabulary: &ready.vocabulary,
+        trace: &ready.trace,
+        shared: owner,
+        floor: &floor,
+    }
+    .serve(MICROPHONE_RETRY);
 }
 
 pub fn start(
@@ -532,34 +566,18 @@ pub fn start(
                 return;
             }
         };
-        owner.set(Phase::Ready, None);
-        let floor = Arc::new(Floor::default());
-        let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
-        voice_speaker::spawn(voice_speaker::Parts {
-            speaking: engine.omni.clone(),
-            clips: engine.clips.clone(),
-            audio: audio.clone(),
-            voyager: voyager.clone(),
-            replies,
-            trace: trace.clone(),
-            floor: floor.clone(),
-            status: Arc::new(move |phase, notice| status.set(phase, notice)),
-            stopped: Arc::new(move || stopped.has_stopped()),
-            on: Arc::new(move || listening.is_on()),
-        });
-        Exchange {
-            hearing: engine.omni.as_ref(),
-            routing: engine.omni.as_ref(),
-            speaking: engine.omni.as_ref(),
-            clips: &engine.clips,
-            audio: audio.as_ref(),
-            voyager: voyager.as_ref(),
-            vocabulary: &vocabulary,
-            trace: &trace,
-            shared: &owner,
-            floor: &floor,
-        }
-        .serve(MICROPHONE_RETRY);
+        serve_ready(
+            &owner,
+            Ready {
+                engine: engine.omni.clone(),
+                store: Clips::new(&settings, &engine.files),
+                voyager,
+                replies,
+                vocabulary,
+                audio,
+                trace,
+            },
+        );
         if let Err(error) = omni::stop(&engine.client, &engine.running, &engine.files) {
             eprintln!("Voice engine stop was not confirmed: {error:?}");
         }
