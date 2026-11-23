@@ -422,7 +422,9 @@ During an avatar drag the pump runs as at rest. It parses, sends replies and
 returns credit after parsing. Only the redraw waits. A pane that parsed output
 while the avatar's terminal hold lives marks itself dirty and starts one waiter
 on the hold's end, which then notifies the pane. Later output during the same
-hold adds no waiter. `docs/avatar.md` describes the hold.
+hold adds no waiter. Frames drawn for other views can still render the pane
+during a drag, so a render while the hold lives keeps the grid the pane last
+drew and takes no new snapshot. `docs/avatar.md` describes the hold.
 
 The pump keeps returning credit during a drag because Core drops a slow viewer's
 backlog. Herdr Core 0.1.16 (e07c2a1) and 0.1.21 (1b0393f) open each viewer

@@ -39,6 +39,10 @@ impl RedrawAtRest {
         }
     }
 
+    pub(crate) fn holding(&self) -> bool {
+        self.hold.holding()
+    }
+
     pub(crate) fn notify<T: 'static>(&self, cx: &mut Context<T>) {
         if !self.hold.holding() {
             cx.notify();
