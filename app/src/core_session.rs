@@ -16,6 +16,10 @@ const AMBIENT: [&str; 5] = [
     "HC_TERMINAL_SOCKET",
 ];
 
+fn ambient(is_set: impl Fn(&str) -> bool) -> Option<&'static str> {
+    AMBIENT.into_iter().find(|key| is_set(key))
+}
+
 fn running(session: &str) -> bool {
     std::os::unix::net::UnixStream::connect(crate::core_endpoint::endpoint(session)).is_ok()
 }
@@ -29,8 +33,8 @@ impl SessionGuard {
     pub(crate) fn new(prefix: &str) -> Self {
         let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
         let session = format!("{prefix}-{}-{serial}", std::process::id());
-        for key in AMBIENT {
-            assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
+        if let Some(key) = ambient(|key| std::env::var_os(key).is_some()) {
+            panic!("Clear ambient {key}");
         }
         Self {
             session,
@@ -129,6 +133,14 @@ mod tests {
         );
         assert_ne!(first.session(), second.session());
         assert!(!running(first.session()));
+    }
+
+    #[test]
+    fn a_guard_refuses_to_start_when_any_one_ambient_variable_is_set() {
+        for key in AMBIENT {
+            assert_eq!(ambient(|set| set == key), Some(key));
+        }
+        assert_eq!(ambient(|_| false), None);
     }
 
     #[test]
