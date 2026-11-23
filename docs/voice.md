@@ -392,15 +392,16 @@ what failed and why. A spoken answer is the whole answer, with no lists, symbols
 paths or code, and it never points to the chat.
 
 The background Voyager reads the guide in two places. Its launch prompt is the
-background-session line, the reply-marker rule `spoken::reply_rule` and the guide.
+background-session line, the reply-marker rule `spoken::reply_rule`, the cut-off rule
+`spoken::cut_off_rule` and the guide.
 Claude Code ignores the launch prompt on a resumed conversation, so the focus hook
 sends the same text after the dock line at every prompt. The background-session line
 stays beside the marker rule because it is part of the marker mechanism. It lets
 Voyager drop a personal reply prefix that the person's own instructions name. The
-hook text is 4,032 bytes, and a test holds it under 4,100, because it is sent on
+hook text is 4,084 bytes, and a test holds it under 4,100, because it is sent on
 every prompt. It adds no tool call or round trip. The bound is the text's length plus
 about 70 bytes, so any longer wording fails the test and is timed again before the
-bound moves. The guide grew from a 3,130-byte hook text, and the voice model and the
+bound moves. The cut-off rule added 52 bytes to the 4,032 that the guide alone gives. The guide grew from a 3,130-byte hook text, and the voice model and the
 small-talk router read it too. On the voice journey's `acknowledgement-is-prompt`
 case, the longer guide measured a first-sound median of 236 ms against 254 ms for the
 shorter one, and a heard-to-routed median of 885.5 ms against 886 ms. The voice
@@ -410,7 +411,8 @@ you are", because the voice model has no `voyager` or `hc` commands.
 Three checks hold this in place. A unit test in `spoken.rs` holds the joined guide
 to the approved text byte for byte, by length and sha256, so any drift in wording
 fails. A unit test in `focus_hook.rs` holds the hook text under 4,100 bytes and
-checks that it carries the background-session line, the marker rule and the guide.
+checks that it carries the background-session line, the marker rule, the cut-off rule
+and the guide.
 The `adopt-by-label` journey's `focus-hook-names-dock` case reads the stand-in
 agent's scrollback and requires the docked Vessel's name to end the first line of
 the hook's context, so the dock still comes first ahead of the longer guide.
