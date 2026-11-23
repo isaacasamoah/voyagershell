@@ -41,6 +41,7 @@ pub enum Phase {
     Hearing,
     Acknowledging,
     Speaking,
+    SpeakingOpen,
     Unavailable(String),
     Stopped,
 }
