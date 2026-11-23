@@ -603,6 +603,7 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
                 "(): void",
                 move |pane, args, window, cx| {
                     anyhow::ensure!(args.is_empty(), "focus takes no arguments");
+                    crate::avatar::trace(format!("term-focus active={}", window.is_window_active()));
                     if window.is_window_active() {
                         pane.read(cx).focus.clone().focus(window, cx);
                     }

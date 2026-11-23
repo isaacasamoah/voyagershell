@@ -383,6 +383,7 @@ impl Render for Pane {
             }))
             .on_key_down(move |event, _, cx| {
                 crate::diagnostics::trace("key_received", 0);
+                crate::avatar::trace(format!("term-key {}", event.keystroke.key));
                 if event.keystroke.modifiers.control && event.keystroke.key == "q" {
                     return;
                 }

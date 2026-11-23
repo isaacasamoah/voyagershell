@@ -561,6 +561,7 @@ impl Render for AvatarView {
             )
             .on_key_down(
                 cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
+                    super::trace(format!("avatar-key {}", event.keystroke.key));
                     if event.keystroke.key == "escape" {
                         this.avatar.update(cx, |avatar, cx| avatar.cancel_drag(cx));
                     } else if matches!(event.keystroke.key.as_str(), "s" | "f5")
