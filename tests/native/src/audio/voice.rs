@@ -891,7 +891,7 @@ pub fn window_ranges(narrow: &[i16]) -> Vec<std::ops::Range<usize>> {
         } else {
             continue;
         }
-        cuts.push(start * frame);
+        cuts.push((start * frame).min(narrow.len()));
     }
     cuts.push(narrow.len());
     cuts.windows(2)
@@ -1302,6 +1302,27 @@ mod tests {
                 .all(|window| !(span.start < window.start && window.start < span.end))
         }));
         assert_eq!(word_errors(&heard, &sentences.join(" ")), (0, 54));
+    }
+
+    #[test]
+    fn a_pause_cut_on_the_last_partial_frame_stays_inside_the_capture() {
+        for partial in [1, 160, 319] {
+            let narrow: Vec<i16> =
+                [vec![3000i16; 16_000 * 9], vec![0i16; 320 * 14 + partial]].concat();
+            let windows = window_ranges(&narrow);
+            assert_eq!(windows.len(), 1, "partial {partial}");
+            assert_eq!(windows[0], 0..narrow.len(), "partial {partial}");
+        }
+    }
+
+    #[test]
+    fn a_ceiling_cut_on_the_last_partial_frame_stays_inside_the_capture() {
+        for partial in [1, 160, 319] {
+            let narrow = vec![3000i16; 320 * 749 + partial];
+            let windows = window_ranges(&narrow);
+            assert_eq!(windows.len(), 1, "partial {partial}");
+            assert_eq!(windows[0], 0..narrow.len(), "partial {partial}");
+        }
     }
 
     #[test]
