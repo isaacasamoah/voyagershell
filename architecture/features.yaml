@@ -1664,7 +1664,12 @@ features:
         says: 'A dock on a Vessel, from the avatar or from Voyager''s voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A dock home leaves the keyboard where it was. A later layout re-read that is not a dock leaves the keyboard where the user put it.'
         owner: desktop-presentation
         guards: ['type:app/src/client_owner.rs#Flight', 'type:app/src/client_core.rs#WorkspaceNotice']
-        checks: ['journey:socket-dock/socket-dock-takes-keyboard', 'journey:socket-dock/reread-keeps-clicked-pane', 'journey:socket-dock/redock-takes-keyboard', 'journey:socket-dock/dock-home-keeps-keyboard']
+        checks:
+          - 'journey:socket-dock/socket-dock-takes-keyboard'
+          - 'journey:socket-dock/reread-keeps-clicked-pane'
+          - 'journey:socket-dock/redock-takes-keyboard'
+          - 'journey:socket-dock/typing-right-after-a-dock-reaches-the-vessel'
+          - 'journey:socket-dock/dock-home-keeps-keyboard'
         formal: []
         journeys: [socket-dock]
       - id: created-while-preparing-is-drawn
