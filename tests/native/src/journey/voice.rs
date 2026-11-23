@@ -441,7 +441,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         for (gain, bed) in QUIET_VOICES {
             let samples =
                 room::quiet_request(&DOCK_ON_THIS_FLEET, gain, bed, QUIET_VOICE_AROUND_S)?;
-            voice::turn_on(native)?;
+            let turned_on_ms = voice::turn_on(native)?;
             let listened = voice::feed_and_settle(native, "quiet-voice", &samples);
             voice::turn_off(native)?;
             let listened = listened?;
@@ -456,7 +456,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 bed,
                 turns: listened.turns.len(),
                 sent: listened.sent(),
-                waited_ms: listened.waited_ms,
+                waited_ms: turned_on_ms + listened.waited_ms,
                 heard,
                 word_errors,
                 words,

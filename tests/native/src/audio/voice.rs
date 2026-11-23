@@ -538,7 +538,7 @@ pub fn turn_on(native: &Native) -> Result<u64> {
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;
-    let waited_ms = await_reply_end(native)?;
+    let before_ms = await_reply_end(native)?;
     native.click(&Target::VOICE_CONTROL)?;
     until("the app to open the microphone", || {
         Ok(recorders(native)?
@@ -551,7 +551,7 @@ pub fn turn_on(native: &Native) -> Result<u64> {
         "the voice control listening",
         |label| label == LISTENING,
     )?;
-    Ok(waited_ms)
+    Ok(before_ms + await_floor(native)?)
 }
 
 pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
@@ -748,7 +748,7 @@ fn floor_is_clear(marks: &[Mark]) -> bool {
 }
 
 fn reply_is_over(marks: &[Mark]) -> bool {
-    !reply_is_owed(marks) && !reply_is_playing(marks)
+    !reply_is_playing(marks)
 }
 
 pub fn await_floor(native: &Native) -> Result<u64> {
@@ -1488,22 +1488,35 @@ mod tests {
     }
 
     #[test]
-    fn a_reply_owed_or_playing_is_not_over() {
-        assert!(!reply_is_over(&trace(&["heard", "sent"])));
-        assert!(!reply_is_over(&trace(&["sent", "speech-started"])));
+    fn a_reply_owed_to_a_microphone_that_is_off_does_not_hold_the_click() {
+        assert!(reply_is_over(&trace(&["heard", "sent"])));
         assert!(reply_is_over(&trace(&[
             "sent",
             "speech-started",
             "speech-ended",
+            "sent"
+        ])));
+        assert!(!floor_is_clear(&trace(&["heard", "sent"])));
+    }
+
+    #[test]
+    fn a_reply_owed_while_voice_is_off_does_not_block_the_click() {
+        let waited = wait_for(
+            || Ok(trace(&["heard", "sent", "capture-open", "listening"])),
+            Duration::from_secs(5),
+            reply_is_over,
+        )
+        .unwrap();
+        assert!(waited < 1000);
+    }
+
+    #[test]
+    fn a_reply_that_is_playing_is_not_over() {
+        assert!(!reply_is_over(&trace(&["sent", "speech-started"])));
+        assert!(reply_is_over(&trace(&[
             "sent",
             "speech-started",
             "speech-ended"
-        ])));
-        assert!(!reply_is_over(&trace(&[
-            "sent",
-            "speech-started",
-            "speech-ended",
-            "sent"
         ])));
     }
 
