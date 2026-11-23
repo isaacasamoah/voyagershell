@@ -1,13 +1,12 @@
 diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
-index 199d24e9..9a979f01 100644
 --- a/app/src/voice_route.rs
 +++ b/app/src/voice_route.rs
-@@ -20,7 +20,7 @@ impl Route {
-         let Ok(Answer::Chat { say }) = serde_json::from_str(answer) else {
-             return Route::Voyager;
+@@ -22,7 +22,7 @@
+             Ok(Answer::Work { ack }) => return Route::Voyager(ack),
+             Err(_) => return Route::Voyager(Ack::None),
          };
 -        let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
 +        let sure = chat_probability.is_some_and(|chance| chance > 1.0);
          if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)
          {
-             return Route::Voyager;
+             return Route::Voyager(Ack::None);

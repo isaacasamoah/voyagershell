@@ -49,8 +49,11 @@ cases! {
 
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
-const TARGET_MS: i64 = 300;
 const RUNS: usize = 10;
+const QUESTION: &str = "What is in this fleet?";
+const CREW_MESSAGE: &str = "Ask the build crew to run the tests.";
+const LOOK_LINES: [&str; 4] = ["one-sec", "let-me-look", "checking", "okay-checking"];
+const SURE_LINES: [&str; 4] = ["sure", "okay", "got-it", "sure-thing"];
 const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
@@ -195,18 +198,18 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         return Ok(());
     };
     cases.check(native, Case::SmallTalkIsAnswered, |native| {
-        let replanted = voice::planted_hum_rendered_again(native)?;
+        let replanted = voice::planted_clip_rendered_again(native)?;
         if !(replanted.replaced && replanted.all_kept) {
             return Verdict::new()
                 .expect(
-                    "the run-on Mm-hm planted in the clip cache is rendered again before the first turn",
+                    "the run-on One sec. clip planted in the clip cache is rendered again before the first turn",
                     replanted.replaced,
                 )
                 .expect(
                     "the app marks every clip kept before the first turn",
                     replanted.all_kept,
                 )
-                .observed("plantedHum", replanted);
+                .observed("plantedClip", replanted);
         }
         let said = voice::converse(native, &HELLO_HOW_ARE_YOU, "small-talk")?;
         let reply = said.chat.clone().unwrap_or_default();
@@ -219,8 +222,8 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 !said.sent && !screen.contains(&spoken(HELLO_HOW_ARE_YOU.words)),
             )
             .expect(
-                "a soft Mm-hm plays first while the engine decides, and reaches the speaker",
-                said.hummed && said.spoken.matches(),
+                "no acknowledgement line plays before the voice's own reply",
+                said.choice.is_none() && said.acknowledgement.is_none(),
             )
             .expect(
                 "the speaker carries most of the reply's words",
@@ -231,7 +234,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.first_sound_after_capture_ms,
             )?
             .observed("conversation", json!(said))?
-            .observed("plantedHum", replanted)?
+            .observed("plantedClip", replanted)?
             .observed("speakerHeard", transcript)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {
@@ -239,19 +242,15 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let chatted = said.marks.iter().any(|mark| mark.event == "chat-started");
         Verdict::new()
             .expect(
-                "the request plays the asking clip at the speaker",
-                said.spoken.matches()
-                    && matches!(
-                        said.acknowledgement.as_deref(),
-                        Some("asking" | "okay-asking")
-                    ),
+                "the request plays only the line its routing choice names, at the speaker",
+                plays_its_choice(&said),
             )
             .expect(
                 "the voice gives no chat reply",
                 said.chat.is_none() && !chatted,
             )
             .expect("the words are sent to Voyager", said.sent)
-            .observed("hummed", said.hummed)?
+            .observed("choice", &said.choice)?
             .observed("conversation", json!(said))
     })?;
     cases.check(native, Case::OfferGoesToVoyager, |native| {
@@ -269,12 +268,8 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.chat.is_none() && !chatted,
             )
             .expect(
-                "the request plays the asking clip at the speaker",
-                said.spoken.matches()
-                    && matches!(
-                        said.acknowledgement.as_deref(),
-                        Some("asking" | "okay-asking")
-                    ),
+                "the withheld reply plays no line, because the voice falls back to none",
+                said.choice.as_deref() == Some("none") && said.acknowledgement.is_none(),
             )
             .expect("the words are sent to Voyager", said.sent)
             .observed("conversation", json!(said))
@@ -509,16 +504,8 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 words_match(&words, RENAME_TO_HARBOR.words),
             )
             .expect(
-                "the acknowledgement for a Voyager that is running plays at the speaker",
-                said.spoken.matches()
-                    && said
-                        .acknowledgement
-                        .as_deref()
-                        .is_some_and(|key| key.contains("asking")),
-            )
-            .expect(
-                "the acknowledgement starts before hearing ends",
-                said.started_before_heard,
+                "a plain command plays no line, because its effect is visible",
+                said.choice.as_deref() == Some("none") && said.acknowledgement.is_none(),
             )
             .expect(
                 "listening resumes after the turn without another click",
@@ -829,27 +816,42 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("clickOff", off)
     })?;
     cases.check(native, Case::AcknowledgementIsPrompt, |native| {
-        let mut first_sounds = Vec::new();
-        let mut early = 0;
-        let mut heard_right = 0;
-        let mut played = std::collections::BTreeSet::new();
-        for run in 0..RUNS {
-            let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
-            first_sounds.push(said.first_sound_after_capture_ms);
-            played.extend(said.acknowledgement.clone());
-            early += usize::from(said.started_before_heard);
-            heard_right += usize::from(
-                said.heard
-                    .as_deref()
-                    .is_some_and(|words| words_match(words, DOCK_ON_THIS_FLEET.words)),
-            );
-            native.drawn_label(
-                &Target::VOICE_CONTROL,
-                "the voice control ready for the next click",
-                |label| label == READY,
-            )?;
+        let requests = speech::requests()?;
+        let request = |words: &str| {
+            requests
+                .iter()
+                .find(|request| request.words == words)
+                .with_context(|| format!("No committed request says {words}"))
+        };
+        let lines = [
+            ("none", DOCK_ON_THIS_FLEET.words.to_owned(), DOCK_ON_THIS_FLEET.samples()?),
+            ("look", QUESTION.to_owned(), request(QUESTION)?.samples.clone()),
+            ("sure", CREW_MESSAGE.to_owned(), request(CREW_MESSAGE)?.samples.clone()),
+        ];
+        let mut runs = Vec::new();
+        for (expected, words, samples) in &lines {
+            for run in 0..RUNS {
+                let said =
+                    voice::converse_samples(native, samples, &format!("prompt-{expected}-{run}"))?;
+                runs.push(json!({
+                    "expected": expected,
+                    "choice": said.choice,
+                    "acknowledgement": said.acknowledgement,
+                    "heardRight": said.heard.as_deref().is_some_and(|heard| words_match(heard, words)),
+                    "playsItsChoice": plays_its_choice(&said),
+                    "firstSoundAfterCaptureMs": said.first_sound_after_capture_ms,
+                }));
+                native.drawn_label(
+                    &Target::VOICE_CONTROL,
+                    "the voice control ready for the next click",
+                    |label| label == READY,
+                )?;
+            }
         }
-        let middle = median(&first_sounds);
+        let played: std::collections::BTreeSet<String> = runs
+            .iter()
+            .filter_map(|run| run["acknowledgement"].as_str().map(str::to_owned))
+            .collect();
         let clips_heard = played
             .iter()
             .map(|key| voice::kept_clip_heard(native, key))
@@ -860,26 +862,33 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .filter(|clip| !clip.opens_quiet)
             .map(|clip| format!("{} opens at level {:.0}", clip.file, clip.opening_level))
             .collect();
+        let every = |key: &str| runs.iter().all(|run| run[key] == true);
+        let medians: Vec<_> = ["none", "look", "sure"]
+            .into_iter()
+            .map(|choice| {
+                let times: Vec<i64> = runs
+                    .iter()
+                    .filter(|run| run["choice"] == choice)
+                    .filter_map(|run| run["firstSoundAfterCaptureMs"].as_i64())
+                    .collect();
+                json!({"choice": choice, "runs": times.len(), "medianMs": median(&times)})
+            })
+            .collect();
         Verdict::new()
+            .expect("every run is heard as spoken", every("heardRight"))
             .expect(
                 "every kept clip begins below the first-sound level; a clip that opens loud was cut by the trim, or was rendered already loud by the engine and kept whole before any trim, and clipsOpeningLoud names each",
                 !openings.is_empty() && loud.is_empty(),
             )
             .expect(
-                "the acknowledgement starts before hearing ends in every run",
-                early == RUNS,
+                "every run plays only the line its routing choice names",
+                every("playsItsChoice"),
             )
-            .expect("every run is heard as spoken", heard_right == RUNS)
-            .expect(
-                "the median first sound after capture ends is under the target",
-                middle.is_some_and(|middle| middle < TARGET_MS),
-            )
-            .observed("firstSoundAfterCaptureMs", &first_sounds)?
-            .observed("medianMs", middle)?
+            .observed("firstSoundByChoice", &medians)?
             .observed("clipsHeardBack", clips_heard)?
             .observed("clipsOpeningLoud", loud)?
             .observed("clipOpenings", openings)?
-            .observed("targetMs", TARGET_MS)
+            .observed("runs", &runs)
     })?;
     cases.check(native, Case::RefusalIsInTheChat, |native| {
         let bound = std::fs::read(native.profile_path("voyager.json"))?;
@@ -1004,4 +1013,15 @@ fn in_order(pieces: &[String], wanted: &[&str]) -> bool {
     pieces
         .windows(wanted.len())
         .any(|run| run.iter().zip(wanted).all(|(piece, want)| piece == want))
+}
+
+fn plays_its_choice(said: &voice::Conversation) -> bool {
+    let matched = said.spoken.as_ref().is_some_and(|score| score.matches());
+    let played = said.acknowledgement.as_deref();
+    match said.choice.as_deref() {
+        Some("none") => played.is_none(),
+        Some("look") => matched && played.is_some_and(|key| LOOK_LINES.contains(&key)),
+        Some("sure") => matched && played.is_some_and(|key| SURE_LINES.contains(&key)),
+        _ => false,
+    }
 }

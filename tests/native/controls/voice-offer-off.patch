@@ -1,13 +1,12 @@
 diff --git a/app/src/voice_route.rs b/app/src/voice_route.rs
-index 4a846a2e..331931a2 100644
 --- a/app/src/voice_route.rs
 +++ b/app/src/voice_route.rs
-@@ -21,7 +21,7 @@ impl Route {
-             return Route::Voyager;
+@@ -23,7 +23,7 @@
+             Err(_) => return Route::Voyager(Ack::None),
          };
          let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
 -        if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)
 +        if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS)
          {
-             return Route::Voyager;
+             return Route::Voyager(Ack::None);
          }

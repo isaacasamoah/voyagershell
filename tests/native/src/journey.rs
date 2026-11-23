@@ -515,7 +515,7 @@ mod tests {
                 "tests/native/controls/voice-streams.patch".to_owned(),
                 "tests/native/controls/voice-chat-off.patch".to_owned(),
                 "tests/native/controls/voice-chat-promise.patch".to_owned(),
-                "tests/native/controls/voice-hum-off.patch".to_owned(),
+                "tests/native/controls/voice-ack-ignored.patch".to_owned(),
                 "tests/native/controls/voice-ack-drop.patch".to_owned(),
                 "tests/native/controls/voice-offer-off.patch".to_owned(),
                 "tests/native/controls/voice-kept-clip.patch".to_owned(),
