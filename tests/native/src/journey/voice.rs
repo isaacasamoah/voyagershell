@@ -832,9 +832,11 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let mut first_sounds = Vec::new();
         let mut early = 0;
         let mut heard_right = 0;
+        let mut played = std::collections::BTreeSet::new();
         for run in 0..RUNS {
             let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
             first_sounds.push(said.first_sound_after_capture_ms);
+            played.extend(said.acknowledgement.clone());
             early += usize::from(said.started_before_heard);
             heard_right += usize::from(
                 said.heard
@@ -848,7 +850,15 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )?;
         }
         let middle = median(&first_sounds);
+        let clips_heard = played
+            .iter()
+            .map(|key| voice::kept_clip_heard(native, key))
+            .collect::<Result<Vec<_>>>()?;
         Verdict::new()
+            .expect(
+                "every acknowledgement clip that played, heard back by the engine, holds its words",
+                !clips_heard.is_empty() && clips_heard.iter().all(|clip| clip.holds_its_words),
+            )
             .expect(
                 "the acknowledgement starts before hearing ends in every run",
                 early == RUNS,
@@ -860,6 +870,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
             .observed("medianMs", middle)?
+            .observed("clipsHeardBack", clips_heard)?
             .observed("targetMs", TARGET_MS)
     })?;
     cases.check(native, Case::RefusalIsInTheChat, |native| {

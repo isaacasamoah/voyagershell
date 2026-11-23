@@ -1,0 +1,13 @@
+diff --git a/app/src/omni.rs b/app/src/omni.rs
+index 6d90cce7..f223bfe9 100644
+--- a/app/src/omni.rs
++++ b/app/src/omni.rs
+@@ -498,7 +498,7 @@ fn trimmed(clip: Clip) -> Clip {
+         plain_level(&samples) > ONSET_LEVEL
+     });
+     let start = onset.map_or(0, |frames| {
+-        (frames * frame).saturating_sub(bytes_within(LEAD_PAD, clip.rate)) & !1
++        (frames * frame + bytes_within(LEAD_PAD, clip.rate)).min(clip.pcm.len()) & !1
+     });
+     if start == 0 {
+         return clip;
