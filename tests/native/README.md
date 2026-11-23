@@ -451,12 +451,12 @@ the terminal with the circle's area masked and reads Core's screen.
   Vessel and the streaming terminal draws again after the release.
 
 The control `tests/native/controls/avatar-drag.patch` drops the redraw at the
-end of the hold, so `caught-up` fails: the staircase has finished, nothing
+end of the hold, so `caught-up` fails. The staircase has finished, nothing
 else prints, and the terminal never draws it. The journey judges no frame
 budget. The drag's frame timing was measured with the exploratory Wayland
-harness on the `experiment/avatar-motion` branch, which runs a candidate built
-with the frame profiler on a headless mutter compositor with a GPU and injects
-moves through RemoteDesktop. The same harness can measure this change.
+harness in `experiments/avatar-motion/` on the `experiment/canvas-redraw`
+branch. It runs a candidate built with the frame profiler on a headless mutter
+compositor with a GPU and injects moves through RemoteDesktop.
 
 ### Profile fixtures, live edits and a second build
 

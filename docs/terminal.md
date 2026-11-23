@@ -418,7 +418,7 @@ it adds no idle polling or timer. Disconnect and completion return directly.
 This gives the event loop an opportunity to handle input and frames, but actual
 saturated-output responsiveness and latency still require native evidence.
 
-During an avatar drag the pump runs as at rest: it parses, sends replies and
+During an avatar drag the pump runs as at rest. It parses, sends replies and
 returns credit after parsing. Only the redraw waits. A pane that parsed output
 while the avatar's terminal hold lives marks itself dirty and starts one waiter
 on the hold's end, which then notifies the pane. Later output during the same
