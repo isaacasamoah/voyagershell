@@ -392,6 +392,7 @@ fn converse_within(
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
                 .map(|_| ()))
         })?;
+        await_reply_settled(native, "after-reply")?;
     }
     let listening_resumed = native
         .drawn_label(&Target::VOICE_CONTROL, "listening again", |label| {
@@ -540,7 +541,7 @@ pub fn turn_on(native: &Native) -> Result<u64> {
     })?;
     let before_ms = await_reply_stop(native)?;
     native.click(&Target::VOICE_CONTROL)?;
-    let after_ms = await_reply_settled(native)?;
+    let after_ms = await_reply_settled(native, "after-click")?;
     until("the app to open the microphone", || {
         Ok(recorders(native)?
             .iter()
@@ -756,19 +757,31 @@ fn reply_is_settled(marks: &[Mark]) -> bool {
     !reply_is_owed(marks) && !reply_is_playing(marks)
 }
 
-pub fn await_floor(native: &Native) -> Result<u64> {
+fn awaited(native: &Native, kind: &str, clear: fn(&[Mark]) -> bool) -> Result<u64> {
     let trace = native.voice_trace();
-    wait_for(|| marks(&trace), FLOOR_WAIT.within(), floor_is_clear)
+    let waited_ms = wait_for(|| marks(&trace), FLOOR_WAIT.within(), clear)?;
+    let mut log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(native.system.evidence.join("voice-waits.jsonl"))?;
+    writeln!(
+        log,
+        "{}",
+        json!({ "atMs": now_millis(), "kind": kind, "waitedMs": waited_ms })
+    )?;
+    Ok(waited_ms)
+}
+
+pub fn await_floor(native: &Native) -> Result<u64> {
+    awaited(native, "before-feed", floor_is_clear)
 }
 
 pub fn await_reply_stop(native: &Native) -> Result<u64> {
-    let trace = native.voice_trace();
-    wait_for(|| marks(&trace), FLOOR_WAIT.within(), reply_has_stopped)
+    awaited(native, "before-click", reply_has_stopped)
 }
 
-fn await_reply_settled(native: &Native) -> Result<u64> {
-    let trace = native.voice_trace();
-    wait_for(|| marks(&trace), FLOOR_WAIT.within(), reply_is_settled)
+pub fn await_reply_settled(native: &Native, kind: &str) -> Result<u64> {
+    awaited(native, kind, reply_is_settled)
 }
 
 fn wait_for(
@@ -826,6 +839,7 @@ pub fn settle_ms(marks: &[Mark]) -> Option<u64> {
 pub fn turn_off(native: &Native) -> Result<()> {
     let label = native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
     if label != READY {
+        await_reply_settled(native, "before-off")?;
         native.click(&Target::VOICE_CONTROL)?;
     }
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
