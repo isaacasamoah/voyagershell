@@ -280,7 +280,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let speech = Samples::thump()
             .then(&Samples::silence(ROOM_SILENCE_MS))
             .then(&OPEN_THEN_DOCK.samples()?);
-        voice::turn_on(native)?;
+        let waited_ms = voice::turn_on(native)?;
         let turn = voice::feed_turn(native, "thump-then-sentence", &speech)?;
         voice::turn_off(native)?;
         Verdict::new()
@@ -292,12 +292,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the turn holds the whole sentence",
                 turn.heard.len() == 1 && words_match(&turn.heard[0], OPEN_THEN_DOCK.words),
             )
+            .observed("waitedMs", waited_ms)?
             .observed("turn", turn)
     })?;
     cases.check(native, Case::ConnectingThenListening, |native| {
         native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
             label == READY
         })?;
+        voice::await_reply_stop(native)?;
         native.click(&Target::VOICE_CONTROL)?;
         let connecting = native.drawn_label(&Target::VOICE_CONTROL, "connecting", |label| {
             label == CONNECTING || label == LISTENING

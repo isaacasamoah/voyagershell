@@ -538,8 +538,9 @@ pub fn turn_on(native: &Native) -> Result<u64> {
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;
-    let before_ms = await_reply_end(native)?;
+    let before_ms = await_reply_stop(native)?;
     native.click(&Target::VOICE_CONTROL)?;
+    let after_ms = await_reply_settled(native)?;
     until("the app to open the microphone", || {
         Ok(recorders(native)?
             .iter()
@@ -551,7 +552,7 @@ pub fn turn_on(native: &Native) -> Result<u64> {
         "the voice control listening",
         |label| label == LISTENING,
     )?;
-    Ok(before_ms + await_floor(native)?)
+    Ok(before_ms + after_ms)
 }
 
 pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
@@ -747,8 +748,12 @@ fn floor_is_clear(marks: &[Mark]) -> bool {
     !reply_is_owed(marks) && listening_follows
 }
 
-fn reply_is_over(marks: &[Mark]) -> bool {
+fn reply_has_stopped(marks: &[Mark]) -> bool {
     !reply_is_playing(marks)
+}
+
+fn reply_is_settled(marks: &[Mark]) -> bool {
+    !reply_is_owed(marks) && !reply_is_playing(marks)
 }
 
 pub fn await_floor(native: &Native) -> Result<u64> {
@@ -756,9 +761,14 @@ pub fn await_floor(native: &Native) -> Result<u64> {
     wait_for(|| marks(&trace), FLOOR_WAIT.within(), floor_is_clear)
 }
 
-pub fn await_reply_end(native: &Native) -> Result<u64> {
+pub fn await_reply_stop(native: &Native) -> Result<u64> {
     let trace = native.voice_trace();
-    wait_for(|| marks(&trace), FLOOR_WAIT.within(), reply_is_over)
+    wait_for(|| marks(&trace), FLOOR_WAIT.within(), reply_has_stopped)
+}
+
+fn await_reply_settled(native: &Native) -> Result<u64> {
+    let trace = native.voice_trace();
+    wait_for(|| marks(&trace), FLOOR_WAIT.within(), reply_is_settled)
 }
 
 fn wait_for(
@@ -1482,15 +1492,15 @@ mod tests {
     #[test]
     fn a_reply_that_ended_with_the_microphone_closed_is_over() {
         let ended = trace(&["sent", "speech-started", "speech-ended"]);
-        assert!(reply_is_over(&ended));
+        assert!(reply_has_stopped(&ended));
         assert!(!floor_is_clear(&ended));
-        assert!(reply_is_over(&trace(&[])));
+        assert!(reply_has_stopped(&trace(&[])));
     }
 
     #[test]
     fn a_reply_owed_to_a_microphone_that_is_off_does_not_hold_the_click() {
-        assert!(reply_is_over(&trace(&["heard", "sent"])));
-        assert!(reply_is_over(&trace(&[
+        assert!(reply_has_stopped(&trace(&["heard", "sent"])));
+        assert!(reply_has_stopped(&trace(&[
             "sent",
             "speech-started",
             "speech-ended",
@@ -1504,16 +1514,28 @@ mod tests {
         let waited = wait_for(
             || Ok(trace(&["heard", "sent", "capture-open", "listening"])),
             Duration::from_secs(5),
-            reply_is_over,
+            reply_has_stopped,
         )
         .unwrap();
         assert!(waited < 1000);
     }
 
     #[test]
-    fn a_reply_that_is_playing_is_not_over() {
-        assert!(!reply_is_over(&trace(&["sent", "speech-started"])));
-        assert!(reply_is_over(&trace(&[
+    fn a_reply_is_settled_only_when_none_is_owed_or_playing() {
+        assert!(reply_is_settled(&trace(&[])));
+        assert!(!reply_is_settled(&trace(&["heard", "sent"])));
+        assert!(!reply_is_settled(&trace(&["sent", "speech-started"])));
+        assert!(reply_is_settled(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_that_is_playing_has_not_stopped() {
+        assert!(!reply_has_stopped(&trace(&["sent", "speech-started"])));
+        assert!(reply_has_stopped(&trace(&[
             "sent",
             "speech-started",
             "speech-ended"
@@ -1525,7 +1547,7 @@ mod tests {
         let error = wait_for(
             || Ok(trace(&["sent", "speech-started"])),
             Duration::from_millis(50),
-            reply_is_over,
+            reply_has_stopped,
         )
         .unwrap_err();
         assert!(
