@@ -1335,6 +1335,12 @@ pub fn audio_in_text(native: &Native) -> Result<Value> {
     Ok(json!({"scanned":scanned,"engineLines":engine.lines().count(),"found":found}))
 }
 
+pub fn keep_engine_log(native: &Native) -> Result<()> {
+    let path = native.system.evidence.join("voice-engine.log");
+    fs::write(&path, engine_screen(native)?)
+        .with_context(|| format!("The engine log was not kept at {}", path.display()))
+}
+
 fn engine_screen(native: &Native) -> Result<String> {
     let listed = native.system.watch("terminal.list", json!({}))?;
     let terminals = listed["terminals"]

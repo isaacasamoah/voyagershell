@@ -132,6 +132,12 @@ fn spoken(words: &str) -> String {
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
+    let driven = drive_cases(native, cases);
+    let kept = voice::keep_engine_log(native);
+    driven.and(kept)
+}
+
+fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     anyhow::ensure!(
         native.audio.is_some() && native.voice_engine.is_some(),
         "The voice journey needs --audio on and --voice-engine"
