@@ -2818,3 +2818,87 @@ test("a Voyage close inspection that is refused or uncertain says which", async 
     ]);
   }
 });
+
+test("a render after an outside workspace change finishes, and the notice starts the inspect", async () => {
+  let notice = {
+    revision: "9",
+    closeRevision: "0",
+    navigationRevision: "0",
+    dockRevision: "0",
+    packageRevision: "0",
+  };
+  const handlers = [];
+  const Canvas = new Function(
+    "View",
+    "div",
+    "workspace_notice",
+    "take_animation_notice",
+    "take_result",
+    "projection",
+    "Prepared",
+    "NoticeListener",
+    "invoke",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(
+    class {},
+    element,
+    () => notice,
+    () => null,
+    () => null,
+    () => ({}),
+    { new: element },
+    {
+      new: (handler) => {
+        handlers.push(handler);
+        return element();
+      },
+    },
+    async () => ({ requestId: "inspect", status: "refused", message: "" }),
+  );
+  const started = [];
+  const context = (phase) => ({
+    notify() {
+      if (phase === "render")
+        throw new TypeError(
+          "cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead",
+        );
+    },
+    spawn(task) {
+      started.push(task);
+    },
+  });
+  const view = Object.assign(new Canvas(), {
+    busy: false,
+    layout: null,
+    status: "",
+    animationNotice: null,
+    focus: {},
+    drag: null,
+    version: "8",
+    refreshRequested: false,
+    automaticRefresh: false,
+    workspaceNotice: { ...notice, revision: "8" },
+    action: () => element(),
+  });
+  assert.doesNotThrow(() => view.render(context("render")));
+  assert.equal(started.length, 0, "a render starts no workspace request");
+  assert.equal(view.busy, false);
+  handlers.at(-1)(context("event"));
+  assert.equal(started.length, 1);
+  await started[0](context("task"));
+  assert.equal(started.length, 2, "the notice starts one inspect");
+  assert.equal(view.busy, true);
+  notice = { ...notice, revision: "10" };
+  handlers.at(-1)(context("event"));
+  await started[2](context("task"));
+  assert.equal(started.length, 3, "a notice while busy waits for the inspect");
+  assert.equal(view.refreshRequested, true);
+  await started[1](context("task"));
+  assert.equal(
+    started.length,
+    4,
+    "the waiting notice starts its inspect when the first one finishes",
+  );
+  assert.equal(view.busy, true);
+  assert.equal(view.workspaceNotice.revision, "10");
+});
