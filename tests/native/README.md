@@ -1505,6 +1505,9 @@ declared once, with its source, and the pull request that adds one names it.
 | `AGENTS_ROW` | 1 s | The `core-events` journey's stated bound for the Agents row to name a program that Core reported. |
 | `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |
 | `FLOAT_SPACING` | 90 ms | The pace between two looks at the floating avatar. |
+| `STATUS_AFTER_CLICK` | 600 ms | How long `created-during-avatar-home-click-is-drawn` reads the status line after the click on the avatar at home, long enough for the canvas to show a render error. |
+| `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
+| `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |
 
 `voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
 constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an
