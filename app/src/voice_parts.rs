@@ -60,6 +60,9 @@ pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
     fn detector(&self) -> Box<dyn SpeechDetector>;
+    fn headphones(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Default)]
@@ -112,6 +115,10 @@ impl Audio for System {
 
     fn detector(&self) -> Box<dyn SpeechDetector> {
         Box::new(Silero::new())
+    }
+
+    fn headphones(&self) -> bool {
+        crate::audio_io::headphones_in_use()
     }
 }
 
