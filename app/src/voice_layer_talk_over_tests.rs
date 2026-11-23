@@ -2,6 +2,31 @@ use super::*;
 use crate::voice_parts::Rendered;
 use std::sync::mpsc::{self, Sender};
 
+pub(super) struct Live {
+    pub(super) played: Arc<Mutex<Vec<usize>>>,
+    pub(super) cut: Arc<Mutex<Vec<bool>>>,
+}
+
+impl Speaker for Live {
+    fn play(self: Box<Self>, clips: Clips) -> Finish {
+        let played = self.played.clone();
+        let drained = thread::spawn(move || {
+            for clip in clips {
+                played.lock().unwrap().push(clip.pcm.len());
+            }
+        });
+        Box::new(move |cut| {
+            let mut stopped = false;
+            while !stopped && !drained.is_finished() {
+                thread::sleep(Duration::from_millis(1));
+                stopped = cut();
+            }
+            self.cut.lock().unwrap().push(stopped);
+            drained.join().unwrap();
+        })
+    }
+}
+
 const SHORT: usize = 20;
 const LONG: usize = 120_000;
 const LAST: usize = 30;

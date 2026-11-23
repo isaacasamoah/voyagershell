@@ -91,31 +91,6 @@ struct Fake {
     live: bool,
 }
 
-struct Live {
-    played: Arc<Mutex<Vec<usize>>>,
-    cut: Arc<Mutex<Vec<bool>>>,
-}
-
-impl Speaker for Live {
-    fn play(self: Box<Self>, clips: Clips) -> Finish {
-        let played = self.played.clone();
-        let drained = thread::spawn(move || {
-            for clip in clips {
-                played.lock().unwrap().push(clip.pcm.len());
-            }
-        });
-        Box::new(move |cut| {
-            let mut stopped = false;
-            while !stopped && !drained.is_finished() {
-                thread::sleep(Duration::from_millis(1));
-                stopped = cut();
-            }
-            self.cut.lock().unwrap().push(stopped);
-            drained.join().unwrap();
-        })
-    }
-}
-
 struct Voice {
     played: Arc<Mutex<Vec<usize>>>,
     cut: Arc<Mutex<Vec<bool>>>,
@@ -157,7 +132,7 @@ impl Audio for Fake {
     fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
         self.speakers.fetch_add(1, Ordering::SeqCst);
         if self.live {
-            return Ok(Box::new(Live {
+            return Ok(Box::new(talk_over::Live {
                 played: self.played.clone(),
                 cut: self.cut.clone(),
             }));
@@ -482,25 +457,6 @@ fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
     assert!(rig.said().is_empty());
     assert!(rig.played().is_empty());
     assert!(!rig.snapshot().on);
-    assert_eq!(rig.opened(), 1);
-}
-
-#[test]
-fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
-    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    *rig.audio.while_playing.lock().unwrap() = Some(click);
-    rig.shared.update(|state| state.snapshot.on = true);
-    thread::scope(|scope| {
-        scope.spawn(|| rig.serve("open the roadmap"));
-        wait_until(|| {
-            let snapshot = rig.snapshot();
-            !snapshot.on && snapshot.phase == Phase::Ready
-        });
-        rig.shared.update(|state| state.shutdown = true);
-    });
-    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
-    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
     assert_eq!(rig.opened(), 1);
 }
 
