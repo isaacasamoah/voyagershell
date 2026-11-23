@@ -1535,6 +1535,41 @@ mod tests {
     }
 
     #[test]
+    fn the_click_off_waits_for_an_owed_reply_to_play_out() {
+        let mut reads = 0;
+        let waited = wait_for(
+            || {
+                reads += 1;
+                Ok(match reads {
+                    1 => trace(&["heard", "sent"]),
+                    2 => trace(&["heard", "sent", "speech-started"]),
+                    _ => trace(&["heard", "sent", "speech-started", "speech-ended"]),
+                })
+            },
+            Duration::from_secs(5),
+            reply_is_settled,
+        )
+        .unwrap();
+        assert!(reads >= 3);
+        assert!(waited < 5000);
+    }
+
+    #[test]
+    fn a_reply_that_never_plays_fails_the_click_off_wait_with_the_named_reason() {
+        let error = wait_for(
+            || Ok(trace(&["heard", "sent"])),
+            Duration::from_millis(50),
+            reply_is_settled,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_none());
+    }
+
+    #[test]
     fn a_reply_is_settled_only_when_none_is_owed_or_playing() {
         assert!(reply_is_settled(&trace(&[])));
         assert!(!reply_is_settled(&trace(&["heard", "sent"])));
