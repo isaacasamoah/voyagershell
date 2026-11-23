@@ -555,6 +555,7 @@ pub fn turn_on(native: &Native) -> Result<u64> {
 }
 
 pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    await_floor(native)?;
     let stack = stack(native)?;
     let before = marks(&native.voice_trace())?.len();
     let mut player = stack.start_feed(&native.system, name, samples)?;
@@ -564,6 +565,7 @@ pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn>
 }
 
 pub fn feed_until_listening(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    await_floor(native)?;
     let stack = stack(native)?;
     let before = marks(&native.voice_trace())?.len();
     let mut player = stack.start_feed(&native.system, name, samples)?;
@@ -573,6 +575,7 @@ pub fn feed_until_listening(native: &Native, name: &str, samples: &Samples) -> R
 }
 
 pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
+    await_floor(native)?;
     let before = marks(&native.voice_trace())?.len();
     feed(native, speech)?;
     let fed_until_ms = now_millis();
@@ -618,6 +621,7 @@ pub struct HeardTurn {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listened {
+    pub waited_ms: u64,
     pub fed_ms: u64,
     pub turns: Vec<HeardTurn>,
 }
@@ -680,6 +684,7 @@ fn settled_since(marks: &[Mark]) -> bool {
 }
 
 pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result<Listened> {
+    let waited_ms = await_floor(native)?;
     let stack = stack(native)?;
     let trace = native.voice_trace();
     let before = marks(&trace)?.len();
@@ -697,6 +702,7 @@ pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result
     .context("The app did not settle back to listening after the room sound")?;
     let fresh: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     Ok(Listened {
+        waited_ms,
         fed_ms: fed - began,
         turns: turns_in(&fresh, began),
     })
