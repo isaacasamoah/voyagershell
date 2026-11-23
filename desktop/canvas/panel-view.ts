@@ -116,6 +116,20 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
       inspectOutsideRender(workspace, cx);
     }
   }
+}
+
+export function noticeArrived(workspace: Canvas, cx: UIContext) {
+  const notice = workspace_notice();
+  if (
+    notice.revision !== workspace.workspaceNotice.revision ||
+    changedBesidesRevision(notice, workspace.workspaceNotice)
+  )
+    workspace.refreshRequested = true;
+  followDockNotice(workspace, cx);
+  if (workspace.refreshRequested) inspectOutsideRender(workspace, cx);
+}
+
+export function followDockNotice(workspace: Canvas, cx: UIContext) {
   if (workspace.busy) return;
   const dock = workspace_notice().dockRevision;
   const seen = seenDocks.get(workspace);

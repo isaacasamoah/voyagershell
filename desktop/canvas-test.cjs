@@ -865,7 +865,13 @@ test("a dock follows once for each dock revision, once no request is preparing",
   let result = null;
   let dockRevision = "0";
   let noticeRevision = "0";
-  const { Canvas, acceptDockResult, inspectNotice, moveFocus } = new Function(
+  const {
+    Canvas,
+    acceptDockResult,
+    followDockNotice,
+    inspectNotice,
+    moveFocus,
+  } = new Function(
     "View",
     "take_result",
     "validateResponse",
@@ -873,7 +879,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "workspace_notice",
     "invoke",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
-      "\nreturn { Canvas, acceptDockResult, inspectNotice, moveFocus };",
+      "\nreturn { Canvas, acceptDockResult, followDockNotice, inspectNotice, moveFocus };",
   )(
     class {},
     () => {
@@ -975,7 +981,10 @@ test("a dock follows once for each dock revision, once no request is preparing",
     view.acceptSnapshot(next, task);
     done?.(next, task);
   };
-  const render = () => acceptDockResult(view, cx);
+  const render = () => {
+    acceptDockResult(view, cx);
+    followDockNotice(view, cx);
+  };
   view.acceptSnapshot(reply("placement-3"), cx);
   render();
   assert.deepEqual(focused, [], "the first notice only records the dock");

@@ -800,6 +800,25 @@ is canceled with canvas. It invalidates the retained script description and
 exposes only a small read-only revision projection to JavaScript. Retired scripts
 cannot register or replace this subscription.
 
+The canvas starts its notice read outside render. gpui-shell refuses
+`cx.notify()` while a script renders, so a read started from render would throw
+and lose that frame. The canvas draws one `NoticeListener` (`desktop/src/notice_listener.rs`),
+and each render registers its handler, `noticeArrived` in `panel-view.ts`. After each notice,
+the host raises the listener on a one-slot channel. One host task invokes the
+latest handler as a gpui-shell event. Notices raised before or during a call
+fold into exactly one more call. gpui-shell refuses a handler from a retired
+script. After a reload, the listener holds the notice until the new script's
+first render registers its handler, then calls it once. The listener cannot
+tell a refused handler from one that throws, so a failed call is retried once,
+with the next handler a render registers. If that call fails too, the listener
+logs it and waits for the next notice, so a broken handler cannot run on every
+frame. The handler records the
+notice, follows a new dock revision, and starts the read through
+`inspectOutsideRender` in `panel-view.ts`. That function reads from a spawned
+task, and only while the canvas is not busy. A busy canvas reads when its
+current action finishes. Render only reads the notice and starts the activity
+read.
+
 Each notice carries the actual Core document revision and a separate package
 revision. Package remove/restore advances only the package revision without
 saving a layout or changing its CAS revision. The canvas reads the latest snapshot

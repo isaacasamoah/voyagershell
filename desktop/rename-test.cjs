@@ -63,6 +63,7 @@ function fixture() {
       { ComposerState: { new: state } },
     ),
     projection: () => ({}),
+    workspace_notice: () => ({ revision: "0", dockRevision: "0" }),
     invoke(action) {
       calls.push(action);
       return new Promise((resolve) => {
