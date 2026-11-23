@@ -20,6 +20,7 @@ cases! {
     SocketDockTakesKeyboard => "socket-dock-takes-keyboard",
     RereadKeepsClickedPane => "reread-keeps-clicked-pane",
     RedockTakesKeyboard => "redock-takes-keyboard",
+    TypingRightAfterADockReachesTheVessel => "typing-right-after-a-dock-reaches-the-vessel",
     DockHomeKeepsKeyboard => "dock-home-keeps-keyboard",
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
     AvatarClickAwayMinimizes => "avatar-click-away-minimizes",
@@ -345,6 +346,46 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("docked", &docked_screen)?
             .observed("first", &first_screen)
     })?;
+
+    cases.check(
+        native,
+        Case::TypingRightAfterADockReachesTheVessel,
+        |native| {
+            show_fleet(native)?;
+            first.focus(native)?;
+            native.observe("the first Vessel focused by the click", |seen| {
+                (focused(seen).as_ref() == Some(first.placement())).then_some(())
+            })?;
+            let onto = Context::Fleet { id: fleet.clone() };
+            native.drag(
+                &Target::AVATAR,
+                &Target::name(&RenameTarget::Fleet { id: fleet.clone() }),
+            )?;
+            native.observe("the avatar's dock on the Fleet drawn in the frame", |seen| {
+                (seen.frame.dock == onto).then_some(())
+            })?;
+            let marker = typed_into(native, "socket-typed-after-dock")?;
+            let at = native
+                .observe("the canvas focus after the dock", |seen| focused(seen))
+                .ok();
+            let target = if at.as_ref() == Some(first.placement()) {
+                &first
+            } else {
+                &docked
+            };
+            let arrived = target.printed(native, &format!("\n{marker}"))?;
+            let screen = target.screen(native)?;
+            native.keep_window("typing-right-after-a-dock-reaches-the-vessel")?;
+            Verdict::new()
+                .expect(
+                    "every key typed right after the dock's reply reached the Vessel that took the keyboard",
+                    arrived && screen.matches(&marker).count() >= 2,
+                )
+                .observed("marker", &marker)?
+                .observed("focus", &at)?
+                .observed("screen", &screen)
+        },
+    )?;
 
     cases.check(native, Case::DockHomeKeepsKeyboard, |native| {
         show_fleet(native)?;

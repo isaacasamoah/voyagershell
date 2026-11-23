@@ -121,6 +121,7 @@ function followDock(
   seenDocks.set(workspace, dock);
   cx.spawn(async (task) => {
     await Promise.resolve();
+    focusDocked(workspace, task);
     if (workspace.busy) {
       if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
       return;

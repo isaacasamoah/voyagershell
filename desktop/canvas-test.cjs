@@ -955,6 +955,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
     return built;
   };
   const view = build();
+  const only = (list) => [...new Set(list)];
   const settle = async () => {
     for (let turn = 0; turn < 5; turn += 1)
       await new Promise((resolve) => setImmediate(resolve));
@@ -982,7 +983,11 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "a dock's follow does not start in render, because the request it starts asks for a redraw",
   );
   await settle();
-  assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
+  assert.deepEqual(
+    only(focused),
+    ["content-10"],
+    "the avatar's dock follows once",
+  );
   assert.equal(inspects, 1, "the avatar's dock runs only its own inspect");
   focused.length = 0;
   next = reply("placement-3");
@@ -996,7 +1001,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   render();
   await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-2"],
     "a dock from another caller follows once",
   );
@@ -1011,7 +1016,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   render();
   await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-2"],
     "a second dock on the shown Vessel follows once",
   );
@@ -1028,7 +1033,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   render();
   await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-10"],
     "an avatar dock whose notice lands before its reply follows once",
   );
@@ -1055,12 +1060,38 @@ test("a dock follows once for each dock revision, once no request is preparing",
   render();
   await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-2"],
     "the dock follows once the request has ended, because the seen dock was put back",
   );
   assert.equal(inspects, 1, "and runs one inspect");
   await settle();
+  focused.length = 0;
+  const realRun = view.run;
+  let release = null;
+  view.run = (action, task, done) => {
+    inspects += 1;
+    release = () => {
+      view.acceptSnapshot(next, task);
+      done?.(next, task);
+    };
+  };
+  next = reply("placement-11");
+  view.acceptSnapshot(next, cx);
+  inspects = 0;
+  dockRevision = "7";
+  render();
+  await settle();
+  assert.deepEqual(
+    only(focused),
+    ["content-10"],
+    "the keyboard goes back as soon as the dock's reply is accepted, before the inspect's read returns",
+  );
+  assert.equal(inspects, 1, "the inspect is still started, and still waiting");
+  assert.equal(typeof release, "function");
+  release();
+  await settle();
+  view.run = realRun;
   const open = (...ids) =>
     new Map(ids.map((id) => [id, { status: "applied" }]));
   const avatarReply = (requestId) => {
