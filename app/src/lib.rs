@@ -33,6 +33,8 @@ mod voyager_start;
 pub mod workspace;
 
 #[cfg(test)]
+mod dock_tests;
+#[cfg(test)]
 mod tests;
 
 pub mod wire;

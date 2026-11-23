@@ -183,10 +183,10 @@ confidence = "stated"
 
 [[invariant]]
 id = "dock-gives-the-keyboard"
-says = "A dock on a Vessel, from the avatar or from Voyager's voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A dock home leaves the keyboard where it was. A later layout re-read that is not a dock leaves the keyboard where the user put it."
+says = "A dock on a Vessel, from the avatar or from Voyager's voyager command, shows that Vessel and gives it the keyboard, unless a chat, a rename or a dialog is open. This holds for a second dock on the Vessel already shown after the user clicked another. Typed keys then reach only the docked Vessel. A dock home leaves the view and the keyboard where they were. A later layout re-read that is not a dock leaves the keyboard where the user put it."
 kind = "user"
 owner = "desktop-presentation"
-source = "Isaac, 17 Nov 2026: a dock onto a Vessel opens its Voyage and Fleet, shows it and gives it keyboard focus; Verify's trial at main 53f6ffab, 21 Nov 2026, where a voyager command dock left the keys in the first shell; Isaac's answer to the dock counter card, 21 Nov 2026: add it, so a second dock on the same Vessel gives it the keyboard again; Isaac, 22 Nov 2026: 'my focus should stay where it is when I dock the voyager home'"
+source = "Isaac, 17 Nov 2026: a dock onto a Vessel opens its Voyage and Fleet, shows it and gives it keyboard focus; Verify's trial at main 53f6ffab, 21 Nov 2026, where a voyager command dock left the keys in the first shell; Isaac's answer to the dock counter card, 21 Nov 2026: add it, so a second dock on the same Vessel gives it the keyboard again; Isaac, 22 Nov 2026: 'my focus should stay where it is when I dock the voyager home'; Isaac, 23 Nov 2026: a dock home leaves the view, the Voyage and the Fleet where they were, and only a click on the avatar at home opens the home Voyage"
 features = ["adopted-vessels"]
 guard = ["type:app/src/client_owner.rs#Flight", "type:app/src/client_core.rs#WorkspaceNotice"]
 check = ["journey:socket-dock/socket-dock-takes-keyboard", "journey:socket-dock/reread-keeps-clicked-pane", "journey:socket-dock/redock-takes-keyboard", "journey:socket-dock/typing-right-after-a-dock-reaches-the-vessel", "journey:socket-dock/dock-home-keeps-keyboard"]
@@ -217,15 +217,15 @@ gap = "No case yet. The unit that gives every user invariant in scope a journey 
 confidence = "stated"
 
 [[invariant]]
-id = "avatar-click-minimizes"
-says = "Clicking the avatar while it is docked anywhere but home minimizes the workspace and leaves the avatar free. Clicking it again restores the same workspace at its previous position. Clicking the avatar while it is home opens the home Voyage and the window stays up. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar is docked."
+id = "avatar-click-opens-home"
+says = "Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing."
 kind = "user"
 owner = "desktop-presentation"
-source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'"
+source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'; Isaac, 23 Nov 2026: a click while docked anywhere else does nothing, which keeps that click free for a docking menu per Vessel type"
 features = ["avatar"]
 guard = ["type:desktop/src/avatar/click.rs#Click"]
-check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-minimizes"]
-gap = "The clause that a second click restores the workspace has no case yet. The unit that gives every user invariant in scope a journey (DI13) adds it. The clause about a click made while a dock waits is shown for a dock away from home only, because a dock onto home opens the Home view by itself and the screen cannot tell a waiting click from a dropped one there."
+check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-changes-nothing", "journey:socket-dock/avatar-click-while-docking-home-is-held"]
+gap = "Known edge: a click on the floating avatar, which exists only after the platform minimised the workspace, still restores the workspace. A click made while a request waits is kept and acts when the request ends, which is shown for a dock home only, because no other request leaves the avatar at home with another view shown."
 confidence = "stated"
 
 [[invariant]]

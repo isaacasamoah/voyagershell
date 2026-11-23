@@ -449,7 +449,11 @@ impl Model {
     fn dock(&mut self, context: Context) -> Result<(), String> {
         let landing = self.landing(&context)?;
         match landing {
-            Landing::Home => self.layout.view = WorkspaceView::Home,
+            Landing::Home => {
+                if !matches!(context, Context::Workspace) {
+                    self.layout.view = WorkspaceView::Home;
+                }
+            }
             Landing::Voyage { voyage } => {
                 let found = self
                     .layout

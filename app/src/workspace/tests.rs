@@ -166,15 +166,15 @@ fn docking_on_a_fleet_or_voyage_opens_its_last_vessel() {
 }
 
 #[test]
-fn docking_on_the_workspace_or_a_home_target_goes_home() {
+fn docking_on_the_workspace_leaves_the_view_and_docking_on_a_home_target_goes_home() {
     let (mut model, _, _, _, _) = two_voyages();
-    docked(&mut model, Context::Workspace).unwrap();
-    assert_eq!(model.layout.view, WorkspaceView::Home);
     model
         .apply(Action::SelectVoyage {
             id: model.layout.voyages[0].id.clone(),
         })
         .unwrap();
+    assert_eq!(model.layout.view, WorkspaceView::Fleet);
+    docked(&mut model, Context::Workspace).unwrap();
     assert_eq!(model.layout.view, WorkspaceView::Fleet);
     let home = model.layout.home.as_ref().unwrap();
     let on_home = home.fleets[0].placements[0].id.clone();

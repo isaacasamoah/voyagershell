@@ -1,0 +1,30 @@
+diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
+--- a/desktop/src/avatar/click.rs
++++ b/desktop/src/avatar/click.rs
+@@ -7,6 +7,7 @@ use voyager_contract::{Action, Context as Scope};
+ pub(super) enum Click {
+     Restore,
+     Home,
++    Minimize,
+ }
+ 
+ impl Click {
+@@ -14,7 +15,7 @@ impl Click {
+         match (floating, scope) {
+             (true, _) => Some(Self::Restore),
+             (false, Scope::Workspace) => Some(Self::Home),
+-            (false, _) => None,
++            (false, _) => Some(Self::Minimize),
+         }
+     }
+ }
+@@ -49,6 +50,9 @@ impl Avatar {
+         match Click::of(self.floating == Some(window.window_handle()), &self.scope) {
+             Some(Click::Restore) => self.restore_workspace(cx),
+             Some(Click::Home) => self.submit(Action::Home, cx),
++            Some(Click::Minimize) => {
++                self.float(window, cx);
++            }
+             None => {}
+         }
+     }
