@@ -51,6 +51,12 @@ pub fn install(cx: &mut App) -> Listener {
     listener
 }
 
+pub fn raise(cx: &App) {
+    if let Some(listener) = cx.try_global::<Listener>() {
+        listener.raise();
+    }
+}
+
 impl Listener {
     pub fn raise(&self) {
         let _ = self.0.raised.try_send(());

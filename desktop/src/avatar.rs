@@ -10,7 +10,7 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, canvas, div, img, point,
     prelude::*, px, size,
 };
-use gpui_shell::{HostError, HostModule, HostValue, ScriptView, ShellRoot};
+use gpui_shell::{HostError, HostModule, HostValue};
 use std::{
     cell::{Cell, RefCell},
     path::PathBuf,
@@ -1116,14 +1116,9 @@ impl Binding {
             .finish()
     }
 
-    pub fn observe(&self, root: &Entity<ShellRoot>, cx: &mut App) -> Subscription {
-        let root = root.downgrade();
-        cx.subscribe(&self.avatar, move |_, _: &Changed, cx| {
-            if let Some(root) = root.upgrade()
-                && let Ok(script) = root.read(cx).content().clone().downcast::<ScriptView>()
-            {
-                script.update(cx, |script, cx| script.refresh(cx));
-            }
+    pub fn observe(&self, cx: &mut App) -> Subscription {
+        cx.subscribe(&self.avatar, |_, _: &Changed, cx| {
+            crate::notice_listener::raise(cx)
         })
     }
 }

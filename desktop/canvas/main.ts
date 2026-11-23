@@ -36,7 +36,6 @@ import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import {
-  acceptDockResult,
   followDockNotice,
   inspectNotice,
   noticeArrived,
@@ -1935,11 +1934,6 @@ export default class Canvas extends View {
       if (animationNotice || this.status === this.animationNotice)
         this.status = animationNotice;
       this.animationNotice = animationNotice;
-    }
-    try {
-      acceptDockResult(this, cx);
-    } catch (error) {
-      this.status = errorMessage(error);
     }
     const ownerNotice = workspace_notice();
     if (ownerNotice.activityRevision !== undefined) {

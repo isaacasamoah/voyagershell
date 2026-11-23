@@ -17,7 +17,7 @@ import {
 } from "./panels.js";
 import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
-import { changedBesidesRevision } from "./status.js";
+import { changedBesidesRevision, errorMessage } from "./status.js";
 import type Canvas from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
@@ -88,9 +88,10 @@ export function giveKeyboardBack(
   workspace: Canvas,
   cx: UIContext | AsyncContext,
 ) {
+  const target = workspace.focused;
   cx.spawn(async (task) => {
     await Promise.resolve();
-    focusDocked(workspace, task);
+    if (workspace.focused === target) focusDocked(workspace, task);
   });
 }
 
@@ -119,6 +120,12 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
 }
 
 export function noticeArrived(workspace: Canvas, cx: UIContext) {
+  cx.notify();
+  try {
+    acceptDockResult(workspace, cx);
+  } catch (error) {
+    workspace.status = errorMessage(error);
+  }
   const notice = workspace_notice();
   if (
     notice.revision !== workspace.workspaceNotice.revision ||

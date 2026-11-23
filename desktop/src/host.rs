@@ -538,9 +538,7 @@ impl CanvasHost {
             Ok(root) => (Some(root), None),
             Err(error) => (None, Some(format!("Canvas load failed: {error:#}"))),
         };
-        let avatar_observe = root
-            .as_ref()
-            .map(|root| workspace_binding.avatar.observe(root, cx));
+        let avatar_observe = root.as_ref().map(|_| workspace_binding.avatar.observe(cx));
         let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
             Some(Ok(watch)) => (Some(watch), None),
             Some(Err(error)) => (None, Some(format!("Canvas reload unavailable: {error:#}"))),
@@ -687,8 +685,7 @@ impl CanvasHost {
                                 cx,
                             ) {
                                 Ok(root) => {
-                                    canvas._avatar =
-                                        Some(workspace_binding.avatar.observe(&root, cx));
+                                    canvas._avatar = Some(workspace_binding.avatar.observe(cx));
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => canvas._watch = Some(watch),
                                         Err(error) => {
