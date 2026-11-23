@@ -1,6 +1,8 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
-use crate::native::{LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis};
+use crate::native::{
+    Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis,
+};
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -9,6 +11,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
+use std::time::Duration;
 
 pub const APP_CLIENT: &str = "voyager-voice";
 pub const READY: &str = "Start voice";
@@ -59,6 +62,14 @@ pub fn marks(path: &Path) -> Result<Vec<Mark>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(error) => Err(error.into()),
     }
+}
+
+pub fn live_marks(path: &Path) -> Result<Vec<Mark>> {
+    ensure!(
+        path.exists(),
+        Defect("voice trace missing, so the wait could not tell whether a reply was owed".into())
+    );
+    marks(path)
 }
 
 pub fn words_match(heard: &str, wanted: &str) -> bool {
@@ -347,7 +358,7 @@ fn converse_within(
     turn_on(native)?;
     stack.feed(system, speech)?;
     let answer = until("the turn to be answered", || {
-        let now = marks(&trace)?;
+        let now = live_marks(&trace)?;
         Ok(now
             .get(before..)
             .and_then(|fresh| fresh.iter().find(|mark| answers(mark)).cloned()))
@@ -370,13 +381,13 @@ fn converse_within(
     let samples = capture.samples()?;
     let onset = onset_ms(&samples).context("No sound reached the speaker")?;
     until("the words to be heard", || {
-        Ok(marks(&trace)?
+        Ok(live_marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, "heard"))
             .map(|_| ()))
     })?;
     let sent = poll(SEND_WAIT.within(), LOOK, true, || {
-        Ok(marks(&trace)?
+        Ok(live_marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, "sent"))
             .map(|_| ()))
@@ -384,11 +395,12 @@ fn converse_within(
     .is_some();
     if sent {
         poll(reply_wait.within(), LOOK, true, || {
-            Ok(marks(&trace)?
+            Ok(live_marks(&trace)?
                 .get(before..)
                 .and_then(|fresh| mark_of(fresh, "speech-ended"))
                 .map(|_| ()))
         })?;
+        await_reply_settled(native, "after-reply", true)?;
     }
     let listening_resumed = native
         .drawn_label(&Target::VOICE_CONTROL, "listening again", |label| {
@@ -466,7 +478,7 @@ pub fn click_off_during_reply(
     turn_on(native)?;
     stack.feed(system, speech)?;
     let reply_started_ms = until("the reply to start", || {
-        Ok(marks(&trace)?
+        Ok(live_marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, "speech-started"))
             .map(|mark| mark.at_ms))
@@ -482,7 +494,7 @@ pub fn click_off_during_reply(
     })
     .is_ok();
     poll(REPLY_WAIT.within(), LOOK, true, || {
-        Ok(marks(&trace)?
+        Ok(live_marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, "speech-ended"))
             .map(|_| ()))
@@ -531,11 +543,13 @@ impl Turn {
     }
 }
 
-pub fn turn_on(native: &Native) -> Result<()> {
+pub fn turn_on(native: &Native) -> Result<u64> {
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
         label == READY
     })?;
+    let before_ms = await_reply_stop(native)?;
     native.click(&Target::VOICE_CONTROL)?;
+    let after_ms = await_reply_settled(native, "after-click", false)?;
     until("the app to open the microphone", || {
         Ok(recorders(native)?
             .iter()
@@ -547,10 +561,12 @@ pub fn turn_on(native: &Native) -> Result<()> {
         "the voice control listening",
         |label| label == LISTENING,
     )?;
-    Ok(())
+    live_marks(&native.voice_trace())?;
+    Ok(before_ms + after_ms)
 }
 
 pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    await_floor(native)?;
     let stack = stack(native)?;
     let before = marks(&native.voice_trace())?.len();
     let mut player = stack.start_feed(&native.system, name, samples)?;
@@ -560,6 +576,7 @@ pub fn feed_turn(native: &Native, name: &str, samples: &Samples) -> Result<Turn>
 }
 
 pub fn feed_until_listening(native: &Native, name: &str, samples: &Samples) -> Result<Turn> {
+    await_floor(native)?;
     let stack = stack(native)?;
     let before = marks(&native.voice_trace())?.len();
     let mut player = stack.start_feed(&native.system, name, samples)?;
@@ -569,6 +586,7 @@ pub fn feed_until_listening(native: &Native, name: &str, samples: &Samples) -> R
 }
 
 pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
+    await_floor(native)?;
     let before = marks(&native.voice_trace())?.len();
     feed(native, speech)?;
     let fed_until_ms = now_millis();
@@ -578,7 +596,7 @@ pub fn speak_and_hear_reply(native: &Native, speech: &Speech) -> Result<Turn> {
 fn turn_since(native: &Native, before: usize, fed_until_ms: u64, last: &str) -> Result<Turn> {
     let trace = native.voice_trace();
     until(&format!("the turn's {last} mark"), || {
-        Ok(marks(&trace)?
+        Ok(live_marks(&trace)?
             .get(before..)
             .and_then(|fresh| mark_of(fresh, last))
             .map(|_| ()))
@@ -614,6 +632,7 @@ pub struct HeardTurn {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listened {
+    pub waited_ms: u64,
     pub fed_ms: u64,
     pub turns: Vec<HeardTurn>,
 }
@@ -676,6 +695,7 @@ fn settled_since(marks: &[Mark]) -> bool {
 }
 
 pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result<Listened> {
+    let waited_ms = await_floor(native)?;
     let stack = stack(native)?;
     let trace = native.voice_trace();
     let before = marks(&trace)?.len();
@@ -687,15 +707,126 @@ pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result
     .context("The room sound feed did not finish")?;
     let fed = now_millis();
     poll(ROOM_FEED.within(), LOOK, false, || {
-        let fresh: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
+        let fresh: Vec<Mark> = live_marks(&trace)?.into_iter().skip(before).collect();
         Ok((now_millis() >= fed + AFTER_FEED_MS && settled_since(&fresh)).then_some(()))
     })?
     .context("The app did not settle back to listening after the room sound")?;
     let fresh: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     Ok(Listened {
+        waited_ms,
         fed_ms: fed - began,
         turns: turns_in(&fresh, began),
     })
+}
+
+fn reply_is_owed(marks: &[Mark]) -> bool {
+    marks
+        .iter()
+        .rposition(|mark| mark.event == "sent")
+        .is_some_and(|sent| {
+            !marks[sent..]
+                .iter()
+                .any(|mark| mark.event == "speech-started")
+        })
+}
+
+fn reply_is_playing(marks: &[Mark]) -> bool {
+    marks
+        .iter()
+        .rposition(|mark| mark.event == "speech-started")
+        .is_some_and(|started| {
+            !marks[started..]
+                .iter()
+                .any(|mark| mark.event == "speech-ended")
+        })
+}
+
+fn floor_is_clear(marks: &[Mark]) -> bool {
+    let listening_follows = marks
+        .iter()
+        .rposition(|mark| mark.event == "speech-started")
+        .is_none_or(|started| {
+            marks[started..]
+                .iter()
+                .position(|mark| mark.event == "speech-ended")
+                .is_some_and(|ended| {
+                    marks[started + ended..]
+                        .iter()
+                        .any(|mark| mark.event == "listening")
+                })
+        });
+    !reply_is_owed(marks) && listening_follows
+}
+
+fn reply_has_stopped(marks: &[Mark]) -> bool {
+    !reply_is_playing(marks)
+}
+
+fn reply_is_settled(marks: &[Mark]) -> bool {
+    !reply_is_owed(marks) && !reply_is_playing(marks)
+}
+
+fn awaited(
+    native: &Native,
+    kind: &str,
+    clear: fn(&[Mark]) -> bool,
+    voice_is_on: bool,
+) -> Result<u64> {
+    let trace = native.voice_trace();
+    let waited_ms = wait_for(
+        || {
+            if voice_is_on {
+                live_marks(&trace)
+            } else {
+                marks(&trace)
+            }
+        },
+        FLOOR_WAIT.within(),
+        clear,
+    )?;
+    let mut log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(native.system.evidence.join("voice-waits.jsonl"))?;
+    writeln!(
+        log,
+        "{}",
+        json!({ "atMs": now_millis(), "kind": kind, "waitedMs": waited_ms })
+    )?;
+    Ok(waited_ms)
+}
+
+pub fn await_floor(native: &Native) -> Result<u64> {
+    awaited(native, "before-feed", floor_is_clear, true)
+}
+
+pub fn await_reply_stop(native: &Native) -> Result<u64> {
+    awaited(native, "before-click", reply_has_stopped, false)
+}
+
+pub fn await_reply_settled(native: &Native, kind: &str, voice_is_on: bool) -> Result<u64> {
+    awaited(native, kind, reply_is_settled, voice_is_on)
+}
+
+fn wait_for(
+    mut read: impl FnMut() -> Result<Vec<Mark>>,
+    within: Duration,
+    clear: fn(&[Mark]) -> bool,
+) -> Result<u64> {
+    let began = now_millis();
+    if poll(within, LOOK, true, || Ok(clear(&read()?).then_some(())))?.is_some() {
+        return Ok(now_millis() - began);
+    }
+    let reason = format!(
+        "previous reply still playing after {} s, so nothing was started after it",
+        within.as_secs()
+    );
+    let seen = read()?;
+    if reply_is_owed(&seen) || reply_is_playing(&seen) {
+        Err(Defect(reason).into())
+    } else {
+        Err(anyhow::anyhow!(reason))
+    }
 }
 
 pub fn feed(native: &Native, speech: &Speech) -> Result<()> {
@@ -738,6 +869,7 @@ pub fn settle_ms(marks: &[Mark]) -> Option<u64> {
 pub fn turn_off(native: &Native) -> Result<()> {
     let label = native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
     if label != READY {
+        await_reply_settled(native, "before-off", true)?;
         native.click(&Target::VOICE_CONTROL)?;
     }
     native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
@@ -1306,6 +1438,257 @@ mod tests {
         assert_eq!(first.len(), 1);
         assert_eq!(second.len(), 2);
         Ok(())
+    }
+
+    fn trace(events: &[&str]) -> Vec<Mark> {
+        events
+            .iter()
+            .zip(0..)
+            .map(|(event, at_ms)| Mark {
+                event: (*event).to_owned(),
+                at_ms,
+                words: None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_floor_is_clear_before_any_reply_is_owed() {
+        assert!(floor_is_clear(&trace(&[])));
+        assert!(floor_is_clear(&trace(&["capture-open", "listening"])));
+    }
+
+    #[test]
+    fn a_sent_turn_owes_a_reply_that_has_not_started() {
+        assert!(!floor_is_clear(&trace(&["heard", "sent"])));
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "capture-open",
+            "listening"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_holds_the_floor_until_capture_reopens_after_it_ends() {
+        assert!(!floor_is_clear(&trace(&["sent", "speech-started"])));
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "capture-open"
+        ])));
+        assert!(floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "capture-open",
+            "listening"
+        ])));
+    }
+
+    #[test]
+    fn a_later_sent_turn_owes_its_own_reply() {
+        assert!(!floor_is_clear(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "listening",
+            "sent",
+            "capture-open",
+            "listening"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_that_never_releases_the_floor_fails_with_the_named_reason() {
+        let error = wait_for(
+            || Ok(trace(&["sent", "speech-started"])),
+            Duration::from_millis(50),
+            floor_is_clear,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_some());
+    }
+
+    #[test]
+    fn a_clear_floor_ends_the_wait_at_once() {
+        let waited = wait_for(
+            || {
+                Ok(trace(&[
+                    "sent",
+                    "speech-started",
+                    "speech-ended",
+                    "listening",
+                ]))
+            },
+            Duration::from_secs(5),
+            floor_is_clear,
+        )
+        .unwrap();
+        assert!(waited < 1000);
+    }
+
+    #[test]
+    fn a_reply_that_ended_with_the_microphone_closed_is_over() {
+        let ended = trace(&["sent", "speech-started", "speech-ended"]);
+        assert!(reply_has_stopped(&ended));
+        assert!(!floor_is_clear(&ended));
+        assert!(reply_has_stopped(&trace(&[])));
+    }
+
+    #[test]
+    fn a_reply_owed_to_a_microphone_that_is_off_does_not_hold_the_click() {
+        assert!(reply_has_stopped(&trace(&["heard", "sent"])));
+        assert!(reply_has_stopped(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "sent"
+        ])));
+        assert!(!floor_is_clear(&trace(&["heard", "sent"])));
+    }
+
+    #[test]
+    fn a_reply_owed_while_voice_is_off_does_not_block_the_click() {
+        let waited = wait_for(
+            || Ok(trace(&["heard", "sent", "capture-open", "listening"])),
+            Duration::from_secs(5),
+            reply_has_stopped,
+        )
+        .unwrap();
+        assert!(waited < 1000);
+    }
+
+    #[test]
+    fn the_click_off_waits_for_an_owed_reply_to_play_out() {
+        let mut reads = 0;
+        let waited = wait_for(
+            || {
+                reads += 1;
+                Ok(match reads {
+                    1 => trace(&["heard", "sent"]),
+                    2 => trace(&["heard", "sent", "speech-started"]),
+                    _ => trace(&["heard", "sent", "speech-started", "speech-ended"]),
+                })
+            },
+            Duration::from_secs(5),
+            reply_is_settled,
+        )
+        .unwrap();
+        assert!(reads >= 3);
+        assert!(waited < 5000);
+    }
+
+    #[test]
+    fn a_reply_that_never_plays_fails_the_click_off_wait_with_the_named_reason() {
+        let error = wait_for(
+            || Ok(trace(&["heard", "sent"])),
+            Duration::from_millis(50),
+            reply_is_settled,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_some());
+    }
+
+    #[test]
+    fn a_reply_that_ended_but_never_resumed_listening_is_blamed_on_the_fixture() {
+        let error = wait_for(
+            || Ok(trace(&["sent", "speech-started", "speech-ended"])),
+            Duration::from_millis(50),
+            floor_is_clear,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_none());
+    }
+
+    #[test]
+    fn a_reply_owed_with_no_speech_is_blamed_on_the_product() {
+        let error = wait_for(
+            || Ok(trace(&["heard", "sent"])),
+            Duration::from_millis(50),
+            reply_is_settled,
+        )
+        .unwrap_err();
+        assert!(error.downcast_ref::<Defect>().is_some());
+    }
+
+    #[test]
+    fn a_trace_missing_before_voice_is_on_reads_as_empty() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-such-voice-trace.jsonl");
+        assert!(marks(&path).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_trace_missing_once_voice_is_on_fails_with_its_own_reason() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-such-voice-trace.jsonl");
+        let error = live_marks(&path).unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("voice trace missing"),
+            "{error:#}"
+        );
+        assert!(error.downcast_ref::<Defect>().is_some());
+        let waited = wait_for(|| live_marks(&path), Duration::from_secs(5), floor_is_clear);
+        assert!(waited.is_err());
+    }
+
+    #[test]
+    fn an_empty_trace_that_is_present_reads_as_before() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("empty-voice-trace-test.jsonl");
+        fs::write(&path, "").unwrap();
+        let read = live_marks(&path);
+        fs::remove_file(&path).unwrap();
+        assert!(read.unwrap().is_empty());
+        assert!(floor_is_clear(&[]));
+    }
+
+    #[test]
+    fn a_reply_is_settled_only_when_none_is_owed_or_playing() {
+        assert!(reply_is_settled(&trace(&[])));
+        assert!(!reply_is_settled(&trace(&["heard", "sent"])));
+        assert!(!reply_is_settled(&trace(&["sent", "speech-started"])));
+        assert!(reply_is_settled(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_that_is_playing_has_not_stopped() {
+        assert!(!reply_has_stopped(&trace(&["sent", "speech-started"])));
+        assert!(reply_has_stopped(&trace(&[
+            "sent",
+            "speech-started",
+            "speech-ended"
+        ])));
+    }
+
+    #[test]
+    fn a_reply_that_never_ends_fails_the_wait_before_the_click_with_the_named_reason() {
+        let error = wait_for(
+            || Ok(trace(&["sent", "speech-started"])),
+            Duration::from_millis(50),
+            reply_has_stopped,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
     }
 
     #[test]

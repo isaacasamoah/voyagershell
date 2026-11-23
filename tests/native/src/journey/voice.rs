@@ -91,6 +91,7 @@ struct QuietTurn {
     bed: room::Bed,
     turns: usize,
     sent: usize,
+    waited_ms: u64,
     heard: String,
     word_errors: usize,
     words: usize,
@@ -279,7 +280,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let speech = Samples::thump()
             .then(&Samples::silence(ROOM_SILENCE_MS))
             .then(&OPEN_THEN_DOCK.samples()?);
-        voice::turn_on(native)?;
+        let waited_ms = voice::turn_on(native)?;
         let turn = voice::feed_turn(native, "thump-then-sentence", &speech)?;
         voice::turn_off(native)?;
         Verdict::new()
@@ -291,12 +292,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the turn holds the whole sentence",
                 turn.heard.len() == 1 && words_match(&turn.heard[0], OPEN_THEN_DOCK.words),
             )
+            .observed("waitedMs", waited_ms)?
             .observed("turn", turn)
     })?;
     cases.check(native, Case::ConnectingThenListening, |native| {
         native.drawn_label(&Target::VOICE_CONTROL, "the voice control off", |label| {
             label == READY
         })?;
+        voice::await_reply_stop(native)?;
         native.click(&Target::VOICE_CONTROL)?;
         let connecting = native.drawn_label(&Target::VOICE_CONTROL, "connecting", |label| {
             label == CONNECTING || label == LISTENING
@@ -440,7 +443,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         for (gain, bed) in QUIET_VOICES {
             let samples =
                 room::quiet_request(&DOCK_ON_THIS_FLEET, gain, bed, QUIET_VOICE_AROUND_S)?;
-            voice::turn_on(native)?;
+            let turned_on_ms = voice::turn_on(native)?;
             let listened = voice::feed_and_settle(native, "quiet-voice", &samples);
             voice::turn_off(native)?;
             let listened = listened?;
@@ -455,6 +458,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 bed,
                 turns: listened.turns.len(),
                 sent: listened.sent(),
+                waited_ms: turned_on_ms + listened.waited_ms,
                 heard,
                 word_errors,
                 words,
