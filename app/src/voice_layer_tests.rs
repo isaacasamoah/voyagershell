@@ -866,7 +866,7 @@ impl Hearing for Gated {
 
 impl Routing for Gated {
     fn route(&self, _: &str) -> Result<Route, Fault> {
-        Ok(Route::Voyager)
+        Ok(Route::Voyager(Ack::None))
     }
 }
 
