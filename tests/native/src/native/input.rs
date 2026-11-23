@@ -406,6 +406,17 @@ impl Native {
             .act(json!({"input":"type","text":text}), || x11.type_text(text))
     }
 
+    pub fn type_by(&self, text: &str, due: std::time::Instant) -> Result<std::time::Instant> {
+        self.keyboard()?;
+        let x11 = self.x11()?;
+        self.system
+            .act_by(json!({"input":"type","text":text}), due, || {
+                let sent = std::time::Instant::now();
+                x11.type_text(text)?;
+                Ok(sent)
+            })
+    }
+
     fn spot(&self, target: &Target) -> Result<Aim> {
         let mut covered = false;
         let spotted = self.wait_for(&target.to_string(), PATIENCE, |frame| {

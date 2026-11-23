@@ -154,7 +154,8 @@ function focusDocked(workspace: Canvas, cx: AsyncContext) {
     : workspace.layout
       ? openingPlacement(workspace.layout)
       : undefined;
-  if (target) workspace.terminals.get(target.vessel)?.focus();
+  const terminal = target && workspace.terminals.get(target.vessel);
+  if (terminal && !terminal.focused()) terminal.focus();
 }
 
 const focusedPlacements = new WeakMap<Canvas, string | null>();

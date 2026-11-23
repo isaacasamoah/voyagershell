@@ -896,11 +896,8 @@ impl Native {
         let Some(seen) = found else {
             return Ok(None);
         };
-        if let Some(wait) = (seen + after.within()).checked_duration_since(Instant::now()) {
-            sleep(wait);
-        }
-        self.type_text(probe)?;
-        Ok(Some(seen.elapsed()))
+        let sent = self.type_by(probe, seen + after.within())?;
+        Ok(Some(sent.duration_since(seen)))
     }
 
     pub fn drawn_labels(&self, target: &Target, during: Owed) -> Result<Vec<String>> {
