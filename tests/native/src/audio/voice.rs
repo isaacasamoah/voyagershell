@@ -1,7 +1,7 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
 use crate::native::{
-    FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis,
+    Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED, SEND_WAIT, now_millis,
 };
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
@@ -790,13 +790,19 @@ fn wait_for(
     clear: fn(&[Mark]) -> bool,
 ) -> Result<u64> {
     let began = now_millis();
-    poll(within, LOOK, true, || Ok(clear(&read()?).then_some(())))?.with_context(|| {
-        format!(
-            "previous reply still playing after {} s, so nothing was started after it",
-            within.as_secs()
-        )
-    })?;
-    Ok(now_millis() - began)
+    if poll(within, LOOK, true, || Ok(clear(&read()?).then_some(())))?.is_some() {
+        return Ok(now_millis() - began);
+    }
+    let reason = format!(
+        "previous reply still playing after {} s, so nothing was started after it",
+        within.as_secs()
+    );
+    let seen = read()?;
+    if reply_is_owed(&seen) || reply_is_playing(&seen) {
+        Err(Defect(reason).into())
+    } else {
+        Err(anyhow::anyhow!(reason))
+    }
 }
 
 pub fn feed(native: &Native, speech: &Speech) -> Result<()> {
@@ -1255,7 +1261,6 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::Defect;
 
     #[test]
     fn heard_digits_count_as_the_same_number_said_in_words() {
@@ -1482,7 +1487,7 @@ mod tests {
             format!("{error:#}").starts_with("previous reply still playing after "),
             "{error:#}"
         );
-        assert!(error.downcast_ref::<Defect>().is_none());
+        assert!(error.downcast_ref::<Defect>().is_some());
     }
 
     #[test]
@@ -1566,7 +1571,33 @@ mod tests {
             format!("{error:#}").starts_with("previous reply still playing after "),
             "{error:#}"
         );
+        assert!(error.downcast_ref::<Defect>().is_some());
+    }
+
+    #[test]
+    fn a_reply_that_ended_but_never_resumed_listening_is_blamed_on_the_fixture() {
+        let error = wait_for(
+            || Ok(trace(&["sent", "speech-started", "speech-ended"])),
+            Duration::from_millis(50),
+            floor_is_clear,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("previous reply still playing after "),
+            "{error:#}"
+        );
         assert!(error.downcast_ref::<Defect>().is_none());
+    }
+
+    #[test]
+    fn a_reply_owed_with_no_speech_is_blamed_on_the_product() {
+        let error = wait_for(
+            || Ok(trace(&["heard", "sent"])),
+            Duration::from_millis(50),
+            reply_is_settled,
+        )
+        .unwrap_err();
+        assert!(error.downcast_ref::<Defect>().is_some());
     }
 
     #[test]
