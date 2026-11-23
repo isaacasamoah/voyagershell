@@ -200,7 +200,7 @@ owner = "desktop-presentation"
 source = "Docking home crew's socket-dock runs, 22 Nov 2026: a terminal Vessel created in the Home Fleet through the voyager command while the Home view was shown was saved and never drawn, 2 of 5 runs on main; the admiral's order of 22 Nov 2026, relayed by the Build commodore: a Vessel created while the canvas prepares is drawn"
 features = ["adopted-vessels"]
 guard = ["type:desktop/canvas/main.ts#Canvas"]
-check = ["journey:home-create/created-while-preparing-is-drawn", "journey:home-create/created-during-avatar-home-click-is-drawn"]
+check = ["journey:home-create/created-while-preparing-is-drawn", "journey:home-create/created-during-avatar-home-click-is-drawn", "journey:home-create/created-right-after-a-home-click-is-drawn"]
 confidence = "stated"
 
 [[invariant]]
