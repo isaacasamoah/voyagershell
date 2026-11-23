@@ -1114,6 +1114,7 @@ features:
       - app/src/voice.rs
       - app/src/voice_host.rs
       - app/src/voice_layer.rs
+      - app/src/voice_layer_line_tests.rs
       - app/src/voice_layer_tests.rs
       - app/src/voice_parts.rs
       - app/src/voice_reply.rs
