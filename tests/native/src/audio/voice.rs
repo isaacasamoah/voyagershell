@@ -244,6 +244,66 @@ fn clip(home: &Path, key: &str) -> Result<Samples> {
     Ok(upsample(&Samples::raw(&bytes[HEADER..]).0))
 }
 
+const OPENING_SAMPLES: usize = 120;
+const FIRST_SOUND_LEVEL: f64 = 100.0;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipOpening {
+    pub file: String,
+    pub opening_level: f64,
+    pub first_sound_ms: Option<usize>,
+    pub opens_quiet: bool,
+}
+
+fn level(samples: &[i16]) -> f64 {
+    let sum: f64 = samples
+        .iter()
+        .map(|sample| f64::from(*sample).powi(2))
+        .sum();
+    (sum / samples.len().max(1) as f64).sqrt()
+}
+
+pub fn kept_clip_openings(native: &Native) -> Result<Vec<ClipOpening>> {
+    openings_in(
+        &native
+            .system
+            .evidence
+            .join("home/.cache/voyager/voice/clips"),
+    )
+}
+
+fn openings_in(clips: &Path) -> Result<Vec<ClipOpening>> {
+    let mut openings = Vec::new();
+    for folder in fs::read_dir(clips)?.filter_map(Result::ok) {
+        for entry in fs::read_dir(folder.path())?.filter_map(Result::ok) {
+            let bytes = fs::read(entry.path())?;
+            let Some(pcm) = bytes.get(HEADER..) else {
+                continue;
+            };
+            let samples = Samples::raw(pcm).0;
+            let frames: Vec<f64> = samples
+                .as_chunks::<OPENING_SAMPLES>()
+                .0
+                .iter()
+                .map(|frame| level(frame))
+                .collect();
+            let opening_level = frames.first().copied().unwrap_or(0.0);
+            openings.push(ClipOpening {
+                file: entry.file_name().to_string_lossy().into_owned(),
+                opening_level,
+                first_sound_ms: frames
+                    .iter()
+                    .position(|frame| *frame > FIRST_SOUND_LEVEL)
+                    .map(|frame| frame * OPENING_SAMPLES * 1000 / CLIP_RATE as usize),
+                opens_quiet: opening_level <= FIRST_SOUND_LEVEL,
+            });
+        }
+    }
+    openings.sort_by(|left, right| left.file.cmp(&right.file));
+    Ok(openings)
+}
+
 const ACKNOWLEDGEMENT_WORDS: [(&str, &str); 3] = [
     ("asking", "Asking Voyager."),
     ("okay-asking", "Okay, asking Voyager."),
@@ -1401,6 +1461,31 @@ fn engine_screen(native: &Native) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_kept_clip_that_opens_on_its_first_sound_is_told_apart_from_one_that_opens_quiet() {
+        let root = std::env::temp_dir().join(format!("voyager-openings-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let folder = root.join("omni-1-female");
+        fs::create_dir_all(&folder).unwrap();
+        let quiet: Vec<i16> = [vec![20; 3_480], vec![2_000; 4_800]].concat();
+        let cut: Vec<i16> = vec![2_000; 4_800];
+        fs::write(folder.join("asking-00000000.wav"), wav(CLIP_RATE, &quiet)).unwrap();
+        fs::write(folder.join("queued-00000000.wav"), wav(CLIP_RATE, &cut)).unwrap();
+        let openings = openings_in(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+        let seen: Vec<_> = openings
+            .iter()
+            .map(|clip| (clip.file.as_str(), clip.opens_quiet, clip.first_sound_ms))
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                ("asking-00000000.wav", true, Some(145)),
+                ("queued-00000000.wav", false, Some(0)),
+            ]
+        );
+    }
 
     #[test]
     fn heard_digits_count_as_the_same_number_said_in_words() {
