@@ -376,7 +376,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 )?
                 .context("The avatar's dock on the Fleet never showed in the frame")?;
             let at = native
-                .observe("the canvas focus after the dock", |seen| focused(seen))
+                .observe("the canvas focus after the dock", focused)
                 .ok();
             let target = if at.as_ref() == Some(first.placement()) {
                 &first
