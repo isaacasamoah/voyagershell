@@ -38,6 +38,7 @@ use std::path::PathBuf;
 pub trait Case: Copy + 'static {
     const NAMES: &'static [&'static str];
     const SETUP: &'static [&'static str];
+    const NEEDS: &'static [(&'static str, &'static str)];
     fn name(self) -> &'static str;
 }
 
@@ -45,7 +46,7 @@ macro_rules! cases {
     (@setup setup $name:literal) => {
         $name
     };
-    ($($variant:ident => $name:literal $($setup:ident)?),+ $(,)?) => {
+    ($($variant:ident => $name:literal $($setup:ident)?),+ $(,)? $(; $($later:literal needs $earlier:literal),+ $(,)?)?) => {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Case {
             $($variant),+
@@ -54,6 +55,7 @@ macro_rules! cases {
         impl crate::journey::Case for Case {
             const NAMES: &'static [&'static str] = &[$($name),+];
             const SETUP: &'static [&'static str] = &[$($($crate::journey::cases!(@setup $setup $name),)?)+];
+            const NEEDS: &'static [(&'static str, &'static str)] = &[$($(($later, $earlier),)+)?];
 
             fn name(self) -> &'static str {
                 match self {
@@ -94,6 +96,12 @@ macro_rules! journeys {
             pub fn setup(self) -> &'static [&'static str] {
                 match self {
                     $(Journey::$variant => <$module::Case as Case>::SETUP),+
+                }
+            }
+
+            pub fn needs(self) -> &'static [(&'static str, &'static str)] {
+                match self {
+                    $(Journey::$variant => <$module::Case as Case>::NEEDS),+
                 }
             }
 
@@ -179,6 +187,45 @@ impl Journey {
         matches!(self, Self::AvatarDrag)
     }
 
+    pub fn select(self, names: &[String]) -> Result<Selection> {
+        let cases = self.cases();
+        let mut picked: Vec<&'static str> = Vec::new();
+        for name in names {
+            let Some(case) = cases.iter().find(|case| **case == name.as_str()) else {
+                bail!(
+                    "Case {name} is not a case of the {} journey; its cases are {}",
+                    self.name(),
+                    cases.join(", ")
+                );
+            };
+            ensure!(!picked.contains(case), "Case {name} is named twice");
+            picked.push(case);
+        }
+        if picked.is_empty() {
+            return Ok(Selection::full(self));
+        }
+        let mut wanted: Vec<&'static str> = picked.clone();
+        wanted.extend(self.setup());
+        while let Some(earlier) = self
+            .needs()
+            .iter()
+            .find(|(later, earlier)| wanted.contains(later) && !wanted.contains(earlier))
+            .map(|(_, earlier)| *earlier)
+        {
+            wanted.push(earlier);
+        }
+        let ordered = |keep: &dyn Fn(&&'static str) -> bool| -> Vec<&'static str> {
+            cases.iter().filter(|case| keep(case)).copied().collect()
+        };
+        let left_out = ordered(&|case| !wanted.contains(case));
+        Ok(Selection {
+            partial: !left_out.is_empty(),
+            picked: ordered(&|case| picked.contains(case)),
+            included: ordered(&|case| wanted.contains(case) && !picked.contains(case)),
+            left_out,
+        })
+    }
+
     pub fn core_delay(self) -> Option<&'static str> {
         match self {
             Self::SlowSave => Some(slow_save::HOLD),
@@ -209,6 +256,26 @@ impl Journey {
                 json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"coreDelay":journey.core_delay(),"talkOver":journey.talk_over(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
             })
             .collect()
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Selection {
+    partial: bool,
+    picked: Vec<&'static str>,
+    included: Vec<&'static str>,
+    #[serde(rename = "leftOut")]
+    left_out: Vec<&'static str>,
+}
+
+impl Selection {
+    pub fn full(journey: Journey) -> Self {
+        Self {
+            partial: false,
+            picked: journey.cases().to_vec(),
+            included: Vec::new(),
+            left_out: Vec::new(),
+        }
     }
 }
 
@@ -260,6 +327,7 @@ enum Status {
     Failed,
     Interrupted,
     Skipped,
+    LeftOut,
 }
 
 #[derive(Serialize)]
@@ -273,24 +341,56 @@ struct Outcome {
 pub struct Outcomes {
     cases: Vec<Outcome>,
     path: PathBuf,
+    selection: Selection,
 }
 
 impl Outcomes {
-    pub fn new(journey: Journey, path: PathBuf) -> Self {
+    pub fn new(journey: Journey, path: PathBuf, selection: Selection) -> Self {
         let cases = journey
             .cases()
             .iter()
             .map(|case| Outcome {
                 case,
-                status: Status::Skipped,
+                status: if selection.left_out.contains(case) {
+                    Status::LeftOut
+                } else {
+                    Status::Skipped
+                },
                 verdict: Verdict::new(),
             })
             .collect();
-        Self { cases, path }
+        Self {
+            cases,
+            path,
+            selection,
+        }
+    }
+
+    pub fn selection(&self) -> &Selection {
+        &self.selection
     }
 
     pub fn passed(&self) -> bool {
-        self.cases.iter().all(|case| case.status == Status::Passed)
+        self.cases
+            .iter()
+            .all(|case| matches!(case.status, Status::Passed | Status::LeftOut))
+    }
+
+    pub fn unrun_message(&self, case: &str) -> String {
+        if !self.selection.partial {
+            return format!("The driver ended without running the declared case {case}");
+        }
+        let earlier: Vec<&str> = self
+            .cases
+            .iter()
+            .take_while(|outcome| outcome.case != case)
+            .filter(|outcome| outcome.status == Status::LeftOut)
+            .map(|outcome| outcome.case)
+            .collect();
+        format!(
+            "The picked case {case} did not run. It probably needs an earlier case that was left out ({}). Declare the dependency with needs in the journey, or pick that case too.",
+            earlier.join(", ")
+        )
     }
 
     pub fn unrun(&self) -> Option<&'static str> {
@@ -320,7 +420,10 @@ impl Outcomes {
     }
 
     pub fn save(&self, error: Option<&str>) -> Result<()> {
-        save(&self.path, &json!({"cases":self.cases,"error":error}))
+        save(
+            &self.path,
+            &json!({"cases":self.cases,"selection":self.selection,"error":error}),
+        )
     }
 
     fn failed(&self) -> bool {
@@ -339,6 +442,13 @@ impl Outcomes {
             "Case {case} ran after an interrupted case"
         );
         if self.failed() {
+            return Ok(None);
+        }
+        if self
+            .cases
+            .iter()
+            .any(|outcome| outcome.case == case && outcome.status == Status::LeftOut)
+        {
             return Ok(None);
         }
         match self.next() {
@@ -461,7 +571,7 @@ mod tests {
     }
 
     fn outcomes() -> Outcomes {
-        Outcomes::new(JOURNEY, PathBuf::from("unsaved"))
+        Outcomes::new(JOURNEY, PathBuf::from("unsaved"), Selection::full(JOURNEY))
     }
 
     fn judge(outcomes: &mut Outcomes, case: &'static str, verdict: Option<Verdict>) -> Result<()> {
@@ -645,6 +755,122 @@ mod tests {
         Ok(())
     }
 
+    fn picked(journey: Journey, names: &[&str]) -> Result<Selection> {
+        journey.select(
+            &names
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    #[test]
+    fn an_unknown_case_is_refused_naming_the_cases_of_the_journey() {
+        let refusal = picked(Journey::SocketDock, &["no-such-case"])
+            .unwrap_err()
+            .to_string();
+        assert!(refusal.contains("no-such-case") && refusal.contains("socket-dock"));
+        for case in Journey::SocketDock.cases() {
+            assert!(refusal.contains(case), "{refusal}");
+        }
+    }
+
+    #[test]
+    fn no_pick_is_the_full_run_and_a_pick_that_covers_every_case_is_not_partial() -> Result<()> {
+        let journey = Journey::SocketDock;
+        assert!(!journey.select(&[])?.partial);
+        let every: Vec<&str> = journey.cases().to_vec();
+        let all = picked(journey, &every)?;
+        assert!(!all.partial && all.left_out.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn a_picked_case_pulls_in_the_case_it_needs_and_leaves_the_rest_out() -> Result<()> {
+        let selection = picked(Journey::SocketDock, &["avatar-click-away-minimizes"])?;
+        assert!(selection.partial);
+        assert_eq!(selection.picked, ["avatar-click-away-minimizes"]);
+        assert_eq!(selection.included, ["socket-dock-takes-keyboard"]);
+        assert_eq!(
+            selection.left_out.len(),
+            Journey::SocketDock.cases().len() - 2
+        );
+        assert!(!selection.left_out.contains(&"socket-dock-takes-keyboard"));
+        Ok(())
+    }
+
+    #[test]
+    fn the_setup_cases_of_a_journey_run_when_another_case_is_picked_alone() -> Result<()> {
+        let journey = Journey::ManifestVessel;
+        let setup = journey.setup();
+        assert!(!setup.is_empty());
+        let last = journey.cases().last().copied().unwrap();
+        let selection = picked(journey, &[last])?;
+        for case in setup {
+            assert!(
+                selection.picked.contains(case) || selection.included.contains(case),
+                "{case}"
+            );
+            assert!(!selection.left_out.contains(case), "{case}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_declared_need_names_an_earlier_case_of_its_own_journey() {
+        for journey in Journey::ALL {
+            let cases = journey.cases();
+            for (later, earlier) in journey.needs() {
+                let later_at = cases.iter().position(|case| case == later);
+                let earlier_at = cases.iter().position(|case| case == earlier);
+                assert!(
+                    matches!((later_at, earlier_at), (Some(l), Some(e)) if e < l),
+                    "{}: {later} needs {earlier}",
+                    journey.name()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn left_out_cases_are_skipped_in_order_and_the_partial_run_says_what_ran() -> Result<()> {
+        let journey = Journey::SocketDock;
+        let selection = picked(journey, &["redock-takes-keyboard"])?;
+        let mut outcomes = Outcomes::new(journey, PathBuf::from("unsaved"), selection);
+        for case in journey.cases() {
+            judge(&mut outcomes, case, held())?;
+        }
+        assert!(outcomes.passed() && outcomes.unrun().is_none());
+        let statuses = statuses(&outcomes);
+        assert_eq!(statuses[0], "socket-dock-takes-keyboard:passed");
+        assert_eq!(statuses[1], "reread-keeps-clicked-pane:left-out");
+        assert_eq!(statuses[2], "redock-takes-keyboard:passed");
+        let saved = serde_json::to_value(outcomes.selection())?;
+        assert_eq!(saved["partial"], true);
+        assert_eq!(saved["picked"], json!(["redock-takes-keyboard"]));
+        assert_eq!(saved["included"], json!(["socket-dock-takes-keyboard"]));
+        assert_eq!(saved["leftOut"].as_array().map(Vec::len), Some(5));
+        Ok(())
+    }
+
+    #[test]
+    fn a_picked_case_that_never_ran_is_named_with_the_earlier_cases_left_out() -> Result<()> {
+        let journey = Journey::Workspace;
+        let last = journey.cases().last().copied().unwrap();
+        let selection = picked(journey, &[last])?;
+        let outcomes = Outcomes::new(journey, PathBuf::from("unsaved"), selection);
+        assert_eq!(outcomes.unrun(), Some(last));
+        let message = outcomes.unrun_message(last);
+        assert!(
+            message.contains(last) && message.contains("split-vessel"),
+            "{message}"
+        );
+        assert!(!outcomes.passed());
+        let full = Outcomes::new(journey, PathBuf::from("unsaved"), Selection::full(journey));
+        assert!(full.unrun_message(last).contains("declared case"));
+        Ok(())
+    }
+
     #[test]
     fn a_failed_case_is_named_with_what_it_observed_and_ends_the_journey() -> Result<()> {
         let mut outcomes = outcomes();
@@ -681,7 +907,11 @@ mod tests {
         let mut native = crate::native::tests::native()?;
         let case = scrolling::Case::NormalHistory;
         let mut check = |name: &str, held: bool| {
-            let mut outcomes = Outcomes::new(JOURNEY, native.system.evidence.join(name));
+            let mut outcomes = Outcomes::new(
+                JOURNEY,
+                native.system.evidence.join(name),
+                Selection::full(JOURNEY),
+            );
             let verdict = Verdict::new().expect("wheel up shows earlier history", held);
             let checked = Cases::over(&mut outcomes).check(&mut native, case, |_| Ok(verdict));
             (checked, outcomes)
@@ -711,7 +941,7 @@ mod tests {
     fn a_failed_verdict_about_a_stopped_candidate_is_a_hang() -> Result<()> {
         let mut native = crate::native::tests::stopped()?;
         let path = native.system.evidence.join("observations.json");
-        let mut outcomes = Outcomes::new(JOURNEY, path);
+        let mut outcomes = Outcomes::new(JOURNEY, path, Selection::full(JOURNEY));
         let case = scrolling::Case::NormalHistory;
         let verdict = Verdict::new().expect("wheel up shows earlier history", false);
         let hang = Cases::over(&mut outcomes)

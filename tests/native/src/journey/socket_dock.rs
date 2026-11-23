@@ -27,7 +27,15 @@ cases! {
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
     AvatarClickWhileDockingHomeIsHeld => "avatar-click-while-docking-home-is-held",
     AvatarClickAwayChangesNothing => "avatar-click-away-changes-nothing",
-    VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
+    VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes";
+    "reread-keeps-clicked-pane" needs "socket-dock-takes-keyboard",
+    "redock-takes-keyboard" needs "socket-dock-takes-keyboard",
+    "typing-right-after-a-dock-reaches-the-vessel" needs "socket-dock-takes-keyboard",
+    "dock-home-keeps-keyboard" needs "socket-dock-takes-keyboard",
+    "avatar-click-at-home-opens-home" needs "socket-dock-takes-keyboard",
+    "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
+    "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
+    "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
 }
 
 pub const CONTROL: Case = Case::RedockTakesKeyboard;

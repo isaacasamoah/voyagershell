@@ -46,6 +46,8 @@ pub struct Input {
 pub struct RunInput {
     pub path: String,
     pub role: Option<Role>,
+    #[serde(default)]
+    pub partial: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -91,6 +93,9 @@ struct Run {
     runtime_result: String,
     sha256: String,
     checks: String,
+    partial: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection: Option<Value>,
 }
 
 #[derive(Serialize)]
@@ -180,7 +185,20 @@ fn run(folder: &Path, input: &RunInput) -> Result<Run> {
         (None, Some(declared)) => (declared, "declared"),
         (None, None) => bail!("Run {} has no role", input.path),
     };
+    let selection = checks.get("selection").filter(|value| !value.is_null());
+    let partial = selection
+        .and_then(|value| value.get("partial"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    ensure!(
+        partial == input.partial,
+        "{checks_path} records a {} run, but the input declares it {}; a partial run must be listed with \"partial\": true and is never a full pass",
+        if partial { "partial" } else { "full" },
+        if input.partial { "partial" } else { "full" }
+    );
     Ok(Run {
+        partial,
+        selection: partial.then(|| selection.cloned()).flatten(),
         journey: field(&checks, "journey", &input.path)?,
         runtime_result: field(&checks, "runtimeResult", &input.path)?,
         sha256: field(&checks, "sha256", &input.path)?,
@@ -346,6 +364,47 @@ mod tests {
         )
         .unwrap_err();
         assert!(format!("{error:#}").contains("has no role"));
+    }
+
+    fn partial_checks(folder: &Path, path: &str) {
+        let run = folder.join(path);
+        fs::create_dir_all(&run).unwrap();
+        let value = json!({"journey":"socket-dock","runtimeResult":"passed","sha256":"ab","role":"head","selection":{"partial":true,"picked":["redock-takes-keyboard"],"included":["socket-dock-takes-keyboard"],"leftOut":["reread-keeps-clicked-pane"]}});
+        fs::write(run.join("checks.json"), value.to_string()).unwrap();
+    }
+
+    #[test]
+    fn a_partial_run_is_refused_unless_the_input_declares_it_partial() {
+        let scratch = Scratch::new("manifest").unwrap();
+        partial_checks(scratch.path(), "head-1");
+        let error = build(
+            scratch.path(),
+            input(json!({"pr":1,"head":"h","runs":[{"path":"head-1"}]})),
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("partial run must be listed"));
+        let manifest = build(
+            scratch.path(),
+            input(json!({"pr":1,"head":"h","runs":[{"path":"head-1","partial":true}]})),
+        )
+        .unwrap();
+        assert_eq!(manifest["runs"][0]["partial"], true);
+        assert_eq!(
+            manifest["runs"][0]["selection"]["leftOut"],
+            json!(["reread-keeps-clicked-pane"])
+        );
+    }
+
+    #[test]
+    fn a_full_run_declared_partial_is_refused() {
+        let scratch = Scratch::new("manifest").unwrap();
+        checks(scratch.path(), "head-1", Some("head"));
+        let error = build(
+            scratch.path(),
+            input(json!({"pr":1,"head":"h","runs":[{"path":"head-1","partial":true}]})),
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("records a full run"));
     }
 
     #[test]

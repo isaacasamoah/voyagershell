@@ -2009,6 +2009,31 @@ The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
 inconclusive or unavailable.
 
+## Running chosen cases
+
+`run --case NAME[,NAME]` runs only the named cases of a journey, so a later case can be
+seen without rerunning the whole journey. A name that is not a case of the journey is
+refused, and the refusal lists the journey's cases. Cases run in their declared order.
+
+Each picked case still gets what it needs:
+
+- Cases declared `setup` in `cases!` always run.
+- A case that uses the state an earlier case made declares that in the journey, after
+  the case list: `cases! { First => "first", Second => "second"; "second" needs "first" }`.
+  A picked case pulls in the cases it needs, directly or through other needs, and the run
+  records them as included.
+- A journey that declares no needs for a case does not guess. If a picked case never runs
+  because an earlier case that it depends on was left out, the run fails and names the
+  picked case and the earlier cases that were left out. Declare the need in the journey, or
+  pick the earlier case too. The `socket-dock` journey declares its needs; other journeys
+  declare theirs when a crew needs a case alone.
+
+A partial run cannot be read as a full pass. `observations.json` and `checks.json` carry
+`"selection"` with `partial`, `picked`, `included` and `leftOut`, and each left-out case
+has the status `left-out`. `manifest` refuses a run whose `checks.json` is partial unless
+the input lists it with `"partial": true`, refuses `"partial": true` on a full run, and then
+copies the selection into `verdict.json`, so a partial run is never cited as a full one.
+
 ## Run roles and the verdict manifest
 
 `run --role head|trunk|control|mutant` writes `"role"` into `checks.json`. It says
