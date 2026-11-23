@@ -1,9 +1,11 @@
 const assert = require("node:assert");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 const {
+  CLEARED,
   IGNORED,
   PlanError,
   WORKFLOW,
@@ -129,4 +131,41 @@ test("the list option prints the plan and runs nothing", () => {
   assert.strictEqual(result.status, 0, result.stderr);
   assert.match(result.stdout, /cargo fmt --all --check/);
   assert.match(result.stdout, /npm test$/m);
+});
+
+test("the seven session and display variables never reach a step", () => {
+  assert.deepStrictEqual(CLEARED, [
+    "HC_SOCKET",
+    "HC_SESSION",
+    "HC_TERMINAL_ID",
+    "HC_SCOPE",
+    "HC_TERMINAL_SOCKET",
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+  ]);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "ci-steps-local-"));
+  const seen = path.join(folder, "env.txt");
+  const caller = { KEEP_THIS: "yes" };
+  for (const key of CLEARED) {
+    caller[key] = "set-by-the-caller";
+  }
+  const lines = [];
+  const results = runSteps(
+    [{ name: "print the environment", command: `env > "${seen}"` }],
+    "abc123",
+    path.join(__dirname, ".."),
+    (line) => lines.push(line),
+    caller,
+  );
+  assert.strictEqual(results[0].status, 0);
+  const names = fs
+    .readFileSync(seen, "utf8")
+    .split("\n")
+    .map((line) => line.split("=")[0]);
+  for (const key of CLEARED) {
+    assert.ok(!names.includes(key), `${key} reached the step`);
+  }
+  assert.ok(names.includes("KEEP_THIS"));
+  assert.ok(lines.some((line) => /are cleared for every step/.test(line)));
+  fs.rmSync(folder, { recursive: true });
 });

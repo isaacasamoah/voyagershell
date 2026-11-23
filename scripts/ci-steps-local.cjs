@@ -15,6 +15,15 @@ const IGNORED = [
   },
 ];
 const ALSO = ["npm test"];
+const CLEARED = [
+  "HC_SOCKET",
+  "HC_SESSION",
+  "HC_TERMINAL_ID",
+  "HC_SCOPE",
+  "HC_TERMINAL_SOCKET",
+  "WAYLAND_DISPLAY",
+  "DISPLAY",
+];
 
 class PlanError extends Error {}
 
@@ -110,8 +119,18 @@ function plan(text, base) {
   return planned;
 }
 
-function runSteps(planned, head, cwd, out) {
+function cleanEnv(env) {
+  const kept = { ...env };
+  for (const key of CLEARED) {
+    delete kept[key];
+  }
+  return kept;
+}
+
+function runSteps(planned, head, cwd, out, env = process.env) {
   out(`head ${head}`);
+  out(`environment: ${CLEARED.join(", ")} are cleared for every step`);
+  const stepEnv = cleanEnv(env);
   const results = [];
   planned.forEach((step, index) => {
     out(`== [${index + 1}/${planned.length}] ${step.name}`);
@@ -119,6 +138,7 @@ function runSteps(planned, head, cwd, out) {
     const started = Date.now();
     const result = spawnSync("sh", ["-c", step.command], {
       cwd,
+      env: stepEnv,
       stdio: "inherit",
     });
     const status = result.status === null ? 1 : result.status;
@@ -185,4 +205,13 @@ if (require.main === module) {
   }
 }
 
-module.exports = { IGNORED, PlanError, WORKFLOW, parseSteps, plan, runSteps };
+module.exports = {
+  CLEARED,
+  IGNORED,
+  PlanError,
+  WORKFLOW,
+  cleanEnv,
+  parseSteps,
+  plan,
+  runSteps,
+};
