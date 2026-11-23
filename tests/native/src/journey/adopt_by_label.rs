@@ -698,7 +698,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             ),
         )?;
         let keeper = address(native, "keeper")?;
-        let held = native.observe("the keeper program adopted into the Fleet", |seen| {
+        native.observe("the keeper program adopted into the Fleet", |seen| {
             bound_to(seen.document, &keeper).map(|placement| placement.id)
         })?;
         let (_, before) = native.document()?.context("Missing saved layout")?;
@@ -761,11 +761,17 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restarted", &restarted)?
             .observed("kept", &kept)?
             .observed("still", &still)?;
-        let shell = Terminal::bind(native, &held)?;
-        typed(&shell, native, "exit")?;
-        native.observe("the keeper Vessel gone once its program ended", |seen| {
-            bound_to(seen.document, &keeper).is_none().then_some(())
-        })?;
+        let moved = still
+            .iter()
+            .find(|(_, _, address)| address == &keeper)
+            .map(|(placement, _, _)| placement.clone());
+        if let Some(placement) = moved {
+            let shell = Terminal::bind(native, &placement)?;
+            typed(&shell, native, "exit")?;
+            native.observe("the keeper Vessel gone once its program ended", |seen| {
+                bound_to(seen.document, &keeper).is_none().then_some(())
+            })?;
+        }
         Ok((verdict, Some((placed, finisher, created))))
     })?;
     let Some((placed, finisher, created)) = reopened else {
