@@ -1,8 +1,8 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index cc05c2c8..3a50ce14 100644
+index c33c1de4..8343483c 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -98,17 +98,12 @@ function followDock(workspace, seen, dock, cx) {
+@@ -104,17 +104,12 @@ function followDock(workspace, seen, dock, cx) {
    });
  }
  function focusDocked(workspace, cx) {
@@ -25,10 +25,10 @@ index cc05c2c8..3a50ce14 100644
  }
  const focusedPlacements = new WeakMap();
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index 679d1bfd..16b392a9 100644
+index 63ad21a2..d7c5efe3 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -133,17 +133,12 @@ function followDock(
+@@ -143,17 +143,12 @@ function followDock(
  }
  
  function focusDocked(workspace: Canvas, cx: AsyncContext) {
