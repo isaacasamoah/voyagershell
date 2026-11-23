@@ -198,8 +198,17 @@ mod tests {
         let mut guard = SessionGuard::new("voyager-guard-delay");
         let session = guard.session().to_owned();
         guard.open("/tmp");
+        let mark = std::path::PathBuf::from(std::env::var_os("VOYAGER_DELAY_MARK").unwrap());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !mark.exists() {
+            assert!(
+                Instant::now() < deadline,
+                "the Client never started its connection"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
         drop(guard);
-        thread::sleep(Duration::from_secs(3));
+        thread::sleep(Duration::from_secs(4));
         let leaked = running(&session);
         if leaked {
             let mut core = Core::connect(&session).unwrap();
