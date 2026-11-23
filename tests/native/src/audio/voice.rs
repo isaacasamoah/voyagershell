@@ -364,6 +364,7 @@ pub fn plant_run_on_hum(home: &Path, engine: &Path) -> Result<()> {
 #[serde(rename_all = "camelCase")]
 pub struct Replanted {
     pub replaced: bool,
+    pub all_kept: bool,
     pub kept_ms: Option<usize>,
     pub planted_ms: usize,
 }
@@ -378,8 +379,15 @@ pub fn planted_hum_rendered_again(native: &Native) -> Result<Replanted> {
     let kept = poll(CLIPS_KEPT.within(), LOOK, true, || {
         Ok(fs::read(&path).ok().filter(|bytes| *bytes != planted))
     })?;
+    let trace = native.voice_trace();
+    let all_kept = kept.is_some()
+        && poll(CLIPS_KEPT.within(), LOOK, true, || {
+            Ok(mark_of(&marks(&trace)?, "clips-kept").map(|_| ()))
+        })?
+        .is_some();
     Ok(Replanted {
         replaced: kept.is_some(),
+        all_kept,
         kept_ms: kept
             .map(|bytes| bytes.len().saturating_sub(HEADER) * 1000 / (CLIP_RATE as usize * 2)),
         planted_ms: PLANTED_HUM_MS,

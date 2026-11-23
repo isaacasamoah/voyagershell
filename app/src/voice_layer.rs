@@ -506,12 +506,13 @@ where
     E: Hearing + Routing + Speaking + Send + Sync + 'static,
 {
     let kept = Kept::default();
-    let (engine, filling) = (ready.engine.clone(), kept.clone());
-    thread::spawn(move || {
-        if let Err(fault) = omni::prepare_clips(engine.as_ref(), &ready.store, &filling) {
-            eprintln!("The voice clips were not all kept: {fault}");
-        }
-    });
+    let (engine, filling, marking) = (ready.engine.clone(), kept.clone(), ready.trace.clone());
+    thread::spawn(
+        move || match omni::prepare_clips(engine.as_ref(), &ready.store, &filling) {
+            Ok(()) => marking.mark("clips-kept"),
+            Err(fault) => eprintln!("The voice clips were not all kept: {fault}"),
+        },
+    );
     owner.set(Phase::Ready, None);
     let floor = Arc::new(Floor::default());
     let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
