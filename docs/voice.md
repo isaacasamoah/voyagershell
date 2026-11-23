@@ -520,8 +520,9 @@ failed on it.
 A clip fits when its audio lasts at most 1.5 times 1.288 s plus 0.056 s for each character
 of its words. 1.288 s plus 0.056 s a character is the upper envelope of 253 renders of 17
 texts that never ran on. They are every other fixed phrase, short words such as "Sure."
-and "You?", and the clips kept by 16 journey runs. "Mm-hm." may last 2.44 s. Its longest
-good render was 1.92 s and its shortest run-on 2.96 s. The rule is `omni::longest`.
+and "You?", and the clips kept by 16 journey runs. The hum is not among them, so its
+own renders were checked separately. "Mm-hm." may last 2.436 s. Its longest good render
+was 1.92 s and its shortest run-on 2.96 s. The rule is `omni::longest`.
 
 `omni::prepare_clips` applies the rule on load and on render. A kept clip that does not
 fit is treated as missing, so a run-on kept by an earlier version is rendered again. The

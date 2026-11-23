@@ -354,8 +354,10 @@ impl Exchange<'_> {
                 return (decided, None);
             }
             let hum = self.play(Phrase::Hum, speaker.take());
-            self.trace
-                .mark_words("acknowledgement-started", Phrase::Hum.key());
+            if hum.is_some() {
+                self.trace
+                    .mark_words("acknowledgement-started", Phrase::Hum.key());
+            }
             let decided = told.recv().unwrap_or_else(|_| {
                 Decided::Missed(Fault::Failed("The voice stopped deciding".into()))
             });
