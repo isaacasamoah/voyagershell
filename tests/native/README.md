@@ -443,7 +443,8 @@ the circle's area and the avatar's resting place.
 - `kept` prints the staircase during a drag, then releases the avatar, which
   returns to its place over the terminal, and scrolls the terminal up two wheel
   clicks at a time to the top. Rows that read as unknown beside the avatar are
-  skipped, and each of them appears clear of it on another page.
+  skipped and counted as `unknown readings`. A row never read clear of the
+  avatar on any page counts as missing, so the skip cannot hide a lost row.
   Row k of the staircase is k `#` characters after about 32 KiB of invisible
   SGR resets, so about 4.25 MiB in, Core's 4 MiB queue limit would drop rows
   from a terminal that stopped reading. It passes when every row from 1 to the

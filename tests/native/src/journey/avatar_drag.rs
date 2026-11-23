@@ -319,15 +319,18 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
 
 #[derive(Serialize)]
 struct Page {
-    widths: Vec<u16>,
+    widths: Vec<Option<u16>>,
+    unknown: usize,
     broken: Option<(u16, u16)>,
 }
 
-fn steps(widths: &[u16], count: u16) -> (Vec<u16>, Option<(u16, u16)>) {
+fn steps(widths: &[Option<u16>], count: u16) -> (Vec<u16>, Option<(u16, u16)>) {
     let mut seen = Vec::new();
     let mut broken = None;
     for pair in widths.windows(2) {
-        let (above, below) = (pair[0], pair[1]);
+        let (Some(above), Some(below)) = (pair[0], pair[1]) else {
+            continue;
+        };
         if above == 0 || below == 0 || above > count || below > count {
             continue;
         }
@@ -350,7 +353,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     rested(native, terminal, &orbit, &frozen)?;
     let mut pages = Vec::new();
     let mut found = vec![false; usize::from(count) + 1];
-    let mut previous: Option<Vec<u16>> = None;
+    let mut previous: Option<Vec<Option<u16>>> = None;
     for _ in 0..SCROLL_PAGES {
         terminal.settled(native, "the scrolled terminal", |_| true)?;
         let widths = terminal.widths(native, None)?;
@@ -362,6 +365,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
             found[usize::from(width)] = true;
         }
         pages.push(Page {
+            unknown: widths.iter().filter(|width| width.is_none()).count(),
             widths: widths.clone(),
             broken,
         });
@@ -372,6 +376,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         .filter(|row| !found[*row])
         .collect();
     let broken: Vec<(u16, u16)> = pages.iter().filter_map(|page| page.broken).collect();
+    let unknown: usize = pages.iter().map(|page| page.unknown).sum();
     native.keep_window("drag-kept")?;
     let record = native.system.evidence.join("drag-kept.json");
     fs::write(&record, serde_json::to_vec(&json!({"pages":pages}))?)?;
@@ -381,7 +386,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
             drag.printed_while_moving,
         )
         .expect(
-            "the pane's scrollback holds every staircase row",
+            "the pane's scrollback holds every staircase row, each read clear of the avatar on some page",
             missing.is_empty(),
         )
         .expect(
@@ -391,6 +396,7 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         .observed("rows", count)?
         .observed("bytes", KEPT_BYTES)?
         .observed("missing", &missing)?
+        .observed("unknown readings", unknown)?
         .observed("broken", &broken)?
         .observed("pages", pages.len())
 }

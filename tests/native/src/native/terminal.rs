@@ -510,7 +510,7 @@ impl Terminal {
         self.grid(native)?.cell(column, row)
     }
 
-    pub fn widths(&self, native: &Native, masked: Option<Geometry>) -> Result<Vec<u16>> {
+    pub fn widths(&self, native: &Native, masked: Option<Geometry>) -> Result<Vec<Option<u16>>> {
         let grid = self.grid(native)?;
         let mut look = self.look(native)?;
         if let Some(masked) = masked {
@@ -706,7 +706,7 @@ impl Grid {
     }
 }
 
-fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<u16>> {
+fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<Option<u16>>> {
     let rows: Vec<&[u8]> = look.rows().collect();
     let background = background(&rows).context("The terminal shows no background")?;
     (0..grid.rows)
@@ -729,11 +729,14 @@ fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<u16>> {
             let right = rightmost(&|pixel| pixel[..3] != background[..3] && pixel[..3] != MASKED);
             let hidden = rightmost(&|pixel| pixel[..3] == MASKED);
             if hidden.is_some_and(|hidden| right.is_none_or(|right| right < hidden)) {
-                return Ok(0);
+                return Ok(None);
             }
-            Ok(right.filter(|right| *right >= left).map_or(0, |right| {
-                u16::try_from((right - left) / usize::from(cell.width) + 1).unwrap_or(u16::MAX)
-            }))
+            Ok(Some(right.filter(|right| *right >= left).map_or(
+                0,
+                |right| {
+                    u16::try_from((right - left) / usize::from(cell.width) + 1).unwrap_or(u16::MAX)
+                },
+            )))
         })
         .collect()
 }
@@ -1000,7 +1003,7 @@ mod tests {
         ink(30, 8, 9);
         ink(30, 47, 50);
         let look = Pixels::new(grid.area, bgrx.clone());
-        assert_eq!(widths(&look, &grid).unwrap(), vec![2, 6]);
+        assert_eq!(widths(&look, &grid).unwrap(), vec![Some(2), Some(6)]);
         let mut hidden = look;
         hidden.mask(Geometry {
             x: 40,
@@ -1008,7 +1011,7 @@ mod tests {
             width: 20,
             height: 26,
         });
-        assert_eq!(widths(&hidden, &grid).unwrap(), vec![2, 0]);
+        assert_eq!(widths(&hidden, &grid).unwrap(), vec![Some(2), None]);
         let mut beside = Pixels::new(grid.area, bgrx);
         beside.mask(Geometry {
             x: 20,
@@ -1016,7 +1019,7 @@ mod tests {
             width: 10,
             height: 26,
         });
-        assert_eq!(widths(&beside, &grid).unwrap(), vec![2, 6]);
+        assert_eq!(widths(&beside, &grid).unwrap(), vec![Some(2), Some(6)]);
     }
 
     #[test]
