@@ -202,6 +202,7 @@ Owns files:
 - `app/src/voice_route.rs`
 - `app/src/voice_parts.rs`
 - `app/src/voice_speaker.rs`
+- `app/src/voice_talk_over.rs`
 - `app/tests/voice_engine.rs`
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`

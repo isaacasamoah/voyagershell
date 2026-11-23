@@ -1178,6 +1178,7 @@ features:
       - app/src/voice_route.rs
       - app/src/voice_session.rs
       - app/src/voice_speaker.rs
+      - app/src/voice_talk_over.rs
       - app/src/voice_transcript.rs
       - app/src/voice_voyager.rs
       - app/src/voice_wire.rs
