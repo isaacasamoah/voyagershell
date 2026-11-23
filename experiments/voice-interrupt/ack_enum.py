@@ -32,9 +32,19 @@ def schema():
     return {"anyOf": [work, chat]}
 
 
+EXTRA = [("Make the browser bigger.", "none"), ("Show me the Ledger voyage.", "none"), ("Move the logs over to the right.", "none"),
+         ("Call this one Sandbox.", "none"), ("Tell the reviewer to take another pass.", "sure"), ("Kick off a fresh build.", "sure"),
+         ("What changed since lunch?", "look")]
+
+
 def messages(text):
     m = [{"role": "system", "content": f"{RULE}\n\n{A.TALK}\n\n{A.CLOSING}"}]
-    for said, say in A.EXAMPLES_TODAY:
+    pairs = list(A.EXAMPLES_TODAY)
+    if os.environ.get("ACK_EXTRA") == "1":
+        for said, ack in EXTRA:
+            EXAMPLE_ACK[said] = ack
+        pairs = pairs[:7] + [(s, None) for s, _ in EXTRA] + pairs[7:]
+    for said, say in pairs:
         m.append({"role": "user", "content": said})
         m.append({"role": "assistant", "content": json.dumps({"kind": "chat", "say": say} if say is not None else {"kind": "work", "ack": EXAMPLE_ACK[said]})})
     m.append({"role": "user", "content": text})

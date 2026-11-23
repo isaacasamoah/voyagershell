@@ -6,4 +6,4 @@ LD_LIBRARY_PATH=$L $L/llama-server -m $D/LFM3-Omni-2B-Q4_K_M.gguf -mm $D/mmproj-
 PID=$!
 trap 'kill $PID; wait $PID' EXIT
 for i in $(seq 120); do curl -sf http://127.0.0.1:8131/health >/dev/null && break; sleep 0.5; done
-OMNI_PORT=8131 /var/tmp/voyager-crew/scratch/voice/venv/bin/python -I "$@"
+OMNI_PORT=8131 ACK_EXTRA=${ACK_EXTRA:-0} /var/tmp/voyager-crew/scratch/voice/venv/bin/python -I "$@"
