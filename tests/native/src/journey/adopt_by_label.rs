@@ -9,8 +9,10 @@ use serde::Serialize;
 use serde_json::json;
 use voyager_contract::launch::Launch;
 use voyager_contract::{
-    Context, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, VoyageId,
+    Context, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, VesselId, VoyageId,
 };
+
+type Held = (PlacementId, VesselId, String);
 
 cases! {
     AgentInFleet => "agent-in-fleet",
@@ -153,6 +155,27 @@ fn recorded(layout: &Layout, placement: &PlacementId, address: &str) -> bool {
                 .as_ref()
                 .is_some_and(|backend| backend.0 == address)
         })
+}
+
+fn live_adopted(layout: &Layout, live: &[String]) -> Vec<Held> {
+    layout
+        .vessels
+        .iter()
+        .filter(|content| content.adopted)
+        .filter_map(|content| {
+            let address = content.backend.as_ref()?.0.clone();
+            live.contains(&address).then_some(())?;
+            let member = fleets(layout)
+                .flat_map(|fleet| &fleet.placements)
+                .chain(voyages(layout).flat_map(|voyage| &voyage.portals))
+                .find(|member| member.vessel == content.id)?;
+            Some((member.id.clone(), content.id.clone(), address))
+        })
+        .collect()
+}
+
+fn kept_through(before: &[Held], after: &[Held]) -> bool {
+    !before.is_empty() && before.iter().all(|held| after.contains(held))
 }
 
 fn on_canvas(root: Option<&Split>, placement: &PlacementId) -> bool {
@@ -666,6 +689,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 })?;
             content.backend.as_ref().map(|backend| backend.0.clone())
         })?;
+        let (_, before) = native.document()?.context("Missing saved layout")?;
+        let kept: Vec<Held> = live_adopted(&before, &live_addresses(native)?)
+            .into_iter()
+            .filter(|(_, _, address)| address != &finisher)
+            .collect();
         native.close()?;
         for ended in [&finisher, &own] {
             native
@@ -705,14 +733,22 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     .collect()
             })
             .unwrap_or_default();
+        let (_, after) = native.document()?.context("Missing saved layout")?;
+        let still = live_adopted(&after, &live_addresses(native)?);
         native.keep_window("reopen-restarts-own-terminal")?;
         let verdict = Verdict::new()
             .expect(
                 "the terminal Isaac opened and then ended comes back as a fresh shell in its Vessel",
                 created.contains(&restarted),
             )
+            .expect(
+                "every live adopted Vessel keeps its placement, its Vessel and its terminal after the reopen",
+                kept_through(&kept, &still),
+            )
             .observed("ended", &own)?
-            .observed("restarted", &restarted)?;
+            .observed("restarted", &restarted)?
+            .observed("kept", &kept)?
+            .observed("still", &still)?;
         Ok((verdict, Some((placed, finisher, created))))
     })?;
     let Some((placed, finisher, created)) = reopened else {
@@ -951,6 +987,20 @@ fn names_vessel(line: &str, name: &str) -> bool {
     line.ends_with(&squeezed(&format!("> {name}.")))
 }
 
+fn live_addresses(native: &Native) -> Result<Vec<String>> {
+    let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+    Ok(listed["terminals"]
+        .as_array()
+        .map(|terminals| {
+            terminals
+                .iter()
+                .filter(|terminal| terminal["state"] != "finished")
+                .filter_map(|terminal| terminal["address"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 fn terminal_addresses(native: &Native) -> Result<Vec<String>> {
     let listed = native.system.watch("terminal.list", json!({"all":true}))?;
     Ok(listed["terminals"]
@@ -967,6 +1017,38 @@ fn terminal_addresses(native: &Native) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn held(placement: &str, vessel: &str, address: &str) -> Held {
+        (
+            PlacementId(placement.into()),
+            VesselId(vessel.into()),
+            address.into(),
+        )
+    }
+
+    #[test]
+    fn live_adopted_vessels_count_as_kept_only_when_every_id_is_unchanged() {
+        let before = [held("p1", "v1", "t1"), held("p2", "v2", "t2")];
+        assert!(kept_through(&before, &before));
+        assert!(kept_through(
+            &before,
+            &[before[1].clone(), before[0].clone()]
+        ));
+        assert!(!kept_through(&before, &[before[0].clone()]));
+        assert!(!kept_through(
+            &before,
+            &[held("p1", "v1", "t1"), held("p2", "v9", "t2")]
+        ));
+        assert!(!kept_through(
+            &before,
+            &[held("p1", "v1", "t1"), held("p9", "v2", "t2")]
+        ));
+        assert!(!kept_through(
+            &before,
+            &[held("p1", "v1", "t1"), held("p2", "v2", "t9")]
+        ));
+        assert!(!kept_through(&[], &before));
+    }
 
     const GIVEN: &str = "Stand-in claude was given: VoyagerShell focus at this prompt: The user is docked on\nStand-in line: Voyager > Fleet 1 > hoo\nked.\nStand-in line: This is the app's dock context now.\nStand-in line: Never say an id > other.\nStand-in claude heard: where am I\n";
 
