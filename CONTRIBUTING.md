@@ -40,6 +40,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
 ```
 
+Run `npm run ci:local` before you call a change code-ready. CI stops at the feature map change gate when it fails and skips every later step, so a fault in a later step reaches main unseen. The script reads each step from `.github/workflows/checks.yml` after that gate and runs it here, in order and without stopping at a failure, so one run shows every fault. It prints the head first, each command with its exit status and a final summary line, and exits non-zero if any step failed. It also runs `npm test`. It takes the base for the comment, prose and gate checks from `--base <rev>` and otherwise from the merge base of `origin/main` and `HEAD`, so commit first. It leaves out the CI setup step that needs sudo, by a list in `scripts/ci-steps-local.cjs`. A step it cannot run, such as an action step, makes it stop with the step named, and `scripts/ci-steps-local-test.cjs` fails the same way when the workflow changes. Wrap it in your own load control, for example `heavy`, because it starts the cargo builds.
+
 `npm run architecture:check` gives every Rust and TypeScript source file under
 `app/`, `contract/`, `desktop/` and `content/` exactly one owning context in
 `tests/architecture/vocabulary.yaml`. It fails on a file in no context or in two.
