@@ -171,6 +171,11 @@ impl Owner {
         let binding = profile
             .as_deref()
             .map_or_else(Binding::unbound, Binding::load);
+        if profile.is_some() && crate::launch::command_path().is_none() {
+            client
+                .replies
+                .set_unbound(Some(crate::replies::Unbound::CommandMissing));
+        }
         Self {
             cwd,
             launches: profile.map(|profile| profile.join("launches.json")),
@@ -240,7 +245,7 @@ impl Owner {
         );
         let before = self.version;
         self.prepare();
-        let unbound = self.voyager();
+        self.voyager();
         if self.version != before
             && let Some(owner) = self.content.as_mut()
         {
@@ -283,7 +288,7 @@ impl Owner {
                 close_exited(core, saved, &ended, &live);
             }
         }
-        if reported || noticed || unbound || self.version != before {
+        if reported || noticed || self.version != before {
             self.notices.send(self.version, self.closing.revision);
         }
         self.sockets.sync(&self.layout);

@@ -1,16 +1,15 @@
-diff --git a/app/src/client_voyager.rs b/app/src/client_voyager.rs
---- a/app/src/client_voyager.rs
-+++ b/app/src/client_voyager.rs
-@@ -30,12 +30,6 @@ impl Owner {
-         }
-         self.voyager_started = true;
-         self.sockets.binding().forget();
--        if crate::launch::command_path().is_none() {
--            self.client
+diff --git a/app/src/client_owner.rs b/app/src/client_owner.rs
+--- a/app/src/client_owner.rs
++++ b/app/src/client_owner.rs
+@@ -171,11 +171,6 @@ impl Owner {
+         let binding = profile
+             .as_deref()
+             .map_or_else(Binding::unbound, Binding::load);
+-        if profile.is_some() && crate::launch::command_path().is_none() {
+-            client
 -                .replies
--                .set_unbound(Some(Unbound::CommandMissing));
--            return true;
+-                .set_unbound(Some(crate::replies::Unbound::CommandMissing));
 -        }
-         if let Err(error) = self.bring_up_voyager() {
-             self.say(format!("Voyager was not started: {error:?}"));
-         }
+         Self {
+             cwd,
+             launches: profile.map(|profile| profile.join("launches.json")),

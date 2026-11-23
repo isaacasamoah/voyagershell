@@ -2,7 +2,6 @@ use super::terminal_start::{CreatedTerminal, Owned, start_terminal};
 use super::{Owner, Start};
 use crate::core::Error;
 use crate::layout_store::{rejected, save};
-use crate::replies::Unbound;
 use crate::voyager_start::{self, Standing};
 use crate::workspace::Model;
 use std::sync::Arc;
@@ -21,25 +20,21 @@ impl Owner {
         }
     }
 
-    pub(super) fn voyager(&mut self) -> bool {
+    pub(super) fn voyager(&mut self) {
         if self.voyager_started
             || self.launches.is_none()
             || !matches!(self.start, Start::Created | Start::Ready)
         {
-            return false;
+            return;
         }
         self.voyager_started = true;
         self.sockets.binding().forget();
-        if crate::launch::command_path().is_none() {
-            self.client
-                .replies
-                .set_unbound(Some(Unbound::CommandMissing));
-            return true;
+        if self.client.replies.unbound().is_some() {
+            return;
         }
         if let Err(error) = self.bring_up_voyager() {
             self.say(format!("Voyager was not started: {error:?}"));
         }
-        false
     }
 
     fn bring_up_voyager(&mut self) -> Result<(), Error> {
