@@ -35,7 +35,8 @@ cases! {
     ClickCountsCharacters => "a-click-across-a-wide-character-sends-one-arrow-per-character",
     ClickAboveCursorSendsNothing => "a-click-on-a-row-above-the-cursor-sends-no-arrow-bytes",
     ClickUnderMouseTrackingSendsNothing => "a-click-under-mouse-tracking-sends-no-arrow-bytes",
-    ClickInAlternateScreenSendsNothing => "a-click-on-the-cursor-row-of-an-alternate-screen-program-sends-no-arrow-bytes",
+    ClickInAlternateScreenSendsNothing => "a-click-on-the-cursor-row-of-an-alternate-screen-program-sends-no-arrow-bytes";
+    "a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection" needs "input-reaches-one-terminal-while-another-floods",
 }
 
 pub const CONTROL: Case = Case::CopyToClipboard;

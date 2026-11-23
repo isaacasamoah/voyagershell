@@ -2025,14 +2025,25 @@ Each picked case still gets what it needs:
 - A journey that declares no needs for a case does not guess. If a picked case never runs
   because an earlier case that it depends on was left out, the run fails and names the
   picked case and the earlier cases that were left out. Declare the need in the journey, or
-  pick the earlier case too. The `socket-dock` journey declares its needs; other journeys
-  declare theirs when a crew needs a case alone.
+  pick the earlier case too. The `socket-dock`, `profile`, `portals`, `chat`, `agent-split`,
+  `terminal-input` and `adopt-by-label` journeys declare the needs of the cases that use state
+  an earlier case made. Other journeys declare theirs when a crew needs a case alone.
 
 A partial run cannot be read as a full pass. `observations.json` and `checks.json` carry
 `"selection"` with `partial`, `picked`, `included` and `leftOut`, and each left-out case
 has the status `left-out`. `manifest` refuses a run whose `checks.json` is partial unless
 the input lists it with `"partial": true`, refuses `"partial": true` on a full run, and then
 copies the selection into `verdict.json`, so a partial run is never cited as a full one.
+
+With every need of a journey declared, a pick never runs a case without the setup it
+uses. A case behind an early exit that an earlier case's result controls, such as the cases
+after the `open-portal` case, is reported as not run and fails the run when its earlier case is
+left out, so the run says so and never passes. Picking `seeded-core-document-kept` pulls in
+`second-build-keeps-voyage` and `live-edit-recolours`, because that case reads Core after the
+second build's relaunch, and read alone it would pass on a profile that no build had changed.
+Picking `relaunch-restores-portal` pulls in the cases that hide, show, close and reopen the
+Portal, because its check compares the layout from before the relaunch with the layout from after
+it, and the layout those cases leave behind is the one that needs restoring.
 
 A partial run says so on its own summary line. It prints
 `PARTIAL: N cases left out, not a journey pass. Left out: ...` with every left-out case

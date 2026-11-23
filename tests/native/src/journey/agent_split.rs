@@ -28,7 +28,8 @@ cases! {
     AgentResizeRefused => "agent-resize-refused",
     AgentSplitKeepsMaximize => "agent-split-keeps-maximize",
     NewPieceShowsAfterUnmaximize => "new-piece-shows-after-unmaximize",
-    VoyagerSplitClearsMaximize => "voyager-split-clears-maximize",
+    VoyagerSplitClearsMaximize => "voyager-split-clears-maximize";
+    "voyager-resizes-a-split" needs "bad-split-places-nothing",
 }
 
 pub const CONTROL: Case = Case::CreateVesselSplitsBeside;

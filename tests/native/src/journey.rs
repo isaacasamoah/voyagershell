@@ -811,15 +811,76 @@ mod tests {
     }
 
     #[test]
-    fn picking_redock_pulls_in_the_reread_case_that_moves_the_focus_off_the_docked_vessel()
-    -> Result<()> {
-        let selection = picked(Journey::SocketDock, &["redock-takes-keyboard"])?;
-        assert_eq!(selection.picked, ["redock-takes-keyboard"]);
-        assert_eq!(
-            selection.included,
-            ["socket-dock-takes-keyboard", "reread-keeps-clicked-pane"]
-        );
-        assert!(!selection.left_out.contains(&"reread-keeps-clicked-pane"));
+    fn a_case_that_uses_the_state_of_earlier_cases_pulls_them_in_when_picked_alone() -> Result<()> {
+        let table: &[(Journey, &str, &[&str])] = &[
+            (
+                Journey::SocketDock,
+                "redock-takes-keyboard",
+                &["socket-dock-takes-keyboard", "reread-keeps-clicked-pane"],
+            ),
+            (
+                Journey::Profile,
+                "second-build-keeps-voyage",
+                &["live-edit-recolours"],
+            ),
+            (
+                Journey::Profile,
+                "seeded-core-document-kept",
+                &["live-edit-recolours", "second-build-keeps-voyage"],
+            ),
+            (Journey::Portals, "show-portals", &["hide-portals"]),
+            (
+                Journey::Portals,
+                "close-portal",
+                &["hide-portals", "show-portals"],
+            ),
+            (
+                Journey::Portals,
+                "reopen-portal",
+                &["hide-portals", "show-portals", "close-portal"],
+            ),
+            (
+                Journey::Portals,
+                "relaunch-restores-portal",
+                &[
+                    "hide-portals",
+                    "show-portals",
+                    "close-portal",
+                    "reopen-portal",
+                ],
+            ),
+            (Journey::Chat, "peek-stays-here", &["dock-takes-you-there"]),
+            (
+                Journey::AgentSplit,
+                "voyager-resizes-a-split",
+                &["bad-split-places-nothing"],
+            ),
+            (
+                Journey::TerminalInput,
+                "a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection",
+                &["input-reaches-one-terminal-while-another-floods"],
+            ),
+            (
+                Journey::AdoptByLabel,
+                "command-fleet-holds-only-its-agent",
+                &["command-creates-fleet"],
+            ),
+        ];
+        for (journey, later, earlier) in table {
+            let selection = picked(*journey, &[*later])?;
+            assert_eq!(
+                selection.included,
+                *earlier,
+                "{}: picking {later}",
+                journey.name()
+            );
+            assert!(
+                selection
+                    .left_out
+                    .iter()
+                    .all(|case| !earlier.contains(case))
+            );
+        }
         Ok(())
     }
 
