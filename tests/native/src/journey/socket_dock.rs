@@ -3,13 +3,15 @@ use super::{Cases, Verdict, cases};
 use crate::core_relay::Fault;
 use crate::inspection::Target;
 use crate::native::{
-    CANVAS_REFRESH, Decorations, Native, Seen, Terminal, bound_terminal, fleets, now_millis,
+    CANVAS_REFRESH, Decorations, FRAME_POLL, Native, PROBE_AFTER_DOCK, PROBE_LATEST, Seen,
+    Terminal, bound_terminal, fleets, now_millis,
 };
 use crate::sandbox::COMMAND;
 use crate::x11::Key;
 use crate::x11::{Observed, Request};
 use anyhow::{Context as _, Result};
 use serde_json::{Value, json};
+use std::time::Duration;
 use voyager_contract::inspection::Role;
 use voyager_contract::{
     Action, ContentDestination, Context, FleetId, Layout, PlacementId, PlacementInsertion,
@@ -365,10 +367,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 &Target::AVATAR,
                 &Target::name(&RenameTarget::Fleet { id: fleet.clone() }),
             )?;
-            native.observe("the avatar's dock on the Fleet drawn in the frame", |seen| {
-                (seen.frame.dock == onto).then_some(())
-            })?;
-            let marker = typed_into(native, "socket-typed-after-dock")?;
+            let sent = native
+                .probe_at_frame(
+                    CANVAS_REFRESH,
+                    |frame| frame.dock == onto,
+                    PROBE_AFTER_DOCK,
+                    PROBE_KEY,
+                )?
+                .context("The avatar's dock on the Fleet never showed in the frame")?;
             let at = native
                 .observe("the canvas focus after the dock", |seen| focused(seen))
                 .ok();
@@ -377,14 +383,29 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             } else {
                 &docked
             };
+            let landed = target.printed(native, &format!("$ {PROBE_KEY}"))?;
+            let probe = judge_probe(sent, landed);
+            anyhow::ensure!(
+                probe != Probe::Late,
+                "The probe key went out {sent:?} after the dock showed in the frame, later than {:?}, so this run says nothing",
+                PROBE_LATEST.within()
+            );
+            native.press(Key::Return)?;
+            let marker = typed_into(native, "socket-typed-after-dock")?;
             let arrived = target.printed(native, &format!("\n{marker}"))?;
             let screen = target.screen(native)?;
             native.keep_window("typing-right-after-a-dock-reaches-the-vessel")?;
             Verdict::new()
                 .expect(
-                    "every key typed right after the dock's reply reached the Vessel that took the keyboard",
+                    "a key sent 50 ms after the dock showed in the frame reached the Vessel that took the keyboard",
+                    probe == Probe::Reached,
+                )
+                .expect(
+                    "a line typed after the dock reached the Vessel that took the keyboard",
                     arrived && screen.matches(&marker).count() >= 2,
                 )
+                .observed("probeSentAfterMs", sent.as_millis())?
+                .observed("framePollMs", FRAME_POLL.as_millis())?
                 .observed("marker", &marker)?
                 .observed("focus", &at)?
                 .observed("screen", &screen)
@@ -729,6 +750,25 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
+const PROBE_KEY: &str = "Q";
+
+#[derive(Debug, PartialEq)]
+enum Probe {
+    Reached,
+    Lost,
+    Late,
+}
+
+fn judge_probe(sent_after: Duration, landed: bool) -> Probe {
+    if sent_after > PROBE_LATEST.within() {
+        Probe::Late
+    } else if landed {
+        Probe::Reached
+    } else {
+        Probe::Lost
+    }
+}
+
 fn nice_of(stat: &str) -> Option<i32> {
     stat.rsplit_once(')')?
         .1
@@ -778,7 +818,21 @@ fn minimises(sent: &[Observed]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{nice_of, render_error};
+    use super::{Probe, judge_probe, nice_of, render_error};
+    use std::time::Duration;
+
+    #[test]
+    fn a_probe_sent_late_is_inconclusive_whether_or_not_it_landed() {
+        assert_eq!(judge_probe(Duration::from_millis(61), false), Probe::Late);
+        assert_eq!(judge_probe(Duration::from_millis(61), true), Probe::Late);
+        assert_eq!(judge_probe(Duration::from_millis(400), true), Probe::Late);
+    }
+
+    #[test]
+    fn a_probe_sent_in_time_is_judged_by_where_it_landed() {
+        assert_eq!(judge_probe(Duration::from_millis(50), false), Probe::Lost);
+        assert_eq!(judge_probe(Duration::from_millis(60), true), Probe::Reached);
+    }
 
     #[test]
     fn the_nice_value_is_read_from_the_stat_line() {
