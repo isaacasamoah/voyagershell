@@ -867,6 +867,10 @@ canvas's own read after the attach.
   the saved document and the drawn frame both show the Home view, the app took
   the click and opened no terminal, and the case fails on the product. If the
   click never reached the app, it ends inconclusive and blames the fixture.
+- `created-right-after-a-home-click-is-drawn` shows the Fleet view, clicks Home in
+  the sidebar and sends the create from Voyager's terminal at once, with no hold
+  on the terminal attach. It passes when the create was applied and the new Home
+  Vessel is drawn with its terminal while the Home view is shown.
 
 #### Scripted tool calls
 
@@ -1271,6 +1275,8 @@ The `avatar-click-home` patch makes a click on the avatar at home minimize the w
 The `avatar-click-wait` patch puts back the old guard, so a click made while a dock waits for its reply is dropped. `avatar-click-away-minimizes` is then expected to fail on the expectation `a click right after the drag onto a Fleet sent one iconic change-state request for the window`. This result is a prediction until the control runs.
 
 The `avatar-home-prepare` patch puts back the canvas as main has it. An avatar reply is accepted while the canvas is drawing, and the notice inspect skips a Home whose Vessels are not open. `created-during-avatar-home-click-is-drawn` is then expected to fail on the expectation `a click on the avatar that the app accepted and drew, with the app prepared before it, opened the Home Vessels through terminal.attach`, and `dock-home-keeps-keyboard` on its script-error expectation. These two results are predictions until the control runs.
+
+The `home-notice-dropped` patch makes the canvas ignore the owner's workspace notice, so a Vessel that Voyager creates is saved and never read by the canvas. `created-right-after-a-home-click-is-drawn` is then expected to fail on the expectation `the Vessel created right after a click on Home from a Fleet view is drawn with its terminal`. This result is a prediction until the control runs.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

@@ -494,6 +494,7 @@ mod tests {
                 "tests/native/controls/avatar-click-home.patch".to_owned(),
                 "tests/native/controls/avatar-click-wait.patch".to_owned(),
                 "tests/native/controls/avatar-home-prepare.patch".to_owned(),
+                "tests/native/controls/home-notice-dropped.patch".to_owned(),
                 "tests/native/controls/voice-handoff.patch".to_owned(),
                 "tests/native/controls/voice-hearing.patch".to_owned(),
                 "tests/native/controls/voice-quiet.patch".to_owned(),

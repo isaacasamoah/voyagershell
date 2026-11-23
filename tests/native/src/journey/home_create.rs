@@ -12,6 +12,7 @@ use voyager_contract::{
 cases! {
     CreatedWhilePreparingIsDrawn => "created-while-preparing-is-drawn",
     CreatedDuringAvatarHomeClickIsDrawn => "created-during-avatar-home-click-is-drawn",
+    HomeClickThenCreateDrawsTheVessel => "created-right-after-a-home-click-is-drawn",
 }
 
 pub const CONTROL: Case = Case::CreatedWhilePreparingIsDrawn;
@@ -49,12 +50,7 @@ fn home_ids(native: &Native) -> Result<Vec<PlacementId>> {
         .collect())
 }
 
-fn create_during(
-    native: &mut Native,
-    id: &str,
-    status_after_open: bool,
-    open: impl FnOnce(&mut Native) -> Result<()>,
-) -> Result<Verdict> {
+fn home_request(native: &mut Native, id: &str) -> Result<(String, String, Vec<PlacementId>)> {
     Terminal::first(native)?;
     let voyager = bound_terminal(native).context("voyager.json names no terminal")?;
     let (_, layout) = native.document()?.context("Missing saved layout")?;
@@ -89,6 +85,16 @@ fn create_during(
         },
     )?;
     let before = home_ids(native)?;
+    Ok((caller, request, before))
+}
+
+fn create_during(
+    native: &mut Native,
+    id: &str,
+    status_after_open: bool,
+    open: impl FnOnce(&mut Native) -> Result<()>,
+) -> Result<Verdict> {
+    let (caller, request, before) = home_request(native, id)?;
     let arm = native
         .system
         .arm_core(ATTACH, Fault::Hold { ms: HELD_MS })?;
@@ -181,6 +187,39 @@ fn create_during(
         .observed("added", &added)
 }
 
+fn create_at_once(native: &mut Native, id: &str) -> Result<Verdict> {
+    let (caller, request, before) = home_request(native, id)?;
+    native.click(&Target::HOME)?;
+    let created = send_line(native, &caller, &request)?;
+    let added = native
+        .observe(
+            "the Vessel created right after the click on Home drawn",
+            |seen| {
+                let fresh = seen
+                    .document
+                    .home
+                    .iter()
+                    .flat_map(|home| &home.fleets)
+                    .flat_map(|fleet| &fleet.placements)
+                    .map(|panel| &panel.id)
+                    .find(|id| !before.contains(id))?;
+                (seen.document.view == WorkspaceView::Home && seen.shows(&Target::terminal(fresh)))
+                    .then(|| fresh.clone())
+            },
+        )
+        .ok();
+    Verdict::new()
+        .expect(
+            "voyager do workspace applied the create-vessel from Voyager's terminal",
+            created["reply"]["status"] == "applied",
+        )
+        .expect(
+            "the Vessel created right after a click on Home from a Fleet view is drawn with its terminal",
+            added.is_some(),
+        )
+        .observed("added", &added)
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::CreatedWhilePreparingIsDrawn, |native| {
         create_during(native, "home-create-while-preparing", false, |native| {
@@ -207,7 +246,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 native.click(&Target::AVATAR)
             })
         },
-    )
+    )?;
+    cases.check(native, Case::HomeClickThenCreateDrawsTheVessel, |native| {
+        show_fleet(native)?;
+        create_at_once(native, "home-create-at-once")
+    })
 }
 
 #[cfg(test)]

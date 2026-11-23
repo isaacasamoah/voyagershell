@@ -1,0 +1,24 @@
+diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
+index d5607d1b..609d4099 100644
+--- a/desktop/canvas/panel-view.js
++++ b/desktop/canvas/panel-view.js
+@@ -43,6 +43,7 @@ function unopened(workspace) {
+   );
+ }
+ export function inspectNotice(workspace, cx) {
++  if (workspace) return;
+   const notice = workspace_notice();
+   const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
+   workspace.workspaceNotice = notice;
+diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
+index f83bd51d..847bd0c0 100644
+--- a/desktop/canvas/panel-view.ts
++++ b/desktop/canvas/panel-view.ts
+@@ -66,6 +66,7 @@ function unopened(workspace: Canvas) {
+ }
+ 
+ export function inspectNotice(workspace: Canvas, cx: UIContext) {
++  if (workspace) return;
+   const notice = workspace_notice();
+   const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
+   workspace.workspaceNotice = notice;
