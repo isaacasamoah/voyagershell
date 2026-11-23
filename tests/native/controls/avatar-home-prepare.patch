@@ -33,7 +33,7 @@ index 5907f9cc..21c896d9 100644
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index c33c1de4..1b0d2c3f 100644
+index d5607d1b..74455807 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
@@ -89,7 +89,7 @@ index c33c1de4..1b0d2c3f 100644
  function focusDocked(workspace, cx) {
    const home = workspace.layout?.context.kind === "workspace";
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index 63ad21a2..11a0b7b6 100644
+index f83bd51d..6b36b0fd 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
 @@ -72,8 +72,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {

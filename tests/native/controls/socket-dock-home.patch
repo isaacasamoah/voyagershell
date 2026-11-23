@@ -1,8 +1,8 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index c33c1de4..8343483c 100644
+index d5607d1b..8343483c 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -104,17 +104,12 @@ function followDock(workspace, seen, dock, cx) {
+@@ -104,19 +104,13 @@ function followDock(workspace, seen, dock, cx) {
    });
  }
  function focusDocked(workspace, cx) {
@@ -18,17 +18,20 @@ index c33c1de4..8343483c 100644
 -    : workspace.layout
 -      ? openingPlacement(workspace.layout)
 -      : undefined;
+-  const terminal = target && workspace.terminals.get(target.vessel);
+-  if (terminal && !terminal.focused()) terminal.focus();
 +  const target = workspace.layout
 +    ? openingPlacement(workspace.layout)
 +    : undefined;
-   if (target) workspace.terminals.get(target.vessel)?.focus();
++  if (target) workspace.terminals.get(target.vessel)?.focus();
  }
  const focusedPlacements = new WeakMap();
+ export function focusedPlacement(workspace) {
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index 63ad21a2..d7c5efe3 100644
+index f83bd51d..d7c5efe3 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -143,17 +143,12 @@ function followDock(
+@@ -143,19 +143,13 @@ function followDock(
  }
  
  function focusDocked(workspace: Canvas, cx: AsyncContext) {
@@ -44,9 +47,12 @@ index 63ad21a2..d7c5efe3 100644
 -    : workspace.layout
 -      ? openingPlacement(workspace.layout)
 -      : undefined;
+-  const terminal = target && workspace.terminals.get(target.vessel);
+-  if (terminal && !terminal.focused()) terminal.focus();
 +  const target = workspace.layout
 +    ? openingPlacement(workspace.layout)
 +    : undefined;
-   if (target) workspace.terminals.get(target.vessel)?.focus();
++  if (target) workspace.terminals.get(target.vessel)?.focus();
  }
  
+ const focusedPlacements = new WeakMap<Canvas, string | null>();
