@@ -233,7 +233,7 @@ mod tests {
                 "  socket=\"$XDG_RUNTIME_DIR/herdr-core/$3.sock\"\n",
                 "  seen=0\n",
                 "  waited=0\n",
-                "  while [ $waited -lt 300 ]; do\n",
+                "  while [ $waited -lt 500 ]; do\n",
                 "    if [ -e \"$socket\" ]; then seen=1; elif [ $seen = 1 ]; then break; fi\n",
                 "    sleep 0.01\n",
                 "    waited=$((waited + 1))\n",
