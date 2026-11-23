@@ -227,7 +227,20 @@ mod tests {
         let script = runtime.join("slow-first-connect.sh");
         std::fs::write(
             &script,
-            "#!/bin/sh\nif mkdir \"$VOYAGER_DELAY_MARK\" 2>/dev/null; then sleep 2; fi\nexec \"$VOYAGER_REAL_HC\" \"$@\"\n",
+            concat!(
+                "#!/bin/sh\n",
+                "if mkdir \"$VOYAGER_DELAY_MARK\" 2>/dev/null; then\n",
+                "  socket=\"$XDG_RUNTIME_DIR/herdr-core/$3.sock\"\n",
+                "  seen=0\n",
+                "  waited=0\n",
+                "  while [ $waited -lt 300 ]; do\n",
+                "    if [ -e \"$socket\" ]; then seen=1; elif [ $seen = 1 ]; then break; fi\n",
+                "    sleep 0.01\n",
+                "    waited=$((waited + 1))\n",
+                "  done\n",
+                "fi\n",
+                "exec \"$VOYAGER_REAL_HC\" \"$@\"\n",
+            ),
         )
         .unwrap();
         std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755))
