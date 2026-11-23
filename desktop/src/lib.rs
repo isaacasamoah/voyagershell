@@ -29,6 +29,8 @@ mod speech;
 mod split;
 mod status;
 mod terminal;
+#[cfg(test)]
+mod terminal_keyboard_test;
 mod terminal_screen;
 mod text;
 mod window_frame;

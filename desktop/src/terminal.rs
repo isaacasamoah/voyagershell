@@ -102,7 +102,7 @@ use gpui_shell::{
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
     MaterializeRequest, RegistryError, StateDescriptor, StateMethodDescriptor,
 };
-use libghostty_vt::key::{self, Key, Mods};
+use libghostty_vt::key::{self, Mods};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -379,7 +379,7 @@ impl Pane {
     fn key(&mut self, event: &KeyDownEvent) -> Result<()> {
         let stroke = &event.keystroke;
         let mut input = key::Event::new()?;
-        input.set_key(key_code(&stroke.key));
+        input.set_key(input::key_code(&stroke.key));
         input.set_action(if event.is_held {
             key::Action::Repeat
         } else {
@@ -533,86 +533,6 @@ fn primary_text(cx: &gpui::App) -> Option<String> {
 #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
 fn primary_text(_: &gpui::App) -> Option<String> {
     None
-}
-
-fn key_code(key: &str) -> Key {
-    match key {
-        "enter" => Key::Enter,
-        "backspace" => Key::Backspace,
-        "tab" => Key::Tab,
-        "escape" => Key::Escape,
-        "up" => Key::ArrowUp,
-        "down" => Key::ArrowDown,
-        "left" => Key::ArrowLeft,
-        "right" => Key::ArrowRight,
-        "home" => Key::Home,
-        "end" => Key::End,
-        "pageup" => Key::PageUp,
-        "pagedown" => Key::PageDown,
-        "delete" => Key::Delete,
-        "insert" => Key::Insert,
-        "f1" => Key::F1,
-        "f2" => Key::F2,
-        "f3" => Key::F3,
-        "f4" => Key::F4,
-        "f5" => Key::F5,
-        "f6" => Key::F6,
-        "f7" => Key::F7,
-        "f8" => Key::F8,
-        "f9" => Key::F9,
-        "f10" => Key::F10,
-        "f11" => Key::F11,
-        "f12" => Key::F12,
-        "0" => Key::Digit0,
-        "1" => Key::Digit1,
-        "2" => Key::Digit2,
-        "3" => Key::Digit3,
-        "4" => Key::Digit4,
-        "5" => Key::Digit5,
-        "6" => Key::Digit6,
-        "7" => Key::Digit7,
-        "8" => Key::Digit8,
-        "9" => Key::Digit9,
-        "`" => Key::Backquote,
-        "\\" => Key::Backslash,
-        "[" => Key::BracketLeft,
-        "]" => Key::BracketRight,
-        "," => Key::Comma,
-        "=" => Key::Equal,
-        "-" => Key::Minus,
-        "." => Key::Period,
-        "'" => Key::Quote,
-        ";" => Key::Semicolon,
-        "/" => Key::Slash,
-        "space" => Key::Space,
-        "a" => Key::A,
-        "b" => Key::B,
-        "c" => Key::C,
-        "d" => Key::D,
-        "e" => Key::E,
-        "f" => Key::F,
-        "g" => Key::G,
-        "h" => Key::H,
-        "i" => Key::I,
-        "j" => Key::J,
-        "k" => Key::K,
-        "l" => Key::L,
-        "m" => Key::M,
-        "n" => Key::N,
-        "o" => Key::O,
-        "p" => Key::P,
-        "q" => Key::Q,
-        "r" => Key::R,
-        "s" => Key::S,
-        "t" => Key::T,
-        "u" => Key::U,
-        "v" => Key::V,
-        "w" => Key::W,
-        "x" => Key::X,
-        "y" => Key::Y,
-        "z" => Key::Z,
-        _ => Key::Unidentified,
-    }
 }
 
 struct TerminalMaterializer;
@@ -1008,65 +928,6 @@ mod tests {
     }
 }
 
-fn holds_keyboard(focus: &gpui::FocusHandle, window: &gpui::Window) -> bool {
+pub(crate) fn holds_keyboard(focus: &gpui::FocusHandle, window: &gpui::Window) -> bool {
     focus.is_focused(window)
-}
-
-#[cfg(test)]
-mod keyboard_tests {
-    use super::holds_keyboard;
-    use gpui::{
-        AppContext as _, Context, FocusHandle, IntoElement, ParentElement as _, Render, Window,
-        WindowOptions, div,
-    };
-    use std::{cell::Cell, rc::Rc};
-
-    struct Panes {
-        first: FocusHandle,
-        second: FocusHandle,
-    }
-
-    impl Render for Panes {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().child("panes")
-        }
-    }
-
-    #[test]
-    fn a_focus_change_is_visible_to_the_very_next_read() {
-        let observed = Rc::new(Cell::new(false));
-        let result = observed.clone();
-        gpui_platform::headless()
-            .with_quit_mode(gpui::QuitMode::Explicit)
-            .run(move |cx| {
-                let window = cx
-                    .open_window(
-                        WindowOptions {
-                            focus: false,
-                            show: false,
-                            ..Default::default()
-                        },
-                        |_, cx| {
-                            cx.new(|cx| Panes {
-                                first: cx.focus_handle(),
-                                second: cx.focus_handle(),
-                            })
-                        },
-                    )
-                    .unwrap();
-                window
-                    .update(cx, |panes, window, cx| {
-                        panes.first.focus(window, cx);
-                        let first = holds_keyboard(&panes.first, window)
-                            && !holds_keyboard(&panes.second, window);
-                        panes.second.focus(window, cx);
-                        let second = holds_keyboard(&panes.second, window)
-                            && !holds_keyboard(&panes.first, window);
-                        result.set(first && second);
-                    })
-                    .unwrap();
-                cx.quit();
-            });
-        assert!(observed.get());
-    }
 }
