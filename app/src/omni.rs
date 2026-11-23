@@ -3,7 +3,7 @@ use crate::{
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
-        Clip, Fault, Hearing, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
+        Clip, Fault, Hearing, Kept, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
     },
     voice_route::{ROUTE_EXAMPLES, Route, Routing, route_prompt},
 };
@@ -13,6 +13,7 @@ use std::{
     collections::HashMap,
     env, fs,
     net::{Ipv4Addr, TcpListener},
+    ops::ControlFlow,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -32,6 +33,10 @@ const ROUTE_WITHIN: Duration = Duration::from_secs(3);
 const HEALTH_WITHIN: Duration = Duration::from_millis(800);
 const WARM_SAMPLES: usize = 8_000;
 const LIVENESS_EVERY: Duration = Duration::from_secs(1);
+const FIT_LEAD: Duration = Duration::from_millis(1288);
+const FIT_PER_CHARACTER: Duration = Duration::from_millis(56);
+const FIT_MARGIN_TENTHS: u32 = 15;
+const RENDERS_PER_CLIP: usize = 5;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
@@ -233,16 +238,32 @@ impl Omni {
         Self { port }
     }
 
-    fn speech(&self, text: &str) -> Result<Clip, Fault> {
+    fn speech(&self, text: &str, longest: Option<Duration>) -> Result<Clip, Fault> {
         let body = json!({"input": text, "voice": VOICE, "stream": true}).to_string();
         let mut audio = Vec::new();
+        let mut layout = None;
         let status = http1::stream(
             self.port,
             "POST",
             "/v1/audio/speech",
             body.as_bytes(),
             REQUEST_WITHIN,
-            |bytes| audio.extend_from_slice(bytes),
+            |bytes| {
+                audio.extend_from_slice(bytes);
+                let Some(longest) = longest else {
+                    return ControlFlow::Continue(());
+                };
+                if layout.is_none() {
+                    layout =
+                        parse_wav(&audio).map(|clip| (audio.len() - clip.pcm.len(), clip.rate));
+                }
+                match layout {
+                    Some((header, rate)) if audio.len() - header > bytes_within(longest, rate) => {
+                        ControlFlow::Break(())
+                    }
+                    _ => ControlFlow::Continue(()),
+                }
+            },
         )
         .map_err(|error| Fault::Failed(format!("The voice engine did not speak: {error}")))?;
         if status != 200 {
@@ -255,7 +276,7 @@ impl Omni {
     }
 
     pub fn warm(&self) -> Result<(), Fault> {
-        self.speech("Ready.")?;
+        self.speech("Ready.", None)?;
         let _ = self.route("Hello.");
         self.hear(
             &Utterance {
@@ -402,11 +423,11 @@ impl Routing for Omni {
 
 impl Speaking for Omni {
     fn render(&self, phrase: Phrase) -> Result<Clip, Fault> {
-        self.speech(phrase.words())
+        self.speech(phrase.words(), Some(longest(phrase.words())))
     }
 
     fn speak(&self, piece: Piece<'_>) -> Result<Clip, Fault> {
-        self.speech(piece.as_str())
+        self.speech(piece.as_str(), None)
     }
 }
 
@@ -438,7 +459,7 @@ impl Clips {
     }
 
     pub fn load(&self, phrase: Phrase) -> Option<Clip> {
-        parse_wav(&fs::read(self.file(phrase)).ok()?)
+        parse_wav(&fs::read(self.file(phrase)).ok()?).filter(|clip| fits(phrase, clip))
     }
 
     pub fn store(&self, phrase: Phrase, clip: &Clip) -> std::io::Result<()> {
@@ -450,14 +471,47 @@ impl Clips {
     }
 }
 
-pub fn prepare_clips(speaking: &dyn Speaking, clips: &Clips) -> Result<(), Fault> {
-    for phrase in Phrase::ALL {
-        if clips.load(phrase).is_none() {
-            let clip = speaking.render(phrase)?;
-            clips
-                .store(phrase, &clip)
-                .map_err(|error| Fault::Failed(format!("A clip was not kept: {error}")))?;
+pub fn longest(words: &str) -> Duration {
+    let characters = u32::try_from(words.chars().count()).unwrap_or(u32::MAX);
+    (FIT_LEAD + FIT_PER_CHARACTER * characters) * FIT_MARGIN_TENTHS / 10
+}
+
+fn bytes_within(longest: Duration, rate: u32) -> usize {
+    let bytes = longest.as_millis() * u128::from(rate) * 2 / 1000;
+    usize::try_from(bytes).unwrap_or(usize::MAX)
+}
+
+fn fits(phrase: Phrase, clip: &Clip) -> bool {
+    clip.pcm.len() <= bytes_within(longest(phrase.words()), clip.rate)
+}
+
+fn render_fitting(speaking: &dyn Speaking, phrase: Phrase) -> Result<Option<Clip>, Fault> {
+    for _ in 0..RENDERS_PER_CLIP {
+        let clip = speaking.render(phrase)?;
+        if fits(phrase, &clip) {
+            return Ok(Some(clip));
         }
+    }
+    Ok(None)
+}
+
+pub fn prepare_clips(speaking: &dyn Speaking, clips: &Clips, kept: &Kept) -> Result<(), Fault> {
+    for phrase in Phrase::ALL {
+        if let Some(clip) = clips.load(phrase) {
+            kept.keep(phrase, clip);
+            continue;
+        }
+        let Some(clip) = render_fitting(speaking, phrase)? else {
+            eprintln!(
+                "The voice clip {} ran past the length its words allow in {RENDERS_PER_CLIP} renders, so it is not kept.",
+                phrase.key()
+            );
+            continue;
+        };
+        kept.keep(phrase, clip.clone());
+        clips
+            .store(phrase, &clip)
+            .map_err(|error| Fault::Failed(format!("A clip was not kept: {error}")))?;
     }
     Ok(())
 }
@@ -621,8 +675,8 @@ mod tests {
                 Err(Fault::Unavailable("unused".into()))
             }
         }
-        prepare_clips(&Counting(&rendered), &clips).unwrap();
-        prepare_clips(&Counting(&rendered), &clips).unwrap();
+        prepare_clips(&Counting(&rendered), &clips, &Kept::default()).unwrap();
+        prepare_clips(&Counting(&rendered), &clips, &Kept::default()).unwrap();
         assert_eq!(rendered.lock().unwrap().len(), Phrase::ALL.len());
         assert_eq!(clips.load(Phrase::Queued).unwrap().pcm, vec![1, 0, 2, 0]);
     }
@@ -662,7 +716,7 @@ mod tests {
                 Err(Fault::Unavailable("unused".into()))
             }
         }
-        prepare_clips(&Fresh, &clips).unwrap();
+        prepare_clips(&Fresh, &clips, &Kept::default()).unwrap();
         assert_eq!(
             clips.load(Phrase::NotRunning).unwrap().pcm,
             vec![1, 0, 2, 0]
@@ -689,11 +743,188 @@ mod tests {
                 Err(Fault::Failed("engine gone".into()))
             }
         }
-        assert!(prepare_clips(&Down, &clips).is_err());
+        assert!(prepare_clips(&Down, &clips, &Kept::default()).is_err());
         assert!(
             Phrase::ALL
                 .iter()
                 .all(|phrase| clips.load(*phrase).is_none())
         );
+    }
+
+    fn lasting(millis: u64) -> Clip {
+        let bytes = usize::try_from(millis * 48).unwrap();
+        Clip {
+            rate: 24_000,
+            pcm: vec![1; bytes],
+        }
+    }
+
+    fn kept_clips(name: &str) -> Clips {
+        let root = scratch(name);
+        let settings = settings(&root);
+        touch(&settings.directory.join(MODEL));
+        let files = Files {
+            server: root.join("s"),
+            model: settings.directory.join(MODEL),
+            projector: root.join("p"),
+        };
+        Clips::new(&settings, &files)
+    }
+
+    struct Renders {
+        hum: Mutex<Vec<u64>>,
+        rendered: Mutex<Vec<Phrase>>,
+    }
+
+    impl Renders {
+        fn hum(lengths: &[u64]) -> Self {
+            Self {
+                hum: Mutex::new(lengths.iter().rev().copied().collect()),
+                rendered: Mutex::default(),
+            }
+        }
+
+        fn of(&self, phrase: Phrase) -> usize {
+            self.rendered
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|each| **each == phrase)
+                .count()
+        }
+    }
+
+    impl Speaking for Renders {
+        fn render(&self, phrase: Phrase) -> Result<Clip, Fault> {
+            self.rendered.lock().unwrap().push(phrase);
+            let millis = match phrase {
+                Phrase::Hum => self.hum.lock().unwrap().pop().unwrap_or(28_880),
+                _ => 1_000,
+            };
+            Ok(lasting(millis))
+        }
+        fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
+            Err(Fault::Unavailable("unused".into()))
+        }
+    }
+
+    #[test]
+    fn the_length_rule_holds_every_measured_good_render_and_no_measured_run_on() {
+        let good = [
+            ("Mm-hm.", 1_920),
+            ("Okay, asking Voyager.", 2_400),
+            ("Voyager needs you on Home first.", 2_880),
+            (
+                "Voyager can't take that right now. Try again in a moment.",
+                4_480,
+            ),
+        ];
+        for (words, millis) in good {
+            assert!(longest(words) >= Duration::from_millis(millis), "{words}");
+        }
+        for millis in [2_960, 3_120, 3_680, 7_440, 28_880, 40_960] {
+            assert!(
+                longest("Mm-hm.") < Duration::from_millis(millis),
+                "{millis}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_run_on_render_is_rendered_again_and_only_the_one_that_fits_is_kept() {
+        let clips = kept_clips("run-on");
+        let renders = Renders::hum(&[28_880, 1_120]);
+        let kept = Kept::default();
+        prepare_clips(&renders, &clips, &kept).unwrap();
+        assert_eq!(renders.of(Phrase::Hum), 2);
+        assert_eq!(kept.get(Phrase::Hum), Some(lasting(1_120)));
+        assert_eq!(clips.load(Phrase::Hum), Some(lasting(1_120)));
+    }
+
+    #[test]
+    fn a_kept_run_on_clip_is_dropped_on_load_and_rendered_again() {
+        let clips = kept_clips("cached-run-on");
+        clips.store(Phrase::Hum, &lasting(28_880)).unwrap();
+        assert_eq!(clips.load(Phrase::Hum), None);
+        let renders = Renders::hum(&[960]);
+        let kept = Kept::default();
+        prepare_clips(&renders, &clips, &kept).unwrap();
+        assert_eq!(renders.of(Phrase::Hum), 1);
+        assert_eq!(clips.load(Phrase::Hum), Some(lasting(960)));
+    }
+
+    #[test]
+    fn a_phrase_that_never_fits_keeps_nothing_and_every_other_clip_is_kept() {
+        let clips = kept_clips("never-fits");
+        let renders = Renders::hum(&[]);
+        let kept = Kept::default();
+        prepare_clips(&renders, &clips, &kept).unwrap();
+        assert_eq!(renders.of(Phrase::Hum), RENDERS_PER_CLIP);
+        assert_eq!(kept.get(Phrase::Hum), None);
+        assert_eq!(clips.load(Phrase::Hum), None);
+        assert!(
+            Phrase::ALL
+                .into_iter()
+                .filter(|phrase| *phrase != Phrase::Hum)
+                .all(|phrase| kept.get(phrase).is_some() && clips.load(phrase).is_some())
+        );
+    }
+
+    fn endless_speech() -> (u16, std::thread::JoinHandle<usize>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (socket, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(socket);
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let mut socket = reader.into_inner();
+            let mut header = crate::audio_io::wav(24_000, &[]);
+            header[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
+            header[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+            let head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
+            socket.write_all(head.as_bytes()).unwrap();
+            let mut sent = 0;
+            let mut write = |bytes: &[u8]| {
+                write!(socket, "{:x}\r\n", bytes.len())
+                    .and_then(|()| socket.write_all(bytes))
+                    .and_then(|()| socket.write_all(b"\r\n"))
+            };
+            write(&header).unwrap();
+            let piece = vec![1; 3_840];
+            while sent < 24_000 * 2 * 41 && write(&piece).is_ok() {
+                sent += piece.len();
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            sent
+        });
+        (port, server)
+    }
+
+    #[test]
+    fn a_clip_render_that_runs_on_is_cut_once_it_passes_the_clip_limit() {
+        let (port, server) = endless_speech();
+        let clip = Omni::new(port).render(Phrase::Hum).unwrap();
+        let limit = bytes_within(longest(Phrase::Hum.words()), 24_000);
+        assert!(clip.pcm.len() > limit, "{} <= {limit}", clip.pcm.len());
+        assert!(
+            clip.pcm.len() <= limit + 3_840,
+            "{} past {limit}",
+            clip.pcm.len()
+        );
+        assert!(!fits(Phrase::Hum, &clip));
+        assert!(server.join().unwrap() < 24_000 * 2 * 41);
     }
 }
