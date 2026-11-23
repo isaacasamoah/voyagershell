@@ -7,6 +7,10 @@ use voyager_contract::{
     place::Place,
 };
 
+mod discard;
+
+pub(crate) use discard::discard_vessels;
+
 pub(crate) const VOYAGER_VESSEL: &str = "voyager";
 
 pub(crate) fn is_voyager(vessel: &Vessel) -> bool {

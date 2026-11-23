@@ -96,8 +96,9 @@ as a deliberate name, so a later folder change does not rename it. When Core
 gives no name, or another member of the group already holds it, the placement
 gets the default `Terminal N`. Adoption starts nothing, because the terminal is already
 running. When a later launch finds that the adopted terminal is gone or ended,
-`prepare_reopen` in `app/src/families/terminal/lifecycle.rs` clears the Vessel's backend
-and gives it a fresh shell, as for any terminal Vessel.
+`prepare_reopen` in `app/src/families/terminal/lifecycle.rs` deletes the
+Vessel, its placement and its saved-layout leaves, and starts no shell. Reopening
+can never use such a record, because it refuses ended programs.
 A terminal that any Vessel already names is skipped, so a repeat report or a
 second snapshot adds nothing. The adopted terminal joins the live bindings, so
 its Vessel closes when its program exits, like any other.

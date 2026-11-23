@@ -461,6 +461,29 @@ pub(crate) fn visible(root: &Option<Split>, members: &[Placement]) -> Option<Spl
     root.as_ref().and_then(|root| prune(root, members))
 }
 
+pub(crate) fn discard(layout: &mut Layout, id: &PlacementId) -> Result<(), String> {
+    let owner = owner_of(layout, id)?;
+    if contains(group(layout, &owner)?.root, id) {
+        apply(
+            layout,
+            voyager_contract::Action::RemovePlacement { id: id.clone() },
+        )?;
+    }
+    let current = group_mut(layout, &owner)?;
+    current.members.retain(|panel| &panel.id != id);
+    repair_maximized(current);
+    for saved in layout
+        .arrangements
+        .iter_mut()
+        .filter(|saved| saved.owner == owner)
+    {
+        if let Some(root) = saved.root.take() {
+            saved.root = remove_leaf(root, id).0;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn repair_maximized(group: GroupMut<'_>) {
     let shown = visible(group.root, group.members);
     if group

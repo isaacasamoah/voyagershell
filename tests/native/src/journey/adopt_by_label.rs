@@ -142,6 +142,19 @@ fn voyage_of(layout: &Layout, fleet: &FleetId) -> Option<VoyageId> {
         .map(|voyage| voyage.id.clone())
 }
 
+fn recorded(layout: &Layout, placement: &PlacementId, address: &str) -> bool {
+    fleets(layout)
+        .flat_map(|fleet| &fleet.placements)
+        .chain(voyages(layout).flat_map(|voyage| &voyage.portals))
+        .any(|member| &member.id == placement)
+        || layout.vessels.iter().any(|content| {
+            content
+                .backend
+                .as_ref()
+                .is_some_and(|backend| backend.0 == address)
+        })
+}
+
 fn on_canvas(root: Option<&Split>, placement: &PlacementId) -> bool {
     match root {
         None => false,
@@ -721,6 +734,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 gone && !drawn,
             )
             .expect(
+                "the layout keeps no placement or Vessel for the program that ended",
+                !recorded(&layout, &placed, &finisher),
+            )
+            .expect(
                 "the reopen started exactly one new terminal, the shell of the terminal Isaac opened",
                 created.len() == 1,
             )
@@ -766,9 +783,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .into_iter()
             .filter(|address| !known.contains(address))
             .collect();
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
         native.keep_window("ended-away-adopted-removed-when-shown")?;
         Verdict::new()
             .expect("the program that ended is gone from its Fleet", removed)
+            .expect(
+                "the layout keeps no placement or Vessel for the program that ended",
+                !recorded(&layout, &placement, &wanderer),
+            )
             .expect("its ending started no terminal in Core", started.is_empty())
             .observed("wanderer", &wanderer)?
             .observed("started", &started)
@@ -854,6 +876,18 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 
     cases.check(native, Case::TypedExitClosesVessel, |native| {
         let own = Terminal::bind(native, &shell_placement)?;
+        let (_, before_layout) = native.document()?.context("Missing saved layout")?;
+        let typed_address = before_layout
+            .vessels
+            .iter()
+            .find(|content| {
+                fleets(&before_layout)
+                    .flat_map(|item| &item.placements)
+                    .any(|member| member.id == shell_placement && member.vessel == content.id)
+            })
+            .and_then(|content| content.backend.as_ref())
+            .map(|backend| backend.0.clone())
+            .context("The shell Vessel has no terminal")?;
         let before = terminal_addresses(native)?;
         own.focus(native)?;
         native.press(Key::Char('d').ctrl())?;
@@ -868,9 +902,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .into_iter()
             .filter(|address| !before.contains(address))
             .collect();
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
         native.keep_window("typed-exit-closes-vessel")?;
         Verdict::new()
             .expect("a typed exit closes the Vessel", removed)
+            .expect(
+                "the layout keeps no placement or Vessel for the shell that exited",
+                !recorded(&layout, &shell_placement, &typed_address),
+            )
             .expect("no new terminal started in Core", started.is_empty())
             .observed("started", &started)
     })

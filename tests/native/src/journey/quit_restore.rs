@@ -1,5 +1,5 @@
 use super::adopt_by_label::{address, bound_to};
-use super::layout::{avatar_on_dock, without_adopted_leaves, without_runtime};
+use super::layout::{avatar_on_dock, without_adopted_records, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Decorations, Native, Seen, Stopwatch, Terminal, bound_terminal, voyages};
@@ -606,7 +606,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the Voyages, Fleets, Vessels, names and selection are the same after the restart",
                 without_runtime(&layout)
-                    == without_runtime(&without_adopted_leaves(&saved.document)),
+                    == without_runtime(&without_adopted_records(&saved.document)),
             )
             .expect(
                 "each Vessel of the selected Fleet runs a new plain shell",
