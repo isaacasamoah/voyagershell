@@ -849,7 +849,10 @@ mod tests {
         assert_eq!(saved["partial"], true);
         assert_eq!(saved["picked"], json!(["redock-takes-keyboard"]));
         assert_eq!(saved["included"], json!(["socket-dock-takes-keyboard"]));
-        assert_eq!(saved["leftOut"].as_array().map(Vec::len), Some(5));
+        assert_eq!(
+            saved["leftOut"].as_array().map(Vec::len),
+            Some(journey.cases().len() - 2)
+        );
         Ok(())
     }
 
