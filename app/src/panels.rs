@@ -186,13 +186,8 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                     }
                 }
             }
-            insert(
-                group_mut(layout, &owner)?,
-                &owner,
-                insertion,
-                panel,
-                Maximize::Clear,
-            )?;
+            let group = group_mut(layout, &owner)?;
+            insert(group, &owner, insertion, panel, Maximize::Clear)?;
         }
         Action::RevealPlacement { id } => {
             let owner = owner_of(layout, &id)?;
