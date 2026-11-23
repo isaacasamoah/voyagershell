@@ -1,7 +1,7 @@
 use crate::terminal::holds_keyboard;
 use gpui::{
-    AppContext as _, Context, FocusHandle, IntoElement, ParentElement as _, Render, Window,
-    WindowOptions, div,
+    AppContext as _, Context, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, Window, WindowOptions, div,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -12,7 +12,9 @@ struct Panes {
 
 impl Render for Panes {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().child("panes")
+        div()
+            .child(div().track_focus(&self.first))
+            .child(div().track_focus(&self.second))
     }
 }
 
@@ -23,6 +25,9 @@ fn a_focus_change_is_visible_to_the_very_next_read() {
     gpui_platform::headless()
         .with_quit_mode(gpui::QuitMode::Explicit)
         .run(move |cx| {
+            let first = cx.focus_handle();
+            let second = cx.focus_handle();
+            let held = (first.clone(), second.clone());
             let window = cx
                 .open_window(
                     WindowOptions {
@@ -30,26 +35,23 @@ fn a_focus_change_is_visible_to_the_very_next_read() {
                         show: false,
                         ..Default::default()
                     },
-                    |_, cx| {
-                        cx.new(|cx| Panes {
-                            first: cx.focus_handle(),
-                            second: cx.focus_handle(),
-                        })
-                    },
+                    move |_, cx| cx.new(|_| Panes { first, second }),
                 )
                 .unwrap();
-            window
-                .update(cx, |panes, window, cx| {
-                    panes.first.focus(window, cx);
-                    let first = holds_keyboard(&panes.first, window)
-                        && !holds_keyboard(&panes.second, window);
-                    panes.second.focus(window, cx);
-                    let second = holds_keyboard(&panes.second, window)
-                        && !holds_keyboard(&panes.first, window);
-                    result.set(first && second);
+            cx.spawn(async move |cx| {
+                cx.update_window(window.into(), |_, window, cx| {
+                    window.draw(cx).clear(cx);
+                    let (first, second) = held;
+                    window.focus(&first, cx);
+                    let one = holds_keyboard(&first, window) && !holds_keyboard(&second, window);
+                    window.focus(&second, cx);
+                    let two = holds_keyboard(&second, window) && !holds_keyboard(&first, window);
+                    result.set(one && two);
                 })
                 .unwrap();
-            cx.quit();
+                cx.update(|cx| cx.quit());
+            })
+            .detach();
         });
     assert!(observed.get());
 }
