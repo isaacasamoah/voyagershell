@@ -693,12 +693,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             &first,
             native,
             &format!(
-                "hc run --bg --no-parent --name keeper --label voyager.place=fleet:{} bash -c 'sleep 600'",
+                "hc run --bg --no-parent --name keeper --label voyager.place=fleet:{} bash",
                 fleet.0
             ),
         )?;
         let keeper = address(native, "keeper")?;
-        native.observe("the keeper program adopted into the Fleet", |seen| {
+        let held = native.observe("the keeper program adopted into the Fleet", |seen| {
             bound_to(seen.document, &keeper).map(|placement| placement.id)
         })?;
         let (_, before) = native.document()?.context("Missing saved layout")?;
@@ -761,9 +761,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restarted", &restarted)?
             .observed("kept", &kept)?
             .observed("still", &still)?;
-        native
-            .system
-            .rpc("terminal.kill", json!({"terminal":keeper}))?;
+        let shell = Terminal::bind(native, &held)?;
+        typed(&shell, native, "exit")?;
         native.observe("the keeper Vessel gone once its program ended", |seen| {
             bound_to(seen.document, &keeper).is_none().then_some(())
         })?;
