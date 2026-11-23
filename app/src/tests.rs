@@ -721,8 +721,8 @@ fn absent_target_cannot_change_layout() {
 fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     use crate::{client::Client, core::Core};
     use voyager_contract::{Outcome, Request};
-    let session = format!("voyager-p1-test-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-p1-test");
+    let client = guard.open("/tmp");
     let call = |action, expected_version| {
         client
             .call(Request {
@@ -788,7 +788,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     };
     let resized = client.call(resized_request.clone()).unwrap();
     let repeated_resize = client.call(resized_request).unwrap();
-    let mut cleanup = Core::connect(&session).unwrap();
+    let mut cleanup = Core::connect(guard.session()).unwrap();
     cleanup
         .document_set("voyager-layout-v2", &resized.layout, resized.version)
         .unwrap();
@@ -803,7 +803,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
         resized.version,
     );
     let refreshed = call(Action::Inspect, 0);
-    let reconnect = Client::open(session.clone(), "/tmp".into());
+    let reconnect = Client::open(guard.session().to_owned(), "/tmp".into());
     let reopened = reconnect
         .call(Request {
             request_id: reconnect.request_id(),
@@ -815,7 +815,6 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     assert!(!refreshed.created_workspace);
     assert!(!reopened.created_workspace);
     let retained_outcome = client.call(request).unwrap();
-    let stopped = cleanup.server_stop();
     cleanup.close().unwrap();
     assert_eq!(saved.status, Outcome::Applied);
     assert_eq!(resized.status, Outcome::Applied);
@@ -839,7 +838,6 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
         &refreshed.layout,
         &retained_outcome.layout
     ));
-    assert!(stopped.is_ok());
 }
 
 #[test]
@@ -895,10 +893,9 @@ fn a_voyage_portal_retains_its_identity_while_fleets_change() {
 
 #[test]
 fn administrator_scope_refuses_another_voyage_without_changing_it() {
-    use crate::{client::Client, core::Core};
     use voyager_contract::{Outcome, Request};
-    let session = format!("voyager-c2-scope-test-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-c2-scope-test");
+    let client = guard.open("/tmp");
     let call = |action, expected_version| {
         client
             .call(Request {
@@ -944,9 +941,6 @@ fn administrator_scope_refuses_another_voyage_without_changing_it() {
         )
         .unwrap();
     let observed = call(Action::Inspect, 0);
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.server_stop().unwrap();
-    cleanup.close().unwrap();
     assert_eq!(inspect.layout.voyages.len(), 1);
     assert_eq!(refused.status, Outcome::Refused);
     assert_eq!(observed.layout.voyages[1].fleets.len(), 1);
@@ -1112,7 +1106,7 @@ fn home_navigation_does_not_change_explicit_context_or_create_content() {
 
 #[test]
 fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
-    use crate::{client::Client, core::Core};
+    use crate::core::Core;
     use std::{
         panic, thread,
         time::{Duration, Instant},
@@ -1121,8 +1115,9 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
         Request, Status, VesselId,
         administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
     };
-    let session = format!("voyager-c2-process-test-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-c2-process-test");
+    let client = guard.open("/tmp");
+    let session = guard.session().to_owned();
     let checked = panic::catch_unwind(|| {
         let inspect = || {
             client
@@ -1333,17 +1328,16 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
             Status::Rejected
         );
     });
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.server_stop().unwrap();
     checked.unwrap();
 }
 
 #[test]
 fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
-    use crate::{client::Client, core::Core};
+    use crate::client::Client;
     use voyager_contract::{Outcome, Request};
-    let session = format!("voyager-created-eligibility-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-created-eligibility");
+    let session = guard.session().to_owned();
+    let client = guard.open("/tmp");
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let inspect = || Request {
             request_id: client.request_id(),
@@ -1413,11 +1407,7 @@ fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
             .unwrap();
         assert!(observed.created_vessels.is_empty());
     }));
-    let mut core = Core::connect(&session).unwrap();
-    let stopped = core.server_stop();
-    core.close().unwrap();
     checked.unwrap();
-    assert!(stopped.is_ok());
 }
 
 #[test]
