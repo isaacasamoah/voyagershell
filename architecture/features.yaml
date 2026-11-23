@@ -1010,7 +1010,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: python-only}
     platforms: [linux]
     checks: []
-    native_journeys: [voice]
+    native_journeys: [voice, voice-talk-over]
     python_journeys: [conversation-voice]
     invariants:
       - id: context-follows-dock
@@ -1949,6 +1949,7 @@ features:
       - tests/native/src/journey/slow_save.rs
       - tests/native/src/journey/socket_dock.rs
       - tests/native/src/journey/voice.rs
+      - tests/native/src/journey/voice_talk_over.rs
       - tests/native/src/journey/voyage_close.rs
       - tests/native/src/journey/voyager_command.rs
       - tests/native/src/journey/workspace.rs
