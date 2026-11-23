@@ -58,15 +58,20 @@ export function statusLine(
   text: string,
   refresh: NativeElement,
 ): NativeElement {
-  const shown = text || unboundLine();
-  const view = div()
-    .flex()
-    .flex_col()
-    .px(12)
-    .py(6)
-    .child(
-      Status.new("workspace-status", shown).text_size(11).text_color("#ffcad3"),
-    )
-    .child(refresh.child(Marker.new("workspace-refresh")));
-  return shown ? view.child(Marker.new("workspace-status", "", shown)) : view;
+  const unbound = unboundLine();
+  const view = div().flex().flex_col().px(12).py(6);
+  if (text)
+    view.child(
+      Status.new("workspace-status", text).text_size(11).text_color("#ffcad3"),
+    );
+  if (unbound)
+    view.child(
+      Status.new("voyager-unbound", unbound)
+        .text_size(11)
+        .text_color("#ffcad3"),
+    );
+  view.child(refresh.child(Marker.new("workspace-refresh")));
+  if (text) view.child(Marker.new("workspace-status", "", text));
+  if (unbound) view.child(Marker.new("voyager-unbound", "", unbound));
+  return view;
 }

@@ -532,6 +532,7 @@ mod tests {
                 "tests/native/controls/agent-keeps-maximize-clears.patch".to_owned(),
                 "tests/native/controls/agent-voyager-keeps.patch".to_owned(),
                 "tests/native/controls/agent-keep-hides-piece.patch".to_owned(),
+                "tests/native/controls/voyager-command-hidden.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

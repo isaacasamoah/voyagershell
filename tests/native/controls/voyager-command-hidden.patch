@@ -1,0 +1,13 @@
+diff --git a/desktop/canvas/status.ts b/desktop/canvas/status.ts
+index 3e617da9..39a8533b 100644
+--- a/desktop/canvas/status.ts
++++ b/desktop/canvas/status.ts
+@@ -58,7 +58,7 @@ export function statusLine(
+   text: string,
+   refresh: NativeElement,
+ ): NativeElement {
+-  const unbound = unboundLine();
++  const unbound = text ? "" : unboundLine();
+   const view = div().flex().flex_col().px(12).py(6);
+   if (text)
+     view.child(

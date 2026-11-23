@@ -1282,6 +1282,10 @@ The `voyager-command` journey runs the app in a sandbox that holds no `voyager`
 command beside the candidate, which every other journey has. Its patch makes the
 launch bring up Voyager without checking for the command. `command-missing-line-drawn`
 then fails, because the status line never says Voyager cannot reply.
+`tests/native/controls/voyager-command-hidden.patch` makes the status line draw
+the missing-command line only while no outcome line is showing, as it did before
+the line had its own place. A candidate built with it must fail
+`line-shows-beside-a-refusal`, because the Refused line hides the missing-command line.
 
 The `agent-split` patch offers `create-vessel` only to Voyager again.
 `create-vessel-splits-beside` then fails on the expectation `voyager do

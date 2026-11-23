@@ -163,7 +163,8 @@ union all come from that list.
 | `chat-status` | Empty | The Thinking line. Its `label` is the string that it draws | `Chat.render` |
 | `chat-error` | Empty | The chat's error line. Its `label` is the error text | `Chat.render` |
 | `voice-control` | Empty | The avatar's voice button. Its `label` says what it does now, such as `Loading voice…`, `Start voice`, `Connecting…`, `Listening` or `Can't hear the microphone` | `Speech.render` |
-| `workspace-status` | Empty | The workspace status line, drawn only while it has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `statusLine` in `status.ts` |
+| `workspace-status` | Empty | The workspace status line, drawn only while an outcome or notice has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `statusLine` in `status.ts` |
+| `voyager-unbound` | Empty | The line that says Voyager cannot reply because the `voyager` command is missing, drawn on its own line under any outcome line, and only while that is true. Its `label` is the text | `statusLine` in `status.ts` |
 | `workspace-refresh` | Empty | The Refresh button beside the workspace status line | `statusLine` in `status.ts` |
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |

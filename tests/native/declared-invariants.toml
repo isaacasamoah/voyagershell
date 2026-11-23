@@ -573,7 +573,7 @@ source = "AGENTS.md: 'Preserve request/target identity, structured Core errors a
 features = ["outcomes", "voyager-command-missing"]
 guard = []
 type_gap = "A refused Response has message: Option<String>, so a refusal with no reason can be built, and Status, Outcome and Unapplied each name refusal in their own words. DI16 makes one Outcome whose Refusal requires a reason."
-check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused", "journey:voice/refusal-is-in-the-chat", "journey:voyager-command/command-missing-line-drawn", "journey:voyager-command/no-voyager-bound", "journey:voyager-command/line-survives-a-layout-change"]
+check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused", "journey:voice/refusal-is-in-the-chat", "journey:voyager-command/command-missing-line-drawn", "journey:voyager-command/no-voyager-bound", "journey:voyager-command/line-survives-a-layout-change", "journey:voyager-command/line-shows-beside-a-refusal"]
 confidence = "stated"
 
 [[invariant]]

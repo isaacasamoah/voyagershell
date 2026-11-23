@@ -102,6 +102,7 @@ roles! {
     ChatError => "chat-error",
     VoiceControl => "voice-control",
     WorkspaceStatus => "workspace-status",
+    VoyagerUnbound => "voyager-unbound",
     WorkspaceRefresh => "workspace-refresh",
     SplitDivider => "split-divider",
     MaximizePanel => "maximize-panel",
