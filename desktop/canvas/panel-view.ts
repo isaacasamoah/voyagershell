@@ -9,9 +9,15 @@ import { notice as workspace_notice } from "voyager_workspace";
 import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
-import { openingPlacement, terminalBacked, visiblePanels } from "./panels.js";
+import {
+  openingPlacement,
+  shownPanels,
+  terminalBacked,
+  visiblePanels,
+} from "./panels.js";
 import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
+import { changedBesidesRevision } from "./status.js";
 import type Canvas from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
@@ -21,7 +27,11 @@ import type {
   NativeElement,
 } from "gpui-kit";
 import type { Action } from "../../contract/generated/request";
-import type { Context, Placement } from "../../contract/generated/response";
+import type {
+  Context,
+  Placement,
+  Response,
+} from "../../contract/generated/response";
 
 function noteFocus(
   workspace: Canvas,
@@ -40,42 +50,133 @@ const VOYAGER_VESSEL = "voyager";
 
 const seenDocks = new WeakMap<Canvas, string>();
 
+function unopened(workspace: Canvas) {
+  const layout = workspace.layout;
+  return Boolean(
+    layout &&
+    shownPanels(layout).some((panel) => {
+      const content = layout.vessels.find((item) => item.id === panel.vessel);
+      return (
+        content &&
+        terminalBacked(content.typeId) &&
+        !workspace.openings.has(panel.vessel)
+      );
+    }),
+  );
+}
+
+export function inspectNotice(workspace: Canvas, cx: UIContext) {
+  const notice = workspace_notice();
+  const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
+  workspace.workspaceNotice = notice;
+  workspace.refreshRequested = false;
+  if (
+    !changed &&
+    BigInt(notice.revision) <= BigInt(workspace.version) &&
+    !unopened(workspace)
+  )
+    return;
+  workspace.automaticRefresh = true;
+  try {
+    workspace.run({ operation: "inspect" }, cx);
+  } finally {
+    workspace.automaticRefresh = false;
+  }
+}
+
+export function giveKeyboardBack(
+  workspace: Canvas,
+  cx: UIContext | AsyncContext,
+) {
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    focusDocked(workspace, task);
+  });
+}
+
+export function inspectOutsideRender(
+  workspace: Canvas,
+  cx: UIContext | AsyncContext,
+) {
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    if (!workspace.busy) inspectNotice(workspace, task);
+  });
+}
+
 export function acceptDockResult(workspace: Canvas, cx: UIContext) {
   const raw = take_result();
   if (raw !== null) {
     const result: unknown = JSON.parse(raw);
     if (!validateResponse(result)) throw Error("Invalid native dock response");
-    if (workspace.acceptSnapshot(result, cx) && result.status === "applied")
+    if (workspace.acceptSnapshot(result, cx) && result.status === "applied") {
       workspace.dockReceipt = result.requestId;
+      workspace.refreshRequested = true;
+      giveKeyboardBack(workspace, cx);
+      inspectOutsideRender(workspace, cx);
+    }
   }
   if (workspace.busy) return;
   const dock = workspace_notice().dockRevision;
   const seen = seenDocks.get(workspace);
   if (seen === undefined) seenDocks.set(workspace, dock);
-  else if (seen !== dock) followDock(workspace, dock, cx);
+  else if (seen !== dock) followDock(workspace, seen, dock, cx);
 }
 
-function followDock(workspace: Canvas, dock: string, cx: UIContext) {
+function followDock(
+  workspace: Canvas,
+  seen: string,
+  dock: string,
+  cx: UIContext,
+) {
   seenDocks.set(workspace, dock);
-  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
-    focusDocked(workspace, task),
-  );
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    if (workspace.busy) {
+      if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
+      return;
+    }
+    workspace.run({ operation: "inspect" }, task, (_result, done) =>
+      focusDocked(workspace, done),
+    );
+  });
 }
 
 function focusDocked(workspace: Canvas, cx: AsyncContext) {
-  moveFocus(workspace, "opening", cx);
+  const home = workspace.layout?.context.kind === "workspace";
+  if (!home) moveFocus(workspace, "opening", cx);
   if (workspace.chat?.open || workspace.editing || window.has_active_dialog())
     return;
-  const target = workspace.layout
-    ? openingPlacement(workspace.layout)
-    : undefined;
-  if (target) workspace.terminals.get(target.vessel)?.focus();
+  const target = home
+    ? shownPanels(workspace.layout).find(
+        (panel) => panel.id === focusedPlacement(workspace),
+      )
+    : workspace.layout
+      ? openingPlacement(workspace.layout)
+      : undefined;
+  const terminal = target && workspace.terminals.get(target.vessel);
+  if (terminal && !terminal.focused()) terminal.focus();
 }
 
 const focusedPlacements = new WeakMap<Canvas, string | null>();
 
 export function focusedPlacement(workspace: Canvas): string | null {
   return focusedPlacements.get(workspace) ?? null;
+}
+
+export function refocus(workspace: Canvas, cx: UIContext | AsyncContext) {
+  const target = workspace.focused;
+  cx.spawn(async () => {
+    await Promise.resolve();
+    if (
+      workspace.focused === target &&
+      !workspace.chat?.open &&
+      !workspace.editing &&
+      !workspace.layoutName &&
+      !window.has_active_dialog()
+    )
+      workspace.focus.focus();
+  });
 }
 
 export function moveFocus(

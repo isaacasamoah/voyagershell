@@ -2,6 +2,7 @@ use super::Pane;
 use gpui::{
     Bounds, ClipboardItem, Context, EntityInputHandler, KeyBinding, Pixels, UTF16Selection, Window,
 };
+use libghostty_vt::key::Key;
 use std::ops::Range;
 
 pub(super) const KEY_CONTEXT: &str = "Terminal";
@@ -214,6 +215,86 @@ impl EntityInputHandler for Pane {
         _: &mut Context<Self>,
     ) -> Option<usize> {
         None
+    }
+}
+
+pub(super) fn key_code(key: &str) -> Key {
+    match key {
+        "enter" => Key::Enter,
+        "backspace" => Key::Backspace,
+        "tab" => Key::Tab,
+        "escape" => Key::Escape,
+        "up" => Key::ArrowUp,
+        "down" => Key::ArrowDown,
+        "left" => Key::ArrowLeft,
+        "right" => Key::ArrowRight,
+        "home" => Key::Home,
+        "end" => Key::End,
+        "pageup" => Key::PageUp,
+        "pagedown" => Key::PageDown,
+        "delete" => Key::Delete,
+        "insert" => Key::Insert,
+        "f1" => Key::F1,
+        "f2" => Key::F2,
+        "f3" => Key::F3,
+        "f4" => Key::F4,
+        "f5" => Key::F5,
+        "f6" => Key::F6,
+        "f7" => Key::F7,
+        "f8" => Key::F8,
+        "f9" => Key::F9,
+        "f10" => Key::F10,
+        "f11" => Key::F11,
+        "f12" => Key::F12,
+        "0" => Key::Digit0,
+        "1" => Key::Digit1,
+        "2" => Key::Digit2,
+        "3" => Key::Digit3,
+        "4" => Key::Digit4,
+        "5" => Key::Digit5,
+        "6" => Key::Digit6,
+        "7" => Key::Digit7,
+        "8" => Key::Digit8,
+        "9" => Key::Digit9,
+        "`" => Key::Backquote,
+        "\\" => Key::Backslash,
+        "[" => Key::BracketLeft,
+        "]" => Key::BracketRight,
+        "," => Key::Comma,
+        "=" => Key::Equal,
+        "-" => Key::Minus,
+        "." => Key::Period,
+        "'" => Key::Quote,
+        ";" => Key::Semicolon,
+        "/" => Key::Slash,
+        "space" => Key::Space,
+        "a" => Key::A,
+        "b" => Key::B,
+        "c" => Key::C,
+        "d" => Key::D,
+        "e" => Key::E,
+        "f" => Key::F,
+        "g" => Key::G,
+        "h" => Key::H,
+        "i" => Key::I,
+        "j" => Key::J,
+        "k" => Key::K,
+        "l" => Key::L,
+        "m" => Key::M,
+        "n" => Key::N,
+        "o" => Key::O,
+        "p" => Key::P,
+        "q" => Key::Q,
+        "r" => Key::R,
+        "s" => Key::S,
+        "t" => Key::T,
+        "u" => Key::U,
+        "v" => Key::V,
+        "w" => Key::W,
+        "x" => Key::X,
+        "y" => Key::Y,
+        "z" => Key::Z,
+        _ => Key::Unidentified,
     }
 }
 
@@ -431,5 +512,61 @@ mod tests {
         composition.mark(None, "preview", None).unwrap();
         assert!(composition.mark(None, &"x".repeat(65537), None).is_err());
         assert_eq!(composition.text, "preview");
+    }
+
+    struct Holders {
+        first: FocusHandle,
+        second: FocusHandle,
+    }
+
+    impl Render for Holders {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            div()
+                .child(div().track_focus(&self.first))
+                .child(div().track_focus(&self.second))
+        }
+    }
+
+    #[test]
+    fn a_focus_change_is_visible_to_the_very_next_read() {
+        let observed = Rc::new(std::cell::Cell::new(false));
+        let result = observed.clone();
+        gpui_platform::headless()
+            .with_quit_mode(gpui::QuitMode::Explicit)
+            .run(move |cx| {
+                let first = cx.focus_handle();
+                let second = cx.focus_handle();
+                let held = (first.clone(), second.clone());
+                let window = cx
+                    .open_window(
+                        gpui::WindowOptions {
+                            focus: false,
+                            show: false,
+                            ..Default::default()
+                        },
+                        move |_, cx| cx.new(|_| Holders { first, second }),
+                    )
+                    .unwrap();
+                cx.spawn(async move |cx| {
+                    cx.update_window(window.into(), |_, window, cx| {
+                        window.draw(cx).clear(cx);
+                        let (first, second) = held;
+                        let holds = crate::terminal::holds_keyboard;
+                        window.focus(&first, cx);
+                        let one = holds(&first, window) && !holds(&second, window);
+                        window.focus(&second, cx);
+                        let two = holds(&second, window) && !holds(&first, window);
+                        result.set(one && two);
+                    })
+                    .unwrap();
+                    cx.update(|cx| cx.quit());
+                })
+                .detach();
+            });
+        assert!(observed.get());
     }
 }

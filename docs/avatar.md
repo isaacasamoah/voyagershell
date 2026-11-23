@@ -119,7 +119,10 @@ The avatar is still at rest and runs finite animations on deliberate triggers.
 Hover starts one stretch on entry. Staying over the hit area does not repeat it.
 An applied dock replaces any active clip with a pronounced two-second float.
 Hover is ignored while a clip runs and is never queued. Click keeps its original
-minimize/restore action. Dragging keeps its placement behavior and sound.
+minimize/restore action while the avatar is docked anywhere but home. While the
+avatar is home, a click sends the existing Home request and the window stays up. A click made while a dock is still
+waiting for its reply is kept, one deep with the latest winning, and acts when the reply returns.
+Dragging keeps its placement behavior and sound.
 Shift-click and focused S also play the hover binding. Focused F5 reloads the
 profile's animation files. S and F5 use local press/release latches because the
 pinned X11 backend does not mark repeated keys as held. Blur clears those latches.
@@ -231,6 +234,7 @@ supplies actual Voyage-owned Portals and the shared content renderer. Portal
 targets and Go there now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
+An avatar reply is accepted in render, as the canvas always did, so the layout, the dock receipt and the avatar's projection change together with the reply. A press on the avatar that begins in the gap between the reply and a later layout change is cancelled by that change, so the layout must not lag the reply. The one focus call that accepting can make, for a focused Vessel the new layout no longer shows, may not run while the canvas draws. It runs in a spawned task after one await, and only if the focus is still where the accept left it and no chat, rename or dialog has opened since. The avatar is the person, and the owner raises a change notice only for requests that carry an agent or program scope, so an avatar reply raises none. The accept therefore has to be followed by the notice inspect, because nothing else will ask the canvas to open the terminals of what the reply shows. A reply that opens Home is prepared by that inspect. The inspect runs in a spawned task after its first await, through one function, `inspectOutsideRender`, because the request it starts ends with a redraw request that the toolkit refuses while the canvas draws. The follow that a dock starts, `followDock`, starts its inspect the same way, from a task after one await, and puts the seen dock back if a request has started by then so the next draw follows it. The other callers that still start a request while the canvas draws are left to the general fix, which moves them onto `inspectOutsideRender`. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening. When the canvas is busy the reply leaves the refresh wanted, and the one place busy ends reads it, so a click during launch work prepares once when that work ends.
 
 ## Working-core integration
 

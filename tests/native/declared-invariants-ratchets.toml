@@ -2,7 +2,6 @@ unguarded = [
   "adopted-agents-follow-their-label",
   "agent-setup-untouched",
   "authority-comes-from-assignment",
-  "avatar-click-minimizes",
   "avatar-stays-fast",
   "avatar-stays-put",
   "checks-have-a-way-through",

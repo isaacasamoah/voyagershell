@@ -171,6 +171,7 @@ impl Journey {
             Self::Outcomes => Some(outcomes::HOLD),
             Self::SlowList => Some(slow_list::HOLD),
             Self::HomeCreate => Some(home_create::HOLD),
+            Self::SocketDock => Some(socket_dock::HOLD),
             _ => None,
         }
     }
@@ -489,6 +490,10 @@ mod tests {
             .map(|journey| journey.control_patch())
             .chain([
                 "tests/native/controls/frame-stall.patch".to_owned(),
+                "tests/native/controls/socket-dock-home.patch".to_owned(),
+                "tests/native/controls/avatar-click-home.patch".to_owned(),
+                "tests/native/controls/avatar-click-wait.patch".to_owned(),
+                "tests/native/controls/avatar-home-prepare.patch".to_owned(),
                 "tests/native/controls/voice-handoff.patch".to_owned(),
                 "tests/native/controls/voice-hearing.patch".to_owned(),
                 "tests/native/controls/voice-quiet.patch".to_owned(),

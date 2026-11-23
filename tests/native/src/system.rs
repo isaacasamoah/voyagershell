@@ -406,6 +406,25 @@ impl System {
         outcome
     }
 
+    pub fn act_by<T>(
+        &self,
+        intent: Value,
+        due: Instant,
+        perform: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let id = stamp();
+        self.record(json!({"id":id,"event":"intent","action":intent}))?;
+        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+            sleep(wait);
+        }
+        let outcome = perform();
+        self.record(json!({"id":id,"event":"acknowledgement","error":outcome.as_ref().err().map(|error| format!("{error:#}"))}))?;
+        if outcome.is_ok() {
+            self.acknowledged.fetch_add(1, Ordering::SeqCst);
+        }
+        outcome
+    }
+
     pub fn execute(
         &self,
         program: &str,

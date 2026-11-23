@@ -7,8 +7,9 @@ pub use avatar::{Reference, Sharpness};
 pub use input::Wheel;
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed, FLOAT_SPACING,
-    LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, QUIET_MIC, REPLY_WAIT, ROOM_FEED,
-    SEND_WAIT, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
+    LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, PROBE_AFTER_DOCK, PROBE_LATEST,
+    QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, STATUS_AFTER_CLICK, Stopwatch, VESSEL_CLOSED,
+    after_entry, clock, epoch_millis, hold, now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -44,6 +45,7 @@ const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 const REQUEST_QUIET: Duration = Duration::from_millis(750);
 
 const GLANCE: Duration = Duration::from_millis(80);
+pub const FRAME_POLL: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct Surface {
@@ -873,6 +875,29 @@ impl Native {
                 .filter(|label| wanted(label))
                 .map(str::to_owned)
         })
+    }
+
+    pub fn probe_at_frame(
+        &self,
+        within: Owed,
+        mut check: impl FnMut(&Frame) -> bool,
+        after: Owed,
+        probe: &str,
+    ) -> Result<Option<Duration>> {
+        let x11 = self.x11()?;
+        let path = self.inspection();
+        let found = poll(within.within(), FRAME_POLL, true, || {
+            let window = x11.geometry(self.window)?;
+            Ok(inspection::read(&path)?
+                .filter(|frame| drawn_for(frame, window))
+                .filter(|frame| check(frame))
+                .map(|_| Instant::now()))
+        })?;
+        let Some(seen) = found else {
+            return Ok(None);
+        };
+        let sent = self.type_by(probe, seen + after.within())?;
+        Ok(Some(sent.duration_since(seen)))
     }
 
     pub fn drawn_labels(&self, target: &Target, during: Owed) -> Result<Vec<String>> {

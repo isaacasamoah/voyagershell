@@ -817,14 +817,17 @@ test("context metadata rejects a late different dock and notifies only changed f
   assert.deepEqual(view.contextFacts, facts);
 });
 
-test("a dock follows once for each dock revision, once no request is preparing", () => {
+test("a dock follows once for each dock revision, once no request is preparing", async () => {
   const layout = (context, last) => ({
     view: "fleet",
     selectedVoyage: "voyage-1",
     selectedFleet: "fleet-4",
     context,
     lastVessels: [{ fleet: "fleet-4", vessel: last }],
-    vessels: [{ id: "content-2" }, { id: "content-10" }],
+    vessels: [
+      { id: "content-2", typeId: "terminal" },
+      { id: "content-10", typeId: "terminal" },
+    ],
     voyages: [
       {
         id: "voyage-1",
@@ -855,18 +858,22 @@ test("a dock follows once for each dock revision, once no request is preparing",
     status: "applied",
     version: "1",
     fresh: true,
+    createdVessels: [],
+    createdWorkspace: false,
     layout: layout({ kind: "vessel", id }, id),
   });
   let result = null;
   let dockRevision = "0";
-  const { Canvas, acceptDockResult } = new Function(
+  let noticeRevision = "0";
+  const { Canvas, acceptDockResult, inspectNotice, moveFocus } = new Function(
     "View",
     "take_result",
     "validateResponse",
     "window",
     "workspace_notice",
+    "invoke",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "const Canvas = class") +
-      "\nreturn { Canvas, acceptDockResult };",
+      "\nreturn { Canvas, acceptDockResult, inspectNotice, moveFocus };",
   )(
     class {},
     () => {
@@ -876,29 +883,89 @@ test("a dock follows once for each dock revision, once no request is preparing",
     },
     () => true,
     { has_active_dialog: () => false },
-    () => ({ dockRevision }),
+    () => ({
+      revision: noticeRevision,
+      closeRevision: "0",
+      navigationRevision: "0",
+      packageRevision: "0",
+      dockRevision,
+      activityRevision: "0",
+    }),
+    async () => ({ status: "applied" }),
   );
   const focused = [];
-  const view = Object.assign(new Canvas(), {
-    version: "1",
-    names: new Map(),
-    contextFacts: null,
-    terminals: new Map(
-      ["content-2", "content-10"].map((id) => [
-        id,
-        { focus: () => focused.push(id) },
-      ]),
-    ),
-  });
-  view.readContext = async () => {};
-  view.readProcesses = async () => {};
-  view.readObservation = async () => {};
+  let owner = null;
+  const prepared = [];
+  const accepted = [];
+  const focusCalls = [];
+  let renderPhase = false;
   const cx = {
     spawn(callback) {
-      callback(cx);
+      renderPhase = true;
+      try {
+        callback(
+          Object.assign(Object.create(cx), {
+            notify() {},
+            sleep: () => new Promise((resolve) => setImmediate(resolve)),
+          }),
+        );
+      } finally {
+        renderPhase = false;
+      }
     },
     notify() {},
     focus_handle: () => ({}),
+  };
+  const build = () => {
+    const built = Object.assign(new Canvas(), {
+      version: "1",
+      focus: { focus: () => focusCalls.push("root") },
+      refreshRequested: false,
+      workspaceNotice: {
+        revision: "0",
+        closeRevision: "0",
+        navigationRevision: "0",
+        packageRevision: "0",
+        dockRevision: "0",
+        activityRevision: "0",
+      },
+      openings: new Map(
+        ["content-2", "content-10"].map((id) => [id, { status: "applied" }]),
+      ),
+      pendingShortcuts: [],
+      names: new Map(),
+      contextFacts: null,
+      terminals: new Map(
+        ["content-2", "content-10"].map((id) => [
+          id,
+          {
+            focus: () => {
+              owner = id;
+              focused.push(id);
+            },
+            focused: () => owner === id,
+          },
+        ]),
+      ),
+    });
+    built.readContext = async () => {};
+    built.readProcesses = async () => {};
+    built.readObservation = async () => {};
+    built.prepare = async (task, existingOnly) => {
+      prepared.push(existingOnly);
+    };
+    const realAccept = built.acceptSnapshot.bind(built);
+    built.acceptSnapshot = (reply, where) => {
+      accepted.push(where === cx || renderPhase ? "render" : "task");
+      return realAccept(reply, where);
+    };
+    return built;
+  };
+  const view = build();
+  const only = (list) => [...new Set(list)];
+  const settle = async () => {
+    for (let turn = 0; turn < 5; turn += 1)
+      await new Promise((resolve) => setImmediate(resolve));
   };
   let next = null;
   let inspects = 0;
@@ -915,22 +982,35 @@ test("a dock follows once for each dock revision, once no request is preparing",
   result = JSON.stringify(reply("placement-11"));
   next = reply("placement-11");
   dockRevision = "1";
+  owner = null;
   render();
   render();
-  assert.deepEqual(focused, ["content-10"], "the avatar's dock follows once");
+  assert.equal(
+    inspects,
+    0,
+    "a dock's follow does not start in render, because the request it starts asks for a redraw",
+  );
+  await settle();
+  assert.deepEqual(
+    only(focused),
+    ["content-10"],
+    "the avatar's dock follows once",
+  );
   assert.equal(inspects, 1, "the avatar's dock runs only its own inspect");
   focused.length = 0;
   next = reply("placement-3");
   view.acceptSnapshot(next, cx);
   dockRevision = "2";
+  owner = null;
   view.busy = true;
   render();
   assert.deepEqual(focused, [], "a dock waits while a request prepares");
   view.busy = false;
   render();
   render();
+  await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-2"],
     "a dock from another caller follows once",
   );
@@ -941,10 +1021,12 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.deepEqual(focused, [], "a re-read with no new dock does not follow");
   assert.equal(inspects, 2, "a re-read with no new dock runs no inspect");
   dockRevision = "3";
+  owner = null;
   render();
   render();
+  await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-2"],
     "a second dock on the shown Vessel follows once",
   );
@@ -956,15 +1038,220 @@ test("a dock follows once for each dock revision, once no request is preparing",
   focused.length = 0;
   next = reply("placement-11");
   dockRevision = "4";
+  owner = null;
   render();
   result = JSON.stringify(reply("placement-11"));
   render();
+  await settle();
   assert.deepEqual(
-    focused,
+    only(focused),
     ["content-10"],
     "an avatar dock whose notice lands before its reply follows once",
   );
   assert.equal(inspects, 4, "that dock runs one inspect");
+  focused.length = 0;
+  next = reply("placement-3");
+  view.acceptSnapshot(next, cx);
+  inspects = 0;
+  dockRevision = "6";
+  owner = null;
+  render();
+  view.busy = true;
+  await settle();
+  assert.equal(
+    inspects,
+    0,
+    "a request that starts between a dock and its follow is not doubled",
+  );
+  assert.deepEqual(
+    focused,
+    [],
+    "the dock does not follow while that request runs",
+  );
+  view.busy = false;
+  render();
+  await settle();
+  assert.deepEqual(
+    only(focused),
+    ["content-2"],
+    "the dock follows once the request has ended, because the seen dock was put back",
+  );
+  assert.equal(inspects, 1, "and runs one inspect");
+  await settle();
+  focused.length = 0;
+  next = reply("placement-11");
+  view.acceptSnapshot(next, cx);
+  inspects = 0;
+  result = JSON.stringify({
+    ...reply("placement-11"),
+    requestId: "avatar-dock-reply-alone",
+  });
+  render();
+  assert.deepEqual(
+    focused,
+    [],
+    "the keyboard does not move while the canvas draws",
+  );
+  await settle();
+  assert.deepEqual(
+    only(focused),
+    ["content-10"],
+    "the keyboard goes back when the dock's reply is accepted, before any dock notice has arrived",
+  );
+  assert.equal(focused.length, 1, "and exactly once");
+  next = reply("placement-11");
+  dockRevision = "8";
+  render();
+  await settle();
+  assert.equal(
+    focused.length,
+    1,
+    "the follow that the dock's notice starts does not move a keyboard that is already on the Vessel",
+  );
+  focused.length = 0;
+  dockRevision = "9";
+  owner = null;
+  render();
+  await settle();
+  assert.deepEqual(
+    only(focused),
+    ["content-10"],
+    "a dock that no avatar reply preceded, with the keyboard elsewhere, still gets it back after its inspect",
+  );
+  const open = (...ids) =>
+    new Map(ids.map((id) => [id, { status: "applied" }]));
+  const avatarReply = (requestId) => {
+    result = JSON.stringify({ ...reply("placement-11"), requestId });
+    owner = null;
+    accepted.length = 0;
+    inspects = 0;
+    render();
+  };
+  noticeRevision = view.version;
+  view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
+  view.openings = open("content-2");
+  avatarReply("avatar-home");
+  assert.equal(
+    accepted.includes("task"),
+    false,
+    "an avatar reply is accepted in render, as before, so its layout and receipt land with the reply",
+  );
+  assert.equal(accepted[0], "render");
+  assert.equal(view.dockReceipt, "avatar-home");
+  assert.equal(
+    inspects,
+    0,
+    "an avatar reply starts no inspect while the canvas draws, because the request it starts asks for a redraw",
+  );
+  assert.equal(view.refreshRequested, true);
+  await settle();
+  assert.equal(
+    inspects,
+    1,
+    "an avatar reply that shows a Vessel not yet open reads and prepares once, from a task, though the notice did not change",
+  );
+  assert.equal(view.refreshRequested, false);
+  view.openings = open("content-2", "content-10");
+  avatarReply("avatar-home-open");
+  await settle();
+  assert.equal(
+    inspects,
+    0,
+    "an avatar reply that shows only open Vessels reads nothing",
+  );
+  view.openings = open("content-2");
+  view.busy = true;
+  avatarReply("avatar-home-busy");
+  await settle();
+  assert.equal(
+    accepted[0],
+    "render",
+    "a reply during another request is accepted at once",
+  );
+  assert.equal(inspects, 0, "it reads nothing while the other request runs");
+  assert.equal(
+    view.refreshRequested,
+    true,
+    "it leaves the refresh wanted for the end of the other request",
+  );
+  Canvas.prototype.run.call(view, { operation: "inspect" }, cx);
+  assert.equal(
+    view.refreshRequested,
+    true,
+    "an inspect refused while busy does not clear the wanted refresh",
+  );
+  view.busy = false;
+  inspectNotice(view, cx);
+  assert.equal(
+    inspects,
+    1,
+    "when the request ends the wanted refresh opens the Vessels once",
+  );
+  assert.equal(view.refreshRequested, false);
+  view.openings = open("content-2");
+  avatarReply("avatar-home-then-busy");
+  view.busy = true;
+  await settle();
+  assert.equal(
+    inspects,
+    0,
+    "a request that starts between the reply and its task is not doubled",
+  );
+  assert.equal(view.refreshRequested, true);
+  view.busy = false;
+  view.refreshRequested = false;
+  view.openings = open("content-2", "content-10");
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel");
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "the root focus does not move while the canvas is drawing",
+  );
+  assert.equal(
+    view.focused,
+    "placement-11",
+    "the focus state moves to the opening Vessel at once",
+  );
+  await settle();
+  assert.deepEqual(
+    focusCalls,
+    ["root"],
+    "the root focus moves once, in a task, when nothing else moved the focus",
+  );
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel-again");
+  moveFocus(view, { placement: "placement-3" }, cx);
+  await settle();
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "a click elsewhere between the accept and the task keeps the focus where the person put it",
+  );
+  moveFocus(view, { placement: "placement-9" }, cx);
+  focusCalls.length = 0;
+  avatarReply("avatar-hides-the-focused-vessel-third");
+  view.chat = { open: true };
+  await settle();
+  view.chat = undefined;
+  assert.deepEqual(
+    focusCalls,
+    [],
+    "a chat opened between the accept and the task keeps its input focus",
+  );
+  next = reply("placement-3");
+  result = JSON.stringify(reply("placement-3"));
+  dockRevision = "5";
+  owner = null;
+  render();
+  await settle();
+  assert.deepEqual(
+    prepared,
+    [],
+    "a dock reply prepares nothing but its own follow",
+  );
 });
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
@@ -1814,7 +2101,11 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     observationRead: 0,
   });
   const cx = {
-    spawn() {},
+    spawn(run) {
+      try {
+        Promise.resolve(run(cx)).catch(() => {});
+      } catch {}
+    },
     notify() {},
     focus_handle() {
       return {};
@@ -1865,6 +2156,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   layout.voyages[0].fleets[0].root = null;
   view.chat = { open: true };
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     0,
@@ -1873,6 +2165,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   view.chat.open = false;
   dialog = true;
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     0,
@@ -1880,6 +2173,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   );
   dialog = false;
   view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     restored,
     1,

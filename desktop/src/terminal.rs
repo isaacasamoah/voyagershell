@@ -102,7 +102,7 @@ use gpui_shell::{
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
     MaterializeRequest, RegistryError, StateDescriptor, StateMethodDescriptor,
 };
-use libghostty_vt::key::{self, Key, Mods};
+use libghostty_vt::key::{self, Mods};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -379,7 +379,7 @@ impl Pane {
     fn key(&mut self, event: &KeyDownEvent) -> Result<()> {
         let stroke = &event.keystroke;
         let mut input = key::Event::new()?;
-        input.set_key(key_code(&stroke.key));
+        input.set_key(input::key_code(&stroke.key));
         input.set_action(if event.is_held {
             key::Action::Repeat
         } else {
@@ -535,86 +535,6 @@ fn primary_text(_: &gpui::App) -> Option<String> {
     None
 }
 
-fn key_code(key: &str) -> Key {
-    match key {
-        "enter" => Key::Enter,
-        "backspace" => Key::Backspace,
-        "tab" => Key::Tab,
-        "escape" => Key::Escape,
-        "up" => Key::ArrowUp,
-        "down" => Key::ArrowDown,
-        "left" => Key::ArrowLeft,
-        "right" => Key::ArrowRight,
-        "home" => Key::Home,
-        "end" => Key::End,
-        "pageup" => Key::PageUp,
-        "pagedown" => Key::PageDown,
-        "delete" => Key::Delete,
-        "insert" => Key::Insert,
-        "f1" => Key::F1,
-        "f2" => Key::F2,
-        "f3" => Key::F3,
-        "f4" => Key::F4,
-        "f5" => Key::F5,
-        "f6" => Key::F6,
-        "f7" => Key::F7,
-        "f8" => Key::F8,
-        "f9" => Key::F9,
-        "f10" => Key::F10,
-        "f11" => Key::F11,
-        "f12" => Key::F12,
-        "0" => Key::Digit0,
-        "1" => Key::Digit1,
-        "2" => Key::Digit2,
-        "3" => Key::Digit3,
-        "4" => Key::Digit4,
-        "5" => Key::Digit5,
-        "6" => Key::Digit6,
-        "7" => Key::Digit7,
-        "8" => Key::Digit8,
-        "9" => Key::Digit9,
-        "`" => Key::Backquote,
-        "\\" => Key::Backslash,
-        "[" => Key::BracketLeft,
-        "]" => Key::BracketRight,
-        "," => Key::Comma,
-        "=" => Key::Equal,
-        "-" => Key::Minus,
-        "." => Key::Period,
-        "'" => Key::Quote,
-        ";" => Key::Semicolon,
-        "/" => Key::Slash,
-        "space" => Key::Space,
-        "a" => Key::A,
-        "b" => Key::B,
-        "c" => Key::C,
-        "d" => Key::D,
-        "e" => Key::E,
-        "f" => Key::F,
-        "g" => Key::G,
-        "h" => Key::H,
-        "i" => Key::I,
-        "j" => Key::J,
-        "k" => Key::K,
-        "l" => Key::L,
-        "m" => Key::M,
-        "n" => Key::N,
-        "o" => Key::O,
-        "p" => Key::P,
-        "q" => Key::Q,
-        "r" => Key::R,
-        "s" => Key::S,
-        "t" => Key::T,
-        "u" => Key::U,
-        "v" => Key::V,
-        "w" => Key::W,
-        "x" => Key::X,
-        "y" => Key::Y,
-        "z" => Key::Z,
-        _ => Key::Unidentified,
-    }
-}
-
 struct TerminalMaterializer;
 
 impl ComponentMaterializer for TerminalMaterializer {
@@ -690,6 +610,17 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
                 },
             ),
             StateMethodDescriptor::new::<Entity<Pane>>(
+                "focused",
+                "(): boolean",
+                move |pane, args, window, cx| {
+                    anyhow::ensure!(args.is_empty(), "focused takes no arguments");
+                    Ok(ComponentDataValue::Boolean(holds_keyboard(
+                        &pane.read(cx).focus,
+                        window,
+                    )))
+                },
+            ),
+            StateMethodDescriptor::new::<Entity<Pane>>(
                 "focusIfUnchanged",
                 "(): void",
                 move |pane, args, window, cx| {
@@ -726,6 +657,10 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
         ),
     )?;
     Ok(())
+}
+
+pub(crate) fn holds_keyboard(focus: &gpui::FocusHandle, window: &gpui::Window) -> bool {
+    focus.is_focused(window)
 }
 
 #[cfg(test)]

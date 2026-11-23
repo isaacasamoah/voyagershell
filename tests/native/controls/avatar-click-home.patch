@@ -1,0 +1,13 @@
+diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
+index 54c23e3c..05d18fb9 100644
+--- a/desktop/src/avatar/click.rs
++++ b/desktop/src/avatar/click.rs
+@@ -14,7 +14,7 @@ impl Click {
+     pub(super) fn of(floating: bool, scope: &Scope) -> Self {
+         match (floating, scope) {
+             (true, _) => Self::Restore,
+-            (false, Scope::Workspace) => Self::Home,
++            (false, Scope::Workspace) => Self::Minimize,
+             (false, _) => Self::Minimize,
+         }
+     }

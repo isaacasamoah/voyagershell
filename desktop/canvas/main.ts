@@ -43,8 +43,10 @@ import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
+  inspectNotice,
   focusedPlacement,
   moveFocus,
+  refocus,
   renderPanel,
 } from "./panel-view.js";
 import {
@@ -702,62 +704,51 @@ export default class Canvas extends View {
         this.splitReset += 1;
       }
       this.busy = false;
-      if (done) done(result, task);
-      if (result?.status === "applied" && this.fresh) {
-        if (this.pendingLayout) {
-          const next = this.pendingLayout;
-          this.pendingLayout = null;
-          this.run(next, task, () => {
+      try {
+        if (done) done(result, task);
+        if (result?.status === "applied" && this.fresh) {
+          if (this.pendingLayout) {
+            const next = this.pendingLayout;
+            this.pendingLayout = null;
+            this.run(next, task, () => {
+              this.savingLayout = false;
+            });
+          } else if (this.editing?.pending) {
+            this.editing.pending = false;
+            this.saveName(this.editing, task);
+          } else if (this.afterRename) {
+            const next = this.afterRename;
+            this.afterRename = null;
+            this.run(next, task);
+          }
+        } else {
+          if (this.pendingLayout) {
+            this.pendingLayout = null;
             this.savingLayout = false;
-          });
-        } else if (this.editing?.pending) {
-          this.editing.pending = false;
-          this.saveName(this.editing, task);
-        } else if (this.afterRename) {
-          const next = this.afterRename;
+            this.status += " Layout was not saved.";
+          }
+          if (this.editing?.pending) {
+            this.editing.pending = false;
+            this.editing.saving = false;
+            this.status += " Rename was not sent.";
+          }
           this.afterRename = null;
-          this.run(next, task);
         }
-      } else {
-        if (this.pendingLayout) {
-          this.pendingLayout = null;
-          this.savingLayout = false;
-          this.status += " Layout was not saved.";
-        }
-        if (this.editing?.pending) {
-          this.editing.pending = false;
-          this.editing.saving = false;
-          this.status += " Rename was not sent.";
-        }
-        this.afterRename = null;
+        this.finishPresentation(
+          task,
+          accepted &&
+            result?.status === "applied" &&
+            this.fresh &&
+            (prepared || !prepareContents),
+        );
+        task.notify();
+        if (!prepared) this.pendingShortcuts = [];
+      } finally {
+        if (!this.busy && this.refreshRequested) inspectNotice(this, task);
       }
-      this.finishPresentation(
-        task,
-        accepted &&
-          result?.status === "applied" &&
-          this.fresh &&
-          (prepared || !prepareContents),
-      );
-      task.notify();
-      if (!prepared) this.pendingShortcuts = [];
-      if (!this.busy && this.refreshRequested) this.inspectNotice(task);
       if (!this.busy) this.flushShortcuts(task, prepared);
     });
     cx.notify();
-  }
-
-  inspectNotice(cx: UIContext) {
-    const notice = workspace_notice();
-    const changed = changedBesidesRevision(notice, this.workspaceNotice);
-    this.workspaceNotice = notice;
-    this.refreshRequested = false;
-    if (!changed && BigInt(notice.revision) <= BigInt(this.version)) return;
-    this.automaticRefresh = true;
-    try {
-      this.run({ operation: "inspect" }, cx);
-    } finally {
-      this.automaticRefresh = false;
-    }
   }
 
   acceptSnapshot(result: Reply, task: AsyncContext) {
@@ -789,7 +780,7 @@ export default class Canvas extends View {
       !window.has_active_dialog()
     ) {
       moveFocus(this, "opening", task);
-      this.focus.focus();
+      refocus(this, task);
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
@@ -1966,7 +1957,7 @@ export default class Canvas extends View {
       changedBesidesRevision(ownerNotice, this.workspaceNotice)
     ) {
       this.refreshRequested = true;
-      if (!this.busy) this.inspectNotice(cx);
+      if (!this.busy) inspectNotice(this, cx);
     }
     const colors = projection();
     const shell = div()

@@ -227,6 +227,7 @@ edges:
   - {from: 'rs:voyager_desktop::avatar', to: 'rs:voyager_app::client', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop::avatar', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_desktop::avatar', to: 'rs:voyager_contract::operations', from_owner: desktop-presentation, to_owner: application-queue}
+  - {from: 'rs:voyager_desktop::avatar::click', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_desktop::avatar::view', to: 'rs:voyager_contract', from_owner: desktop-presentation, to_owner: placement}
   - {from: 'rs:voyager_desktop::banner', to: 'rs:voyager_app::content::install', from_owner: desktop-presentation, to_owner: content}
   - {from: 'rs:voyager_desktop::bridge', to: 'rs:voyager_contract::operations', from_owner: desktop-presentation, to_owner: application-queue}
