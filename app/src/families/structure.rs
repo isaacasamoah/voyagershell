@@ -426,7 +426,7 @@ mod tests {
             &mut Core(core, Ok(())),
             layout,
             None,
-            Defaults::Plain,
+            Caller::Agent,
             &request,
             &HashMap::new(),
         )
@@ -493,7 +493,7 @@ mod tests {
             &mut core,
             &layout,
             None,
-            Defaults::Plain,
+            Caller::Agent,
             &request,
             &HashMap::new(),
         );
