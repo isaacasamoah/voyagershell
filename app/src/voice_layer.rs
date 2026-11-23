@@ -631,6 +631,7 @@ struct Ready<E> {
     vocabulary: Vocabulary,
     audio: Arc<dyn Audio>,
     trace: Trace,
+    talk_over: TalkOver,
 }
 
 fn serve_ready<E>(owner: &Arc<Shared>, ready: Ready<E>)
@@ -659,7 +660,7 @@ where
         status: Arc::new(move |phase, notice| status.set(phase, notice)),
         stopped: Arc::new(move || stopped.has_stopped()),
         on: Arc::new(move || listening.is_on()),
-        talk_over: TalkOver::default(),
+        talk_over: ready.talk_over,
     });
     Exchange {
         hearing: ready.engine.as_ref(),
@@ -687,6 +688,7 @@ pub fn start(
 ) -> Layer {
     let shared = Arc::new(Shared::new(Phase::Starting));
     let owner = shared.clone();
+    let talk_over = TalkOver::from_environment();
     thread::spawn(move || {
         let engine = match bring_up(&client, &settings) {
             Ok(engine) => engine,
@@ -707,6 +709,7 @@ pub fn start(
                 vocabulary,
                 audio,
                 trace,
+                talk_over,
             },
         );
         if let Err(error) = omni::stop(&engine.client, &engine.running, &engine.files) {

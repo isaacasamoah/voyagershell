@@ -381,6 +381,13 @@ reply. `voice_settings::TalkOver` is the setting. It is `Auto`, `On` or `Off`, a
 keeps the microphone open. `Auto` keeps it open only when the default output is
 headphones.
 
+`TalkOver::from_environment` is the one place the setting is read. It reads the launch
+variable `VOYAGER_VOICE_TALK_OVER` once, when the voice layer starts. The values are
+`auto`, `on` and `off` in any letter case, and an unset variable means `Auto`. Any
+other value also means `Auto`, and the app logs one line that names the variable and
+the value it got. The app has no stored voice setting yet, so the variable is the only
+way to change it.
+
 `audio_io::headphones_in_use` answers that. It runs `pactl --format=json info` and
 `pactl --format=json list sinks`, which only read. The default sink counts as
 headphones when its `device.form_factor` is `headset`, `headphone` or `hands-free`, or
@@ -612,6 +619,7 @@ The engine looks for a runtime folder and the model files.
 | Setting | Meaning |
 | --- | --- |
 | `VOYAGER_OMNI_DIR` | The runtime folder. Defaults to `voyager/voice/omni` in the user cache folder. |
+| `VOYAGER_VOICE_TALK_OVER` | Whether speech can stop a reply, as `auto`, `on` or `off`. Defaults to `auto`. [Talking over Voyager](#talking-over-voyager) describes it. |
 | `VOYAGER_OMNI_SERVER` | The server program, for a test machine that runs a local llama.cpp build. |
 | `VOYAGER_OMNI_GPU_LAYERS` | How many layers the server puts on a graphics card. Defaults to 0, the CPU build. |
 
