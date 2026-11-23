@@ -9,7 +9,8 @@ pub mod content;
 pub mod context;
 pub mod core;
 mod core_endpoint;
-pub mod core_session;
+#[cfg(test)]
+mod core_session;
 pub mod core_state;
 pub mod diagnostics;
 mod families;
