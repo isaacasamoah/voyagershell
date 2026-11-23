@@ -689,14 +689,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 })?;
             content.backend.as_ref().map(|backend| backend.0.clone())
         })?;
-        native.system.rpc(
-            "terminal.run",
-            json!({
-                "argv":["bash","-c","sleep 600"],
-                "name":"keeper",
-                "no_parent":true,
-                "labels":{"voyager.place":format!("fleet:{}", fleet.0)}
-            }),
+        typed(
+            &first,
+            native,
+            &format!(
+                "hc run --bg --no-parent --name keeper --label voyager.place=fleet:{} bash -c 'sleep 600'",
+                fleet.0
+            ),
         )?;
         let keeper = address(native, "keeper")?;
         native.observe("the keeper program adopted into the Fleet", |seen| {
