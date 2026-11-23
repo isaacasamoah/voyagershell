@@ -10,7 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-const BACKCHANNELS: [&str; 7] = ["yeah", "mm-hm", "uh-huh", "okay", "right", "sure", "got it"];
+const BACKCHANNELS: [&str; 10] = [
+    "yeah", "mm-hm", "mm-hmm", "mhm", "uh-huh", "okay", "ok", "right", "sure", "got it",
+];
 const STOPS: [&str; 6] = ["stop", "wait", "hang on", "hold on", "never mind", "shush"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -164,7 +166,8 @@ mod tests {
     #[test]
     fn a_backchannel_or_a_stop_is_the_whole_utterance_whatever_its_case_and_punctuation() {
         for heard in [
-            "yeah", "Yeah.", " Mm-hm. ", "mm hm", "Uh-huh!", "Okay", "right?", "Sure.", "Got it.",
+            "yeah", "Yeah.", " Mm-hm. ", "mm hm", "Mm-hmm.", "Mhm.", "Uh-huh!", "Okay", "OK.",
+            "right?", "Sure.", "Got it.",
         ] {
             assert_eq!(interjection(heard), Interjection::Backchannel, "{heard}");
         }
@@ -188,6 +191,8 @@ mod tests {
             "Stop the build.",
             "wait for the tests",
             "okay now open the roadmap",
+            "OK, open the logs",
+            "mhm, and the tests",
             "right click it",
         ] {
             assert_eq!(interjection(heard), Interjection::Steer, "{heard}");

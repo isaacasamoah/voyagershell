@@ -438,7 +438,7 @@ but wait, open the logs" is a steer.
 
 | Kind | Whole utterance | What follows |
 | --- | --- | --- |
-| Backchannel | yeah, mm-hm, uh-huh, okay, right, sure, got it | The reply plays again from the start of the piece it was cut in. |
+| Backchannel | yeah, mm-hm, mm-hmm, mhm, uh-huh, okay, ok, right, sure, got it | The reply plays again from the start of the piece it was cut in. |
 | Stop | stop, wait, hang on, hold on, never mind, shush | The reply stays stopped and nothing is sent. |
 | Steer | Anything else | The words go to Voyager and the reply stays stopped. |
 
