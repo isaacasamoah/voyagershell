@@ -86,8 +86,10 @@ These definitions describe what each user action does.
 - **A Vessel's or Portal's program exiting.** When a terminal program that this
   owner saw live finishes with reason `exited`, the owner deletes its placement,
   its Vessel and its leaf in saved layouts (`families::terminal::close_exited`),
-  so a typed exit leaves no record. Closing the panel by hand is different. It
-  hides the placement and keeps the Vessel for reopening. A program that ended
+  so a typed exit leaves no record. A program stopped from outside, with reason
+  `killed`, is not closed at runtime, and its placement and Vessel stay. Closing
+  the panel by hand is different. It hides the placement and keeps the Vessel
+  for reopening. A program that ended
   while the app was closed, for example after a computer restart, leaves a
   Vessel the user opened with its placement, and the next launch opens a plain
   shell there (`families::terminal::prepare_reopen`). An adopted Vessel whose
