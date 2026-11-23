@@ -1270,7 +1270,8 @@ a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
 step. It records the dock, runs the inspect and gives the keyboard from that
 request's completion, because a focus asked for while the canvas renders does
 not reach the terminal. `acceptDockResult`, beside it, runs at each render. It
-accepts the avatar's reply as a snapshot. Then, when no request is preparing and
+accepts the avatar's reply as a snapshot. `followDockNotice` runs from the
+notice handler and again when a request ends. When no request is preparing and
 the notice's dock revision differs from the last one recorded, it runs
 `followDock` once. Every dock follows this one way, from the avatar, an agent or
 the `voyager` command. A second dock on the Vessel the canvas already shows
