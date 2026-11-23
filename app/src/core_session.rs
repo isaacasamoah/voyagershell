@@ -172,6 +172,76 @@ mod tests {
         assert_eq!(ambient(|_| false), None);
     }
 
+    fn private_runtime() -> std::path::PathBuf {
+        let base = std::env::var_os("VOYAGER_TEST_RUNTIME_BASE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let runtime = base.join(format!(
+            "vgd{}-{}",
+            std::process::id(),
+            SERIAL.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&runtime).unwrap();
+        std::fs::set_permissions(
+            &runtime,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .unwrap();
+        runtime
+    }
+
+    #[test]
+    fn delayed_connect_probe() {
+        if std::env::var_os("VOYAGER_GUARD_DELAY_PROBE").is_none() {
+            return;
+        }
+        let mut guard = SessionGuard::new("voyager-guard-delay");
+        let session = guard.session().to_owned();
+        guard.open("/tmp");
+        drop(guard);
+        thread::sleep(Duration::from_secs(3));
+        let leaked = running(&session);
+        if leaked {
+            let mut core = Core::connect(&session).unwrap();
+            let _ = core.server_stop();
+            let _ = core.close();
+        }
+        assert!(
+            !leaked,
+            "a first connection that landed late left its Core running"
+        );
+    }
+
+    #[test]
+    fn a_first_connection_that_lands_late_leaves_no_core_behind() {
+        let runtime = private_runtime();
+        let script = runtime.join("slow-first-connect.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nif mkdir \"$VOYAGER_DELAY_MARK\" 2>/dev/null; then sleep 2; fi\nexec \"$VOYAGER_REAL_HC\" \"$@\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let real = std::env::var_os("VOYAGER_HC").unwrap_or_else(|| "hc".into());
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "core_session::tests::delayed_connect_probe"])
+            .env("VOYAGER_GUARD_DELAY_PROBE", "1")
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .env("VOYAGER_HC", &script)
+            .env("VOYAGER_REAL_HC", real)
+            .env("VOYAGER_DELAY_MARK", runtime.join("first-connect"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let _ = std::fs::remove_dir_all(&runtime);
+    }
+
     #[test]
     fn a_run_leaves_no_core_behind_whether_it_passes_or_fails() {
         let mut passed = SessionGuard::new("voyager-guard-check-pass");
