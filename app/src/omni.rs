@@ -1,5 +1,5 @@
 use crate::{
-    audio_io::{base64, parse_wav, samples_wav},
+    audio_io::{base64, parse_wav, plain_level, samples_wav},
     client::{Client, ProgramReply, ProgramRequest, ProgramSpec},
     http1,
     speech::{
@@ -37,6 +37,9 @@ const FIT_LEAD: Duration = Duration::from_millis(1288);
 const FIT_PER_CHARACTER: Duration = Duration::from_millis(56);
 const FIT_MARGIN_TENTHS: u32 = 15;
 const RENDERS_PER_CLIP: usize = 5;
+const ONSET_FRAME: Duration = Duration::from_millis(5);
+const ONSET_LEVEL: f32 = 100.0;
+const LEAD_PAD: Duration = Duration::from_millis(145);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
@@ -459,7 +462,9 @@ impl Clips {
     }
 
     pub fn load(&self, phrase: Phrase) -> Option<Clip> {
-        parse_wav(&fs::read(self.file(phrase)).ok()?).filter(|clip| fits(phrase, clip))
+        parse_wav(&fs::read(self.file(phrase)).ok()?)
+            .map(trimmed)
+            .filter(|clip| fits(phrase, clip))
     }
 
     pub fn store(&self, phrase: Phrase, clip: &Clip) -> std::io::Result<()> {
@@ -481,13 +486,36 @@ fn bytes_within(longest: Duration, rate: u32) -> usize {
     usize::try_from(bytes).unwrap_or(usize::MAX)
 }
 
+fn trimmed(clip: Clip) -> Clip {
+    let frame = bytes_within(ONSET_FRAME, clip.rate).max(2) & !1;
+    let onset = clip.pcm.chunks_exact(frame).position(|bytes| {
+        let samples: Vec<i16> = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| i16::from_le_bytes(*pair))
+            .collect();
+        plain_level(&samples) > ONSET_LEVEL
+    });
+    let start = onset.map_or(0, |frames| {
+        (frames * frame).saturating_sub(bytes_within(LEAD_PAD, clip.rate)) & !1
+    });
+    if start == 0 {
+        return clip;
+    }
+    Clip {
+        rate: clip.rate,
+        pcm: clip.pcm[start..].to_vec(),
+    }
+}
+
 fn fits(phrase: Phrase, clip: &Clip) -> bool {
     clip.pcm.len() <= bytes_within(longest(phrase.words()), clip.rate)
 }
 
 fn render_fitting(speaking: &dyn Speaking, phrase: Phrase) -> Result<Option<Clip>, Fault> {
     for _ in 0..RENDERS_PER_CLIP {
-        let clip = speaking.render(phrase)?;
+        let clip = trimmed(speaking.render(phrase)?);
         if fits(phrase, &clip) {
             return Ok(Some(clip));
         }
@@ -926,5 +954,59 @@ mod tests {
         );
         assert!(!fits(Phrase::Hum, &clip));
         assert!(server.join().unwrap() < 24_000 * 2 * 41);
+    }
+
+    fn opening(silent_ms: u64, soft_ms: u64, loud_ms: u64) -> Clip {
+        let samples = |millis: u64, level: i16| vec![level; usize::try_from(millis * 24).unwrap()];
+        let pcm: Vec<u8> = [
+            samples(silent_ms, 0),
+            samples(soft_ms, 60),
+            samples(loud_ms, 2_000),
+        ]
+        .concat()
+        .into_iter()
+        .flat_map(i16::to_le_bytes)
+        .collect();
+        Clip { rate: 24_000, pcm }
+    }
+
+    #[test]
+    fn a_clip_keeps_the_pad_before_its_first_sound_and_drops_the_silence_before_that() {
+        let clip = trimmed(opening(300, 40, 500));
+        assert_eq!(clip.pcm.len(), opening(105, 40, 500).pcm.len());
+        assert_eq!(clip, opening(105, 40, 500));
+    }
+
+    #[test]
+    fn a_clip_whose_sound_starts_within_the_pad_is_kept_whole() {
+        assert_eq!(trimmed(opening(100, 40, 500)), opening(100, 40, 500));
+        assert_eq!(trimmed(opening(1_000, 0, 0)), opening(1_000, 0, 0));
+    }
+
+    #[test]
+    fn trimming_twice_is_trimming_once() {
+        let once = trimmed(opening(340, 95, 500));
+        assert_eq!(trimmed(once.clone()), once);
+    }
+
+    #[test]
+    fn a_kept_clip_with_a_long_silence_before_its_sound_is_trimmed_on_load_and_when_rendered() {
+        let clips = kept_clips("lead");
+        clips.store(Phrase::Asking, &opening(340, 20, 900)).unwrap();
+        assert_eq!(clips.load(Phrase::Asking), Some(opening(125, 20, 900)));
+        struct Late;
+        impl Speaking for Late {
+            fn render(&self, _: Phrase) -> Result<Clip, Fault> {
+                Ok(opening(260, 10, 600))
+            }
+            fn speak(&self, _: Piece<'_>) -> Result<Clip, Fault> {
+                Err(Fault::Unavailable("unused".into()))
+            }
+        }
+        let fresh = kept_clips("lead-render");
+        let kept = Kept::default();
+        prepare_clips(&Late, &fresh, &kept).unwrap();
+        assert_eq!(kept.get(Phrase::Hum), Some(opening(135, 10, 600)));
+        assert_eq!(fresh.load(Phrase::Hum), Some(opening(135, 10, 600)));
     }
 }
