@@ -176,17 +176,13 @@ mod tests {
     fn a_run_leaves_no_core_behind_whether_it_passes_or_fails() {
         let mut passed = SessionGuard::new("voyager-guard-check-pass");
         let passed_session = passed.session().to_owned();
-        let failed_session = {
-            let mut failed = SessionGuard::new("voyager-guard-check-fail");
-            let session = failed.session().to_owned();
-            let outcome = catch_unwind(AssertUnwindSafe(|| {
-                start(&mut failed);
-                panic!("deliberate failure");
-            }));
-            assert!(outcome.is_err());
-            drop(failed);
-            session
-        };
+        let mut failed = SessionGuard::new("voyager-guard-check-fail");
+        let failed_session = failed.session().to_owned();
+        let outcome = catch_unwind(AssertUnwindSafe(move || {
+            start(&mut failed);
+            panic!("deliberate failure");
+        }));
+        assert!(outcome.is_err());
         start(&mut passed);
         drop(passed);
         assert!(
