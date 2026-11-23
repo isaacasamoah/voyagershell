@@ -638,11 +638,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .context("The layout has no selected Fleet")?;
         let onto = Target::name(&RenameTarget::Fleet { id: fleet.clone() });
         native.drag(&Target::AVATAR, &onto)?;
+        let dropped = native.picture()?;
         native.settle(
             "the avatar docked on the Fleet",
             |seen| (seen.document.context == Context::Fleet { id: fleet.clone() }).then_some(()),
             |_| true,
         )?;
+        native.observe("a picture drawn after the drop", |seen| {
+            (seen.frame.sequence > dropped).then_some(())
+        })?;
         let requests = native.window_requests()?.len();
         let arm = native.system.arm_core(SAVE, Fault::Hold { ms: HELD_MS })?;
         native.drag(&Target::AVATAR, &Target::WORKSPACE_DOCK)?;

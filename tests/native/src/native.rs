@@ -1028,6 +1028,12 @@ impl Native {
         Ok(glance(frame.as_ref(), saved.as_ref(), read))
     }
 
+    pub fn picture(&self) -> Result<u64> {
+        inspection::read(&self.inspection())?
+            .map(|frame| frame.sequence)
+            .context("The app has drawn no picture")
+    }
+
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {
         let reply = self.system.watch("doc.get", json!({"name":DOCUMENT}))?;
         if reply["value"].is_null() {
