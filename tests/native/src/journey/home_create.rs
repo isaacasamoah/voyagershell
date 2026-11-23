@@ -11,8 +11,8 @@ use voyager_contract::{
 
 cases! {
     CreatedWhilePreparingIsDrawn => "created-while-preparing-is-drawn",
-    CreatedDuringAvatarHomeClickIsDrawn => "created-during-avatar-home-click-is-drawn",
     HomeClickThenCreateDrawsTheVessel => "created-right-after-a-home-click-is-drawn",
+    CreatedDuringAvatarHomeClickIsDrawn => "created-during-avatar-home-click-is-drawn",
 }
 
 pub const CONTROL: Case = Case::CreatedWhilePreparingIsDrawn;
@@ -226,6 +226,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             native.click(&Target::HOME)
         })
     })?;
+    cases.check(native, Case::HomeClickThenCreateDrawsTheVessel, |native| {
+        show_fleet(native)?;
+        create_at_once(native, "home-create-at-once")
+    })?;
     cases.check(
         native,
         Case::CreatedDuringAvatarHomeClickIsDrawn,
@@ -247,10 +251,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             })
         },
     )?;
-    cases.check(native, Case::HomeClickThenCreateDrawsTheVessel, |native| {
-        show_fleet(native)?;
-        create_at_once(native, "home-create-at-once")
-    })
+    Ok(())
 }
 
 #[cfg(test)]
