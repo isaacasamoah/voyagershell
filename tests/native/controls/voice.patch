@@ -1,11 +1,12 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+index 95844d20..cf401ddf 100644
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -435,6 +435,7 @@
-             }
-         };
-         owner.set(Phase::Ready, None);
-+        let _open = audio.microphone();
-         let floor = Arc::new(Floor::default());
-         let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
-         voice_speaker::spawn(voice_speaker::Parts {
+@@ -514,6 +514,7 @@ where
+         },
+     );
+     owner.set(Phase::Ready, None);
++    let _open = ready.audio.microphone();
+     let floor = Arc::new(Floor::default());
+     let (status, stopped, listening) = (owner.clone(), owner.clone(), owner.clone());
+     voice_speaker::spawn(voice_speaker::Parts {
