@@ -413,10 +413,11 @@ deadline. `Native::resize_window` resizes the owned window, and
 move every 4 ms, without waiting on the app between moves, and returns the wall
 time of each move. `Terminal::widths` reads how many cells of ink each row of a
 terminal's pixels reaches, after masking the avatar and an optional extra area.
-A row reads 0, unknown, when a masked pixel lies to the right of its last ink,
-because its end could be hidden. Its unit test checks a drawn row, a second
-row, a row whose end could be under the mask and a row whose ink reaches past
-it.
+It searches only the grid's columns, because the look also masks the padding
+around them. A row reads unknown when a masked pixel in those columns lies to
+the right of its last ink, because its end could be hidden. Its unit test
+checks a drawn row, a second row, a row whose end could be under the mask, a
+row whose ink reaches past it and both rows with the padding masked.
 
 The `avatar-drag` journey proves that a held avatar follows the pointer under
 load, that terminals wait for the drag without losing output, and that a drag

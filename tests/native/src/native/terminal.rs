@@ -716,10 +716,13 @@ fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<Option<u16>>> {
             let top = usize::try_from(cell.y - look.region.y)?;
             let bottom = (top + usize::from(cell.height)).min(rows.len());
             let band = rows.get(top..bottom).unwrap_or_default();
+            let width = usize::from(cell.width);
+            let end = left + usize::from(grid.columns) * width;
             let rightmost = |found: &dyn Fn(&[u8]) -> bool| {
                 band.iter()
                     .filter_map(|line| {
-                        line.as_chunks::<4>()
+                        line.get(left * 4..(end * 4).min(line.len()))?
+                            .as_chunks::<4>()
                             .0
                             .iter()
                             .rposition(|pixel| found(pixel))
@@ -731,12 +734,9 @@ fn widths(look: &Pixels, grid: &Grid) -> Result<Vec<Option<u16>>> {
             if hidden.is_some_and(|hidden| right.is_none_or(|right| right < hidden)) {
                 return Ok(None);
             }
-            Ok(Some(right.filter(|right| *right >= left).map_or(
-                0,
-                |right| {
-                    u16::try_from((right - left) / usize::from(cell.width) + 1).unwrap_or(u16::MAX)
-                },
-            )))
+            Ok(Some(right.map_or(0, |right| {
+                u16::try_from(right / width + 1).unwrap_or(u16::MAX)
+            })))
         })
         .collect()
 }
@@ -1012,7 +1012,7 @@ mod tests {
             height: 26,
         });
         assert_eq!(widths(&hidden, &grid).unwrap(), vec![Some(2), None]);
-        let mut beside = Pixels::new(grid.area, bgrx);
+        let mut beside = Pixels::new(grid.area, bgrx.clone());
         beside.mask(Geometry {
             x: 20,
             y: 26,
@@ -1020,6 +1020,11 @@ mod tests {
             height: 26,
         });
         assert_eq!(widths(&beside, &grid).unwrap(), vec![Some(2), Some(6)]);
+        let mut padded = Pixels::new(grid.area, bgrx);
+        for edge in padding(grid.area, grid.inset) {
+            padded.mask(edge);
+        }
+        assert_eq!(widths(&padded, &grid).unwrap(), vec![Some(2), Some(6)]);
     }
 
     #[test]
