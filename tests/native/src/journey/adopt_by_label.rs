@@ -689,10 +689,23 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 })?;
             content.backend.as_ref().map(|backend| backend.0.clone())
         })?;
+        native.system.rpc(
+            "terminal.run",
+            json!({
+                "argv":["bash","-c","sleep 600"],
+                "name":"keeper",
+                "no_parent":true,
+                "labels":{"voyager.place":format!("fleet:{}", fleet.0)}
+            }),
+        )?;
+        let keeper = address(native, "keeper")?;
+        native.observe("the keeper program adopted into the Fleet", |seen| {
+            bound_to(seen.document, &keeper).map(|placement| placement.id)
+        })?;
         let (_, before) = native.document()?.context("Missing saved layout")?;
         let kept: Vec<Held> = live_adopted(&before, &live_addresses(native)?)
             .into_iter()
-            .filter(|(_, _, address)| address != &finisher)
+            .filter(|(_, _, address)| address == &keeper)
             .collect();
         native.close()?;
         for ended in [&finisher, &own] {
@@ -749,6 +762,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("restarted", &restarted)?
             .observed("kept", &kept)?
             .observed("still", &still)?;
+        native
+            .system
+            .rpc("terminal.kill", json!({"terminal":keeper}))?;
+        native.observe("the keeper Vessel gone once its program ended", |seen| {
+            bound_to(seen.document, &keeper).is_none().then_some(())
+        })?;
         Ok((verdict, Some((placed, finisher, created))))
     })?;
     let Some((placed, finisher, created)) = reopened else {
