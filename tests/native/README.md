@@ -420,12 +420,18 @@ load, that terminals wait for the drag without losing output, and that a drag
 can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
 120 ms rest. The first four cases use the first terminal. Each types a program
 that starts after two seconds, holds the avatar and circles it in the
-terminal's lower right in segments of 25 moves. Between segments it captures
-the terminal with the circle's area masked and reads Core's screen.
+terminal's lower right in segments of 25 moves. Each look at the terminal masks
+the circle's area and the avatar's resting place.
 
-- `still` prints a staircase of about 5 MiB while the avatar circles. It passes
-  when Core's screen changed, the terminal's pixels did not, and no pause
-  between moves reached 120 ms.
+- `still` captures the terminal and reads Core's screen before the hold. It
+  then glides the avatar for 100 segments, about 10 seconds, without stopping,
+  captures the terminal again and reads Core's screen. It passes when Core's
+  screen changed and the terminal's pixels did not. Under load, reading the
+  screen between segments paused the pointer past the rest, which ends the hold
+  by design, so these two cases look only at the start and the end. A run ends
+  inconclusive with fixture blame, never as a pass, when a pause between moves
+  or the end capture reached 120 ms, when the staircase began before the hold
+  or when it had not finished by the end. Rerun such a run.
 - `caught-up` does the same, then holds the avatar still. It passes when the
   terminal draws the program's output while the button is still down, and not
   before 120 ms after the last move. The time to the drawing is recorded, not

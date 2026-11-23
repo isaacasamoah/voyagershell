@@ -30,6 +30,7 @@ const SEGMENT: usize = 25;
 const LAP: usize = 150;
 const SEGMENTS: usize = 120;
 const AFTER: usize = 3;
+const HELD_SEGMENTS: usize = 100;
 const APPROACH: usize = 50;
 const LAPS: usize = 900;
 const CENTRE: (f32, f32) = (1000., 540.);
@@ -52,6 +53,7 @@ struct Orbit {
     reach: (f32, f32),
     start: (i16, i16),
     clear: Geometry,
+    resting: Geometry,
 }
 
 impl Orbit {
@@ -75,6 +77,12 @@ impl Orbit {
                     y: (centre.1 - tall) as i16,
                     width: (2. * wide) as u16,
                     height: (2. * tall) as u16,
+                },
+                resting: Geometry {
+                    x: avatar.x - i16::try_from(avatar.width / 2).unwrap_or(i16::MAX),
+                    y: avatar.y - i16::try_from(avatar.height / 2).unwrap_or(i16::MAX),
+                    width: avatar.width.saturating_mul(2),
+                    height: avatar.height.saturating_mul(2),
                 },
             })
         })
@@ -101,6 +109,7 @@ impl Orbit {
     fn look(&self, native: &Native, terminal: &Terminal) -> Result<Pixels> {
         let mut look = terminal.look(native)?;
         look.mask(self.clear);
+        look.mask(self.resting);
         Ok(look)
     }
 }
@@ -198,6 +207,47 @@ fn circle_until_printed<'a>(
     Ok((held, drag, frozen))
 }
 
+fn circle_through<'a>(
+    native: &'a Native,
+    terminal: &Terminal,
+    orbit: &Orbit,
+) -> Result<(Held<'a>, Drag, Pixels)> {
+    terminal.settled(native, "the terminal before the drag", |_| true)?;
+    let frozen = orbit.look(native, terminal)?;
+    let first_screen = terminal.screen(native)?;
+    ensure!(
+        !first_screen
+            .lines()
+            .any(|line| line.trim_start().starts_with('#')),
+        "The staircase began before the drag, so this run cannot judge the hold; rerun it"
+    );
+    let mut held = native.hold(&Target::AVATAR)?;
+    let mut path = orbit.approach();
+    path.extend((0..HELD_SEGMENTS).flat_map(|index| orbit.segment(index)));
+    let moves = held.glide(&path)?;
+    let look = orbit.look(native, terminal)?;
+    let looked_ms = now_millis().saturating_sub(moves.last().map_or(0, |last| last.at_ms));
+    let screen = terminal.screen(native)?;
+    let longest_pause_ms = longest_pause(&moves);
+    ensure!(
+        under_rest(longest_pause_ms) && under_rest(looked_ms),
+        "The fixture paused the pointer {longest_pause_ms} ms between moves, or looked {looked_ms} ms after the last move, at or past the 120 ms rest, so this run cannot judge the hold; rerun it"
+    );
+    ensure!(
+        stairs_done(&screen),
+        "The staircase did not finish within the drag, so this run cannot judge the hold; rerun it"
+    );
+    let drag = Drag {
+        moves,
+        segments: HELD_SEGMENTS,
+        longest_pause_ms,
+        printed_while_moving: true,
+        pane_changed_while_moving: changed(&frozen, &look).is_some(),
+        core_changed_while_moving: screen != first_screen,
+    };
+    Ok((held, drag, frozen))
+}
+
 fn rested(
     native: &Native,
     terminal: &Terminal,
@@ -219,7 +269,7 @@ fn still(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let (_, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
-    let (held, drag, _) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
+    let (held, drag, _) = circle_through(native, terminal, &orbit)?;
     held.release()?;
     native.keep_window("drag-still")?;
     Verdict::new()
@@ -231,10 +281,6 @@ fn still(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
             "the pane outside the avatar's path stayed as drawn while the avatar moved",
             !drag.pane_changed_while_moving,
         )
-        .expect(
-            "no pause between pointer moves reached the 120 ms rest",
-            under_rest(drag.longest_pause_ms),
-        )
         .observed("drag", &drag)
 }
 
@@ -243,7 +289,7 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let (_, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
-    let (held, drag, frozen) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
+    let (held, drag, frozen) = circle_through(native, terminal, &orbit)?;
     let shown = rested(native, terminal, &orbit, &frozen)?;
     let rested_at = drag.moves.last().map_or(0, |last| last.at_ms);
     let delay = shown.map(|shown| shown.saturating_sub(rested_at));
@@ -266,10 +312,6 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
         .expect(
             "the pane drew it only after the pointer had rested 120 ms",
             delay.is_some_and(|delay| !under_rest(delay)),
-        )
-        .expect(
-            "no pause between pointer moves reached the 120 ms rest",
-            under_rest(drag.longest_pause_ms),
         )
         .observed("rest to drawn ms", delay)?
         .observed("drag", &drag)
