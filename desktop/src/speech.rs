@@ -99,7 +99,7 @@ fn hint(notice: Option<&str>, phase: &Phase) -> String {
         (None, Phase::NoMicrophone) => "Can't hear the microphone".into(),
         (None, Phase::Hearing) => "Listening to what you said…".into(),
         (None, Phase::SpeakingOpen) => "Listening. Talk any time to interrupt.".into(),
-        (None, Phase::Speaking) => "Mic paused while Voyager speaks. Turn on Talk over Voyager in voice settings if you wear headphones.".into(),
+        (None, Phase::Speaking) => "Mic paused while Voyager speaks.".into(),
         (None, Phase::Unavailable(reason)) => reason.clone(),
         _ => String::new(),
     }
@@ -212,7 +212,7 @@ mod tests {
         );
         assert_eq!(
             hint(None, &Phase::Speaking),
-            "Mic paused while Voyager speaks. Turn on Talk over Voyager in voice settings if you wear headphones."
+            "Mic paused while Voyager speaks."
         );
         assert_eq!(hint(None, &Phase::Listening), "Listening");
         assert_eq!(hint(None, &Phase::Hearing), "Listening to what you said…");

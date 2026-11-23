@@ -458,8 +458,7 @@ over off, so the part that was not spoken is in the chat after a cut.
 The control shows `Phase::SpeakingOpen` while a reply plays with the microphone open.
 It is green, and its tooltip reads "Listening. Talk any time to interrupt.". With the
 microphone paused the phase is `Phase::Speaking`. It is grey, and its tooltip reads "Mic
-paused while Voyager speaks. Turn on Talk over Voyager in voice settings if you wear
-headphones.". When speech cuts the reply the control shows Listening, and then Hearing
+paused while Voyager speaks.". When speech cuts the reply the control shows Listening, and then Hearing
 while the engine hears the words. The wave is green only while the microphone is read.
 
 A click-off while a reply plays with the microphone open closes the microphone at once
