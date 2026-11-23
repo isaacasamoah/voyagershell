@@ -173,14 +173,20 @@ mod tests {
     }
 
     fn private_runtime() -> std::path::PathBuf {
-        let base = std::env::var_os("VOYAGER_TEST_RUNTIME_BASE")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        let runtime = base.join(format!(
-            "vgd{}-{}",
+        let runtime = std::path::Path::new("/tmp").join(format!(
+            "vg{:x}-{}",
             std::process::id(),
             SERIAL.fetch_add(1, Ordering::Relaxed)
         ));
+        let longest = runtime
+            .join("herdr-core")
+            .join("voyager-gd-4294967295-99.sock");
+        assert!(
+            longest.as_os_str().len() <= 107,
+            "socket path too long ({} bytes, Core allows 107): {}",
+            longest.as_os_str().len(),
+            longest.display()
+        );
         std::fs::create_dir_all(&runtime).unwrap();
         std::fs::set_permissions(
             &runtime,
@@ -195,7 +201,7 @@ mod tests {
         if std::env::var_os("VOYAGER_GUARD_DELAY_PROBE").is_none() {
             return;
         }
-        let mut guard = SessionGuard::new("voyager-guard-delay");
+        let mut guard = SessionGuard::new("voyager-gd");
         let session = guard.session().to_owned();
         guard.open("/tmp");
         let mark = std::path::PathBuf::from(std::env::var_os("VOYAGER_DELAY_MARK").unwrap());
