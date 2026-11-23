@@ -214,6 +214,41 @@ pub fn word_errors(heard: &str, wanted: &str) -> (usize, usize) {
     (row[heard.len()], wanted.len())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptClip {
+    pub file: String,
+    pub ms: u64,
+}
+
+pub fn kept_clips(native: &Native) -> Result<Vec<KeptClip>> {
+    let clips = native
+        .system
+        .evidence
+        .join("home/.cache/voyager/voice/clips");
+    let mut kept = Vec::new();
+    for folder in fs::read_dir(&clips)
+        .with_context(|| format!("The app kept no clips under {}", clips.display()))?
+    {
+        for entry in fs::read_dir(folder?.path())? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|extension| extension == "wav") {
+                let bytes = fs::metadata(&path)?.len().saturating_sub(HEADER as u64);
+                kept.push(KeptClip {
+                    file: path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default()
+                        .to_owned(),
+                    ms: bytes * 1000 / 2 / u64::from(CLIP_RATE),
+                });
+            }
+        }
+    }
+    kept.sort_by(|left, right| left.file.cmp(&right.file));
+    Ok(kept)
+}
+
 fn clip(home: &Path, key: &str) -> Result<Samples> {
     let clips = home.join(".cache/voyager/voice/clips");
     let folder = fs::read_dir(&clips)

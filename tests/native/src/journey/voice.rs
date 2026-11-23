@@ -211,6 +211,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 )
                 .observed("plantedClip", replanted);
         }
+        let kept = voice::kept_clips(native)?;
         let said = voice::converse(native, &HELLO_HOW_ARE_YOU, "small-talk")?;
         let reply = said.chat.clone().unwrap_or_default();
         let transcript = voice::transcribe(native, "small-talk")?;
@@ -235,6 +236,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )?
             .observed("conversation", json!(said))?
             .observed("plantedClip", replanted)?
+            .observed("keptClips", kept)?
             .observed("speakerHeard", transcript)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {
