@@ -190,11 +190,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     };
     cases.check(native, Case::SmallTalkIsAnswered, |native| {
         let replanted = voice::planted_hum_rendered_again(native)?;
-        if !replanted.replaced {
+        if !(replanted.replaced && replanted.all_kept) {
             return Verdict::new()
                 .expect(
                     "the run-on Mm-hm planted in the clip cache is rendered again before the first turn",
-                    false,
+                    replanted.replaced,
+                )
+                .expect(
+                    "the app marks every clip kept before the first turn",
+                    replanted.all_kept,
                 )
                 .observed("plantedHum", replanted);
         }

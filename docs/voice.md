@@ -529,7 +529,7 @@ engine streams speech while it renders. The first audio arrived 0.12 s after the
 and about 0.08 s of audio followed every 20 ms in 30 renders. A render stops reading as
 soon as its audio passes the limit, about 0.7 s into a run-on "Mm-hm.", and the clip is
 rendered again, at most five times. Five comes from the run-on rate. 20 of 66 renders ran
-on, and 0.30 to the fifth power is about 0.24%. When no render fits, nothing is kept for
+on, and 0.30 to the fifth power is about 0.24%. The trace marks `clips-kept` once every phrase has been read or rendered. When no render fits, nothing is kept for
 that phrase, the app logs "The voice clip mm-hm ran past the length its words allow in 5
 renders, so it is not kept." with the clip's key, voice runs without it, and the next
 launch tries again. Spoken replies are not held to the rule.
