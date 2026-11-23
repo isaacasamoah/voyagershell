@@ -1,31 +1,33 @@
-use crate::speech::{Fault, SpokenText};
+use crate::speech::{Ack, Fault, SpokenText};
 
 pub const CHAT_CONFIDENCE: f64 = 0.99;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Route {
     Chat(SpokenText),
-    Voyager,
+    Voyager(Ack),
 }
 
 #[derive(serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Answer {
     Chat { say: String },
-    Work,
+    Work { ack: Ack },
 }
 
 impl Route {
     pub fn parse(heard: &str, answer: &str, chat_probability: Option<f64>) -> Route {
-        let Ok(Answer::Chat { say }) = serde_json::from_str(answer) else {
-            return Route::Voyager;
+        let say = match serde_json::from_str(answer) {
+            Ok(Answer::Chat { say }) => say,
+            Ok(Answer::Work { ack }) => return Route::Voyager(ack),
+            Err(_) => return Route::Voyager(Ack::None),
         };
         let sure = chat_probability.is_some_and(|chance| chance >= CHAT_CONFIDENCE);
         if !sure || asks_voyager(heard) || has_any(&say, ACTION_WORDS) || has_any(&say, OFFER_WORDS)
         {
-            return Route::Voyager;
+            return Route::Voyager(Ack::None);
         }
-        SpokenText::from_reply(&say).map_or(Route::Voyager, Route::Chat)
+        SpokenText::from_reply(&say).map_or(Route::Voyager(Ack::None), Route::Chat)
     }
 }
 
@@ -59,27 +61,49 @@ pub trait Routing: Send + Sync {
 
 pub const ROUTE_RULE: &str = r#"You are the voice in front of Voyager. Voyager is the person's workspace assistant. It does every action and knows every fact about their work. You only make small talk. Answer in JSON.
 kind "chat": pure small talk that needs nothing from the workspace, such as hello, how are you, thanks, goodbye, okay, can you hear me, are you there, who are you, or a compliment. Put a short friendly reply in "say", in the style of the guide below. Never offer, promise or describe an action, and never state a fact about their work.
-kind "work": everything else. That is any command, any question about the workspace, the build, the crew or progress, any vague "how's it going" or "anything new", asking for help or what you can do, and never mind or cancel. Voyager answers these, so give only the kind.
+kind "work": everything else. That is any command, any question about the workspace, the build, the crew or progress, any vague "how's it going" or "anything new", asking for help or what you can do, and never mind or cancel. Voyager answers these. Also choose "ack", what you say before Voyager answers. "none" for a plain command whose effect they will see, such as open, go, dock, switch, show, maximize, restore, move, put, rename, hide or close, and for never mind, cancel or forget it. "look" for a question, a lookup, a status check or a summary, which takes Voyager a moment. "sure" for a request to tell or ask the crew something, or to start or stop work.
 When you are not sure, it is work."#;
 
-pub const ROUTE_EXAMPLES: [(&str, Option<&str>); 14] = [
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Example {
+    Chat(&'static str),
+    Work(Ack),
+}
+
+pub const ROUTE_EXAMPLES: [(&str, Example); 21] = [
     (
         "Hi, how are you doing today?",
-        Some("I'm good, thanks. You?"),
+        Example::Chat("I'm good, thanks. You?"),
     ),
-    ("Open the Billing fleet.", None),
-    ("Okay, thanks, that's all.", Some("Anytime.")),
-    ("Are the tests passing?", None),
-    ("Can you hear me okay?", Some("Yes, loud and clear.")),
-    ("Could you help me with something?", None),
-    ("Who's this?", Some("I'm Voyager's voice.")),
-    ("What else can you do?", None),
-    ("Good evening.", Some("Evening!")),
-    ("Forget about it.", None),
-    ("Nice one.", Some("Thanks!")),
-    ("How's it going with the crew?", None),
-    ("Cancel the last one.", None),
-    ("Bye for now.", Some("Bye, talk soon.")),
+    ("Open the Billing fleet.", Example::Work(Ack::None)),
+    ("Okay, thanks, that's all.", Example::Chat("Anytime.")),
+    ("Are the tests passing?", Example::Work(Ack::Look)),
+    (
+        "Can you hear me okay?",
+        Example::Chat("Yes, loud and clear."),
+    ),
+    (
+        "Could you help me with something?",
+        Example::Work(Ack::Sure),
+    ),
+    ("Who's this?", Example::Chat("I'm Voyager's voice.")),
+    ("Make the browser bigger.", Example::Work(Ack::None)),
+    ("Show me the Ledger voyage.", Example::Work(Ack::None)),
+    ("Move the logs over to the right.", Example::Work(Ack::None)),
+    ("Call this one Sandbox.", Example::Work(Ack::None)),
+    (
+        "Tell the reviewer to take another pass.",
+        Example::Work(Ack::Sure),
+    ),
+    ("Kick off a fresh build.", Example::Work(Ack::Sure)),
+    ("What changed since lunch?", Example::Work(Ack::Look)),
+    ("What else can you do?", Example::Work(Ack::Look)),
+    ("Good evening.", Example::Chat("Evening!")),
+    ("Forget about it.", Example::Work(Ack::None)),
+    ("Nice one.", Example::Chat("Thanks!")),
+    ("How's it going with the crew?", Example::Work(Ack::Look)),
+    ("Cancel the last one.", Example::Work(Ack::None)),
+    ("Bye for now.", Example::Chat("Bye, talk soon.")),
 ];
 
 pub const CHAT_CLOSING: &str = "For a chat reply, this rule comes before the guide above: never offer to do anything, never ask whether to do something, and never say what you or Voyager will do. Answer the small talk and stop.";
@@ -110,18 +134,21 @@ mod tests {
         for unsure in [Some(0.98), Some(0.0), None] {
             assert_eq!(
                 Route::parse("How are you?", &answer, unsure),
-                Route::Voyager
+                Route::Voyager(Ack::None)
             );
         }
     }
 
     #[test]
-    fn work_goes_to_voyager_whatever_the_probability() {
-        for chance in [None, Some(0.0), Some(1.0)] {
-            assert_eq!(
-                Route::parse("Open the roadmap.", r#"{"kind": "work"}"#, chance),
-                Route::Voyager
-            );
+    fn work_goes_to_voyager_with_its_chosen_acknowledgement_whatever_the_probability() {
+        for ack in Ack::ALL {
+            let answer = serde_json::json!({"kind": "work", "ack": ack.key()}).to_string();
+            for chance in [None, Some(0.0), Some(1.0)] {
+                assert_eq!(
+                    Route::parse("Open the roadmap.", &answer, chance),
+                    Route::Voyager(ack)
+                );
+            }
         }
     }
 
@@ -136,11 +163,14 @@ mod tests {
             r#"{"kind": "chat", "say": "  "}"#,
             r#"{"kind": "chat", "say": "Hi.", "handoff": false}"#,
             r#"{"kind": "work", "say": "Sure."}"#,
+            r#"{"kind": "work"}"#,
+            r#"{"kind": "work", "ack": "maybe"}"#,
+            r#"{"kind": "work", "ack": "look", "say": "Let me check."}"#,
             r#"{"kind": "chat", "say": "Hi"#,
         ] {
             assert_eq!(
                 Route::parse("Hello.", bad, Some(1.0)),
-                Route::Voyager,
+                Route::Voyager(Ack::None),
                 "{bad:?}"
             );
         }
@@ -161,7 +191,7 @@ mod tests {
         ] {
             assert_eq!(
                 Route::parse("How are you?", &chat(promising), Some(1.0)),
-                Route::Voyager,
+                Route::Voyager(Ack::None),
                 "{promising}"
             );
         }
@@ -192,7 +222,7 @@ mod tests {
         ] {
             assert_eq!(
                 Route::parse(heard, &answer, Some(1.0)),
-                Route::Voyager,
+                Route::Voyager(Ack::None),
                 "{heard}"
             );
         }
@@ -200,14 +230,37 @@ mod tests {
 
     #[test]
     fn no_example_teaches_the_voice_to_answer_work_or_promise_an_action() {
-        for (said, say) in ROUTE_EXAMPLES {
-            let Some(say) = say else { continue };
+        for (said, example) in ROUTE_EXAMPLES {
+            let Example::Chat(say) = example else {
+                continue;
+            };
             assert!(
                 matches!(Route::parse(said, &chat(say), Some(1.0)), Route::Chat(_)),
                 "{said}"
             );
         }
-        assert!(ROUTE_EXAMPLES.iter().any(|(_, say)| say.is_none()));
+    }
+
+    #[test]
+    fn the_examples_teach_every_acknowledgement_choice() {
+        for ack in Ack::ALL {
+            assert!(
+                ROUTE_EXAMPLES
+                    .iter()
+                    .any(|(_, example)| *example == Example::Work(ack)),
+                "{ack:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_routing_rule_names_each_choice_the_schema_allows() {
+        for ack in Ack::ALL {
+            assert!(
+                ROUTE_RULE.contains(&format!("\"{}\" for", ack.key())),
+                "{ack:?}"
+            );
+        }
     }
 
     #[test]
@@ -252,7 +305,7 @@ mod tests {
         ] {
             assert_eq!(
                 Route::parse("Hi there.", &chat(offering), Some(1.0)),
-                Route::Voyager,
+                Route::Voyager(Ack::None),
                 "{offering}"
             );
         }
@@ -262,7 +315,7 @@ mod tests {
                 &chat("I hear you. What would you like to do?"),
                 Some(1.0)
             ),
-            Route::Voyager
+            Route::Voyager(Ack::None)
         );
     }
 }

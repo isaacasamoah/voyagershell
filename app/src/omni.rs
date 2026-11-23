@@ -5,7 +5,7 @@ use crate::{
     speech::{
         Clip, Fault, Hearing, Kept, Phrase, Piece, Speaking, Utterance, clean_heard, hearing_prompt,
     },
-    voice_route::{ROUTE_EXAMPLES, Route, Routing, route_prompt},
+    voice_route::{Example, ROUTE_EXAMPLES, Route, Routing, route_prompt},
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -330,49 +330,30 @@ impl Hearing for Omni {
     }
 }
 
-fn answer_text(say: Option<&str>) -> String {
-    match say {
-        Some(say) => json!({"kind": "chat", "say": say}).to_string(),
-        None => json!({"kind": "work"}).to_string(),
+fn answer_text(example: Example) -> String {
+    match example {
+        Example::Chat(say) => json!({"kind": "chat", "say": say}).to_string(),
+        Example::Work(ack) => format!(r#"{{"kind":"work","ack":"{}"}}"#, ack.key()),
     }
 }
 
 fn route_messages(heard: &str) -> Value {
     let mut messages = vec![json!({"role": "system", "content": route_prompt()})];
-    for (said, say) in ROUTE_EXAMPLES {
+    for (said, example) in ROUTE_EXAMPLES {
         messages.push(json!({"role": "user", "content": said}));
-        messages.push(json!({"role": "assistant", "content": answer_text(say)}));
+        messages.push(json!({"role": "assistant", "content": answer_text(example)}));
     }
     messages.push(json!({"role": "user", "content": heard}));
     Value::Array(messages)
 }
 
-fn route_body(heard: &str) -> Value {
-    json!({
-        "temperature": 0,
-        "max_tokens": 60,
-        "logprobs": true,
-        "top_logprobs": 8,
-        "response_format": {"type": "json_schema", "json_schema": {
-            "name": "route",
-            "strict": true,
-            "schema": {"anyOf": [
-                {
-                    "type": "object",
-                    "properties": {"kind": {"enum": ["work"]}},
-                    "required": ["kind"],
-                    "additionalProperties": false
-                },
-                {
-                    "type": "object",
-                    "properties": {"kind": {"enum": ["chat"]}, "say": {"type": "string"}},
-                    "required": ["kind", "say"],
-                    "additionalProperties": false
-                }
-            ]}
-        }},
-        "messages": route_messages(heard)
-    })
+const ROUTE_FORMAT: &str = r#"{"type":"json_schema","json_schema":{"name":"route","strict":true,"schema":{"anyOf":[{"type":"object","properties":{"kind":{"enum":["work"]},"ack":{"enum":["none","look","sure"]}},"required":["kind","ack"],"additionalProperties":false},{"type":"object","properties":{"kind":{"enum":["chat"]},"say":{"type":"string"}},"required":["kind","say"],"additionalProperties":false}]}}}"#;
+
+fn route_body(heard: &str) -> String {
+    format!(
+        r#"{{"temperature":0,"max_tokens":60,"logprobs":true,"top_logprobs":8,"response_format":{ROUTE_FORMAT},"messages":{}}}"#,
+        route_messages(heard)
+    )
 }
 
 fn chat_probability(answer: &Value) -> Option<f64> {
@@ -400,7 +381,7 @@ fn chat_probability(answer: &Value) -> Option<f64> {
 
 impl Routing for Omni {
     fn route(&self, heard: &str) -> Result<Route, Fault> {
-        let body = route_body(heard).to_string();
+        let body = route_body(heard);
         let response = http1::request(
             self.port,
             "POST",

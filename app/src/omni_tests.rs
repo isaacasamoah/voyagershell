@@ -1,4 +1,5 @@
 use super::*;
+use crate::speech::Ack;
 use std::sync::Mutex;
 
 fn settings(root: &Path) -> Settings {
@@ -48,8 +49,8 @@ fn an_answer_without_logprobs_has_no_probability() {
 }
 
 #[test]
-fn a_work_answer_has_no_room_for_words() {
-    let body = route_body("Open the roadmap.");
+fn a_work_answer_has_no_room_for_words_only_a_closed_acknowledgement() {
+    let body: Value = serde_json::from_str(&route_body("Open the roadmap.")).unwrap();
     let shapes = body["response_format"]["json_schema"]["schema"]["anyOf"]
         .as_array()
         .unwrap();
@@ -57,9 +58,25 @@ fn a_work_answer_has_no_room_for_words() {
         .iter()
         .find(|shape| shape["properties"]["kind"]["enum"][0] == "work")
         .unwrap();
-    assert_eq!(work["required"], json!(["kind"]));
+    assert_eq!(work["required"], json!(["kind", "ack"]));
     assert_eq!(work["additionalProperties"], json!(false));
-    assert_eq!(work["properties"].as_object().unwrap().len(), 1);
+    assert_eq!(work["properties"].as_object().unwrap().len(), 2);
+    assert_eq!(
+        work["properties"]["ack"]["enum"],
+        json!(Ack::ALL.map(Ack::key))
+    );
+    assert_eq!(body["messages"], route_messages("Open the roadmap."));
+    assert_eq!(body["temperature"], 0);
+}
+
+#[test]
+fn the_model_writes_the_kind_before_the_acknowledgement() {
+    let body = route_body("Open the roadmap.");
+    assert!(body.contains(r#""properties":{"kind":{"enum":["work"]},"ack":"#));
+    assert_eq!(
+        answer_text(Example::Work(Ack::Look)),
+        r#"{"kind":"work","ack":"look"}"#
+    );
 }
 
 #[test]
@@ -69,7 +86,7 @@ fn the_route_request_is_the_prompt_then_the_examples_then_the_words() {
     assert_eq!(list.len(), 2 + 2 * ROUTE_EXAMPLES.len());
     assert_eq!(list[0]["content"], route_prompt());
     assert_eq!(list[1]["content"], ROUTE_EXAMPLES[0].0);
-    assert_eq!(list[4]["content"], r#"{"kind":"work"}"#);
+    assert_eq!(list[4]["content"], r#"{"kind":"work","ack":"none"}"#);
     assert_eq!(list[list.len() - 1]["content"], "Hello.");
 }
 
@@ -140,7 +157,7 @@ fn clips_are_kept_once_and_read_back() {
         projector: root.join("p"),
     };
     let clips = Clips::new(&settings, &files);
-    assert!(clips.load(Phrase::Asking).is_none());
+    assert!(clips.load(Phrase::LetMeLook).is_none());
     let rendered = Mutex::new(Vec::new());
     struct Counting<'a>(&'a Mutex<Vec<Phrase>>);
     impl Speaking for Counting<'_> {
@@ -252,14 +269,14 @@ fn kept_clips(name: &str) -> Clips {
 }
 
 struct Renders {
-    hum: Mutex<Vec<u64>>,
+    one_sec: Mutex<Vec<u64>>,
     rendered: Mutex<Vec<Phrase>>,
 }
 
 impl Renders {
-    fn hum(lengths: &[u64]) -> Self {
+    fn one_sec(lengths: &[u64]) -> Self {
         Self {
-            hum: Mutex::new(lengths.iter().rev().copied().collect()),
+            one_sec: Mutex::new(lengths.iter().rev().copied().collect()),
             rendered: Mutex::default(),
         }
     }
@@ -278,7 +295,7 @@ impl Speaking for Renders {
     fn render(&self, phrase: Phrase) -> Result<Clip, Fault> {
         self.rendered.lock().unwrap().push(phrase);
         let millis = match phrase {
-            Phrase::Hum => self.hum.lock().unwrap().pop().unwrap_or(28_880),
+            Phrase::OneSec => self.one_sec.lock().unwrap().pop().unwrap_or(28_880),
             _ => 1_000,
         };
         Ok(lasting(millis))
@@ -313,39 +330,39 @@ fn the_length_rule_holds_every_measured_good_render_and_no_measured_run_on() {
 #[test]
 fn a_run_on_render_is_rendered_again_and_only_the_one_that_fits_is_kept() {
     let clips = kept_clips("run-on");
-    let renders = Renders::hum(&[28_880, 1_120]);
+    let renders = Renders::one_sec(&[28_880, 1_120]);
     let kept = Kept::default();
     prepare_clips(&renders, &clips, &kept).unwrap();
-    assert_eq!(renders.of(Phrase::Hum), 2);
-    assert_eq!(kept.get(Phrase::Hum), Some(lasting(1_120)));
-    assert_eq!(clips.load(Phrase::Hum), Some(lasting(1_120)));
+    assert_eq!(renders.of(Phrase::OneSec), 2);
+    assert_eq!(kept.get(Phrase::OneSec), Some(lasting(1_120)));
+    assert_eq!(clips.load(Phrase::OneSec), Some(lasting(1_120)));
 }
 
 #[test]
 fn a_kept_run_on_clip_is_dropped_on_load_and_rendered_again() {
     let clips = kept_clips("cached-run-on");
-    clips.store(Phrase::Hum, &lasting(28_880)).unwrap();
-    assert_eq!(clips.load(Phrase::Hum), None);
-    let renders = Renders::hum(&[960]);
+    clips.store(Phrase::OneSec, &lasting(28_880)).unwrap();
+    assert_eq!(clips.load(Phrase::OneSec), None);
+    let renders = Renders::one_sec(&[960]);
     let kept = Kept::default();
     prepare_clips(&renders, &clips, &kept).unwrap();
-    assert_eq!(renders.of(Phrase::Hum), 1);
-    assert_eq!(clips.load(Phrase::Hum), Some(lasting(960)));
+    assert_eq!(renders.of(Phrase::OneSec), 1);
+    assert_eq!(clips.load(Phrase::OneSec), Some(lasting(960)));
 }
 
 #[test]
 fn a_phrase_that_never_fits_keeps_nothing_and_every_other_clip_is_kept() {
     let clips = kept_clips("never-fits");
-    let renders = Renders::hum(&[]);
+    let renders = Renders::one_sec(&[]);
     let kept = Kept::default();
     prepare_clips(&renders, &clips, &kept).unwrap();
-    assert_eq!(renders.of(Phrase::Hum), RENDERS_PER_CLIP);
-    assert_eq!(kept.get(Phrase::Hum), None);
-    assert_eq!(clips.load(Phrase::Hum), None);
+    assert_eq!(renders.of(Phrase::OneSec), RENDERS_PER_CLIP);
+    assert_eq!(kept.get(Phrase::OneSec), None);
+    assert_eq!(clips.load(Phrase::OneSec), None);
     assert!(
         Phrase::ALL
             .into_iter()
-            .filter(|phrase| *phrase != Phrase::Hum)
+            .filter(|phrase| *phrase != Phrase::OneSec)
             .all(|phrase| kept.get(phrase).is_some() && clips.load(phrase).is_some())
     );
 }
@@ -396,15 +413,15 @@ fn endless_speech() -> (u16, std::thread::JoinHandle<usize>) {
 #[test]
 fn a_clip_render_that_runs_on_is_cut_once_it_passes_the_clip_limit() {
     let (port, server) = endless_speech();
-    let clip = Omni::new(port).render(Phrase::Hum).unwrap();
-    let limit = bytes_within(longest(Phrase::Hum.words()), 24_000);
+    let clip = Omni::new(port).render(Phrase::OneSec).unwrap();
+    let limit = bytes_within(longest(Phrase::OneSec.words()), 24_000);
     assert!(clip.pcm.len() > limit, "{} <= {limit}", clip.pcm.len());
     assert!(
         clip.pcm.len() <= limit + 3_840,
         "{} past {limit}",
         clip.pcm.len()
     );
-    assert!(!fits(Phrase::Hum, &clip));
+    assert!(!fits(Phrase::OneSec, &clip));
     assert!(server.join().unwrap() < 24_000 * 2 * 41);
 }
 
@@ -444,8 +461,10 @@ fn trimming_twice_is_trimming_once() {
 #[test]
 fn a_kept_clip_with_a_long_silence_before_its_sound_is_trimmed_on_load_and_when_rendered() {
     let clips = kept_clips("lead");
-    clips.store(Phrase::Asking, &opening(340, 20, 900)).unwrap();
-    assert_eq!(clips.load(Phrase::Asking), Some(opening(125, 20, 900)));
+    clips
+        .store(Phrase::LetMeLook, &opening(340, 20, 900))
+        .unwrap();
+    assert_eq!(clips.load(Phrase::LetMeLook), Some(opening(125, 20, 900)));
     struct Late;
     impl Speaking for Late {
         fn render(&self, _: Phrase) -> Result<Clip, Fault> {
@@ -458,6 +477,6 @@ fn a_kept_clip_with_a_long_silence_before_its_sound_is_trimmed_on_load_and_when_
     let fresh = kept_clips("lead-render");
     let kept = Kept::default();
     prepare_clips(&Late, &fresh, &kept).unwrap();
-    assert_eq!(kept.get(Phrase::Hum), Some(opening(135, 10, 600)));
-    assert_eq!(fresh.load(Phrase::Hum), Some(opening(135, 10, 600)));
+    assert_eq!(kept.get(Phrase::OneSec), Some(opening(135, 10, 600)));
+    assert_eq!(fresh.load(Phrase::OneSec), Some(opening(135, 10, 600)));
 }

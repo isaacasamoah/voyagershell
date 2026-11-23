@@ -38,13 +38,12 @@ pub struct Mark {
 #[derive(Debug, Serialize)]
 pub struct Conversation {
     pub heard: Option<String>,
+    pub choice: Option<String>,
     pub acknowledgement: Option<String>,
-    pub hummed: bool,
     pub chat: Option<String>,
-    pub spoken: Score,
+    pub spoken: Option<Score>,
     pub first_sound_after_capture_ms: i64,
     pub capture_began_ms: u64,
-    pub started_before_heard: bool,
     pub sent: bool,
     pub spoken_texts: Vec<String>,
     pub speech_after_capture_ms: Option<i64>,
@@ -215,6 +214,41 @@ pub fn word_errors(heard: &str, wanted: &str) -> (usize, usize) {
     (row[heard.len()], wanted.len())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptClip {
+    pub file: String,
+    pub ms: u64,
+}
+
+pub fn kept_clips(native: &Native) -> Result<Vec<KeptClip>> {
+    let clips = native
+        .system
+        .evidence
+        .join("home/.cache/voyager/voice/clips");
+    let mut kept = Vec::new();
+    for folder in fs::read_dir(&clips)
+        .with_context(|| format!("The app kept no clips under {}", clips.display()))?
+    {
+        for entry in fs::read_dir(folder?.path())? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|extension| extension == "wav") {
+                let bytes = fs::metadata(&path)?.len().saturating_sub(HEADER as u64);
+                kept.push(KeptClip {
+                    file: path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default()
+                        .to_owned(),
+                    ms: bytes * 1000 / 2 / u64::from(CLIP_RATE),
+                });
+            }
+        }
+    }
+    kept.sort_by(|left, right| left.file.cmp(&right.file));
+    Ok(kept)
+}
+
 fn clip(home: &Path, key: &str) -> Result<Samples> {
     let clips = home.join(".cache/voyager/voice/clips");
     let folder = fs::read_dir(&clips)
@@ -304,9 +338,15 @@ fn openings_in(clips: &Path) -> Result<Vec<ClipOpening>> {
     Ok(openings)
 }
 
-const ACKNOWLEDGEMENT_WORDS: [(&str, &str); 3] = [
-    ("asking", "Asking Voyager."),
-    ("okay-asking", "Okay, asking Voyager."),
+const ACKNOWLEDGEMENT_WORDS: [(&str, &str); 9] = [
+    ("one-sec", "One sec."),
+    ("let-me-look", "Let me look."),
+    ("checking", "Checking."),
+    ("okay-checking", "Okay, checking."),
+    ("sure", "Sure."),
+    ("okay", "Okay."),
+    ("got-it", "Got it."),
+    ("sure-thing", "Sure thing."),
     ("queued", "Queued for Voyager."),
 ];
 
@@ -418,29 +458,29 @@ pub fn without_capture(native: &Native, during: Owed) -> Result<Vec<Vec<String>>
     Ok(seen)
 }
 
-const HUM: &str = "mm-hm";
-const HUM_WORDS: &str = "Mm-hm.";
+const PLANTED_KEY: &str = "one-sec";
+const PLANTED_WORDS: &str = "One sec.";
 const ENGINE_MODEL: &str = "LFM3-Omni-2B-Q4_K_M.gguf";
-const PLANTED_HUM_MS: usize = 28_880;
+const PLANTED_MS: usize = 28_880;
 const PLANTED_TONE_HZ: f64 = 220.0;
 const PLANTED_LEVEL: f64 = 3000.0;
 
-fn planted_hum(home: &Path, engine: &Path) -> Result<PathBuf> {
+fn planted_clip(home: &Path, engine: &Path) -> Result<PathBuf> {
     let size = fs::metadata(engine.join(ENGINE_MODEL))
         .with_context(|| format!("The engine folder holds no {ENGINE_MODEL}"))?
         .len();
-    let hash: String = Sha256::digest(HUM_WORDS.as_bytes())[..4]
+    let hash: String = Sha256::digest(PLANTED_WORDS.as_bytes())[..4]
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();
     Ok(home
         .join(".cache/voyager/voice/clips")
         .join(format!("omni-{size}-female"))
-        .join(format!("{HUM}-{hash}.wav")))
+        .join(format!("{PLANTED_KEY}-{hash}.wav")))
 }
 
 fn planted_samples() -> Vec<i16> {
-    let count = CLIP_RATE as usize * PLANTED_HUM_MS / 1000;
+    let count = CLIP_RATE as usize * PLANTED_MS / 1000;
     (0..count)
         .map(|index| {
             let phase =
@@ -450,11 +490,15 @@ fn planted_samples() -> Vec<i16> {
         .collect()
 }
 
-pub fn plant_run_on_hum(home: &Path, engine: &Path) -> Result<()> {
-    let path = planted_hum(home, engine)?;
+pub fn plant_run_on_clip(home: &Path, engine: &Path) -> Result<()> {
+    let path = planted_clip(home, engine)?;
     fs::create_dir_all(path.parent().context("The planted clip has no folder")?)?;
-    fs::write(&path, wav(CLIP_RATE, &planted_samples()))
-        .with_context(|| format!("The run-on Mm-hm was not planted at {}", path.display()))
+    fs::write(&path, wav(CLIP_RATE, &planted_samples())).with_context(|| {
+        format!(
+            "The run-on One sec. clip was not planted at {}",
+            path.display()
+        )
+    })
 }
 
 #[derive(Serialize)]
@@ -466,12 +510,12 @@ pub struct Replanted {
     pub planted_ms: usize,
 }
 
-pub fn planted_hum_rendered_again(native: &Native) -> Result<Replanted> {
+pub fn planted_clip_rendered_again(native: &Native) -> Result<Replanted> {
     let engine = native
         .voice_engine
         .as_deref()
         .context("The voice journey runs without an engine folder")?;
-    let path = planted_hum(&native.system.evidence.join("home"), engine)?;
+    let path = planted_clip(&native.system.evidence.join("home"), engine)?;
     let planted = wav(CLIP_RATE, &planted_samples());
     let kept = poll(CLIPS_KEPT.within(), LOOK, true, || {
         Ok(fs::read(&path).ok().filter(|bytes| *bytes != planted))
@@ -487,13 +531,22 @@ pub fn planted_hum_rendered_again(native: &Native) -> Result<Replanted> {
         all_kept,
         kept_ms: kept
             .map(|bytes| bytes.len().saturating_sub(HEADER) * 1000 / (CLIP_RATE as usize * 2)),
-        planted_ms: PLANTED_HUM_MS,
+        planted_ms: PLANTED_MS,
     })
 }
 
-fn answers(mark: &Mark) -> bool {
-    mark.event == "chat-started"
-        || (mark.event == "acknowledgement-started" && mark.words.as_deref() != Some(HUM))
+fn decides(mark: &Mark) -> bool {
+    matches!(
+        mark.event.as_str(),
+        "chat-started" | "acknowledgement-chosen" | "acknowledgement-started"
+    )
+}
+
+fn settles(mark: &Mark) -> bool {
+    matches!(
+        mark.event.as_str(),
+        "chat-started" | "acknowledgement-started" | "refusal-started" | "sent"
+    )
 }
 
 fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
@@ -501,16 +554,20 @@ fn mark_of<'a>(marks: &'a [Mark], event: &str) -> Option<&'a Mark> {
 }
 
 pub fn converse(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
-    converse_within(native, speech, name, REPLY_WAIT)
+    converse_within(native, &speech.samples()?, name, REPLY_WAIT)
+}
+
+pub fn converse_samples(native: &Native, samples: &Samples, name: &str) -> Result<Conversation> {
+    converse_within(native, samples, name, REPLY_WAIT)
 }
 
 pub fn converse_long(native: &Native, speech: &Speech, name: &str) -> Result<Conversation> {
-    converse_within(native, speech, name, LONG_REPLY_WAIT)
+    converse_within(native, &speech.samples()?, name, LONG_REPLY_WAIT)
 }
 
 fn converse_within(
     native: &Native,
-    speech: &Speech,
+    samples: &Samples,
     name: &str,
     reply_wait: Owed,
 ) -> Result<Conversation> {
@@ -526,30 +583,39 @@ fn converse_within(
     let before = marks(&trace)?.len();
     let clicked = now_millis();
     turn_on(native)?;
-    stack.feed(system, speech)?;
-    let answer = until("the turn to be answered", || {
+    let mut player = stack.start_feed(system, name, samples)?;
+    super::wait_for_exit(&mut player)?;
+    until("the turn to be decided", || {
         let now = live_marks(&trace)?;
         Ok(now
             .get(before..)
-            .and_then(|fresh| fresh.iter().find(|mark| answers(mark)).cloned()))
+            .and_then(|fresh| fresh.iter().find(|mark| decides(mark)).map(|_| ())))
     })?;
-    let chat = (answer.event == "chat-started").then(|| answer.words.clone().unwrap_or_default());
-    let started = answer.words.clone().unwrap_or_default();
-    let judged = if chat.is_some() {
-        HUM
-    } else {
-        started.as_str()
+    poll(SEND_WAIT.within(), LOOK, true, || {
+        Ok(live_marks(&trace)?
+            .get(before..)
+            .and_then(|fresh| fresh.iter().find(|mark| settles(mark)).map(|_| ())))
+    })?;
+    let decided: Vec<Mark> = live_marks(&trace)?.into_iter().skip(before).collect();
+    let chat = mark_of(&decided, "chat-started").map(|mark| mark.words.clone().unwrap_or_default());
+    let choice = mark_of(&decided, "acknowledgement-chosen").and_then(|mark| mark.words.clone());
+    let acknowledgement =
+        mark_of(&decided, "acknowledgement-started").and_then(|mark| mark.words.clone());
+    let score = match acknowledgement.as_deref() {
+        Some(key) => {
+            let reference = clip(&system.evidence.join("home"), key)?;
+            Some(
+                settle(
+                    PATIENCE,
+                    LOOK,
+                    || Ok(Some(judge::score(&reference, &capture.samples()?))),
+                    Score::matches,
+                )?
+                .context("The speaker capture never held still")?,
+            )
+        }
+        None => None,
     };
-    let reference = clip(&system.evidence.join("home"), judged)?;
-    let score = settle(
-        PATIENCE,
-        LOOK,
-        || Ok(Some(judge::score(&reference, &capture.samples()?))),
-        Score::matches,
-    )?
-    .context("The speaker capture never held still")?;
-    let samples = capture.samples()?;
-    let onset = onset_ms(&samples).context("No sound reached the speaker")?;
     until("the words to be heard", || {
         Ok(live_marks(&trace)?
             .get(before..)
@@ -578,29 +644,21 @@ fn converse_within(
         })
         .is_ok();
     let microphone_closed = turn_off(native).is_ok();
+    let onset = onset_ms(&capture.samples()?).context("No sound reached the speaker")?;
     capture.finish(stack.folder(), name)?;
     let marks: Vec<Mark> = marks(&trace)?.into_iter().skip(before).collect();
     let ended = mark_of(&marks, "utterance-ended")
         .map(|mark| mark.at_ms)
         .context("The app marked no end of capture")?;
     let first_sound = i64::try_from(began)? + onset - i64::try_from(ended)?;
-    let acknowledged = mark_of(&marks, "acknowledgement-started").map(|mark| mark.at_ms);
-    let heard_at = mark_of(&marks, "heard").map(|mark| mark.at_ms);
-    let hummed = marks
-        .iter()
-        .take_while(|mark| !answers(mark))
-        .any(|mark| mark.event == "acknowledgement-started" && mark.words.as_deref() == Some(HUM));
     Ok(Conversation {
         heard: mark_of(&marks, "heard").and_then(|mark| mark.words.clone()),
-        acknowledgement: chat.is_none().then_some(started),
-        hummed,
+        choice,
+        acknowledgement,
         chat,
         spoken: score,
         first_sound_after_capture_ms: first_sound,
         capture_began_ms: began,
-        started_before_heard: acknowledged
-            .zip(heard_at)
-            .is_some_and(|(started, heard)| started <= heard),
         sent,
         spoken_texts: marks
             .iter()
@@ -1559,10 +1617,10 @@ mod tests {
     #[test]
     fn words_are_found_inside_a_longer_transcript_ignoring_case_and_punctuation() {
         assert!(words_contain(
-            "Asking Voyager. Docked on this fleet. The Fleet was already open.",
+            "One sec. Docked on this fleet. The Fleet was already open.",
             "Docked on this fleet. The Fleet was already open."
         ));
-        assert!(!words_contain("Asking Voyager.", "Docked on this fleet."));
+        assert!(!words_contain("One sec.", "Docked on this fleet."));
     }
 
     #[test]

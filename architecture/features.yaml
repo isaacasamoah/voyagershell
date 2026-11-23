@@ -1073,17 +1073,21 @@ features:
           - 'test:app/src/voice_layer_tests.rs#a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyager'
         formal: []
         journeys: [voice]
-      - id: voice-first-sound-is-the-answer-or-a-hum
+      - id: voice-first-sound-is-the-answer-or-the-chosen-line
         kind: user
-        says: 'When a turn ends, the first sound is the voice''s chat reply, or the clip for a request for Voyager, if it is ready within the window. Otherwise a soft Mm-hm plays first and the answer follows it. A request for Voyager never gets a chat reply.'
+        says: 'When a turn ends, nothing plays until the turn is decided. The first sound is then the voice''s chat reply, or for a request for Voyager the line its routing choice names. None plays nothing, so the first sound is Voyager''s spoken reply. Look plays one of four app-owned lines such as One sec. Sure plays one of four app-owned lines such as Sure. Voyager''s queued, blocked or gone line takes the place of the chosen line when that standing holds. A request for Voyager never gets a chat reply, and the voice never speaks words the routing model wrote for work.'
         owner: conversation-provider
-        guards: ['type:app/src/voice_layer.rs#Decided']
+        guards: ['type:app/src/speech.rs#Ack', 'type:app/src/voice_route.rs#Route', 'type:app/src/voice_layer.rs#Decided']
         checks:
           - 'journey:voice/small-talk-is-answered-by-the-voice'
           - 'journey:voice/request-gets-no-chat-reply'
+          - 'journey:voice/acknowledgement-is-prompt'
           - 'test:app/src/voice_layer_tests.rs#a_fast_decision_plays_only_the_chat_reply'
-          - 'test:app/src/voice_layer_tests.rs#a_slow_decision_hums_first_then_plays_the_chat_reply'
-          - 'test:app/src/voice_layer_tests.rs#a_request_for_voyager_hums_only_when_deciding_is_slow_and_never_gets_a_chat_reply'
+          - 'test:app/src/voice_layer_tests.rs#a_slow_decision_plays_only_the_chat_reply_once_it_is_ready'
+          - 'test:app/src/voice_layer_tests.rs#a_request_for_voyager_plays_only_its_chosen_line_and_never_gets_a_chat_reply'
+          - 'test:app/src/voice_layer_tests.rs#nothing_plays_while_slow_hearing_decides_the_turn'
+          - 'test:app/src/speech.rs#an_idle_voyager_gets_nothing_for_none_and_a_varied_line_for_look_and_sure'
+          - 'test:app/src/voice_route.rs#work_goes_to_voyager_with_its_chosen_acknowledgement_whatever_the_probability'
         formal: []
         journeys: [voice]
     docs: [docs/conversation.md, docs/terminal.md, docs/voice.md, docs/workspace.md]
@@ -1110,6 +1114,7 @@ features:
       - app/src/voice.rs
       - app/src/voice_host.rs
       - app/src/voice_layer.rs
+      - app/src/voice_layer_line_tests.rs
       - app/src/voice_layer_tests.rs
       - app/src/voice_parts.rs
       - app/src/voice_reply.rs

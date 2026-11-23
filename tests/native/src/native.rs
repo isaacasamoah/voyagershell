@@ -637,7 +637,7 @@ impl Native {
         let trace = self.voice_trace();
         let trace = trace.to_string_lossy().into_owned();
         if let (Some(folder), 1) = (&self.voice_engine, self.launches) {
-            crate::audio::voice::plant_run_on_hum(&self.system.evidence.join("home"), folder)?;
+            crate::audio::voice::plant_run_on_clip(&self.system.evidence.join("home"), folder)?;
         }
         if let Some(engine) = &engine {
             extra_env.push(("VOYAGER_OMNI_DIR", engine));
