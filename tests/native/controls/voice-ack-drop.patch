@@ -1,12 +1,12 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -348,7 +348,7 @@
+@@ -347,7 +347,7 @@
          notice: &mut Option<String>,
      ) -> Option<Finish> {
          let mut finish = held.phrase.and_then(|phrase| {
 -            let finish = self.play(phrase, speaker);
 +            let finish: Option<Finish> = speaker.and(None);
-             self.trace
-                 .mark_words("acknowledgement-started", phrase.key());
-             finish
+             if finish.is_some() {
+                 self.trace
+                     .mark_words("acknowledgement-started", phrase.key());
