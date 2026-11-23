@@ -819,19 +819,21 @@ fn minimises(sent: &[Observed]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{Probe, judge_probe, nice_of, render_error};
-    use std::time::Duration;
+    use crate::native::{PROBE_AFTER_DOCK, PROBE_LATEST};
 
     #[test]
     fn a_probe_sent_late_is_inconclusive_whether_or_not_it_landed() {
-        assert_eq!(judge_probe(Duration::from_millis(61), false), Probe::Late);
-        assert_eq!(judge_probe(Duration::from_millis(61), true), Probe::Late);
-        assert_eq!(judge_probe(Duration::from_millis(400), true), Probe::Late);
+        let just_late = PROBE_LATEST.within().mul_f64(1.02);
+        let far_past = PROBE_LATEST.within() * 7;
+        assert_eq!(judge_probe(just_late, false), Probe::Late);
+        assert_eq!(judge_probe(just_late, true), Probe::Late);
+        assert_eq!(judge_probe(far_past, true), Probe::Late);
     }
 
     #[test]
     fn a_probe_sent_in_time_is_judged_by_where_it_landed() {
-        assert_eq!(judge_probe(Duration::from_millis(50), false), Probe::Lost);
-        assert_eq!(judge_probe(Duration::from_millis(60), true), Probe::Reached);
+        assert_eq!(judge_probe(PROBE_AFTER_DOCK.within(), false), Probe::Lost);
+        assert_eq!(judge_probe(PROBE_LATEST.within(), true), Probe::Reached);
     }
 
     #[test]
