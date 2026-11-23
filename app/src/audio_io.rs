@@ -136,7 +136,7 @@ fn above_floor(floors: &mut VecDeque<f32>, level: f32) -> bool {
     level > (floor * FLOOR_FACTOR).max(MIN_THRESHOLD)
 }
 
-fn plain_level(frame: &[i16]) -> f32 {
+pub(crate) fn plain_level(frame: &[i16]) -> f32 {
     if frame.is_empty() {
         return 0.0;
     }

@@ -524,6 +524,17 @@ and "You?", and the clips kept by 16 journey runs. The hum is not among them, so
 own renders were checked separately. "Mm-hm." may last 2.436 s. Its longest good render
 was 1.92 s and its shortest run-on 2.96 s. The rule is `omni::longest`.
 
+A kept clip starts 145 ms before its first sound. The engine opens every render with 95
+to 340 ms of near silence, a median of 180 ms over 270 kept clips, and the first sound of
+a turn waits for it. Over nine journey runs the first-sound median was about 75 ms plus
+the hum's opening silence, from 201 ms after a 120 ms opening to 324 ms after a 260 ms
+one, past the 300 ms check. The first sound is the first 5 ms with a level over 100. The
+quieter rise into it lasted at most 95 ms in those 270 clips, a median of 10 ms, and
+145 ms is 1.5 times that rise rounded up to the 5 ms step, so trimming never cuts it. A
+clip whose sound starts sooner, or that holds no sound, is kept whole. The trim comes
+before the length rule, on load and on render, so a clip kept by an earlier version is
+trimmed too.
+
 `omni::prepare_clips` applies the rule on load and on render. A kept clip that does not
 fit is treated as missing, so a run-on kept by an earlier version is rendered again. The
 engine streams speech while it renders. The first audio arrived 0.12 s after the request
