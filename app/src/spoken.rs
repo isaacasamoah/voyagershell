@@ -157,10 +157,10 @@ mod tests {
         use sha2::{Digest, Sha256};
         let digest = Sha256::digest(guide().as_bytes());
         let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-        assert_eq!(guide().len(), 2927);
+        assert_eq!(guide().len(), 3829);
         assert_eq!(
             hex,
-            "47cf14519485844caf77f671e12c7396b1a08d17804bd608accbe687b8576195"
+            "2cc7b8957ab9dbff57d7ae1bbd441a021148bd067511cd948eed00bc33d04a6d"
         );
     }
 
@@ -168,9 +168,10 @@ mod tests {
     fn the_guide_carries_the_rules_a_spoken_reply_depends_on() {
         for words in [
             "When something fails, say in one sentence what failed and why",
-            "Never say an id, revision number, file path, command, or layout term",
+            "Never say an id, revision number, file path, command, or a word from inside the app",
             "Do only what was asked.",
-            "Claim only what a tool's output showed, and say it as what changed for them",
+            "Say something is done only when you saw it happen, and say it as what changed for them",
+            "Give the gist, not the inventory.",
             &format!("A {MARKER} prompt came by voice"),
             "never point to the chat",
         ] {

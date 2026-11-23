@@ -170,7 +170,7 @@ pub fn hook(
 mod tests {
     use super::*;
 
-    const REMINDER_BOUND: usize = 3200;
+    const REMINDER_BOUND: usize = 4100;
     use voyager_contract::Context;
 
     fn focus() -> Focus {
