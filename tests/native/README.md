@@ -413,7 +413,10 @@ deadline. `Native::resize_window` resizes the owned window, and
 move every 4 ms, without waiting on the app between moves, and returns the wall
 time of each move. `Terminal::widths` reads how many cells of ink each row of a
 terminal's pixels reaches, after masking the avatar and an optional extra area.
-Its unit test checks a drawn row, a second row and a masked row.
+A row reads 0, unknown, when a masked pixel lies to the right of its last ink,
+because its end could be hidden. Its unit test checks a drawn row, a second
+row, a row whose end could be under the mask and a row whose ink reaches past
+it.
 
 The `avatar-drag` journey proves that a held avatar follows the pointer under
 load, that terminals wait for the drag without losing output, and that a drag
@@ -437,8 +440,10 @@ the circle's area and the avatar's resting place.
   terminal draws the program's output while the button is still down, and not
   before 120 ms after the last move. The time to the drawing is recorded, not
   judged, because under Xvfb and llvmpipe a present alone takes 40 to 117 ms.
-- `kept` prints the staircase during a drag, then parks the avatar beside the
-  terminal and scrolls the terminal up two wheel clicks at a time to the top.
+- `kept` prints the staircase during a drag, then releases the avatar, which
+  returns to its place over the terminal, and scrolls the terminal up two wheel
+  clicks at a time to the top. Rows that read as unknown beside the avatar are
+  skipped, and each of them appears clear of it on another page.
   Row k of the staircase is k `#` characters after about 32 KiB of invisible
   SGR resets, so about 4.25 MiB in, Core's 4 MiB queue limit would drop rows
   from a terminal that stopped reading. It passes when every row from 1 to the

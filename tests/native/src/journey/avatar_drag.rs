@@ -344,25 +344,10 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let native: &Native = native;
     let (count, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
-    let parked = native.observe("a resting place clear of the terminal", |seen| {
-        let area = region(seen.frame, &terminal.target().find(seen.frame)?.bounds);
-        Some((area.x - 60, area.y + i16::try_from(area.height).ok()? - 60))
-    })?;
     terminal.line(native, &command)?;
-    let (mut held, drag, frozen) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
-    held.glide(&line(orbit.at(drag.segments * SEGMENT), parked))?;
+    let (held, drag, frozen) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
     held.release()?;
     rested(native, terminal, &orbit, &frozen)?;
-    let clear = native.observe("the avatar resting clear of the terminal", |seen| {
-        let avatar = avatar_bounds(seen)?;
-        let area = terminal.target().find(seen.frame)?.bounds;
-        Some(
-            avatar.x + avatar.width <= area.x
-                || area.x + area.width <= avatar.x
-                || avatar.y + avatar.height <= area.y
-                || area.y + area.height <= avatar.y,
-        )
-    })?;
     let mut pages = Vec::new();
     let mut found = vec![false; usize::from(count) + 1];
     let mut previous: Option<Vec<u16>> = None;
@@ -395,7 +380,6 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
             "the staircase printed in Core while the avatar moved",
             drag.printed_while_moving,
         )
-        .expect("the avatar rested clear of the terminal", clear)
         .expect(
             "the pane's scrollback holds every staircase row",
             missing.is_empty(),
