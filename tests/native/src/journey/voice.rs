@@ -50,6 +50,7 @@ cases! {
 pub const CONTROL: Case = Case::NoCaptureWithoutClick;
 
 const RUNS: usize = 10;
+const CPU_FIXTURE_BOUND_MS: i64 = 2100;
 const QUESTION: &str = "What is in this fleet?";
 const CREW_MESSAGE: &str = "Ask the build crew to run the tests.";
 const LOOK_LINES: [&str; 4] = ["one-sec", "let-me-look", "checking", "okay-checking"];
@@ -865,17 +866,26 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .map(|clip| format!("{} opens at level {:.0}", clip.file, clip.opening_level))
             .collect();
         let every = |key: &str| runs.iter().all(|run| run[key] == true);
+        let median_of = |choice: &str| {
+            let times: Vec<i64> = runs
+                .iter()
+                .filter(|run| run["choice"] == choice)
+                .filter_map(|run| run["firstSoundAfterCaptureMs"].as_i64())
+                .collect();
+            (times.len(), median(&times))
+        };
         let medians: Vec<_> = ["none", "look", "sure"]
             .into_iter()
             .map(|choice| {
-                let times: Vec<i64> = runs
-                    .iter()
-                    .filter(|run| run["choice"] == choice)
-                    .filter_map(|run| run["firstSoundAfterCaptureMs"].as_i64())
-                    .collect();
-                json!({"choice": choice, "runs": times.len(), "medianMs": median(&times)})
+                let (runs, middle) = median_of(choice);
+                json!({"choice": choice, "runs": runs, "medianMs": middle})
             })
             .collect();
+        let within_bound = |choice: &str| {
+            median_of(choice)
+                .1
+                .is_some_and(|middle| middle < CPU_FIXTURE_BOUND_MS)
+        };
         Verdict::new()
             .expect("every run is heard as spoken", every("heardRight"))
             .expect(
@@ -886,10 +896,15 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "every run plays only the line its routing choice names",
                 every("playsItsChoice"),
             )
+            .expect(
+                "the median first sound for look and for sure is under the fixture's CPU-engine bound",
+                within_bound("look") && within_bound("sure"),
+            )
             .observed("firstSoundByChoice", &medians)?
             .observed("clipsHeardBack", clips_heard)?
             .observed("clipsOpeningLoud", loud)?
             .observed("clipOpenings", openings)?
+            .observed("cpuFixtureBoundMs", CPU_FIXTURE_BOUND_MS)?
             .observed("runs", &runs)
     })?;
     cases.check(native, Case::RefusalIsInTheChat, |native| {

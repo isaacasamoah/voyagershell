@@ -142,6 +142,14 @@ The first sound of a turn is the chat reply, the line the routing choice names, 
 none Voyager's spoken reply. Nothing plays before the turn is decided. A request for
 Voyager never gets a chat reply.
 
+The voice journey's `acknowledgement-is-prompt` case holds the median first sound for
+look and for sure each under 2,100 ms. That is the test fixture's CPU-engine bound, not
+what a person hears. In the sandbox's CPU engine on 23 Nov, hearing took about 0.39 s and
+routing about 1.19 s, and the first sound came at a median of 1,730 ms for look and
+1,901 ms for sure, against 211 ms for the hum it replaced. The bound sits about 200 ms
+above the slower median, about twice that run's widest spread of 125 ms. None is
+recorded only, because its first sound is Voyager's reply.
+
 ## The speech detector
 
 The detector is a Rust port of the Silero voice activity detector, version 6, in
