@@ -33,7 +33,7 @@ index 5907f9cc..21c896d9 100644
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index c4bb2dc5..2ae25197 100644
+index c9630b8d..2ae25197 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
@@ -50,7 +50,7 @@ index c4bb2dc5..2ae25197 100644
    workspace.automaticRefresh = true;
    try {
      workspace.run({ operation: "inspect" }, cx);
-@@ -71,11 +66,8 @@ export function acceptDockResult(workspace, cx) {
+@@ -71,30 +66,20 @@ export function acceptDockResult(workspace, cx) {
    if (raw !== null) {
      const result = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -63,8 +63,32 @@ index c4bb2dc5..2ae25197 100644
    }
    if (workspace.busy) return;
    const dock = workspace_notice().dockRevision;
+   const seen = seenDocks.get(workspace);
+   if (seen === undefined) seenDocks.set(workspace, dock);
+-  else if (seen !== dock) followDock(workspace, seen, dock, cx);
++  else if (seen !== dock) followDock(workspace, dock, cx);
+ }
+-function followDock(workspace, seen, dock, cx) {
++function followDock(workspace, dock, cx) {
+   seenDocks.set(workspace, dock);
+-  cx.spawn(async (task) => {
+-    await Promise.resolve();
+-    if (workspace.busy) {
+-      if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
+-      return;
+-    }
+-    workspace.run({ operation: "inspect" }, task, (_result, done) =>
+-      focusDocked(workspace, done),
+-    );
+-  });
++  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
++    focusDocked(workspace, task),
++  );
+ }
+ function focusDocked(workspace, cx) {
+   const home = workspace.layout?.context.kind === "workspace";
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index ae619bdf..b55989e6 100644
+index 46d4bb01..b55989e6 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
 @@ -72,8 +72,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
@@ -77,7 +101,7 @@ index ae619bdf..b55989e6 100644
    )
      return;
    workspace.automaticRefresh = true;
-@@ -99,11 +98,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -99,36 +98,21 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    if (raw !== null) {
      const result: unknown = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -90,3 +114,33 @@ index ae619bdf..b55989e6 100644
    }
    if (workspace.busy) return;
    const dock = workspace_notice().dockRevision;
+   const seen = seenDocks.get(workspace);
+   if (seen === undefined) seenDocks.set(workspace, dock);
+-  else if (seen !== dock) followDock(workspace, seen, dock, cx);
++  else if (seen !== dock) followDock(workspace, dock, cx);
+ }
+ 
+-function followDock(
+-  workspace: Canvas,
+-  seen: string,
+-  dock: string,
+-  cx: UIContext,
+-) {
++function followDock(workspace: Canvas, dock: string, cx: UIContext) {
+   seenDocks.set(workspace, dock);
+-  cx.spawn(async (task) => {
+-    await Promise.resolve();
+-    if (workspace.busy) {
+-      if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
+-      return;
+-    }
+-    workspace.run({ operation: "inspect" }, task, (_result, done) =>
+-      focusDocked(workspace, done),
+-    );
+-  });
++  workspace.run({ operation: "inspect" }, cx, (_result, task) =>
++    focusDocked(workspace, task),
++  );
+ }
+ 
+ function focusDocked(workspace: Canvas, cx: AsyncContext) {
