@@ -244,6 +244,43 @@ fn clip(home: &Path, key: &str) -> Result<Samples> {
     Ok(upsample(&Samples::raw(&bytes[HEADER..]).0))
 }
 
+const ACKNOWLEDGEMENT_WORDS: [(&str, &str); 3] = [
+    ("asking", "Asking Voyager."),
+    ("okay-asking", "Okay, asking Voyager."),
+    ("queued", "Queued for Voyager."),
+];
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeardClip {
+    pub key: String,
+    pub words: Option<&'static str>,
+    pub heard: String,
+    pub holds_its_words: bool,
+}
+
+pub fn kept_clip_heard(native: &Native, key: &str) -> Result<HeardClip> {
+    let wide = clip(&native.system.evidence.join("home"), key)?;
+    let narrow: Vec<i16> = wide
+        .0
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|trio| ((i32::from(trio[0]) + i32::from(trio[1]) + i32::from(trio[2])) / 3) as i16)
+        .collect();
+    let heard = hear_16k(native, &narrow)?;
+    let words = ACKNOWLEDGEMENT_WORDS
+        .iter()
+        .find(|(known, _)| *known == key)
+        .map(|(_, words)| *words);
+    Ok(HeardClip {
+        key: key.to_owned(),
+        words,
+        holds_its_words: words.is_some_and(|words| words_match(&heard, words)),
+        heard,
+    })
+}
+
 fn upsample(narrow: &[i16]) -> Samples {
     let mut wide = Vec::with_capacity(narrow.len() * 2);
     for (index, sample) in narrow.iter().enumerate() {
