@@ -218,8 +218,13 @@ fn sentence() -> Vec<Step> {
 }
 
 fn clips() -> Kept {
+    clips_without(None)
+}
+
+fn clips_without(left_out: Option<Phrase>) -> Kept {
     Phrase::ALL
         .into_iter()
+        .filter(|phrase| Some(*phrase) != left_out)
         .map(|phrase| {
             (
                 phrase,
@@ -958,4 +963,36 @@ fn voice_is_ready_while_a_clip_is_still_rendering_and_keeps_it_once_rendered() {
     serving.join().unwrap();
     owner.set(Phase::Stopped, None);
     let _ = std::fs::remove_dir_all(&root);
+}
+
+fn hum_marks(left_out: Option<Phrase>) -> (usize, Vec<usize>) {
+    let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    rig.model = Model::Slow(r#"{"kind": "work"}"#);
+    rig.clips = clips_without(left_out);
+    let name = format!("voyager-hum-{left_out:?}-{}.jsonl", std::process::id());
+    let path = std::env::temp_dir().join(name);
+    let trace = Trace::to_file(path.clone());
+    rig.shared.update(|state| state.snapshot.on = true);
+    let vocabulary: Vocabulary = Arc::new(Vec::new);
+    let hearing = Heard("Open the roadmap.");
+    Exchange {
+        trace: &trace,
+        ..rig.exchange(&hearing, &vocabulary)
+    }
+    .serve(Duration::from_millis(5));
+    let marks = std::fs::read_to_string(&path).unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    let started = r#""event":"acknowledgement-started""#;
+    let hums = marks
+        .lines()
+        .filter(|line| line.contains(started) && line.contains(r#""words":"mm-hm""#))
+        .count();
+    (hums, rig.played())
+}
+
+#[test]
+fn a_hum_that_is_not_kept_plays_nothing_and_marks_no_acknowledgement() {
+    let (hum, asking) = (mark(Phrase::Hum), mark(Phrase::Asking));
+    assert_eq!(hum_marks(Some(Phrase::Hum)), (0, vec![asking]));
+    assert_eq!(hum_marks(None), (1, vec![hum, asking]));
 }
