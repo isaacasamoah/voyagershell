@@ -36,11 +36,13 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
    with a median of 201 ms. A model that judges the end of a turn and interruptions
    are later work.
-4. Hearing and routing start the moment the turn ends. A cached "Mm-hm." plays if the
-   first answer is not ready within 0.05 s, as [Small talk](#small-talk) describes. The
-   clip for a request for Voyager is chosen from Voyager's standing. It says only that
-   the words were heard and passed on. It never names an action or claims a result.
-5. Omni turns the samples into words while the clip plays. The prompt names the
+4. Hearing and routing start the moment the turn ends, and nothing plays while they
+   run. The control shows Hearing. The routing call chooses the acknowledgement for a
+   request for Voyager from a closed set, and the app owns its words, as
+   [Small talk](#small-talk) describes. Voyager's standing can replace the line with
+   one that says it is queued, blocked or gone. No line names an action or claims a
+   result.
+5. Omni turns the samples into words. The prompt names the
    product words and the user's own Voyage and Fleet names, read from the workspace
    state the owner already holds, so hearing adds no inspection call. Right
    after hearing, `speech::heard_nothing` drops a transcript with no letter or
@@ -73,9 +75,14 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 
 | Key | Words | Played when | Words sent |
 | --- | --- | --- | --- |
-| `mm-hm` | "Mm-hm." | Nothing is ready to play 0.05 s after the turn ends | Not decided yet |
-| `asking` | "Asking Voyager." | Voyager is idle or done, or has no state yet, on even turns | Yes |
-| `okay-asking` | "Okay, asking Voyager." | The same standing on odd turns | Yes |
+| `one-sec` | "One sec." | The routing call chose look, and Voyager is idle or done, or has no state yet, on the first of every four turns | Yes |
+| `let-me-look` | "Let me look." | The same, on the second | Yes |
+| `checking` | "Checking." | The same, on the third | Yes |
+| `okay-checking` | "Okay, checking." | The same, on the fourth | Yes |
+| `sure` | "Sure." | The routing call chose sure, with the same standing, on the first of every four turns | Yes |
+| `okay` | "Okay." | The same, on the second | Yes |
+| `got-it` | "Got it." | The same, on the third | Yes |
+| `sure-thing` | "Sure thing." | The same, on the fourth | Yes |
 | `queued` | "Queued for Voyager." | Voyager is working | Yes |
 | `needs-you` | "Voyager needs you on Home first." | Voyager is blocked, when the words arrive or while a spoken turn is open, or Core refuses a send with kind `blocked` | No |
 | `not-running` | "I couldn't pass that to Voyager." | Core refuses a send with a kind not listed in this table, including `conflict` | No |
@@ -87,7 +94,8 @@ short hash of its words. The voice speaks as "I" and never as Voyager.
 | `failed` | "That didn't work." | A spoken turn ends in failure | No |
 
 The words in the table never name an action or claim a result, and none points to the
-chat.
+chat. When the routing call chose none and Voyager is idle, done or has no state yet,
+nothing plays and the words are sent.
 
 ## Small talk
 
@@ -99,9 +107,15 @@ request is never dropped.
 The call sends `voice_route::route_prompt` with a few worked examples and then the heard
 words. The prompt is a short routing rule followed by `spoken::TALK`, read from its one
 owner, so the voice's replies follow the same spoken guide as Voyager's. The answer is
-held to one of two JSON shapes, `{"kind":"work"}` or `{"kind":"chat","say":"..."}`. A
-work answer has no room for words, so the voice never writes an acknowledgement for
-work and cannot promise to do it. The call has 3 s, a target to measure.
+held to one of two JSON shapes, `{"kind":"work","ack":"none"}` with `ack` one of `none`,
+`look` and `sure`, or `{"kind":"chat","say":"..."}`. The schema lists `kind` before
+`ack`, so the model writes the kind first, and the body is written by hand because
+`serde_json` sorts the keys of a `Value`. A work answer has no room for words, so the
+voice never writes an acknowledgement for work and cannot promise to do it. It only
+chooses one. The routing rule asks for none for a plain command whose effect the person
+will see and for never mind or cancel, look for a question, a lookup, a status check or
+a summary, and sure for a message to the crew or a start or stop of work. Every way the
+route can go wrong gives none. The call has 3 s, a target to measure.
 
 The prompt is the routing rule, then the spoken guide, then one closing rule for chat,
 `voice_route::CHAT_CLOSING`. A chat reply must never offer, ask whether to do something
@@ -124,17 +138,9 @@ the reply is added to the chat. It is answered whatever Voyager's standing. If t
 route call fails or the reply cannot be spoken, the turn goes to Voyager as any other
 request.
 
-The first sound of a turn is the chat reply, or the clip that today's table gives for a
-request for Voyager, when it is ready within `voice_layer::HUM_AFTER` of the end of the
-turn. Otherwise a soft "Mm-hm." plays at that moment, and the reply or the clip follows
-it. A request for Voyager never gets a chat reply. `HUM_AFTER` is 0.05 s. The journey's
-first-sound check holds the median first sound under 0.3 s. With the clip played at once,
-the audio path alone took 187 to 206 ms, median 201 ms, in ten journey runs. The first
-sound of a turn that hums is the window plus that path, so 0.05 s puts it near 0.25 s and
-leaves margin under the worst run. A 0.1 s window would put it at the check itself. The
-skip needs hearing, routing and, for chat, the reply's render to finish inside the
-window. No machine measured so far does that. On the GPU engine hearing alone took
-0.09 s, and on the CPU engine 0.58 s, so every turn hears "Mm-hm." first today.
+The first sound of a turn is the chat reply, the line the routing choice names, or for
+none Voyager's spoken reply. Nothing plays before the turn is decided. A request for
+Voyager never gets a chat reply.
 
 ## The speech detector
 
@@ -508,7 +514,8 @@ it is kept, so a fresh cache never holds up the control. A clip that is not kept
 nothing. The turn goes on without it, and a reply clip such as "That didn't work." is
 reported as not kept. A kept clip then costs no model run before it starts.
 
-A kept clip must fit its words. The engine sometimes renders "Mm-hm." as a long murmur.
+A kept clip must fit its words. The engine sometimes rendered "Mm-hm.", the hum that the
+chosen lines have since replaced, as a long murmur.
 In 66 renders with the app's request on the journey's CPU engine, 20 ran past 2.44 s and
 the longest stopped at the engine's 40.96 s limit. A run-on is sound almost to its end
 (40.96 s became 40.80 s with its leading and trailing silence trimmed), so trimming does
@@ -542,7 +549,7 @@ and about 0.08 s of audio followed every 20 ms in 30 renders. A render stops rea
 soon as its audio passes the limit, about 0.7 s into a run-on "Mm-hm.", and the clip is
 rendered again, at most five times. Five comes from the run-on rate. 20 of 66 renders ran
 on, and 0.30 to the fifth power is about 0.24%. The trace marks `clips-kept` once every phrase has been read or rendered. When no render fits, nothing is kept for
-that phrase, the app logs "The voice clip mm-hm ran past the length its words allow in 5
+that phrase, the app logs "The voice clip one-sec ran past the length its words allow in 5
 renders, so it is not kept." with the clip's key, voice runs without it, and the next
 launch tries again. Spoken replies are not held to the rule.
 
@@ -574,7 +581,7 @@ no words.
 The native `voice` journey in [the verification guide](../tests/native/README.md#the-voice-journey)
 clicks the real control, feeds committed synthetic speech to the microphone and records the
 speaker. It checks that nothing records the microphone without a click, that the words come
-back exactly as spoken, that the acknowledgement reaches the speaker and that no audio payload
+back exactly as spoken, that only the line the routing choice names reaches the speaker and that no audio payload
 appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
 turn, a quiet request at 0.15 and 0.06 of its level is one turn that is sent, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
 voice on, five minutes of room sound with no speech in it is never a turn, a request
