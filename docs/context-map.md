@@ -185,6 +185,7 @@ Owns files:
 - `app/src/voice_transcript.rs`
 - `app/src/voice_wire.rs`
 - `app/src/speech.rs`
+- `app/src/speech_ack_tests.rs`
 - `app/src/omni.rs`
 - `app/src/omni_tests.rs`
 - `app/src/audio_io.rs`
@@ -192,6 +193,7 @@ Owns files:
 - `app/src/http1.rs`
 - `app/src/voice_layer.rs`
 - `app/src/voice_layer_tests.rs`
+- `app/src/voice_layer_line_tests.rs`
 - `app/src/voice_voyager.rs`
 - `app/src/voice_reply.rs`
 - `app/src/voice_route.rs`
