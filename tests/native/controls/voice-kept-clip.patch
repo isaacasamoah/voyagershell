@@ -1,13 +1,12 @@
 diff --git a/app/src/omni.rs b/app/src/omni.rs
-index 04f97a4a..f9f05ca3 100644
+index 905d8f38..063e8eef 100644
 --- a/app/src/omni.rs
 +++ b/app/src/omni.rs
-@@ -459,7 +459,7 @@ impl Clips {
-     }
- 
+@@ -464,7 +464,6 @@ impl Clips {
      pub fn load(&self, phrase: Phrase) -> Option<Clip> {
--        parse_wav(&fs::read(self.file(phrase)).ok()?).filter(|clip| fits(phrase, clip))
-+        parse_wav(&fs::read(self.file(phrase)).ok()?)
+         parse_wav(&fs::read(self.file(phrase)).ok()?)
+             .map(trimmed)
+-            .filter(|clip| fits(phrase, clip))
      }
  
      pub fn store(&self, phrase: Phrase, clip: &Clip) -> std::io::Result<()> {

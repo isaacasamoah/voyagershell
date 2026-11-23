@@ -832,9 +832,11 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let mut first_sounds = Vec::new();
         let mut early = 0;
         let mut heard_right = 0;
+        let mut played = std::collections::BTreeSet::new();
         for run in 0..RUNS {
             let said = voice::converse(native, &DOCK_ON_THIS_FLEET, &format!("prompt-{run}"))?;
             first_sounds.push(said.first_sound_after_capture_ms);
+            played.extend(said.acknowledgement.clone());
             early += usize::from(said.started_before_heard);
             heard_right += usize::from(
                 said.heard
@@ -848,7 +850,21 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )?;
         }
         let middle = median(&first_sounds);
+        let clips_heard = played
+            .iter()
+            .map(|key| voice::kept_clip_heard(native, key))
+            .collect::<Result<Vec<_>>>()?;
+        let openings = voice::kept_clip_openings(native)?;
+        let loud: Vec<_> = openings
+            .iter()
+            .filter(|clip| !clip.opens_quiet)
+            .map(|clip| format!("{} opens at level {:.0}", clip.file, clip.opening_level))
+            .collect();
         Verdict::new()
+            .expect(
+                "every kept clip begins below the first-sound level; a clip that opens loud was cut by the trim, or was rendered already loud by the engine and kept whole before any trim, and clipsOpeningLoud names each",
+                !openings.is_empty() && loud.is_empty(),
+            )
             .expect(
                 "the acknowledgement starts before hearing ends in every run",
                 early == RUNS,
@@ -860,6 +876,9 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
             .observed("medianMs", middle)?
+            .observed("clipsHeardBack", clips_heard)?
+            .observed("clipsOpeningLoud", loud)?
+            .observed("clipOpenings", openings)?
             .observed("targetMs", TARGET_MS)
     })?;
     cases.check(native, Case::RefusalIsInTheChat, |native| {

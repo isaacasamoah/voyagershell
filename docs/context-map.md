@@ -186,6 +186,7 @@ Owns files:
 - `app/src/voice_wire.rs`
 - `app/src/speech.rs`
 - `app/src/omni.rs`
+- `app/src/omni_tests.rs`
 - `app/src/audio_io.rs`
 - `app/src/silero.rs`
 - `app/src/http1.rs`
