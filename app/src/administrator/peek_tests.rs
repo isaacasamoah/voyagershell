@@ -4,8 +4,8 @@ use voyager_contract::{Action, Context, Response};
 
 #[test]
 fn peek_reads_another_voyage_and_moves_nothing_and_focus_vessel_is_not_an_agent_tool() {
-    let session = format!("voyager-peek-tool-test-{}", std::process::id());
-    let workspace = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-peek-tool-test");
+    let workspace = guard.open("/tmp");
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let call = |action: Action, expected_version: u64| {
             workspace
@@ -98,10 +98,6 @@ fn peek_reads_another_voyage_and_moves_nothing_and_focus_vessel_is_not_an_agent_
             .unwrap();
         assert!(!workspace_tool.schema.to_string().contains("focus-vessel"));
     }));
-    let mut cleanup = crate::core::Core::connect(&session).unwrap();
-    let stopped = cleanup.server_stop();
-    cleanup.close().unwrap();
     drop(workspace);
-    stopped.unwrap();
     checked.unwrap();
 }

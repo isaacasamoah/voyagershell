@@ -1046,8 +1046,8 @@ mod tests {
 
     #[test]
     fn callbacks_require_the_actual_turn_and_reuse_only_unchanged_effects() {
-        let session = format!("voyager-c2-tool-test-{}", std::process::id());
-        let workspace = Client::open(session.clone(), "/tmp".into());
+        let mut guard = crate::core_session::SessionGuard::new("voyager-c2-tool-test");
+        let workspace = guard.open("/tmp");
         let initial = workspace
             .call(Request {
                 request_id: workspace.request_id(),
@@ -1283,9 +1283,6 @@ mod tests {
                 &workspace,
             )
             .unwrap();
-        let mut cleanup = crate::core::Core::connect(&session).unwrap();
-        cleanup.server_stop().unwrap();
-        cleanup.close().unwrap();
         assert_eq!(wrong_tool["result"]["success"], false);
         assert_eq!(processes.outcome.name, "voyager_process");
         assert_eq!(processes.outcome.status, Status::Applied);
@@ -1327,8 +1324,8 @@ mod tests {
 
     #[test]
     fn a_refused_correlated_call_cannot_be_replaced_with_valid_arguments() {
-        let session = format!("voyager-c2-refusal-test-{}", std::process::id());
-        let workspace = Client::open(session.clone(), "/tmp".into());
+        let mut guard = crate::core_session::SessionGuard::new("voyager-c2-refusal-test");
+        let workspace = guard.open("/tmp");
         let context = voyager_contract::context::Focus {
             scope: Context::Workspace,
             path: vec!["Workspace".into()],
@@ -1388,9 +1385,6 @@ mod tests {
         if redispatched {
             completed(&mut tools);
         }
-        let mut cleanup = crate::core::Core::connect(&session).unwrap();
-        cleanup.server_stop().unwrap();
-        cleanup.close().unwrap();
         assert_eq!(first["result"], repeat["result"]);
         assert_eq!(first["result"]["success"], false);
         assert!(!dispatched && changed.is_some_and(|reply| reply["result"]["success"] == false));

@@ -381,15 +381,13 @@ static VOICE_INSTRUCTIONS: std::sync::LazyLock<String> = std::sync::LazyLock::ne
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Core;
     use serde_json::json;
     use voyager_contract::{Action as WorkspaceAction, Request as WorkspaceRequest};
 
     #[test]
     fn a_known_stop_refusal_settles_only_after_closed_and_confirmed_helper_exit() {
-        let session = format!("voyager-c3-stop-{}", std::process::id());
-        let workspace = Workspace::open(session.clone(), "/tmp".into());
-        let mut cleanup = Core::connect(&session).unwrap();
+        let mut guard = crate::core_session::SessionGuard::new("voyager-c3-stop");
+        let workspace = guard.open("/tmp");
         let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let projection = Arc::new(Projection {
                 value: Mutex::new(Snapshot::default()),
@@ -449,16 +447,13 @@ mod tests {
             assert!(stopped.error.as_deref().unwrap().contains("refused"));
             assert_ne!(stopped.phase, voyager_contract::voice::Phase::Unconfirmed);
         }));
-        let stopped = cleanup.server_stop();
-        cleanup.close().unwrap();
-        assert!(stopped.is_ok());
         checked.unwrap();
     }
 
     #[test]
     fn native_voice_binds_the_actual_turn_before_tools_and_retains_it_after_audio_loss() {
-        let session = format!("voyager-c3-context-{}", std::process::id());
-        let workspace = Workspace::open(session.clone(), "/tmp".into());
+        let mut guard = crate::core_session::SessionGuard::new("voyager-c3-context");
+        let workspace = guard.open("/tmp");
         let inspect = || {
             workspace
                 .call(WorkspaceRequest {
@@ -469,7 +464,6 @@ mod tests {
                 .unwrap()
         };
         let initial = inspect();
-        let mut cleanup = Core::connect(&session).unwrap();
         let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let projection = Arc::new(Projection {
                 value: Mutex::new(Snapshot {
@@ -598,9 +592,6 @@ mod tests {
                 .unwrap();
             assert_eq!(final_state.layout.voyages[0].fleets.len(), 2);
         }));
-        let stopped = cleanup.server_stop();
-        cleanup.close().unwrap();
-        assert!(stopped.is_ok());
         checked.unwrap();
     }
 }
