@@ -12,7 +12,7 @@ cases! {
 
 pub const CONTROL: Case = Case::LineDrawn;
 
-const WORDS: &str = "COMMAND-MISSING-WORDS-PENDING";
+const WORDS: &str = "Voyager can't reply: the voyager command is missing.";
 
 fn voyager_terminals(native: &Native) -> Result<Vec<String>> {
     let listed = native.system.rpc("terminal.list", json!({"all":true}))?;

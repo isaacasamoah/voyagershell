@@ -91,7 +91,7 @@ pub enum Unbound {
 impl Unbound {
     fn line(self) -> &'static str {
         match self {
-            Self::CommandMissing => "COMMAND-MISSING-WORDS-PENDING",
+            Self::CommandMissing => "Voyager can't reply: the voyager command is missing.",
         }
     }
 }
