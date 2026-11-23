@@ -189,6 +189,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         return Ok(());
     };
     cases.check(native, Case::SmallTalkIsAnswered, |native| {
+        let replanted = voice::planted_hum_rendered_again(native)?;
+        if !replanted.replaced {
+            return Verdict::new()
+                .expect(
+                    "the run-on Mm-hm planted in the clip cache is rendered again before the first turn",
+                    false,
+                )
+                .observed("plantedHum", replanted);
+        }
         let said = voice::converse(native, &HELLO_HOW_ARE_YOU, "small-talk")?;
         let reply = said.chat.clone().unwrap_or_default();
         let transcript = voice::transcribe(native, "small-talk")?;
@@ -212,6 +221,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 said.first_sound_after_capture_ms,
             )?
             .observed("conversation", json!(said))?
+            .observed("plantedHum", replanted)?
             .observed("speakerHeard", transcript)
     })?;
     cases.check(native, Case::RequestGetsNoChatReply, |native| {
