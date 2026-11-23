@@ -418,7 +418,7 @@ struct Run {
 
 fn fast(terminal: &Terminal, native: &Native, orbit: &Orbit, dragged: bool) -> Result<Run> {
     let command = format!(
-        "printf '\\e[H\\e[2J\\e[3J'; sleep 2; s=$(date +%s%3N); yes {} | head -c {FAST_BYTES}; e=$(date +%s%3N); echo; echo rate-$s-$e-done",
+        "printf '\\e[H\\e[2J\\e[3J'; sleep 5; s=$(date +%s%3N); yes {} | head -c {FAST_BYTES}; e=$(date +%s%3N); echo; echo rate-$s-$e-done",
         "x".repeat(99)
     );
     let before = rate(&terminal.screen(native)?);
@@ -440,7 +440,14 @@ fn fast(terminal: &Terminal, native: &Native, orbit: &Orbit, dragged: bool) -> R
     };
     let (start, end) = reported(&screen).context("The fast printer reported no new rate")?;
     let within_drag = match (moves.first(), moves.last()) {
-        (Some(first), Some(last)) => first.at_ms <= start && end <= last.at_ms,
+        (Some(first), Some(last)) => {
+            ensure!(
+                first.at_ms <= start,
+                "The fast printer started {} ms before the drag's first move, so this run did not print during a drag; rerun it",
+                first.at_ms - start
+            );
+            end <= last.at_ms
+        }
         _ => false,
     };
     Ok(Run {

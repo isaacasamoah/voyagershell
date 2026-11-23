@@ -452,9 +452,11 @@ the circle's area and the avatar's resting place.
   last appears, and every pair of adjacent staircase rows on every page goes up
   by one. Each page's widths are kept in `drag-kept.json`.
 - `throughput` runs a printer of 8 MiB four times at rest and four times while
-  the avatar circles. Each run prints its start and end times. It passes when
-  every dragged run started and ended within the drag and the median dragged
-  time is no slower than the slowest rest time plus the rest runs' spread.
+  the avatar circles. Each run waits 5 s, then prints its start and end times.
+  A dragged run whose print started before the drag's first move did not
+  print during a drag, so the run ends inconclusive and is rerun. It passes
+  when every dragged run ended within the drag and the median dragged time is
+  no slower than the slowest rest time plus the rest runs' spread.
 - `idle`, `streaming` and `fleets` glide the avatar along a 950-point path with
   no load, then with eight visible terminals printing coloured build output,
   then with four more in each of three hidden Fleets. Each passes when the held
