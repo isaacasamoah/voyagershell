@@ -4,7 +4,7 @@ from pathlib import Path
 SOURCE = Path("/var/tmp/voyager-crew/scratch/voice-spoken-r2")
 SCRATCH = Path("/var/tmp/voyager-crew/scratch/reply-rewrite")
 CLAUDE = "/home/isaac/.local/share/fnm/node-versions/v24.13.1/installation/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-PROMPT = (Path(__file__).parent / "rewrite-prompt.md").read_text()
+PROMPT = (Path(__file__).parent / os.environ.get("REWRITE_PROMPT", "rewrite-prompt.md")).read_text()
 SENTENCE_END = re.compile(r"[.!?][\"')]?(\s|$)")
 CLEAN_ENV = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID", "HC_SCOPE", "HC_TERMINAL_SOCKET")}
 

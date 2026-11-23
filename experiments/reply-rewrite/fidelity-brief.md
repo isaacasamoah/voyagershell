@@ -4,7 +4,7 @@
 VoyagerShell's background agent, Voyager, answers the person's voice requests aloud. A second pass rewrites each reply to make it plainer before the person hears it. The rewrite must keep every fact, number and name that matters, add nothing, and keep the meaning. It may cut offers to do more, narration of how Voyager checked, app words and ids, openers and closers. You are an independent checker. You did not write any of these replies or rewrites.
 
 ## Inputs
-- `sheet.json`, in the folder this task names. Each turn has the person's prompt, Voyager's original reply, and up to three rewrites labelled A, B and C. The labels are shuffled per turn. Don't try to work out which label is which rewriter.
+- `sheet.json`, in the folder this task names. Each turn has the person's prompt, Voyager's original reply, and up to four rewrites labelled A, B, C and D. The labels are shuffled per turn. Don't try to work out which label is which rewriter.
 
 Judge each rewrite only against the original reply and the prompt. Don't judge whether the original was true. A rewrite that repeats a false claim from the original is faithful.
 
@@ -16,4 +16,4 @@ Judge each rewrite only against the original reply and the prompt. Don't judge w
 - `reason`: one line naming the fact when any of the four is true.
 
 ## Output
-Reply with only a JSON array, one item per turn, as `{"turn": n, "A": {...}, "B": {...}, "C": {...}}`, with only the labels present on that turn. Each label carries the four booleans, plus `reason` when any is true. Write nothing else, and don't write any file.
+Reply with only a JSON array, one item per turn, as `{"turn": n, "A": {...}, "B": {...}, "C": {...}, "D": {...}}`, with only the labels present on that turn. Each label carries the four booleans, plus `reason` when any is true. Write nothing else, and don't write any file.

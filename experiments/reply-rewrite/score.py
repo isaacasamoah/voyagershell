@@ -14,6 +14,9 @@ SETS = {
     "morning-r2": ("m02", "mn2", "ground-truth-morning.md"),
 }
 REWRITERS = ["lfm", "haiku", "sonnet"]
+HELDOUT = {"held-trial-r1": ("ta", "ground-truth-trial.md"), "held-morning-r1": ("ma", "ground-truth-morning.md"),
+           "held-trial-r2": ("ta2", "ground-truth-trial.md"), "held-morning-r2": ("ma2", "ground-truth-morning.md")}
+HELD_REWRITERS = ["sonnet2", "sonnet3", "haiku2", "haiku3"]
 
 
 def folder_of(batch):
@@ -54,12 +57,12 @@ def sample(name):
     return set(int(x) for x in lines[0 if name.startswith("trial") else 1].split(","))
 
 
-def build_style(name, seed, only=None):
+def build_style(name, seed, only=None, batches=None):
     out = SCRATCH / "score" / (name + ("-fable" if only else ""))
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
     sheet, key = [], []
-    batches = columns(name)
+    batches = batches or columns(name)
     for n, said in enumerate(prompts(batches[1]), 1):
         if only and n not in only:
             continue
@@ -73,19 +76,19 @@ def build_style(name, seed, only=None):
     return out
 
 
-def build_fidelity(name, seed, only=None):
+def build_fidelity(name, seed, only=None, an=None, rewriters=REWRITERS):
     out = SCRATCH / "score" / ("fid-" + name + ("-fable" if only else ""))
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
-    an = SETS[name][1]
+    an = an or SETS[name][1]
     sheet, key = [], []
     for n, said in enumerate(prompts(an), 1):
         if only and n not in only:
             continue
-        order = [f"{r}-{an}" for r in REWRITERS]
+        order = [f"{r}-{an}" for r in rewriters]
         rng.shuffle(order)
-        sheet.append({"turn": n, "prompt": said, "original": reply(an, n), "rewrites": {l: reply(b, n) for l, b in zip("ABC", order)}})
-        key.append({"turn": n, **dict(zip("ABC", order))})
+        sheet.append({"turn": n, "prompt": said, "original": reply(an, n), "rewrites": {l: reply(b, n) for l, b in zip("ABCD", order)}})
+        key.append({"turn": n, **dict(zip("ABCD", order))})
     json.dump(sheet, open(out / "sheet.json", "w"), indent=1)
     json.dump(key, open(out / "key.json", "w"), indent=1)
     return out
@@ -200,13 +203,30 @@ if __name__ == "__main__":
             build_style(name, 71 + i, sample(name)) if name.endswith("r1") else None
             build_fidelity(name, 81 + i)
             build_fidelity(name, 91 + i, sample(name)) if name.endswith("r1") else None
+    elif command == "build-heldout":
+        for i, (name, (a, _)) in enumerate(HELDOUT.items()):
+            build_style(name, 101 + i, batches=[a] + [f"{r}-{a}" for r in HELD_REWRITERS])
+            build_fidelity(name, 111 + i, an=a, rewriters=HELD_REWRITERS)
     elif command == "judge":
         folder, model = Path(sys.argv[2]), sys.argv[3]
         name = folder.name.removeprefix("fid-").removesuffix("-fable")
+        truth = HELDOUT[name][1] if name in HELDOUT else SETS[name][2]
         if folder.name.startswith("fid-"):
             judge(folder, HERE.resolve() / "fidelity-brief.md", None, model)
         else:
-            judge(folder, HERE.resolve() / "label-brief.md", SOURCE / "score" / SETS[name][2], model)
+            judge(folder, HERE.resolve() / "label-brief.md", SOURCE / "score" / truth, model)
+    elif command == "heldout":
+        model = sys.argv[2]
+        style, fid = {}, {}
+        for name in HELDOUT:
+            style.update(unblind(SCRATCH / "score" / name, model))
+            fid.update(unblind(SCRATCH / "score" / f"fid-{name}", model))
+        for kind in ["A"] + HELD_REWRITERS:
+            keys = [k for k in style if (k[0] in [v[0] for v in HELDOUT.values()]) == (kind == "A") and (kind == "A" or k[0].split("-")[0] == kind)]
+            row = {f: sum(1 for k in keys if style[k].get(f)) for f in STYLE}
+            row |= {f: sum(1 for k in keys if fid.get(k, {}).get(f)) for f in FIDELITY}
+            row["median_words"] = statistics.median(len(reply(b, n).split()) for b, n in keys)
+            print(json.dumps({"column": kind, "turns": len(keys), **row}))
     elif command == "totals":
         totals(sys.argv[2])
     elif command == "agree":
