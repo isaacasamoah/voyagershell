@@ -60,6 +60,12 @@ export function inspectNotice(workspace, cx) {
     workspace.automaticRefresh = false;
   }
 }
+export function giveKeyboardBack(workspace, cx) {
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    focusDocked(workspace, task);
+  });
+}
 export function inspectOutsideRender(workspace, cx) {
   cx.spawn(async (task) => {
     await Promise.resolve();
@@ -74,6 +80,7 @@ export function acceptDockResult(workspace, cx) {
     if (workspace.acceptSnapshot(result, cx) && result.status === "applied") {
       workspace.dockReceipt = result.requestId;
       workspace.refreshRequested = true;
+      giveKeyboardBack(workspace, cx);
       inspectOutsideRender(workspace, cx);
     }
   }
@@ -87,7 +94,6 @@ function followDock(workspace, seen, dock, cx) {
   seenDocks.set(workspace, dock);
   cx.spawn(async (task) => {
     await Promise.resolve();
-    focusDocked(workspace, task);
     if (workspace.busy) {
       if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
       return;

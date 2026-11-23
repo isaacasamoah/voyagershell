@@ -351,6 +351,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native,
         Case::TypingRightAfterADockReachesTheVessel,
         |native| {
+            anyhow::ensure!(
+                !nice_of(&std::fs::read_to_string("/proc/self/stat")?).is_some_and(|nice| nice > 0),
+                "This case runs plain. A niced run is slower and types after the keyboard is back, so it hides the bug"
+            );
             show_fleet(native)?;
             first.focus(native)?;
             native.observe("the first Vessel focused by the click", |seen| {
@@ -725,6 +729,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })
 }
 
+fn nice_of(stat: &str) -> Option<i32> {
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(16)?
+        .parse()
+        .ok()
+}
+
 pub(super) fn render_error(labels: &[String]) -> bool {
     labels.iter().any(|label| {
         label.contains("cannot run during render") || label.contains("during the `render` phase")
@@ -765,7 +778,16 @@ fn minimises(sent: &[Observed]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::render_error;
+    use super::{nice_of, render_error};
+
+    #[test]
+    fn the_nice_value_is_read_from_the_stat_line() {
+        let plain = "1234 (voyager-verific) S 1 1234 1234 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 8 0 5000 1000 100 18446744073709551615 0";
+        let niced = "1234 (voyager verific) S 1 1234 1234 0 -1 4194560 100 0 0 0 5 3 0 0 30 10 8 0 5000 1000 100 18446744073709551615 0";
+        assert_eq!(nice_of(plain), Some(0));
+        assert_eq!(nice_of(niced), Some(10));
+        assert_eq!(nice_of("not a stat line"), None);
+    }
 
     #[test]
     fn both_render_phase_refusals_count_as_a_render_error() {

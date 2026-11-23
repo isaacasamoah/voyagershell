@@ -1052,9 +1052,9 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "a request that starts between a dock and its follow is not doubled",
   );
   assert.deepEqual(
-    only(focused),
-    ["content-2"],
-    "the keyboard goes back at once even while another request runs, and the inspect waits",
+    focused,
+    [],
+    "the dock does not follow while that request runs",
   );
   view.busy = false;
   render();
@@ -1067,31 +1067,25 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(inspects, 1, "and runs one inspect");
   await settle();
   focused.length = 0;
-  const realRun = view.run;
-  let release = null;
-  view.run = (action, task, done) => {
-    inspects += 1;
-    release = () => {
-      view.acceptSnapshot(next, task);
-      done?.(next, task);
-    };
-  };
   next = reply("placement-11");
   view.acceptSnapshot(next, cx);
   inspects = 0;
-  dockRevision = "7";
+  result = JSON.stringify({
+    ...reply("placement-11"),
+    requestId: "avatar-dock-reply-alone",
+  });
   render();
+  assert.deepEqual(
+    focused,
+    [],
+    "the keyboard does not move while the canvas draws",
+  );
   await settle();
   assert.deepEqual(
     only(focused),
     ["content-10"],
-    "the keyboard goes back as soon as the dock's reply is accepted, before the inspect's read returns",
+    "the keyboard goes back when the dock's reply is accepted, before any dock notice has arrived",
   );
-  assert.equal(inspects, 1, "the inspect is still started, and still waiting");
-  assert.equal(typeof release, "function");
-  release();
-  await settle();
-  view.run = realRun;
   const open = (...ids) =>
     new Map(ids.map((id) => [id, { status: "applied" }]));
   const avatarReply = (requestId) => {

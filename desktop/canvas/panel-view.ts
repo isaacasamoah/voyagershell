@@ -84,6 +84,16 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
   }
 }
 
+export function giveKeyboardBack(
+  workspace: Canvas,
+  cx: UIContext | AsyncContext,
+) {
+  cx.spawn(async (task) => {
+    await Promise.resolve();
+    focusDocked(workspace, task);
+  });
+}
+
 export function inspectOutsideRender(
   workspace: Canvas,
   cx: UIContext | AsyncContext,
@@ -102,6 +112,7 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
     if (workspace.acceptSnapshot(result, cx) && result.status === "applied") {
       workspace.dockReceipt = result.requestId;
       workspace.refreshRequested = true;
+      giveKeyboardBack(workspace, cx);
       inspectOutsideRender(workspace, cx);
     }
   }
@@ -121,7 +132,6 @@ function followDock(
   seenDocks.set(workspace, dock);
   cx.spawn(async (task) => {
     await Promise.resolve();
-    focusDocked(workspace, task);
     if (workspace.busy) {
       if (seenDocks.get(workspace) === dock) seenDocks.set(workspace, seen);
       return;
