@@ -1333,10 +1333,11 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
 
 #[test]
 fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
-    use crate::{client::Client, core::Core};
+    use crate::client::Client;
     use voyager_contract::{Outcome, Request};
-    let session = format!("voyager-created-eligibility-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-created-eligibility");
+    let session = guard.session().to_owned();
+    let client = guard.open("/tmp");
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let inspect = || Request {
             request_id: client.request_id(),
@@ -1406,11 +1407,7 @@ fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
             .unwrap();
         assert!(observed.created_vessels.is_empty());
     }));
-    let mut core = Core::connect(&session).unwrap();
-    let stopped = core.server_stop();
-    core.close().unwrap();
     checked.unwrap();
-    assert!(stopped.is_ok());
 }
 
 #[test]

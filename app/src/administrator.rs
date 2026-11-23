@@ -746,12 +746,15 @@ mod tests {
             include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
-        let session = format!("voyager-n3-owner-{}", std::process::id());
-        let workspace = Client::with_content(
-            session.clone(),
-            directory.to_string_lossy().into_owned(),
-            Owner::open(&directory).unwrap(),
-        );
+        let mut guard = crate::core_session::SessionGuard::new("voyager-n3-owner");
+        let session = guard.session().to_owned();
+        let workspace = guard.start(|session| {
+            Client::with_content(
+                session,
+                directory.to_string_lossy().into_owned(),
+                Owner::open(&directory).unwrap(),
+            )
+        });
         let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let call = |action, expected_version| {
                 workspace
@@ -1024,12 +1027,8 @@ mod tests {
             assert!(!a_path.exists());
             external.close().unwrap();
         }));
-        let mut cleanup = Core::connect(&session).unwrap();
-        let stopped = cleanup.server_stop();
-        cleanup.close().unwrap();
         drop(workspace);
         std::fs::remove_dir_all(directory).unwrap();
-        stopped.unwrap();
         checked.unwrap();
     }
 

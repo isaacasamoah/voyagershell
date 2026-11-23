@@ -41,8 +41,8 @@ fn worktree_creation_opens_one_voyage_and_reopens_its_identity() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let session = format!("voyager-git-{}", std::process::id());
-    let client = Client::open(session.clone(), root.to_string_lossy().into_owned());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-git");
+    let client = guard.open(&root.to_string_lossy());
     let checked = std::panic::catch_unwind(|| {
         let inspect = || {
             client
@@ -143,9 +143,6 @@ fn worktree_creation_opens_one_voyage_and_reopens_its_identity() {
             1
         );
     });
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.server_stop().unwrap();
-    cleanup.close().unwrap();
     std::fs::remove_dir_all(root).unwrap();
     if let Err(error) = checked {
         std::panic::resume_unwind(error);
@@ -159,14 +156,15 @@ fn reopen_uses_live_core_identity_and_refuses_stale_or_ended_programs() {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
     }
     let runtime = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
-    let session = format!("voyager-reopen-{}", std::process::id());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-reopen");
+    let session = guard.session().to_owned();
     assert!(
         !runtime
             .join("herdr-core")
             .join(format!("{session}.sock"))
             .exists()
     );
-    let client = Client::open(session.clone(), "/tmp".into());
+    let client = guard.open("/tmp");
     let checked = std::panic::catch_unwind(|| {
         let request = |version, action| Request {
             request_id: client.request_id(),
@@ -298,11 +296,7 @@ fn reopen_uses_live_core_identity_and_refuses_stale_or_ended_programs() {
         assert_eq!(core.terminal_list().unwrap().len(), 2);
         core.close().unwrap();
     });
-    let mut cleanup = Core::connect(&session).unwrap();
-    let stopped = cleanup.server_stop();
-    cleanup.close().unwrap();
     drop(client);
-    stopped.unwrap();
     checked.unwrap();
 }
 
@@ -685,8 +679,9 @@ fn inspect_reads_the_workspace_that_owner_start_prepared_and_writes_nothing() {
     for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
     }
-    let session = format!("voyager-inspect-reads-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-inspect-reads");
+    let session = guard.session().to_owned();
+    let client = guard.open("/tmp");
     let checked = std::panic::catch_unwind(|| {
         let (reply, facts) = async_channel::bounded(1);
         client
@@ -722,9 +717,6 @@ fn inspect_reads_the_workspace_that_owner_start_prepared_and_writes_nothing() {
         }
         core.close().unwrap();
     });
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.server_stop().unwrap();
-    cleanup.close().unwrap();
     if let Err(error) = checked {
         std::panic::resume_unwind(error);
     }
@@ -736,8 +728,8 @@ fn each_applied_dock_moves_the_dock_notice_and_only_a_vessel_programs_dock_moves
     for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
     }
-    let session = format!("voyager-dock-notice-{}", std::process::id());
-    let client = Client::open(session.clone(), "/tmp".into());
+    let mut guard = crate::core_session::SessionGuard::new("voyager-dock-notice");
+    let client = guard.open("/tmp");
     let checked = std::panic::catch_unwind(|| {
         let notice = || {
             let (reply, receive) = async_channel::bounded(1);
@@ -814,9 +806,6 @@ fn each_applied_dock_moves_the_dock_notice_and_only_a_vessel_programs_dock_moves
             "a second dock on the same context still moves the dock notice"
         );
     });
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.server_stop().unwrap();
-    cleanup.close().unwrap();
     if let Err(error) = checked {
         std::panic::resume_unwind(error);
     }

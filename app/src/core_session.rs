@@ -34,7 +34,10 @@ impl SessionGuard {
         let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
         let session = format!("{prefix}-{}-{serial}", std::process::id());
         if let Some(key) = ambient(|key| std::env::var_os(key).is_some()) {
-            panic!("Clear ambient {key}");
+            panic!(
+                "Clear ambient {key}: run cargo test behind env {}",
+                AMBIENT.map(|key| format!("-u {key}")).join(" ")
+            );
         }
         Self {
             session,
@@ -47,7 +50,11 @@ impl SessionGuard {
     }
 
     pub(crate) fn open(&mut self, cwd: &str) -> Client {
-        let client = Client::open(self.session.clone(), cwd.into());
+        self.start(|session| Client::open(session, cwd.into()))
+    }
+
+    pub(crate) fn start(&mut self, make: impl FnOnce(String) -> Client) -> Client {
+        let client = make(self.session.clone());
         self.clients.push(client.clone());
         client
     }
@@ -136,9 +143,31 @@ mod tests {
     }
 
     #[test]
+    fn ambient_probe() {
+        if std::env::var_os("VOYAGER_GUARD_PROBE").is_some() {
+            let _guard = SessionGuard::new("voyager-probe");
+        }
+    }
+
+    #[test]
     fn a_guard_refuses_to_start_when_any_one_ambient_variable_is_set() {
         for key in AMBIENT {
-            assert_eq!(ambient(|set| set == key), Some(key));
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "core_session::tests::ambient_probe"])
+                .env("VOYAGER_GUARD_PROBE", "1")
+                .env(key, "set")
+                .output()
+                .unwrap();
+            assert!(!output.status.success(), "{key} did not stop the guard");
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                text.contains(&format!("Clear ambient {key}: run cargo test behind env -u HC_SOCKET -u HC_SESSION -u HC_TERMINAL_ID -u HC_SCOPE -u HC_TERMINAL_SOCKET")),
+                "{key}: {text}"
+            );
         }
         assert_eq!(ambient(|_| false), None);
     }
