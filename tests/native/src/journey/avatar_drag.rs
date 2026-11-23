@@ -2,7 +2,8 @@ use super::layout::{avatar_bounds, avatar_on_dock};
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::{Target, region};
 use crate::native::{
-    DRAG_REST, Held, LOOK, Moved, Native, Terminal, Wheel, changed, fleets, now_millis, voyages,
+    DRAG_REST, Held, LOOK, Moved, Native, PRINT_AT_REST, Terminal, Wheel, changed, fleets, hold,
+    now_millis, voyages,
 };
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Geometry, Pixels};
@@ -11,7 +12,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::f32::consts::TAU;
 use std::fs;
-use voyager_contract::{Context as Scope, FleetId, RenameTarget};
+use voyager_contract::{Context as Scope, FleetId, PlacementId, RenameTarget};
 
 cases! {
     Still => "still",
@@ -28,9 +29,8 @@ pub const CONTROL: Case = Case::CaughtUp;
 
 const SEGMENT: usize = 25;
 const LAP: usize = 150;
-const SEGMENTS: usize = 120;
 const AFTER: usize = 3;
-const HELD_SEGMENTS: usize = 100;
+const HELD_SEGMENTS: usize = 150;
 const APPROACH: usize = 50;
 const LAPS: usize = 900;
 const CENTRE: (f32, f32) = (1000., 540.);
@@ -39,6 +39,7 @@ const KEPT_BYTES: usize = 5 << 20;
 const STAIRS: u16 = 160;
 const FAST_BYTES: usize = 8 << 20;
 const RUNS: usize = 4;
+const COUNTING_LOAD: f32 = 16.;
 const VISIBLE_STREAMS: usize = 8;
 const HIDDEN_FLEETS: usize = 3;
 const STREAMS_PER_HIDDEN_FLEET: usize = 4;
@@ -155,7 +156,7 @@ fn stairs(terminal: &Terminal, native: &Native) -> Result<(u16, String)> {
     );
     let pad = KEPT_BYTES / usize::from(count) / 3;
     let command = format!(
-        "printf '\\e[H\\e[2J\\e[3J'; sleep 2; p=$(printf '\\e[m%.0s' {{1..{pad}}}); b=$(printf '#%.0s' {{1..{count}}}); printf '\\e[H\\e[2J\\e[3J\\n'; for i in {{1..{count}}}; do printf '%s%s\\n' \"$p\" \"${{b:0:i}}\"; sleep 0.02; done; echo; echo stairs-$((6*7)); echo"
+        "printf '\\e[H\\e[2J\\e[3J'; sleep 5; p=$(printf '\\e[m%.0s' {{1..{pad}}}); b=$(printf '#%.0s' {{1..{count}}}); printf '\\e[H\\e[2J\\e[3J\\n'; for i in {{1..{count}}}; do printf '%s%s\\n' \"$p\" \"${{b:0:i}}\"; sleep 0.02; done; echo; echo stairs-$((6*7)); echo"
     );
     Ok((count, command))
 }
@@ -170,56 +171,44 @@ struct Drag {
     core_changed_while_moving: bool,
 }
 
-fn circle_until_printed<'a>(
-    native: &'a Native,
-    terminal: &Terminal,
-    orbit: &Orbit,
-    printed: impl Fn(&str) -> bool,
-) -> Result<(Held<'a>, Drag, Pixels)> {
-    terminal.settled(native, "the terminal before the drag", |_| true)?;
-    let mut held = native.hold(&Target::AVATAR)?;
-    let mut moves = held.glide(&orbit.approach())?;
-    let frozen = orbit.look(native, terminal)?;
-    let first_screen = terminal.screen(native)?;
-    let mut drag = Drag {
-        moves: Vec::new(),
-        segments: 0,
-        longest_pause_ms: 0,
-        printed_while_moving: false,
-        pane_changed_while_moving: false,
-        core_changed_while_moving: false,
-    };
-    let mut after = 0;
-    while drag.segments < SEGMENTS && after < AFTER {
-        moves.extend(held.glide(&orbit.segment(drag.segments))?);
-        drag.segments += 1;
-        let look = orbit.look(native, terminal)?;
-        drag.pane_changed_while_moving |= changed(&frozen, &look).is_some();
-        let screen = terminal.screen(native)?;
-        drag.core_changed_while_moving |= screen != first_screen;
-        if printed(&screen) {
-            drag.printed_while_moving = true;
-            after += 1;
-        }
+struct Printer<B: Fn(&str) -> bool, D: Fn(&str) -> bool> {
+    name: &'static str,
+    begun: B,
+    done: D,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Judged {
+    PaneWhileHeld,
+    AfterTheDrag,
+}
+
+fn staircase() -> Printer<impl Fn(&str) -> bool, impl Fn(&str) -> bool> {
+    Printer {
+        name: "staircase",
+        begun: |screen: &str| {
+            screen
+                .lines()
+                .any(|line| line.trim_start().starts_with('#'))
+        },
+        done: stairs_done,
     }
-    drag.longest_pause_ms = longest_pause(&moves);
-    drag.moves = moves;
-    Ok((held, drag, frozen))
 }
 
 fn circle_through<'a>(
     native: &'a Native,
     terminal: &Terminal,
     orbit: &Orbit,
+    printer: &Printer<impl Fn(&str) -> bool, impl Fn(&str) -> bool>,
+    judged: Judged,
 ) -> Result<(Held<'a>, Drag, Pixels)> {
     terminal.settled(native, "the terminal before the drag", |_| true)?;
     let frozen = orbit.look(native, terminal)?;
     let first_screen = terminal.screen(native)?;
     ensure!(
-        !first_screen
-            .lines()
-            .any(|line| line.trim_start().starts_with('#')),
-        "The staircase began before the drag, so this run cannot judge the hold; rerun it"
+        !(printer.begun)(&first_screen),
+        "The {} began before the drag, so this run cannot judge the hold; rerun it",
+        printer.name
     );
     let mut held = native.hold(&Target::AVATAR)?;
     let mut path = orbit.approach();
@@ -230,12 +219,17 @@ fn circle_through<'a>(
     let screen = terminal.screen(native)?;
     let longest_pause_ms = longest_pause(&moves);
     ensure!(
-        under_rest(longest_pause_ms) && under_rest(looked_ms),
-        "The fixture paused the pointer {longest_pause_ms} ms between moves, or looked {looked_ms} ms after the last move, at or past the 120 ms rest, so this run cannot judge the hold; rerun it"
+        under_rest(longest_pause_ms),
+        "The fixture paused the pointer {longest_pause_ms} ms between moves, at or past the 120 ms rest, so this run cannot judge the hold; rerun it"
     );
     ensure!(
-        stairs_done(&screen),
-        "The staircase did not finish within the drag, so this run cannot judge the hold; rerun it"
+        judged == Judged::AfterTheDrag || under_rest(looked_ms),
+        "The fixture looked {looked_ms} ms after the last move, at or past the 120 ms rest, so this run cannot judge the pane while the hold lived; rerun it"
+    );
+    ensure!(
+        (printer.done)(&screen),
+        "The {} did not finish within the drag, so this run cannot judge the hold; rerun it",
+        printer.name
     );
     let drag = Drag {
         moves,
@@ -269,7 +263,13 @@ fn still(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let (_, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
-    let (held, drag, _) = circle_through(native, terminal, &orbit)?;
+    let (held, drag, _) = circle_through(
+        native,
+        terminal,
+        &orbit,
+        &staircase(),
+        Judged::PaneWhileHeld,
+    )?;
     held.release()?;
     native.keep_window("drag-still")?;
     Verdict::new()
@@ -289,7 +289,13 @@ fn caught_up(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let (_, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
-    let (held, drag, frozen) = circle_through(native, terminal, &orbit)?;
+    let (held, drag, frozen) = circle_through(
+        native,
+        terminal,
+        &orbit,
+        &staircase(),
+        Judged::PaneWhileHeld,
+    )?;
     let shown = rested(native, terminal, &orbit, &frozen)?;
     let rested_at = drag.moves.last().map_or(0, |last| last.at_ms);
     let delay = shown.map(|shown| shown.saturating_sub(rested_at));
@@ -348,7 +354,8 @@ fn kept(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let (count, command) = stairs(terminal, native)?;
     let orbit = Orbit::around(native, &terminal.target())?;
     terminal.line(native, &command)?;
-    let (held, drag, frozen) = circle_until_printed(native, terminal, &orbit, stairs_done)?;
+    let (held, drag, frozen) =
+        circle_through(native, terminal, &orbit, &staircase(), Judged::AfterTheDrag)?;
     held.release()?;
     rested(native, terminal, &orbit, &frozen)?;
     let mut pages = Vec::new();
@@ -424,21 +431,23 @@ fn fast(terminal: &Terminal, native: &Native, orbit: &Orbit, dragged: bool) -> R
     let before = rate(&terminal.screen(native)?);
     let reported = |screen: &str| rate(screen).filter(|reported| Some(*reported) != before);
     terminal.line(native, &command)?;
+    let printer = Printer {
+        name: "fast printer",
+        begun: |screen: &str| reported(screen).is_some(),
+        done: |screen: &str| reported(screen).is_some(),
+    };
     let (moves, screen) = if dragged {
         let (held, drag, _) =
-            circle_until_printed(native, terminal, orbit, |screen| reported(screen).is_some())?;
+            circle_through(native, terminal, orbit, &printer, Judged::AfterTheDrag)?;
         held.release()?;
-        let screen = terminal.screen(native)?;
-        (drag.moves, screen)
+        (drag.moves, terminal.screen(native)?)
     } else {
-        let screen = poll(PATIENCE, LOOK, true, || {
-            let screen = terminal.screen(native)?;
-            Ok(reported(&screen).map(|_| screen))
-        })?
-        .context("The fast printer reported no rate at rest")?;
-        (Vec::new(), screen)
+        hold(PRINT_AT_REST)?;
+        (Vec::new(), terminal.screen(native)?)
     };
-    let (start, end) = reported(&screen).context("The fast printer reported no new rate")?;
+    let (start, end) = reported(&screen).context(
+        "The fast printer did not finish within the wait, so this run cannot judge it; rerun it",
+    )?;
     let within_drag = match (moves.first(), moves.last()) {
         (Some(first), Some(last)) => {
             ensure!(
@@ -465,11 +474,13 @@ fn median(values: &mut [u64]) -> u64 {
 fn throughput(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     let native: &Native = native;
     let orbit = Orbit::around(native, &terminal.target())?;
+    let load_at_start = load();
     let mut runs = Vec::new();
     for _ in 0..RUNS {
         runs.push(fast(terminal, native, &orbit, false)?);
         runs.push(fast(terminal, native, &orbit, true)?);
     }
+    let load_at_end = load();
     let mut rest: Vec<u64> = runs
         .iter()
         .filter(|run| !run.dragged)
@@ -486,21 +497,59 @@ fn throughput(native: &mut Native, terminal: &Terminal) -> Result<Verdict> {
     );
     let noise = slowest - fastest;
     let dragged_median = median(&mut dragged);
-    Verdict::new()
-        .expect(
-            "every dragged run printed while the avatar moved",
-            runs.iter().filter(|run| run.dragged).all(|run| run.within_drag),
-        )
-        .expect(
+    let rest_median = median(&mut rest);
+    let record = json!({
+        "loadAtStart": load_at_start,
+        "loadAtEnd": load_at_end,
+        "restMedianMs": rest_median,
+        "restBandMs": [fastest, slowest],
+        "noiseMs": noise,
+        "dragMedianMs": dragged_median,
+        "runs": runs,
+    });
+    fs::write(
+        native.system.evidence.join("throughput.json"),
+        serde_json::to_vec(&record)?,
+    )?;
+    let started_at = load_at_start
+        .first()
+        .and_then(|minute| minute.parse::<f32>().ok())
+        .context("The machine's load could not be read")?;
+    let verdict = Verdict::new().expect(
+        "every dragged run printed while the avatar moved",
+        runs.iter()
+            .filter(|run| run.dragged)
+            .all(|run| run.within_drag),
+    );
+    let verdict = if started_at < COUNTING_LOAD {
+        verdict.expect(
             "the fast printer's median time during a drag is within the noise band of its times at rest",
             dragged_median <= slowest + noise,
         )
+    } else {
+        verdict.observed(
+            "timing not judged",
+            format!("the load at the start was {started_at}, at or over {COUNTING_LOAD}"),
+        )?
+    };
+    verdict
+        .observed("load at start", &load_at_start)?
+        .observed("load at end", &load_at_end)?
         .observed("bytes", FAST_BYTES)?
-        .observed("rest median ms", median(&mut rest))?
+        .observed("rest median ms", rest_median)?
         .observed("rest band ms", [fastest, slowest])?
         .observed("noise ms", noise)?
         .observed("drag median ms", dragged_median)?
         .observed("runs", &runs)
+}
+
+fn load() -> Vec<String> {
+    fs::read_to_string("/proc/loadavg")
+        .unwrap_or_default()
+        .split_whitespace()
+        .take(3)
+        .map(str::to_owned)
+        .collect()
 }
 
 fn path(native: &Native) -> Result<Vec<(i16, i16)>> {
@@ -617,17 +666,23 @@ fn follows(native: &mut Native, case: Case, expected: usize) -> Result<Verdict> 
         .observed("running", Value::from(load))
 }
 
-fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Result<Verdict> {
+fn docks(native: &mut Native, streaming: &Terminal) -> Result<Verdict> {
     let native: &Native = native;
-    let vessel = Target::name(&RenameTarget::Vessel {
-        id: terminal.placement().clone(),
-    });
     let orbit = Orbit::around(native, &streaming.target())?;
-    let onto = native.observe("the Vessel to dock on", |seen| {
-        Some(centre_of(region(
-            seen.frame,
-            &vessel.find(seen.frame)?.bounds,
-        )))
+    let (aimed, onto) = native.observe("the widest other Vessel to dock on", |seen| {
+        let widest = seen
+            .frame
+            .elements
+            .iter()
+            .filter(|element| {
+                element.role == voyager_contract::inspection::Role::Terminal
+                    && element.key != streaming.placement().0
+            })
+            .max_by(|left, right| left.bounds.width.total_cmp(&right.bounds.width))?;
+        Some((
+            PlacementId(widest.key.clone()),
+            centre_of(region(seen.frame, &widest.bounds)),
+        ))
     })?;
     let mut held = native.hold(&Target::AVATAR)?;
     held.glide(&orbit.approach())?;
@@ -637,12 +692,9 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
     }
     held.glide(&line(orbit.at(AFTER * SEGMENT), onto))?;
     held.release()?;
-    let docked = Scope::Vessel {
-        id: terminal.placement().clone(),
-    };
     let landed = native
         .observe("the avatar docked on the Vessel", |seen| {
-            (seen.document.context == docked && avatar_on_dock(seen)).then_some(())
+            docked_on(&seen.document.context, avatar_on_dock(seen), &aimed).then_some(())
         })
         .is_ok();
     let redrawn = rested(native, streaming, &orbit, &frozen)?.is_some();
@@ -656,6 +708,10 @@ fn docks(native: &mut Native, terminal: &Terminal, streaming: &Terminal) -> Resu
             "once the drag ended, a streaming terminal drew its current output",
             redrawn,
         ))
+}
+
+fn docked_on(context: &Scope, on_dock: bool, placement: &PlacementId) -> bool {
+    on_dock && matches!(context, Scope::Vessel { id } if id == placement)
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
@@ -714,7 +770,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .map(|placed| placed.id.clone())
     })?;
     let streamer = Terminal::bind(native, &placement)?;
-    cases.check(native, Case::Docks, |native| {
-        docks(native, &terminal, &streamer)
-    })
+    cases.check(native, Case::Docks, |native| docks(native, &streamer))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drop_counts_only_when_the_avatar_docks_on_the_aimed_vessel() {
+        let aimed = PlacementId("aimed".into());
+        let vessel = |id: &str| Scope::Vessel {
+            id: PlacementId(id.into()),
+        };
+        assert!(docked_on(&vessel("aimed"), true, &aimed));
+        assert!(!docked_on(&vessel("beside"), true, &aimed));
+        assert!(!docked_on(
+            &Scope::Fleet {
+                id: FleetId("fleet".into())
+            },
+            true,
+            &aimed
+        ));
+        assert!(!docked_on(&vessel("aimed"), false, &aimed));
+    }
 }

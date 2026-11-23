@@ -423,26 +423,35 @@ The `avatar-drag` journey proves that a held avatar follows the pointer under
 load, that terminals wait for the drag without losing output, and that a drag
 can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
 120 ms rest. The first four cases use the first terminal. Each types a program
-that clears the terminal at once and prints after two seconds, so the previous
-case's output is gone before the drag. It then holds the avatar and circles it in the
+that clears the terminal at once and prints after five seconds, so the previous
+case's output is gone before the drag and the drag can begin first. It then holds the avatar and circles it in the
 terminal's lower right in segments of 25 moves. Each look at the terminal masks
 the circle's area and the avatar's resting place.
 
 - `still` captures the terminal and reads Core's screen before the hold. It
-  then glides the avatar for 100 segments, about 10 seconds, without stopping,
+  then glides the avatar for 150 segments, about 15 seconds, without stopping,
   captures the terminal again and reads Core's screen. It passes when Core's
   screen changed and the terminal's pixels did not. Under load, reading the
   screen between segments paused the pointer past the rest, which ends the hold
   by design, so these two cases look only at the start and the end. A run ends
   inconclusive with fixture blame, never as a pass, when a pause between moves
   or the end capture reached 120 ms, when the staircase began before the hold
-  or when it had not finished by the end. Rerun such a run.
+  or when it had not finished by the end. Rerun such a run. The glide is long
+  enough that a program printing after the 5 s wait finishes about 5 s before
+  the hold ends. With a 10 s glide, a staircase that finished 0.3 s before the
+  end left the app still taking its last bytes when the hold released, and that
+  late intake redrew the pane, so the control could pass `caught-up`.
 - `caught-up` does the same, then holds the avatar still. It passes when the
   terminal draws the program's output while the button is still down, and not
   before 120 ms after the last move. The time to the drawing is recorded, not
   judged, because under Xvfb and llvmpipe a present alone takes 40 to 117 ms.
-- `kept` prints the staircase during a drag, then releases the avatar, which
-  returns to its place over the terminal, and scrolls the terminal up two wheel
+- `kept` prints the staircase during a drag that glides without stopping, as in
+  `still`. A pause past the rest would end the hold mid-drag and let a
+  terminal that stopped reading catch up, so such a run is inconclusive. A
+  late look after the glide is not, because `kept` judges the scrollback after
+  the release, not the pane while the hold lived. `throughput` follows the
+  same two rules. It then
+  releases the avatar, which returns to its place over the terminal, and scrolls the terminal up two wheel
   clicks at a time to the top. Rows that read as unknown beside the avatar are
   skipped and counted as `unknown readings`. A row never read clear of the
   avatar on any page counts as missing, so the skip cannot hide a lost row.
@@ -453,18 +462,32 @@ the circle's area and the avatar's resting place.
   by one. Each page's widths are kept in `drag-kept.json`.
 - `throughput` runs a printer of 8 MiB four times at rest and four times while
   the avatar circles. Each run waits 5 s, then prints its start and end times.
-  A dragged run whose print started before the drag's first move did not
-  print during a drag, so the run ends inconclusive and is rerun. It passes
-  when every dragged run ended within the drag and the median dragged time is
-  no slower than the slowest rest time plus the rest runs' spread.
+  A dragged run glides without stopping and reads Core's screen only after
+  the glide, and a rest run waits 11 s and reads it once, so neither pays for
+  reads while the printer runs. A dragged run is inconclusive, never a pass,
+  when its print began before the drag, when it had not finished by the end,
+  or when a pause reached the rest. The case writes `throughput.json` before
+  judging: the rest and dragged medians, the rest band, every run and the
+  machine's load at its start and end. It passes when every dragged run ended
+  within the drag and, when the one-minute load at its start is under 16, the
+  median dragged time is no slower than the slowest rest time plus the rest
+  runs' spread. At 16 or more the timing is recorded and not judged. Under Xvfb
+  the app draws with llvmpipe, which uses about 15 cores during a drag, so this
+  timing includes the renderer's own cost and is not the product's number. The
+  GPU harness judges the drag's cost to a printer.
 - `idle`, `streaming` and `fleets` glide the avatar along a 950-point path with
   no load, then with eight visible terminals printing coloured build output,
   then with four more in each of three hidden Fleets. Each passes when the held
   avatar is drawn under the pointer at the end of the glide and the load
   programs were running.
-- `docks` circles the avatar over a streaming terminal and ends the glide on
-  the first terminal's Vessel name. It passes when the avatar docks on that
-  Vessel and the streaming terminal draws again after the release.
+- `docks` circles the avatar over a streaming terminal and ends the glide at
+  the centre of the widest other terminal's pane. It aims at the pane, not
+  the Vessel name, because a pane among nine tiled terminals can be too narrow
+  to draw its name, and at the widest one because a docked avatar must be
+  drawn inside its pane and a narrow pane is narrower than the avatar. It
+  passes when the avatar docks on that Vessel and the streaming terminal draws
+  again after the release. A dock anywhere else fails it, and
+  its unit test checks that only the aimed Vessel counts.
 
 The control `tests/native/controls/avatar-drag.patch` drops the redraw at the
 end of the hold, so `caught-up` fails. The staircase has finished, nothing
