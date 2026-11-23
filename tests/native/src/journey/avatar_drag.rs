@@ -155,7 +155,7 @@ fn stairs(terminal: &Terminal, native: &Native) -> Result<(u16, String)> {
     );
     let pad = KEPT_BYTES / usize::from(count) / 3;
     let command = format!(
-        "sleep 2; p=$(printf '\\e[m%.0s' {{1..{pad}}}); b=$(printf '#%.0s' {{1..{count}}}); printf '\\e[H\\e[2J\\e[3J\\n'; for i in {{1..{count}}}; do printf '%s%s\\n' \"$p\" \"${{b:0:i}}\"; sleep 0.02; done; echo; echo stairs-$((6*7)); echo"
+        "printf '\\e[H\\e[2J\\e[3J'; sleep 2; p=$(printf '\\e[m%.0s' {{1..{pad}}}); b=$(printf '#%.0s' {{1..{count}}}); printf '\\e[H\\e[2J\\e[3J\\n'; for i in {{1..{count}}}; do printf '%s%s\\n' \"$p\" \"${{b:0:i}}\"; sleep 0.02; done; echo; echo stairs-$((6*7)); echo"
     );
     Ok((count, command))
 }

@@ -419,7 +419,8 @@ The `avatar-drag` journey proves that a held avatar follows the pointer under
 load, that terminals wait for the drag without losing output, and that a drag
 can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
 120 ms rest. The first four cases use the first terminal. Each types a program
-that starts after two seconds, holds the avatar and circles it in the
+that clears the terminal at once and prints after two seconds, so the previous
+case's output is gone before the drag. It then holds the avatar and circles it in the
 terminal's lower right in segments of 25 moves. Each look at the terminal masks
 the circle's area and the avatar's resting place.
 
