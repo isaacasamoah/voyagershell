@@ -659,6 +659,10 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
     Ok(())
 }
 
+pub(crate) fn holds_keyboard(focus: &gpui::FocusHandle, window: &gpui::Window) -> bool {
+    focus.is_focused(window)
+}
+
 #[cfg(test)]
 mod tests {
     use super::Screen;
@@ -926,8 +930,4 @@ mod tests {
         encoder.encode_to_vec(&event, &mut output).unwrap();
         assert_eq!(output, [3]);
     }
-}
-
-pub(crate) fn holds_keyboard(focus: &gpui::FocusHandle, window: &gpui::Window) -> bool {
-    focus.is_focused(window)
 }
