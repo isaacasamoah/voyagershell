@@ -854,10 +854,16 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .iter()
             .map(|key| voice::kept_clip_heard(native, key))
             .collect::<Result<Vec<_>>>()?;
+        let openings = voice::kept_clip_openings(native)?;
+        let loud: Vec<_> = openings
+            .iter()
+            .filter(|clip| !clip.opens_quiet)
+            .map(|clip| format!("{} opens at level {:.0}", clip.file, clip.opening_level))
+            .collect();
         Verdict::new()
             .expect(
-                "every acknowledgement clip that played, heard back by the engine, holds its words",
-                !clips_heard.is_empty() && clips_heard.iter().all(|clip| clip.holds_its_words),
+                "every kept clip begins below the first-sound level; a clip that opens loud was cut by the trim, or was rendered already loud by the engine and kept whole before any trim, and clipsOpeningLoud names each",
+                !openings.is_empty() && loud.is_empty(),
             )
             .expect(
                 "the acknowledgement starts before hearing ends in every run",
@@ -871,6 +877,8 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("firstSoundAfterCaptureMs", &first_sounds)?
             .observed("medianMs", middle)?
             .observed("clipsHeardBack", clips_heard)?
+            .observed("clipsOpeningLoud", loud)?
+            .observed("clipOpenings", openings)?
             .observed("targetMs", TARGET_MS)
     })?;
     cases.check(native, Case::RefusalIsInTheChat, |native| {
