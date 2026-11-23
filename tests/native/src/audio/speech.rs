@@ -62,7 +62,28 @@ pub const HEY_IM_HERE: Speech = Speech {
     wav: include_bytes!("../../fixtures/speech/hey-im-here.wav"),
 };
 
-pub const ALL: [&Speech; 7] = [
+pub const YEAH: Speech = Speech {
+    name: "yeah",
+    words: "Yeah.",
+    sha256: "86776eda60d46a09733eb979b50fc27e92f8b22caab01267f472d0676693bb83",
+    wav: include_bytes!("../../fixtures/speech/yeah.wav"),
+};
+
+pub const STOP: Speech = Speech {
+    name: "stop",
+    words: "Stop.",
+    sha256: "aabb8bf752dad064a1bc3ff39adca011cc40c3183f3be115c950990225d4b5ef",
+    wav: include_bytes!("../../fixtures/speech/stop.wav"),
+};
+
+pub const WHAT_ABOUT_THE_TESTS: Speech = Speech {
+    name: "what-about-the-tests",
+    words: "What about the tests?",
+    sha256: "b2e1c5d489b619b644ccf5bff1b6d5a69cf0d1ff507389bc5a07b508f363c06b",
+    wav: include_bytes!("../../fixtures/speech/what-about-the-tests.wav"),
+};
+
+pub const ALL: [&Speech; 10] = [
     &OPEN_THE_ROADMAP,
     &RENAME_THE_FLEET,
     &RENAME_TO_HARBOR,
@@ -70,6 +91,9 @@ pub const ALL: [&Speech; 7] = [
     &OPEN_THEN_DOCK,
     &HELLO_HOW_ARE_YOU,
     &HEY_IM_HERE,
+    &YEAH,
+    &STOP,
+    &WHAT_ABOUT_THE_TESTS,
 ];
 
 const REQUESTS_TABLE: &str = include_str!("../../fixtures/hearing/hearing.tsv");

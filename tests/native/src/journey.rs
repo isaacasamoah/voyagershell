@@ -21,12 +21,13 @@ mod slow_list;
 mod slow_save;
 mod socket_dock;
 mod voice;
+mod voice_talk_over;
 mod voyage_close;
 mod voyager_command;
 mod workspace;
 mod worktrees;
 
-use crate::native::{Native, Sidebar};
+use crate::native::{Native, Sidebar, TalkOver};
 use crate::system::save;
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -152,6 +153,7 @@ journeys! {
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     VoyagerCommand => "voyager-command" in voyager_command, sidebar: None, window: None;
     AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    VoiceTalkOver => "voice-talk-over" in voice_talk_over, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -189,6 +191,13 @@ impl Journey {
         }
     }
 
+    pub fn talk_over(self) -> Option<TalkOver> {
+        match self {
+            Self::VoiceTalkOver => Some(TalkOver::On),
+            _ => None,
+        }
+    }
+
     pub fn control_patch(self) -> String {
         format!("tests/native/controls/{}.patch", self.name())
     }
@@ -197,7 +206,7 @@ impl Journey {
         Self::ALL
             .iter()
             .map(|journey| {
-                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"coreDelay":journey.core_delay(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
+                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"coreDelay":journey.core_delay(),"talkOver":journey.talk_over(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
             })
             .collect()
     }
@@ -496,6 +505,18 @@ mod tests {
     }
 
     #[test]
+    fn only_the_talk_over_journey_launches_the_app_with_talk_over_on() {
+        for journey in Journey::ALL {
+            let wanted = (*journey == Journey::VoiceTalkOver).then_some(TalkOver::On);
+            assert_eq!(journey.talk_over(), wanted, "{}", journey.name());
+        }
+        assert_eq!(
+            (TalkOver::VARIABLE, TalkOver::On.value()),
+            ("VOYAGER_VOICE_TALK_OVER", "on")
+        );
+    }
+
+    #[test]
     fn every_control_patch_still_applies() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let patches = Journey::ALL
@@ -539,6 +560,10 @@ mod tests {
                 "tests/native/controls/agent-keeps-maximize-clears.patch".to_owned(),
                 "tests/native/controls/agent-voyager-keeps.patch".to_owned(),
                 "tests/native/controls/agent-keep-hides-piece.patch".to_owned(),
+                "tests/native/controls/voice-talk-over-auto.patch".to_owned(),
+                "tests/native/controls/voice-backchannel.patch".to_owned(),
+                "tests/native/controls/voice-cut-off.patch".to_owned(),
+                "tests/native/controls/voice-stop.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

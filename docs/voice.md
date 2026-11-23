@@ -721,4 +721,11 @@ spoken among that sound is sent word for word, two turns in a row each get a spo
 reply with the speaker echoed into the microphone, and a click turns voice off. A long
 reply of 117 words is heard back by the engine with at most a tenth of its words wrong,
 its long sentences split at a comma or at the limit, and its numbers are spoken as
-words.
+words. With Auto on the fixture's speakers, speech fed while a reply plays neither
+cuts it nor becomes a turn.
+
+The `voice-talk-over` journey in [the verification guide](../tests/native/README.md#talking-over-a-reply)
+launches the app with talk over on. While a reply plays the wave is in the open-microphone
+state. "Yeah." cuts the reply, which then plays again from the start of the piece it cut.
+"Stop." leaves it stopped, sends nothing and leaves the whole reply in the chat. A sentence
+reaches Voyager's stand-in as one cut-off prompt.

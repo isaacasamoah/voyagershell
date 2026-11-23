@@ -1,8 +1,8 @@
 use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
 use crate::inspection::Target;
 use crate::native::{
-    CLIPS_KEPT, Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, REPLY_WAIT, ROOM_FEED,
-    SEND_WAIT, now_millis,
+    CLIPS_KEPT, Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, QUIET_MIC, REPLY_WAIT,
+    ROOM_FEED, SEND_WAIT, now_millis,
 };
 use crate::system::{PATIENCE, poll, settle, until};
 use anyhow::{Context, Result, bail, ensure};
@@ -19,12 +19,16 @@ pub const APP_CLIENT: &str = "voyager-voice";
 pub const READY: &str = "Start voice";
 pub const LISTENING: &str = "Listening";
 pub const CONNECTING: &str = "Connecting…";
+pub const SPEAKING_OPEN: &str = "Listening while speaking";
+pub const BUSY: &str = "Busy";
 const CLIP_RATE: u32 = 24_000;
 const HEADER: usize = 44;
 const ONSET_LEVEL: f64 = 300.0;
 const ONSET_WINDOW: usize = 960;
 const SIGNATURES: [&str; 3] = ["UklGR", "input_audio", "RIFF"];
 const AFTER_FEED_MS: u64 = 2500;
+const CUT_QUIET_MS: u64 = 1000;
+const WINDOW_MS: u64 = 20;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -753,6 +757,145 @@ pub fn click_off_during_reply(
         opened_after_next_click,
         heard: transcribe(native, name)?,
         marks: quiet_marks,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Look {
+    pub at_ms: u64,
+    pub label: String,
+    pub recording: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Fed {
+    pub from_ms: u64,
+    pub until_ms: u64,
+    pub onset_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TalkedOver {
+    pub reply_started_ms: u64,
+    pub fed: Option<Fed>,
+    pub silent_at_speaker_ms: Option<u64>,
+    pub onset_to_silence_ms: Option<u64>,
+    pub onset_to_cut_ms: Option<u64>,
+    pub reached: Vec<String>,
+    pub looks: Vec<Look>,
+    pub marks: Vec<Mark>,
+}
+
+fn look(native: &Native) -> Result<Look> {
+    let label = native.drawn_label(&Target::VOICE_CONTROL, "the voice control drawn", |_| true)?;
+    let recording = recorders(native)?.iter().any(|who| who == APP_CLIENT);
+    Ok(Look {
+        at_ms: now_millis(),
+        label,
+        recording,
+    })
+}
+
+fn silent_from(samples: &Samples, began: u64, from_ms: u64) -> Option<u64> {
+    let window = ONSET_WINDOW;
+    let first = usize::try_from(from_ms.checked_sub(began)? / WINDOW_MS).ok()?;
+    let needed = usize::try_from(CUT_QUIET_MS / WINDOW_MS).ok()?;
+    let mut run = 0;
+    for (index, chunk) in samples.0.chunks(window).enumerate().skip(first) {
+        let sum: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+        let quiet = (sum / chunk.len() as f64).sqrt() <= ONSET_LEVEL;
+        run = if quiet { run + 1 } else { 0 };
+        if run >= needed {
+            return Some(began + u64::try_from(index + 1 - run).ok()? * WINDOW_MS);
+        }
+    }
+    None
+}
+
+pub fn talk_during_reply(
+    native: &Native,
+    request: &Speech,
+    said: Option<&Speech>,
+    name: &str,
+    ends: &[&str],
+) -> Result<TalkedOver> {
+    let stack = stack(native)?;
+    let system = &native.system;
+    let mut capture = stack.capture(system, &format!("{SPEAKER}.monitor"), name)?;
+    let began = capture.began()?;
+    let trace = native.voice_trace();
+    let before = marks(&trace)?.len();
+    let fresh = || -> Result<Vec<Mark>> { Ok(marks(&trace)?.into_iter().skip(before).collect()) };
+    turn_on(native)?;
+    stack.feed(system, request)?;
+    let reply_started_ms = poll(LONG_REPLY_WAIT.within(), LOOK, true, || {
+        Ok(mark_of(&fresh()?, "speech-started").map(|mark| mark.at_ms))
+    })?
+    .context("The reply to the request never started")?;
+    let mut looks = Vec::new();
+    let mut index = fresh()?.len();
+    let fed = match said {
+        Some(said) => {
+            let samples = said.samples()?;
+            let from_ms = now_millis();
+            let mut player = stack.start_feed(system, &format!("{name}-fed"), &samples)?;
+            poll(REPLY_WAIT.within(), LOOK, true, || {
+                looks.push(look(native)?);
+                Ok(player.child.try_wait()?.map(|_| ()))
+            })?
+            .context("The speech fed over the reply did not finish")?;
+            Some(Fed {
+                from_ms,
+                until_ms: now_millis(),
+                onset_ms: onset_ms(&samples)
+                    .and_then(|onset| u64::try_from(onset).ok())
+                    .map(|onset| from_ms + onset),
+            })
+        }
+        None => None,
+    };
+    let mut reached = Vec::new();
+    for end in ends {
+        let found = poll(REPLY_WAIT.within(), LOOK, true, || {
+            looks.push(look(native)?);
+            Ok(fresh()?
+                .iter()
+                .skip(index)
+                .position(|mark| mark.event == *end)
+                .map(|at| index + at))
+        })?;
+        let Some(at) = found else {
+            break;
+        };
+        index = at + 1;
+        reached.push((*end).to_owned());
+    }
+    poll(QUIET_MIC.within(), LOOK, true, || {
+        looks.push(look(native)?);
+        Ok(None::<()>)
+    })?;
+    let (samples, _) = capture.finish(stack.folder(), name)?;
+    let marks = fresh()?;
+    turn_off(native)?;
+    let onset = fed.as_ref().and_then(|fed| fed.onset_ms);
+    let silent_at_speaker_ms = onset.and_then(|onset| silent_from(&samples, began, onset));
+    let cut_ms = mark_of(&marks, "speech-cut").map(|mark| mark.at_ms);
+    Ok(TalkedOver {
+        reply_started_ms,
+        silent_at_speaker_ms,
+        onset_to_silence_ms: onset
+            .zip(silent_at_speaker_ms)
+            .and_then(|(onset, silent)| silent.checked_sub(onset)),
+        onset_to_cut_ms: onset
+            .zip(cut_ms)
+            .and_then(|(onset, cut)| cut.checked_sub(onset)),
+        fed,
+        reached,
+        looks,
+        marks,
     })
 }
 

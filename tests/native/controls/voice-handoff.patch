@@ -1,13 +1,12 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
-index fa3f222e..e2bee4ce 100644
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -370,7 +370,7 @@ impl Exchange<'_> {
-         if !held.send {
-             return finish;
+@@ -461,7 +461,7 @@ impl Exchange<'_> {
          }
--        match self.voyager.say(&crate::spoken::prompt(heard)) {
-+        match self.voyager.say(heard) {
-             Ok(()) => self.trace.mark("sent"),
-             Err(failure) => {
-                 if failure.refused {
+         let text = match self.route(&heard) {
+             Route::Chat(text) => text,
+-            Route::Voyager(ack) => return Decided::Voyager(spoken::prompt(&heard), ack),
++            Route::Voyager(ack) => return Decided::Voyager(heard, ack),
+         };
+         let clips: Result<Vec<Clip>, Fault> = text
+             .pieces()

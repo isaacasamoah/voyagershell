@@ -1,0 +1,12 @@
+diff --git a/app/src/voice_settings.rs b/app/src/voice_settings.rs
+--- a/app/src/voice_settings.rs
++++ b/app/src/voice_settings.rs
+@@ -28,7 +28,7 @@ fn named(value: Option<&str>) -> (TalkOver, Option<&str>) {
+     };
+     match value.to_ascii_lowercase().as_str() {
+         "auto" => (TalkOver::Auto, None),
+-        "on" => (TalkOver::On, None),
++        "on" => (TalkOver::Auto, None),
+         "off" => (TalkOver::Off, None),
+         _ => (TalkOver::Auto, Some(value)),
+     }
