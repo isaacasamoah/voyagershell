@@ -1,6 +1,7 @@
 use std::{
     io::{self, BufRead, BufReader, Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
+    ops::ControlFlow,
     time::Duration,
 };
 
@@ -69,7 +70,10 @@ fn read_head(reader: &mut impl BufRead) -> io::Result<(u16, Option<usize>, bool)
     Ok((status, length, chunked))
 }
 
-fn read_chunks(reader: &mut impl BufRead, mut sink: impl FnMut(&[u8])) -> io::Result<()> {
+fn read_chunks(
+    reader: &mut impl BufRead,
+    mut sink: impl FnMut(&[u8]) -> ControlFlow<()>,
+) -> io::Result<()> {
     loop {
         let mut line = String::new();
         reader.read_line(&mut line)?;
@@ -80,7 +84,9 @@ fn read_chunks(reader: &mut impl BufRead, mut sink: impl FnMut(&[u8])) -> io::Re
         }
         let mut chunk = vec![0; size];
         reader.read_exact(&mut chunk)?;
-        sink(&chunk);
+        if sink(&chunk).is_break() {
+            return Ok(());
+        }
         let mut end = [0; 2];
         reader.read_exact(&mut end)?;
     }
@@ -92,7 +98,7 @@ pub(crate) fn stream(
     path: &str,
     body: &[u8],
     deadline: Duration,
-    mut sink: impl FnMut(&[u8]),
+    mut sink: impl FnMut(&[u8]) -> ControlFlow<()>,
 ) -> io::Result<u16> {
     let mut socket = open(port, deadline)?;
     send(&mut socket, method, path, body)?;
@@ -109,17 +115,18 @@ pub(crate) fn stream(
             if count == 0 {
                 return Err(invalid("The engine closed before its body ended"));
             }
-            sink(&buffer[..count]);
+            if sink(&buffer[..count]).is_break() {
+                break;
+            }
             remaining -= count;
         }
     } else {
         let mut buffer = [0; 8192];
         loop {
             let count = reader.read(&mut buffer)?;
-            if count == 0 {
+            if count == 0 || sink(&buffer[..count]).is_break() {
                 break;
             }
-            sink(&buffer[..count]);
         }
     }
     Ok(status)
@@ -135,6 +142,7 @@ pub(crate) fn request(
     let mut collected = Vec::new();
     let status = stream(port, method, path, body, deadline, |bytes| {
         collected.extend_from_slice(bytes);
+        ControlFlow::Continue(())
     })?;
     Ok(Response {
         status,
@@ -177,10 +185,26 @@ mod tests {
         let mut seen = Vec::new();
         let status = stream(port, "POST", "/x", b"{}", Duration::from_secs(2), |bytes| {
             seen.push(bytes.to_vec());
+            ControlFlow::Continue(())
         })
         .unwrap();
         assert_eq!(status, 200);
         assert_eq!(seen, vec![b"abc".to_vec(), b"de".to_vec()]);
+    }
+
+    #[test]
+    fn a_sink_that_breaks_stops_the_read_at_that_chunk() {
+        let port = serve(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n",
+        );
+        let mut seen = Vec::new();
+        let status = stream(port, "POST", "/x", b"{}", Duration::from_secs(2), |bytes| {
+            seen.push(bytes.to_vec());
+            ControlFlow::Break(())
+        })
+        .unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(seen, vec![b"abc".to_vec()]);
     }
 
     #[test]

@@ -499,12 +499,40 @@ card without a code default for it.
 
 ### Acknowledgement clips
 
-The clips in the table are rendered once through the engine and kept in the user
-cache folder, keyed by the model size and the voice. Each file is named by its key and
-a short hash of its words, so a phrase with new words renders a new clip and the old
-file is never played. The app reads them into
-memory when the engine is ready. A click then costs no model run before the
-clip starts. A fresh cache renders the set once, after the first warm-up.
+The clips in the table are rendered through the engine and kept in the user cache
+folder, keyed by the model size and the voice. Each file is named by its key and a short
+hash of its words, so a phrase with new words renders a new clip and the old file is
+never played. Voice is ready as soon as the engine has warmed up. The clips are read or
+rendered after that on their own thread, one at a time, and each is used from the moment
+it is kept, so a fresh cache never holds up the control. A clip that is not kept yet plays
+nothing. The turn goes on without it, and a reply clip such as "That didn't work." is
+reported as not kept. A kept clip then costs no model run before it starts.
+
+A kept clip must fit its words. The engine sometimes renders "Mm-hm." as a long murmur.
+In 66 renders with the app's request on the journey's CPU engine, 20 ran past 2.44 s and
+the longest stopped at the engine's 40.96 s limit. A run-on is sound almost to its end
+(40.96 s became 40.80 s with its leading and trailing silence trimmed), so trimming does
+not fix it. A fixed seed made every render identical and a token cap held renders under
+3.2 s, but neither stops a run-on. Before this rule the voice played the whole hum before
+the reply, so a 28.9 s hum held a small-talk reply for 29 s, and 4 of 15 kept journey runs
+failed on it.
+
+A clip fits when its audio lasts at most 1.5 times 1.288 s plus 0.056 s for each character
+of its words. 1.288 s plus 0.056 s a character is the upper envelope of 253 renders of 17
+texts that never ran on. They are every other fixed phrase, short words such as "Sure."
+and "You?", and the clips kept by 16 journey runs. "Mm-hm." may last 2.44 s. Its longest
+good render was 1.92 s and its shortest run-on 2.96 s. The rule is `omni::longest`.
+
+`omni::prepare_clips` applies the rule on load and on render. A kept clip that does not
+fit is treated as missing, so a run-on kept by an earlier version is rendered again. The
+engine streams speech while it renders. The first audio arrived 0.12 s after the request
+and about 0.08 s of audio followed every 20 ms in 30 renders. A render stops reading as
+soon as its audio passes the limit, about 0.7 s into a run-on "Mm-hm.", and the clip is
+rendered again, at most five times. Five comes from the run-on rate. 20 of 66 renders ran
+on, and 0.30 to the fifth power is about 0.24%. When no render fits, nothing is kept for
+that phrase, the app logs "The voice clip mm-hm ran past the length its words allow in 5
+renders, so it is not kept." with the clip's key, voice runs without it, and the next
+launch tries again. Spoken replies are not held to the rule.
 
 ## Host requirements
 

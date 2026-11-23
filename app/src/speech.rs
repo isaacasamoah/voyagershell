@@ -1,3 +1,8 @@
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, PoisonError},
+};
+
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const CEILING_WORDS: usize = 120;
 pub const PIECE_WORDS: usize = 25;
@@ -147,6 +152,41 @@ pub struct Utterance {
 pub struct Clip {
     pub rate: u32,
     pub pcm: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Kept(Arc<Mutex<HashMap<Phrase, Clip>>>);
+
+impl Kept {
+    pub fn get(&self, phrase: Phrase) -> Option<Clip> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&phrase)
+            .cloned()
+    }
+
+    pub fn keep(&self, phrase: Phrase, clip: Clip) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(phrase, clip);
+    }
+
+    pub fn rate(&self) -> Option<u32> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .values()
+            .next()
+            .map(|clip| clip.rate)
+    }
+}
+
+impl FromIterator<(Phrase, Clip)> for Kept {
+    fn from_iter<I: IntoIterator<Item = (Phrase, Clip)>>(clips: I) -> Self {
+        Self(Arc::new(Mutex::new(clips.into_iter().collect())))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,11 +1,10 @@
 use crate::{
     replies::Replies,
-    speech::{CEILING_CUT, CUT_AT_LIMIT, Clip, Phrase, Speaking},
+    speech::{CEILING_CUT, CUT_AT_LIMIT, Clip, Kept, Speaking},
     voice_parts::{Audio, Floor, Phase, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
 };
 use std::{
-    collections::HashMap,
     sync::{
         Arc, Mutex, PoisonError,
         mpsc::{self, Receiver},
@@ -19,7 +18,7 @@ const STANDING_EVERY: Duration = Duration::from_millis(250);
 
 pub(crate) struct Parts {
     pub speaking: Arc<dyn Speaking>,
-    pub clips: Arc<HashMap<Phrase, Clip>>,
+    pub clips: Kept,
     pub audio: Arc<dyn Audio>,
     pub voyager: Arc<dyn Voyager>,
     pub replies: Replies,
@@ -77,8 +76,7 @@ fn clip_of(parts: &Parts, line: &Line) -> Rendered {
         }
         Line::Said(phrase) => parts
             .clips
-            .get(phrase)
-            .cloned()
+            .get(*phrase)
             .map(|clip| (clip, phrase.key().to_owned()))
             .ok_or_else(|| "The clip is not kept".to_owned()),
         Line::Partial => Err(PARTIAL.to_owned()),
@@ -211,7 +209,7 @@ fn play_all(
 mod tests {
     use super::*;
     use crate::{
-        speech::{Fault, Piece, Standing},
+        speech::{Fault, Phrase, Piece, Standing},
         voice_parts::{Frames, Speaker},
     };
     use std::{
@@ -342,21 +340,19 @@ mod tests {
             let listening = on.clone();
             spawn(Parts {
                 speaking: Arc::new(Reader),
-                clips: Arc::new(
-                    Phrase::ALL
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, phrase)| {
-                            (
-                                phrase,
-                                Clip {
-                                    rate: 24_000,
-                                    pcm: vec![0; 1000 + index],
-                                },
-                            )
-                        })
-                        .collect(),
-                ),
+                clips: Phrase::ALL
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, phrase)| {
+                        (
+                            phrase,
+                            Clip {
+                                rate: 24_000,
+                                pcm: vec![0; 1000 + index],
+                            },
+                        )
+                    })
+                    .collect(),
                 audio: Arc::new(Out(
                     played.clone(),
                     cut.clone(),
