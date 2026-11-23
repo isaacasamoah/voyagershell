@@ -1052,9 +1052,9 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "a request that starts between a dock and its follow is not doubled",
   );
   assert.deepEqual(
-    focused,
-    [],
-    "the dock does not follow while that request runs",
+    only(focused),
+    ["content-2"],
+    "the keyboard goes back at once even while another request runs, and the inspect waits",
   );
   view.busy = false;
   render();
