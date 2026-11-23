@@ -22,9 +22,14 @@ pub enum Standing {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Phrase {
-    Hum,
-    Asking,
-    OkayAsking,
+    OneSec,
+    LetMeLook,
+    Checking,
+    OkayChecking,
+    Sure,
+    Okay,
+    GotIt,
+    SureThing,
     Queued,
     NeedsYou,
     NotRunning,
@@ -37,10 +42,15 @@ pub enum Phrase {
 }
 
 impl Phrase {
-    pub const ALL: [Phrase; 12] = [
-        Phrase::Hum,
-        Phrase::Asking,
-        Phrase::OkayAsking,
+    pub const ALL: [Phrase; 17] = [
+        Phrase::OneSec,
+        Phrase::LetMeLook,
+        Phrase::Checking,
+        Phrase::OkayChecking,
+        Phrase::Sure,
+        Phrase::Okay,
+        Phrase::GotIt,
+        Phrase::SureThing,
         Phrase::Queued,
         Phrase::NeedsYou,
         Phrase::NotRunning,
@@ -54,9 +64,14 @@ impl Phrase {
 
     pub fn words(self) -> &'static str {
         match self {
-            Phrase::Hum => "Mm-hm.",
-            Phrase::Asking => "Asking Voyager.",
-            Phrase::OkayAsking => "Okay, asking Voyager.",
+            Phrase::OneSec => "One sec.",
+            Phrase::LetMeLook => "Let me look.",
+            Phrase::Checking => "Checking.",
+            Phrase::OkayChecking => "Okay, checking.",
+            Phrase::Sure => "Sure.",
+            Phrase::Okay => "Okay.",
+            Phrase::GotIt => "Got it.",
+            Phrase::SureThing => "Sure thing.",
             Phrase::Queued => "Queued for Voyager.",
             Phrase::NeedsYou => "Voyager needs you on Home first.",
             Phrase::NotRunning => "I couldn't pass that to Voyager.",
@@ -71,9 +86,14 @@ impl Phrase {
 
     pub fn key(self) -> &'static str {
         match self {
-            Phrase::Hum => "mm-hm",
-            Phrase::Asking => "asking",
-            Phrase::OkayAsking => "okay-asking",
+            Phrase::OneSec => "one-sec",
+            Phrase::LetMeLook => "let-me-look",
+            Phrase::Checking => "checking",
+            Phrase::OkayChecking => "okay-checking",
+            Phrase::Sure => "sure",
+            Phrase::Okay => "okay",
+            Phrase::GotIt => "got-it",
+            Phrase::SureThing => "sure-thing",
             Phrase::Queued => "queued",
             Phrase::NeedsYou => "needs-you",
             Phrase::NotRunning => "not-running",
@@ -97,32 +117,66 @@ impl Phrase {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Ack {
+    None,
+    Look,
+    Sure,
+}
+
+impl Ack {
+    pub const ALL: [Ack; 3] = [Ack::None, Ack::Look, Ack::Sure];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Ack::None => "none",
+            Ack::Look => "look",
+            Ack::Sure => "sure",
+        }
+    }
+
+    pub fn pool(self) -> &'static [Phrase] {
+        match self {
+            Ack::None => &[],
+            Ack::Look => &[
+                Phrase::OneSec,
+                Phrase::LetMeLook,
+                Phrase::Checking,
+                Phrase::OkayChecking,
+            ],
+            Ack::Sure => &[Phrase::Sure, Phrase::Okay, Phrase::GotIt, Phrase::SureThing],
+        }
+    }
+
+    fn pick(self, turn: u64) -> Option<Phrase> {
+        let pool = self.pool();
+        (!pool.is_empty()).then(|| pool[turn as usize % pool.len()])
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Acknowledgement {
-    pub phrase: Phrase,
+    pub phrase: Option<Phrase>,
     pub send: bool,
 }
 
-pub fn acknowledge(standing: Standing, turn: u64) -> Acknowledgement {
+pub fn acknowledge(standing: Standing, ack: Ack, turn: u64) -> Acknowledgement {
     match standing {
         Standing::Idle | Standing::Unknown => Acknowledgement {
-            phrase: if turn.is_multiple_of(2) {
-                Phrase::Asking
-            } else {
-                Phrase::OkayAsking
-            },
+            phrase: ack.pick(turn),
             send: true,
         },
         Standing::Working => Acknowledgement {
-            phrase: Phrase::Queued,
+            phrase: Some(Phrase::Queued),
             send: true,
         },
         Standing::Blocked => Acknowledgement {
-            phrase: Phrase::NeedsYou,
+            phrase: Some(Phrase::NeedsYou),
             send: false,
         },
         Standing::NotRunning => Acknowledgement {
-            phrase: Phrase::Gone,
+            phrase: Some(Phrase::Gone),
             send: false,
         },
     }
@@ -578,38 +632,86 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_idle_voyager_gets_the_two_asking_phrases_in_turn_and_the_words_are_sent() {
-        let first = acknowledge(Standing::Idle, 0);
-        let second = acknowledge(Standing::Idle, 1);
-        assert_eq!(first.phrase, Phrase::Asking);
-        assert_eq!(second.phrase, Phrase::OkayAsking);
-        assert!(first.send && second.send);
+    fn an_idle_voyager_gets_nothing_for_none_and_a_varied_line_for_look_and_sure() {
+        let none: Vec<_> = (0..4)
+            .map(|turn| acknowledge(Standing::Idle, Ack::None, turn))
+            .collect();
+        assert!(none.iter().all(|held| held.phrase.is_none() && held.send));
+        for ack in [Ack::Look, Ack::Sure] {
+            let lines: Vec<_> = (0..4)
+                .map(|turn| acknowledge(Standing::Idle, ack, turn))
+                .collect();
+            assert!(lines.iter().all(|held| held.send));
+            let phrases: Vec<_> = lines.iter().filter_map(|held| held.phrase).collect();
+            assert_eq!(phrases, ack.pool(), "{ack:?}");
+            assert_eq!(
+                acknowledge(Standing::Idle, ack, 4).phrase,
+                Some(ack.pool()[0])
+            );
+        }
     }
 
     #[test]
-    fn a_working_voyager_queues_the_words() {
-        let queued = acknowledge(Standing::Working, 0);
-        assert_eq!((queued.phrase, queued.send), (Phrase::Queued, true));
+    fn the_look_and_sure_pools_are_four_different_lines_each_and_share_none() {
+        assert!(Ack::None.pool().is_empty());
+        let look = Ack::Look.pool();
+        let sure = Ack::Sure.pool();
+        assert_eq!((look.len(), sure.len()), (4, 4));
+        let mut every: Vec<&str> = look
+            .iter()
+            .chain(sure)
+            .map(|phrase| phrase.words())
+            .collect();
+        every.sort_unstable();
+        every.dedup();
+        assert_eq!(every.len(), 8);
+        assert!(
+            look.iter()
+                .chain(sure)
+                .all(|phrase| Phrase::ALL.contains(phrase))
+        );
+    }
+
+    #[test]
+    fn a_chosen_line_promises_nothing_and_names_nobody() {
+        for phrase in Ack::Look.pool().iter().chain(Ack::Sure.pool()) {
+            let words = phrase.words().to_lowercase();
+            for forbidden in ["voyager", "will", "i'll", "on it", "done", "asking"] {
+                assert!(!words.contains(forbidden), "{words}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_working_voyager_queues_the_words_whatever_the_choice() {
+        for ack in Ack::ALL {
+            let queued = acknowledge(Standing::Working, ack, 0);
+            assert_eq!((queued.phrase, queued.send), (Some(Phrase::Queued), true));
+        }
     }
 
     #[test]
     fn a_voyager_with_no_state_yet_is_asked_like_an_idle_one() {
-        for turn in [0, 1] {
-            let unknown = acknowledge(Standing::Unknown, turn);
-            let idle = acknowledge(Standing::Idle, turn);
-            assert_eq!(unknown, idle);
-            assert!(unknown.send);
+        for ack in Ack::ALL {
+            for turn in [0, 1] {
+                let unknown = acknowledge(Standing::Unknown, ack, turn);
+                let idle = acknowledge(Standing::Idle, ack, turn);
+                assert_eq!(unknown, idle);
+                assert!(unknown.send);
+            }
         }
     }
 
     #[test]
     fn a_blocked_or_absent_voyager_receives_nothing() {
-        for (standing, phrase) in [
-            (Standing::Blocked, Phrase::NeedsYou),
-            (Standing::NotRunning, Phrase::Gone),
-        ] {
-            let held = acknowledge(standing, 0);
-            assert_eq!((held.phrase, held.send), (phrase, false));
+        for ack in Ack::ALL {
+            for (standing, phrase) in [
+                (Standing::Blocked, Phrase::NeedsYou),
+                (Standing::NotRunning, Phrase::Gone),
+            ] {
+                let held = acknowledge(standing, ack, 0);
+                assert_eq!((held.phrase, held.send), (Some(phrase), false));
+            }
         }
     }
 

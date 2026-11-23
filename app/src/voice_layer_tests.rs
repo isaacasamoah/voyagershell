@@ -50,10 +50,13 @@ fn click(shared: &Shared) {
     shared.update(|state| state.snapshot.on = !state.snapshot.on);
 }
 
+type WhilePlaying = Arc<Mutex<Option<fn(&Shared)>>>;
+
 struct Fake {
     mics: Mutex<VecDeque<Mic>>,
     played: Arc<Mutex<Vec<usize>>>,
     cut: Arc<Mutex<Vec<bool>>>,
+    while_playing: WhilePlaying,
     opened: AtomicUsize,
     speakers: AtomicUsize,
     shared: Arc<Shared>,
@@ -63,6 +66,8 @@ struct Fake {
 struct Voice {
     played: Arc<Mutex<Vec<usize>>>,
     cut: Arc<Mutex<Vec<bool>>>,
+    while_playing: WhilePlaying,
+    shared: Arc<Shared>,
 }
 
 impl Speaker for Voice {
@@ -71,6 +76,9 @@ impl Speaker for Voice {
             .lock()
             .unwrap()
             .extend(clips.map(|clip| clip.pcm.len()));
+        if let Some(act) = *self.while_playing.lock().unwrap() {
+            act(&self.shared);
+        }
         Box::new(move |cut| self.cut.lock().unwrap().push(cut()))
     }
 }
@@ -98,6 +106,8 @@ impl Audio for Fake {
         Ok(Box::new(Voice {
             played: self.played.clone(),
             cut: self.cut.clone(),
+            while_playing: self.while_playing.clone(),
+            shared: self.shared.clone(),
         }))
     }
 
@@ -125,7 +135,7 @@ impl Routing for Model {
         match self {
             Model::Says(answer) => Ok(Route::parse(heard, answer, Some(1.0))),
             Model::Slow(answer) => {
-                thread::sleep(HUM_AFTER * 3);
+                thread::sleep(SLOW);
                 Ok(Route::parse(heard, answer, Some(1.0)))
             }
             Model::Fails => Err(Fault::Failed("no route".into())),
@@ -134,6 +144,8 @@ impl Routing for Model {
 }
 
 const CHAT_CLIP: usize = 100;
+const SLOW: Duration = Duration::from_millis(150);
+const LOOK: &str = r#"{"kind": "work", "ack": "look"}"#;
 
 struct Voiced {
     speaks: bool,
@@ -265,12 +277,13 @@ impl Rig {
         let shared = Arc::new(Shared::new(Phase::Ready));
         let floor = Arc::new(Floor::default());
         Self {
-            model: Model::Says(r#"{"kind": "work"}"#),
+            model: Model::Says(LOOK),
             voiced: Voiced { speaks: true },
             audio: Fake {
                 mics: Mutex::new(mics.into()),
                 played: Arc::default(),
                 cut: Arc::default(),
+                while_playing: Arc::default(),
                 opened: AtomicUsize::new(0),
                 speakers: AtomicUsize::new(0),
                 shared: shared.clone(),
@@ -347,7 +360,7 @@ fn a_heard_request_is_acknowledged_sent_and_listening_resumes() {
     rig.serve("Rename this fleet to Harbor.");
     assert_eq!(rig.said(), vec!["[spoken] Rename this fleet to Harbor."]);
     assert!(crate::spoken::is_spoken(&rig.said()[0]));
-    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
     assert_eq!(rig.opened(), 2);
     assert!(rig.snapshot().on);
 }
@@ -363,7 +376,7 @@ fn two_requests_in_a_row_are_two_turns_without_another_click() {
     assert_eq!(rig.said().len(), 2);
     assert_eq!(
         rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::OkayAsking)]
+        vec![mark(Phrase::OneSec), mark(Phrase::LetMeLook)]
     );
     assert!(rig.snapshot().on);
 }
@@ -413,11 +426,10 @@ fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
 }
 
 #[test]
-fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
+fn a_click_while_the_turn_is_decided_plays_nothing_more_and_the_request_still_goes() {
     struct Clicking(Arc<Shared>);
     impl Hearing for Clicking {
         fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
-            thread::sleep(HUM_AFTER * 3);
             click(&self.0);
             Ok("open the roadmap".into())
         }
@@ -433,24 +445,36 @@ fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_
         rig.shared.update(|state| state.shutdown = true);
     });
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::Hum)]);
+    assert!(rig.played().is_empty());
+    assert_eq!(rig.opened(), 1);
+}
+
+#[test]
+fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    *rig.audio.while_playing.lock().unwrap() = Some(click);
+    rig.shared.update(|state| state.snapshot.on = true);
+    thread::scope(|scope| {
+        scope.spawn(|| rig.serve("open the roadmap"));
+        wait_until(|| {
+            let snapshot = rig.snapshot();
+            !snapshot.on && snapshot.phase == Phase::Ready
+        });
+        rig.shared.update(|state| state.shutdown = true);
+    });
+    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
     assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
     assert_eq!(rig.opened(), 1);
 }
 
 #[test]
 fn a_shutdown_while_the_acknowledgement_plays_cuts_it() {
-    struct Closing(Arc<Shared>);
-    impl Hearing for Closing {
-        fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
-            thread::sleep(HUM_AFTER * 3);
-            self.0.update(|state| state.shutdown = true);
-            Ok("open the roadmap".into())
-        }
-    }
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    *rig.audio.while_playing.lock().unwrap() =
+        Some(|shared: &Shared| shared.update(|state| state.shutdown = true));
     rig.shared.update(|state| state.snapshot.on = true);
-    rig.serve_with(&Closing(rig.shared.clone()));
+    rig.serve("open the roadmap");
     assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![true]);
 }
 
@@ -484,7 +508,7 @@ fn a_microphone_that_cannot_open_is_announced_once_and_retried_until_it_hears() 
     rig.serve("open the roadmap");
     assert_eq!(
         rig.played(),
-        vec![mark(Phrase::NoMicrophone), mark(Phrase::Asking)]
+        vec![mark(Phrase::NoMicrophone), mark(Phrase::OneSec)]
     );
     assert_eq!(rig.said().len(), 1);
     assert!(rig.snapshot().on);
@@ -596,7 +620,7 @@ fn a_live_voyager_with_no_state_yet_receives_the_words() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Unknown, false);
     rig.serve("open the roadmap");
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
 }
 
 #[test]
@@ -624,7 +648,7 @@ fn a_refused_send_is_said_aloud_once_and_put_in_the_chat_and_never_retried() {
     assert!(rig.said().is_empty());
     assert_eq!(
         rig.played(),
-        vec![mark(Phrase::Asking), mark(Phrase::NotRunning)]
+        vec![mark(Phrase::OneSec), mark(Phrase::NotRunning)]
     );
     assert_eq!(
         rig.voyager.notes.lock().unwrap().clone(),
@@ -642,7 +666,7 @@ fn an_unconfirmed_send_stays_silent_and_out_of_the_chat() {
     let rig = Rig::failing(vec![Mic::Opens(sentence())], Standing::Idle, Some(failure));
     rig.serve("open the roadmap");
     assert!(rig.snapshot().notice.unwrap().contains("unconfirmed"));
-    assert_eq!(rig.played(), vec![mark(Phrase::Asking)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
     assert!(rig.voyager.notes.lock().unwrap().is_empty());
 }
 
@@ -664,14 +688,14 @@ struct Watching {
 
 impl Hearing for Watching {
     fn hear(&self, _: &Utterance, _: &[String]) -> Result<String, Fault> {
-        thread::sleep(HUM_AFTER * 3);
+        thread::sleep(SLOW);
         *self.before_hearing.lock().unwrap() = Some(self.played.lock().unwrap().clone());
         Ok("open the roadmap".into())
     }
 }
 
 #[test]
-fn the_hum_has_started_before_slow_hearing_ends() {
+fn nothing_plays_while_slow_hearing_decides_the_turn() {
     let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     let hearing = Watching {
         played: rig.audio.played.clone(),
@@ -680,9 +704,9 @@ fn the_hum_has_started_before_slow_hearing_ends() {
     rig.serve_with(&hearing);
     assert_eq!(
         hearing.before_hearing.lock().unwrap().clone(),
-        Some(vec![mark(Phrase::Hum)])
+        Some(Vec::new())
     );
-    assert_eq!(rig.played(), vec![mark(Phrase::Hum), mark(Phrase::Asking)]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
     assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
 }
 
@@ -779,8 +803,7 @@ fn a_chat_reply_that_promises_an_action_is_not_spoken_and_the_words_reach_voyage
     rig.model = Model::Says(r#"{"kind": "chat", "say": "Sure, I'll rename it."}"#);
     rig.serve("Rename it to Harbor.");
     assert_eq!(rig.said(), vec!["[spoken] Rename it to Harbor."]);
-    assert!(!rig.played().contains(&CHAT_CLIP));
-    assert!(rig.played().contains(&mark(Phrase::Asking)));
+    assert!(rig.played().is_empty());
     assert!(rig.notes().is_empty());
 }
 
@@ -795,8 +818,7 @@ fn a_failed_route_or_a_chat_reply_that_cannot_be_spoken_still_reaches_voyager() 
     silent.serve("Hello.");
     for rig in [failed, silent] {
         assert_eq!(rig.said(), vec!["[spoken] Hello."]);
-        assert!(rig.played().contains(&mark(Phrase::Asking)));
-        assert!(!rig.played().contains(&CHAT_CLIP));
+        assert!(rig.played().is_empty());
     }
 }
 
@@ -809,24 +831,52 @@ fn a_fast_decision_plays_only_the_chat_reply() {
 }
 
 #[test]
-fn a_slow_decision_hums_first_then_plays_the_chat_reply() {
+fn a_slow_decision_plays_only_the_chat_reply_once_it_is_ready() {
     let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
     rig.model = Model::Slow(SURE_CHAT);
     rig.serve("Hello.");
-    assert_eq!(rig.played(), vec![mark(Phrase::Hum), CHAT_CLIP]);
+    assert_eq!(rig.played(), vec![CHAT_CLIP]);
     assert!(rig.said().is_empty());
 }
 
 #[test]
-fn a_request_for_voyager_hums_only_when_deciding_is_slow_and_never_gets_a_chat_reply() {
-    let fast = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    fast.serve("Open the roadmap.");
-    assert_eq!(fast.played(), vec![mark(Phrase::Asking)]);
-    let mut slow = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    slow.model = Model::Slow(r#"{"kind": "work"}"#);
-    slow.serve("Open the roadmap.");
-    assert_eq!(slow.played(), vec![mark(Phrase::Hum), mark(Phrase::Asking)]);
-    assert_eq!(slow.said(), vec!["[spoken] Open the roadmap."]);
+fn a_request_for_voyager_plays_only_its_chosen_line_and_never_gets_a_chat_reply() {
+    for (answer, played) in [
+        (r#"{"kind": "work", "ack": "none"}"#, vec![]),
+        (LOOK, vec![mark(Phrase::OneSec)]),
+        (
+            r#"{"kind": "work", "ack": "sure"}"#,
+            vec![mark(Phrase::Sure)],
+        ),
+    ] {
+        for model in [Model::Says(answer), Model::Slow(answer)] {
+            let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+            rig.model = model;
+            rig.serve("Open the roadmap.");
+            assert_eq!(rig.played(), played, "{answer}");
+            assert_eq!(rig.said(), vec!["[spoken] Open the roadmap."], "{answer}");
+        }
+    }
+}
+
+#[test]
+fn turns_in_a_row_vary_the_chosen_line() {
+    let mut rig = Rig::new(
+        vec![
+            Mic::Opens(sentence()),
+            Mic::Opens(sentence()),
+            Mic::Opens(sentence()),
+        ],
+        Standing::Idle,
+        false,
+    );
+    rig.model = Model::Says(r#"{"kind": "work", "ack": "sure"}"#);
+    rig.serve("Ask the crew to run the tests.");
+    assert_eq!(
+        rig.played(),
+        vec![mark(Phrase::Sure), mark(Phrase::Okay), mark(Phrase::GotIt)]
+    );
+    assert_eq!(rig.said().len(), 3);
 }
 
 #[test]
@@ -965,11 +1015,11 @@ fn voice_is_ready_while_a_clip_is_still_rendering_and_keeps_it_once_rendered() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-fn hum_marks(left_out: Option<Phrase>) -> (usize, Vec<usize>) {
+fn line_marks(left_out: Option<Phrase>) -> (usize, Vec<usize>) {
     let mut rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    rig.model = Model::Slow(r#"{"kind": "work"}"#);
+    rig.model = Model::Says(LOOK);
     rig.clips = clips_without(left_out);
-    let name = format!("voyager-hum-{left_out:?}-{}.jsonl", std::process::id());
+    let name = format!("voyager-line-{left_out:?}-{}.jsonl", std::process::id());
     let path = std::env::temp_dir().join(name);
     let trace = Trace::to_file(path.clone());
     rig.shared.update(|state| state.snapshot.on = true);
@@ -983,16 +1033,15 @@ fn hum_marks(left_out: Option<Phrase>) -> (usize, Vec<usize>) {
     let marks = std::fs::read_to_string(&path).unwrap_or_default();
     let _ = std::fs::remove_file(&path);
     let started = r#""event":"acknowledgement-started""#;
-    let hums = marks
+    let lines = marks
         .lines()
-        .filter(|line| line.contains(started) && line.contains(r#""words":"mm-hm""#))
+        .filter(|line| line.contains(started) && line.contains(r#""words":"one-sec""#))
         .count();
-    (hums, rig.played())
+    (lines, rig.played())
 }
 
 #[test]
-fn a_hum_that_is_not_kept_plays_nothing_and_marks_no_acknowledgement() {
-    let (hum, asking) = (mark(Phrase::Hum), mark(Phrase::Asking));
-    assert_eq!(hum_marks(Some(Phrase::Hum)), (0, vec![asking]));
-    assert_eq!(hum_marks(None), (1, vec![hum, asking]));
+fn a_chosen_line_that_is_not_kept_plays_nothing_and_marks_no_acknowledgement() {
+    assert_eq!(line_marks(Some(Phrase::OneSec)), (0, vec![]));
+    assert_eq!(line_marks(None), (1, vec![mark(Phrase::OneSec)]));
 }
