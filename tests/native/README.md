@@ -2019,7 +2019,7 @@ Each picked case still gets what it needs:
 
 - Cases declared `setup` in `cases!` always run.
 - A case that uses the state an earlier case made declares that in the journey, after
-  the case list: `cases! { First => "first", Second => "second"; "second" needs "first" }`.
+  the case list, as in `cases! { First => "first", Second => "second"; "second" needs "first" }`.
   A picked case pulls in the cases it needs, directly or through other needs, and the run
   records them as included.
 - A journey that declares no needs for a case does not guess. If a picked case never runs

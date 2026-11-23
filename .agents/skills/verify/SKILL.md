@@ -101,9 +101,9 @@ repair cannot be completed; do not silently substitute a custom rig. Never weake
 refused with the journey's cases. Setup cases and the cases that a picked case needs, as
 the journey declares them, run too. The run's `observations.json` and `checks.json` say
 which cases were picked, included and left out and that the run is partial, and a partial
-run is never a full pass: list it in the manifest input with `"partial": true`. If a picked
-case did not run, the run fails and names the earlier cases it left out; read the README
-section "Running chosen cases".
+run is never a full pass. List it in the manifest input with `"partial": true`. If a picked
+case did not run, the run fails and names the earlier cases it left out. The README
+section "Running chosen cases" has the rest.
 
 ## Verdict manifest
 
