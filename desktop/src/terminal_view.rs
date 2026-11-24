@@ -42,7 +42,7 @@ impl Render for Pane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         crate::diagnostics::trace("render_start", usize::from(self.dirty));
         crate::diagnostics::redraw::record("terminal_renders", 1);
-        if self.dirty {
+        if self.dirty && (self.grid.is_none() || !self.redraw.holding()) {
             match self.screen.snapshot() {
                 Ok(grid) => {
                     self.grid = Some(grid);

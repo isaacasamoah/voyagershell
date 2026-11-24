@@ -1,6 +1,7 @@
 mod adopt_by_label;
 mod agent_split;
 mod arrangement;
+mod avatar_drag;
 mod chat;
 mod core_events;
 mod home_create;
@@ -150,6 +151,7 @@ journeys! {
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     VoyagerCommand => "voyager-command" in voyager_command, sidebar: None, window: None;
+    AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
 }
 
 impl Journey {
@@ -171,6 +173,10 @@ impl Journey {
         !matches!(self, Self::VoyagerCommand)
     }
 
+    pub fn traces_tools(self) -> bool {
+        matches!(self, Self::AvatarDrag)
+    }
+
     pub fn core_delay(self) -> Option<&'static str> {
         match self {
             Self::SlowSave => Some(slow_save::HOLD),
@@ -178,6 +184,7 @@ impl Journey {
             Self::SlowList => Some(slow_list::HOLD),
             Self::HomeCreate => Some(home_create::HOLD),
             Self::SocketDock => Some(socket_dock::HOLD),
+            Self::AvatarDrag => Some(avatar_drag::WATCH),
             _ => None,
         }
     }

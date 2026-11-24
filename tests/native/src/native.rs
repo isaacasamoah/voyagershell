@@ -4,13 +4,13 @@ mod settle;
 mod terminal;
 
 pub use avatar::{Reference, Sharpness};
-pub use input::Wheel;
+pub use input::{Held, Moved, Wheel};
 pub use settle::{
-    AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, ENGINE_START, Elapsed,
-    FLOAT_SPACING, FLOOR_WAIT, LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE,
-    PROBE_AFTER_DOCK, PROBE_LATEST, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT,
-    STATUS_AFTER_CLICK, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold,
-    now_millis,
+    AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
+    DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH,
+    LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, PRINT_AT_REST, PROBE_AFTER_DOCK,
+    PROBE_LATEST, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, STATUS_AFTER_CLICK, Stopwatch,
+    VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
@@ -226,6 +226,7 @@ pub struct Native {
     pub hc: Pinned,
     pub script: Option<Script>,
     pub probe_frames: bool,
+    pub trace_tools: bool,
     pub audio_requested: bool,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
@@ -282,6 +283,7 @@ impl Native {
             hc,
             script: None,
             probe_frames: false,
+            trace_tools: false,
             audio_requested: false,
             audio: None,
             voice_engine: None,
@@ -622,6 +624,9 @@ impl Native {
         let inspection = self.inspection();
         let stop = self.system.evidence.join(frames::STOP);
         let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
+        if self.trace_tools {
+            extra_env.push(("VOYAGER_TRACE_TOOLS", "1"));
+        }
         if self.probe_frames {
             extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
             extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));

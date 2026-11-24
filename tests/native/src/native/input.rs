@@ -19,6 +19,15 @@ pub enum Wheel {
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
+pub struct Moved {
+    pub at_ms: u64,
+    pub x: i16,
+    pub y: i16,
+}
+
+const GLIDE_STEP: std::time::Duration = std::time::Duration::from_millis(4);
+
+#[derive(Clone, Copy, Debug, Serialize)]
 struct Aim {
     region: Geometry,
     avatar: Option<Geometry>,
@@ -65,6 +74,36 @@ impl Held<'_> {
 
     pub fn press(&self, chord: impl Into<Chord>) -> Result<()> {
         self.native.press(chord)
+    }
+
+    pub fn glide(&mut self, path: &[(i16, i16)]) -> Result<Vec<Moved>> {
+        let x11 = self.native.x11()?;
+        let window = x11.geometry(self.native.window)?;
+        let moved = self.native.system.act(
+            json!({"input":"glide","button":HELD_BUTTON,"from":self.at,"moves":path.len(),"stepMicros":GLIDE_STEP.as_micros()}),
+            || {
+                let began = std::time::Instant::now();
+                let mut moved = Vec::with_capacity(path.len());
+                for (index, point) in path.iter().enumerate() {
+                    let due = GLIDE_STEP * u32::try_from(index).unwrap_or(u32::MAX);
+                    if let Some(wait) = due.checked_sub(began.elapsed()) {
+                        std::thread::sleep(wait);
+                    }
+                    let (x, y) = (window.x + point.0, window.y + point.1);
+                    x11.move_to(x, y)?;
+                    moved.push(Moved {
+                        at_ms: super::settle::now_millis(),
+                        x,
+                        y,
+                    });
+                }
+                Ok(moved)
+            },
+        )?;
+        if let Some(last) = moved.last() {
+            self.at = (last.x, last.y);
+        }
+        Ok(moved)
     }
 
     pub fn until<T>(&self, expected: &str, mut read: impl FnMut(&Seen) -> Option<T>) -> Result<T> {

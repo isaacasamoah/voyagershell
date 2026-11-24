@@ -409,6 +409,122 @@ sleeps for a fixed time, and a gesture the app never answers fails on its
 deadline. `Native::resize_window` resizes the owned window, and
 `Terminal::screen` reads Core's text for a terminal once.
 
+`Held::glide` moves the held pointer through a list of window points at one
+move every 4 ms, without waiting on the app between moves, and returns the wall
+time of each move. `Terminal::widths` reads how many cells of ink each row of a
+terminal's pixels reaches, after masking the avatar and an optional extra area.
+It searches only the grid's columns, because the look also masks the padding
+around them. A row reads unknown when a masked pixel in those columns lies to
+the right of its last ink, because its end could be hidden. Its unit test
+checks a drawn row, a second row, a row whose end could be under the mask, a
+row whose ink reaches past it and both rows with the padding masked.
+
+The `avatar-drag` journey proves that a held avatar follows the pointer under
+load, that terminals wait for the drag without losing output, and that a drag
+can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
+120 ms rest. The journey starts the app with `VOYAGER_TRACE_TOOLS` set
+(`Journey::traces_tools`), so `native.log` records when each workspace request
+reaches the owner. A labelled terminal is adopted only while no request is in
+flight and the owner's layout is current, so that log shows which one held back
+an adoption that never came. The first four cases use the first terminal. Each types a program
+that clears the terminal at once and prints after five seconds, so the previous
+case's output is gone before the drag and the drag can begin first. It then holds the avatar and circles it in the
+terminal's lower right in segments of 25 moves. Each look at the terminal masks
+the circle's area and the avatar's resting place.
+
+- `still` captures the terminal and reads Core's screen before the hold. It
+  then glides the avatar for 150 segments, about 15 seconds, without stopping,
+  captures the terminal again and reads Core's screen. It passes when Core's
+  screen changed and the terminal's pixels did not. Under load, reading the
+  screen between segments paused the pointer past the rest, which ends the hold
+  by design, so these two cases look only at the start and the end. A run ends
+  inconclusive with fixture blame, never as a pass, when a pause between moves
+  or the end capture reached 120 ms, when the staircase began before the hold
+  or when it had not finished by the end. Rerun such a run. The glide is long
+  enough that a program printing after the 5 s wait finishes about 5 s before
+  the hold ends. With a 10 s glide, a staircase that finished 0.3 s before the
+  end left the app still taking its last bytes when the hold released, and that
+  late intake redrew the pane, so the control could pass `caught-up`.
+- `caught-up` does the same, then holds the avatar still. It passes when the
+  terminal draws the program's output while the button is still down, and not
+  before 120 ms after the last move. The time to the drawing is recorded, not
+  judged, because under Xvfb and llvmpipe a present alone takes 40 to 117 ms.
+- `kept` prints the staircase during a drag that glides without stopping, as in
+  `still`. A pause past the rest would end the hold mid-drag and let a
+  terminal that stopped reading catch up, so such a run is inconclusive. A
+  late look after the glide is not, because `kept` judges the scrollback after
+  the release, not the pane while the hold lived. `throughput` follows the
+  same two rules. It then
+  releases the avatar, which returns to its place over the terminal, and scrolls the terminal up two wheel
+  clicks at a time to the top. Rows that read as unknown beside the avatar are
+  skipped and counted as `unknown readings`. A row never read clear of the
+  avatar on any page counts as missing, so the skip cannot hide a lost row.
+  Row k of the staircase is k `#` characters after about 32 KiB of invisible
+  SGR resets, so about 4.25 MiB in, Core's 4 MiB queue limit would drop rows
+  from a terminal that stopped reading. It passes when every row from 1 to the
+  last appears, and every pair of adjacent staircase rows on every page goes up
+  by one. Each page's widths are kept in `drag-kept.json`.
+- `throughput` runs a printer of 8 MiB four times at rest and four times while
+  the avatar circles. Each run waits 5 s, then prints its start and end times.
+  A dragged run glides without stopping and reads Core's screen only after
+  the glide, and a rest run waits 11 s and reads it once, so neither pays for
+  reads while the printer runs. A dragged run is inconclusive, never a pass,
+  when its print began before the drag, when it had not finished by the end,
+  or when a pause reached the rest. Before judging, the case writes the rest
+  and dragged medians, the rest band, every run and the machine's load at its
+  start and end to `throughput.json`. It passes when every dragged run ended
+  within the drag and, when the one-minute load at its start is under 16, the
+  median dragged time is no slower than the slowest rest time plus the rest
+  runs' spread. At 16 or more the timing is recorded and not judged. Under Xvfb
+  the app draws with llvmpipe, which uses about 15 cores during a drag, so this
+  timing includes the renderer's own cost and is not the product's number. The
+  GPU harness judges the drag's cost to a printer.
+- `idle`, `streaming` and `fleets` glide the avatar along a 950-point path with
+  no load, then with eight visible terminals printing coloured build output,
+  then with four more in each of three hidden Fleets. Each passes when the held
+  avatar is drawn under the pointer at the end of the glide and the load
+  programs were running.
+- `after-switch` shows a hidden Fleet, clicks the home Fleet's tab and grabs
+  the avatar at once, then glides it as `fleets` does. It passes when the held
+  avatar is drawn under the pointer at the end. The grab must come within 50 ms
+  of the click (`GRAB_AFTER_SWITCH`), so the new layout lands during the drag;
+  a later grab ends the run inconclusive. Its control is a build that still
+  ends a drag when the canvas reports a new layout.
+- `drop-after-switch` grabs the same way, then drops on the widest Vessel of
+  the home Fleet that the avatar is not already docked on, which only the new
+  layout shows, and expects a dock there. It waits until every layout save
+  sent since that drop has Core's reply, matched by id in the relay's watch,
+  and then holds `DOCK_FOLLOW_MARGIN`, 400 ms. That margin is a timing margin,
+  not a state wait. On main, the canvas drops a Fleet click made while it
+  finishes a dock's follow-up inspect (issue 38), and no observable state marks
+  the end of that follow-up. An inspect request line does not say which run it
+  belongs to. Clicks made 300 ms or more after a dock were kept in 70 of 70
+  measured trials. A state wait replaces the margin once one exists. It then
+  grabs as the hidden Fleet's tab is clicked and drops where another home
+  Vessel was, and expects no dock on that Vessel. It records the saves after
+  the first drop and any sent between the wait and the second click, because
+  the wait cannot see a save the app has not sent yet. Each drop waits until
+  the new Fleet is shown under the held avatar, so the drop is judged against
+  the layout current at release. The first drop's control is the build that
+  ends a drag on a new layout. The second's is a build that judges the drop
+  against the targets presented at the press.
+- `docks` circles the avatar over a streaming terminal and ends the glide at
+  the centre of the widest other terminal's pane. It aims at the pane, not
+  the Vessel name, because a pane among nine tiled terminals can be too narrow
+  to draw its name, and at the widest one because a docked avatar must be
+  drawn inside its pane and a narrow pane is narrower than the avatar. It
+  passes when the avatar docks on that Vessel and the streaming terminal draws
+  again after the release. A dock anywhere else fails it, and
+  its unit test checks that only the aimed Vessel counts.
+
+The control `tests/native/controls/avatar-drag.patch` drops the redraw at the
+end of the hold, so `caught-up` fails. The staircase has finished, nothing
+else prints, and the terminal never draws it. The journey judges no frame
+budget. The drag's frame timing was measured with the exploratory Wayland
+harness in `experiments/avatar-motion/` on the `experiment/canvas-redraw`
+branch. It runs a candidate built with the frame profiler on a headless mutter
+compositor with a GPU and injects moves through RemoteDesktop.
+
 ### Profile fixtures, live edits and a second build
 
 A run's profile is `profile/` in the evidence directory. The app seeds a file
@@ -715,6 +831,16 @@ still in the path, so zero measures the relay and not its absence. A run without
 `--core-delay` has no relay. The driver's own requests to Core, including its
 `doc.get` and `terminal.list` reads, go to the socket directly and are never
 held, so an observation sees the true state while the app sees the delayed one.
+
+`watch:METHOD` in the delay list records the named method without holding it.
+The relay writes an `asked` line with the request's id when the app sends it
+and a `replied` line with the same id when Core answers, and forwards both
+frames at once and unchanged. A method can be held or watched, not both. The
+audit fails a reply with no request and a request whose reply the relay never
+saw while it stayed alive. `watched_since` in `src/core_relay.rs` lists the
+watched requests from a point in time with their reply times. A watch proves
+that every request sent so far has its reply. It cannot see a request the app
+has not sent yet.
 Core accepts and answers those requests within 5 s each. When it does not, the
 error reads "Core did not accept METHOD" or "Core did not answer METHOD", then
 "within 5000 ms on the verifier's own connection", with the operating system's
@@ -822,8 +948,8 @@ A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
 on the command line replaces it. `slow-save` declares `doc.set=1500`, `outcomes` declares
-`terminal.kill=21000`, `slow-list` declares `terminal.list=2000` and
-`home-create` declares `arm`.
+`terminal.kill=21000`, `slow-list` declares `terminal.list=2000`,
+`home-create` declares `arm` and `avatar-drag` declares `watch:doc.set`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can

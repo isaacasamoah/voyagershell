@@ -22,7 +22,9 @@ Navigation does not synthesize a dock. No avatar action grants authority.
 Native pointer events supply the source window and real pointer coordinates.
 The controller converts them to screen coordinates and compares them with the
 workspace's currently presented targets. Composition changes retire omitted
-target records and cancel the previous gesture. The same native avatar view
+target records. A drag in progress continues through them, and its drop is
+judged at release against the targets presented then, so it never docks on a
+retired target. The same native avatar view
 mounts in the outer ShellRoot's native-overlay slot, outside cached workspace
 content and beneath sheets, dialogs and tooltips. The pinned SDK preparation in
 CONTRIBUTING.md supplies that slot without avatar policy or another controller.
@@ -62,6 +64,24 @@ workspace, its image gives way to the native target preview. Workspace-origin
 drags clamp their preview to the viewport as the reference does. Context changes
 still require the typed Dock response; OS window movement does not establish a
 dock. No window is created for each motion or release.
+
+Once a drag has moved, the avatar's capture-phase move listener stops each
+pointer move from propagating. The canvas's bubble-phase move handlers, which
+serve only the canvas's own reordering drags, then do not run during an avatar
+drag. Dock targets are found by the avatar's own listener before the stop, so a
+drag that ends on a target still docks.
+
+A moved drag owns a terminal hold (`Hold` in `desktop/src/avatar/drag.rs`). The
+hold starts on the first move after the drag passes its 7 px threshold. Each
+later move refreshes it. It ends 120 ms after the last move, or when the drag
+ends, is cancelled or is reset by a window restore, because dropping the drag
+drops the hold. Ending the hold closes a channel that every waiting terminal pane
+awaits, so no pane polls for the end. While a hold lives, panes keep parsing
+their output and returning Core's credit, but defer their redraw to the hold's
+end (`RedrawAtRest`). A terminal therefore keeps its last drawn screen while the
+avatar moves and draws its current screen once the pointer rests or the drag
+ends. Redrawing a pane rebuilds the whole canvas, and that rebuild is what the
+hold keeps out of a drag's frames.
 
 On Linux/X11, one connection subscribes to the owned window's `_NET_WM_STATE` changes
 and destruction before its first read. The already-nonblocking connection's
@@ -233,7 +253,7 @@ supplies actual Voyage-owned Portals and the shared content renderer. Portal
 targets and Go there now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
-An avatar reply is accepted in render, as the canvas always did, so the layout, the dock receipt and the avatar's projection change together with the reply. A press on the avatar that begins in the gap between the reply and a later layout change is cancelled by that change, so the layout must not lag the reply. The one focus call that accepting can make, for a focused Vessel the new layout no longer shows, may not run while the canvas draws. It runs in a spawned task after one await, and only if the focus is still where the accept left it and no chat, rename or dialog has opened since. The avatar is the person, and the owner raises a change notice only for requests that carry an agent or program scope, so an avatar reply raises none. The accept therefore has to be followed by the notice inspect, because nothing else will ask the canvas to open the terminals of what the reply shows. A reply that opens Home is prepared by that inspect. The inspect runs in a spawned task after its first await, through one function, `inspectOutsideRender`, because the request it starts ends with a redraw request that the toolkit refuses while the canvas draws. The follow that a dock starts, `followDock`, starts its inspect the same way, from a task after one await, and puts the seen dock back if a request has started by then so the next draw follows it. The other callers that still start a request while the canvas draws are left to the general fix, which moves them onto `inspectOutsideRender`. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening. When the canvas is busy the reply leaves the refresh wanted, and the one place busy ends reads it, so a click during launch work prepares once when that work ends.
+An avatar reply is accepted in render, as the canvas always did, so the layout, the dock receipt and the avatar's projection change together with the reply. A layout change does not end a press on the avatar, so a grab made just before a Fleet switch lands keeps following the pointer, and its drop is judged against the layout shown at release. The one focus call that accepting can make, for a focused Vessel the new layout no longer shows, may not run while the canvas draws. It runs in a spawned task after one await, and only if the focus is still where the accept left it and no chat, rename or dialog has opened since. The avatar is the person, and the owner raises a change notice only for requests that carry an agent or program scope, so an avatar reply raises none. The accept therefore has to be followed by the notice inspect, because nothing else will ask the canvas to open the terminals of what the reply shows. A reply that opens Home is prepared by that inspect. The inspect runs in a spawned task after its first await, through one function, `inspectOutsideRender`, because the request it starts ends with a redraw request that the toolkit refuses while the canvas draws. The follow that a dock starts, `followDock`, starts its inspect the same way, from a task after one await, and puts the seen dock back if a request has started by then so the next draw follows it. The other callers that still start a request while the canvas draws are left to the general fix, which moves them onto `inspectOutsideRender`. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening. When the canvas is busy the reply leaves the refresh wanted, and the one place busy ends reads it, so a click during launch work prepares once when that work ends.
 
 ## Working-core integration
 

@@ -418,6 +418,25 @@ it adds no idle polling or timer. Disconnect and completion return directly.
 This gives the event loop an opportunity to handle input and frames, but actual
 saturated-output responsiveness and latency still require native evidence.
 
+During an avatar drag the pump runs as at rest. It parses, sends replies and
+returns credit after parsing. Only the redraw waits. A pane that parsed output
+while the avatar's terminal hold lives marks itself dirty and starts one waiter
+on the hold's end, which then notifies the pane. Later output during the same
+hold adds no waiter. Frames drawn for other views can still render the pane
+during a drag, so a render while the hold lives keeps the grid the pane last
+drew and takes no new snapshot. `docs/avatar.md` describes the hold.
+
+The pump keeps returning credit during a drag because Core drops a slow viewer's
+backlog. Herdr Core 0.1.16 (e07c2a1) and 0.1.21 (1b0393f) open each viewer
+stream with 256 KiB of credit (`WINDOW` in `crates/herdr-core/src/wire.rs`).
+Core keeps reading the program whatever a viewer's credit, and queues what it
+cannot send. Past 4 MiB queued for one viewer (`MAX_PENDING`), `Outbox::data`
+drops that viewer's queue and `viewers.rs` sends a repaint of the current
+screen instead. The screen converges, but the lines in the dropped queue never
+reach the pane's scrollback. A pane that stopped taking output during a drag
+would meet that drop after about 4.25 MiB of output. A pane that keeps parsing
+meets it only when its program outpaces parsing, as it would without a drag.
+
 The native `terminal-input` journey in `tests/native` covers typed commands,
 keys as bytes, keys under application cursor mode, output drawn without input,
 drag selection, the copy on release to CLIPBOARD and PRIMARY, copy with

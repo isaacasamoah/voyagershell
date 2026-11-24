@@ -473,6 +473,45 @@ gap = "No timing case and no envelope limit yet. Section 3c named no owner, so a
 confidence = "stated"
 
 [[invariant]]
+id = "avatar-drag-follows-pointer"
+says = "While the user drags the avatar, it is drawn under the pointer on every display frame, at idle and up to the load in the usage envelope."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 22 Nov 2026: moving the avatar is a primary action and should be smooth and fast even up to maximal load"
+features = ["avatar"]
+guard = ["type:desktop/src/avatar/drag.rs#Drag"]
+type_gap = "Drag holds one position derived from the latest pointer move and the grab offset, so the drawn avatar follows the pointer. No type bounds how late a frame draws it."
+check = ["journey:avatar-drag/idle", "journey:avatar-drag/streaming", "journey:avatar-drag/fleets", "journey:avatar-drag/after-switch", "journey:avatar-drag/drop-after-switch"]
+gap = "No frame budget is judged until tests/native has a GPU surface. The cases prove the avatar reaches the pointer under each load, but under Xvfb and llvmpipe a present alone takes 40 to 117 ms. Load from builds beside the app is not covered."
+confidence = "stated"
+
+[[invariant]]
+id = "terminal-output-is-kept"
+says = "A terminal Vessel's screen and scrollback show every line its Program prints, in order, and the Program never waits on the view, during an avatar drag as at rest."
+kind = "user"
+owner = "desktop-presentation"
+source = "Product brief for the smooth avatar drag, 22 Nov 2026: a multi-second drag over fast-printing terminals \"loses no output and doesn't stall their programs\""
+features = ["terminal-io", "avatar"]
+guard = ["type:desktop/src/avatar/drag.rs#RedrawAtRest"]
+type_gap = "RedrawAtRest defers only a pane's redraw, so its pump keeps parsing and crediting Core during a drag. No type stops a later change from pausing the pump itself."
+check = ["journey:avatar-drag/kept", "journey:avatar-drag/throughput"]
+gap = "Lines are kept only while the pane parses as fast as the Program prints. A Program that outpaces parsing at rest meets Core's repaint, as it does without a drag."
+confidence = "stated"
+
+[[invariant]]
+id = "terminals-wait-for-the-drag"
+says = "While the user moves the avatar, terminal Vessels keep their last drawn screen, and they show their current output once the pointer has rested 120 ms or the drag ends."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 22 Nov 2026, approving the smooth avatar drag: \"Terminals pause their output while the avatar moves, and catch up within 120 ms of the pointer resting.\""
+features = ["terminal-io", "avatar"]
+guard = ["type:desktop/src/avatar/drag.rs#Hold"]
+type_gap = "A Hold lives only inside a moved Drag and ends 120 ms after its last move, so terminals cannot stay held after a drag ends. No type bounds how soon the next frame draws them."
+check = ["journey:avatar-drag/still", "journey:avatar-drag/caught-up", "journey:avatar-drag/docks"]
+gap = "The cases prove the pane waits for the 120 ms rest and then draws, but judge no upper bound on the catch-up frame until tests/native has a GPU surface."
+confidence = "stated"
+
+[[invariant]]
 id = "reports-wait-for-the-user"
 says = "Reports to Voyager never interrupt the user's chat. Only click-yes cards and blockers raise a badge."
 kind = "user"

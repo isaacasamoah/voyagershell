@@ -149,6 +149,7 @@ struct Pane {
     press: Option<click::Press>,
     scroll_fraction: f32,
     composition: input::Composition,
+    redraw: crate::avatar::RedrawAtRest,
     _task: Task<()>,
     _focus: Vec<Subscription>,
 }
@@ -229,6 +230,7 @@ impl Pane {
             press: None,
             scroll_fraction: 0.,
             composition: input::Composition::default(),
+            redraw: crate::avatar::RedrawAtRest::new(cx),
             _task: task,
             _focus: subscriptions,
         }
@@ -277,7 +279,7 @@ impl Pane {
             #[cfg(feature = "frame-profiler")]
             crate::diagnostics::glyph::observe_parsed(&self.screen.terminal);
             self.dirty = true;
-            cx.notify();
+            self.redraw.notify(cx);
         }
         if !self.viewer.connected() && self.status.is_empty() {
             self.status = "Core disconnected".into();

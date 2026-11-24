@@ -1,0 +1,13 @@
+diff --git a/desktop/src/avatar/drag.rs b/desktop/src/avatar/drag.rs
+index f2c3f7b0..26460b8a 100644
+--- a/desktop/src/avatar/drag.rs
++++ b/desktop/src/avatar/drag.rs
+@@ -52,7 +52,7 @@ impl RedrawAtRest {
+         cx.spawn(async move |view, cx| {
+             hold.released().await;
+             waiting.set(false);
+-            let _ = view.update(cx, |_, cx| cx.notify());
++            let _ = (view, cx);
+         })
+         .detach();
+     }
