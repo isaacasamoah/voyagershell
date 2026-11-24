@@ -1078,9 +1078,9 @@ features:
         journeys: [voice]
       - id: voice-waits-for-the-speaker
         kind: user
-        says: 'After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click, a thump or the app''s own voice is never a turn.'
+        says: 'After a click, voice shows connecting and then green while it listens. A turn ends only after the person stops speaking, and a click or a thump is never a turn. While Voyager speaks, the microphone stays open only when Talk over Voyager is On, or Auto with headphones as the output, and the button stays green. Otherwise the microphone is paused, the button is grey, and the app''s own voice is never a turn. With the microphone open, speech over a reply stops it. When the person''s words end, a backchannel such as Yeah resumes the reply from the sentence piece it cut, a stop leaves it stopped, and anything else reaches Voyager once, as a follow-up to the reply it cut off.'
         owner: conversation-provider
-        guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/voice_parts.rs#Floor']
+        guards: ['type:app/src/audio_io.rs#Gate', 'type:app/src/voice_parts.rs#Floor', 'type:app/src/voice_settings.rs#TalkOver', 'type:app/src/voice_talk_over.rs#Interjection']
         checks:
           - 'journey:voice/turn-waits-for-the-sentence'
           - 'journey:voice/start-thump-is-not-speech'
@@ -1088,8 +1088,19 @@ features:
           - 'journey:voice/two-turns-with-echo'
           - 'test:app/src/audio_io.rs#a_thump_as_the_microphone_opens_is_not_speech'
           - 'test:app/src/audio_io.rs#a_pause_just_under_the_end_of_turn_silence_does_not_end_it'
+          - 'journey:voice/auto-on-speakers-keeps-the-microphone-paused'
+          - 'journey:voice-talk-over/wave-is-green-while-a-reply-plays'
+          - 'journey:voice-talk-over/backchannel-resumes-the-sentence'
+          - 'journey:voice-talk-over/steer-reaches-voyager-as-cut-off'
+          - 'journey:voice-talk-over/stop-leaves-it-stopped'
+          - 'test:app/src/voice_speaker.rs#talk_over_on_offers_the_reply_and_off_never_does_without_reading_the_headphones'
+          - 'test:app/src/voice_speaker.rs#with_headphones_each_reply_is_offered_to_the_listener_and_the_headphones_are_read_once'
+          - 'test:app/src/voice_layer_talk_over_tests.rs#speech_over_a_reply_stops_it_and_a_backchannel_resumes_at_the_piece_it_cut'
+          - 'test:app/src/voice_layer_talk_over_tests.rs#a_bare_stop_leaves_the_reply_stopped_with_the_unspoken_rest_in_the_chat'
+          - 'test:app/src/voice_layer_talk_over_tests.rs#other_words_over_a_reply_reach_voyager_once_as_a_cut_off_prompt'
+          - 'test:desktop/src/speech.rs#the_wave_is_green_only_while_the_microphone_hears_the_person'
         formal: []
-        journeys: [voice]
+        journeys: [voice, voice-talk-over]
       - id: voice-hears-verbatim
         kind: user
         says: 'Voice hands Voyager the words the person spoke, never an answer to them.'
