@@ -13,8 +13,8 @@ pub use settle::{
     now_millis,
 };
 pub use terminal::{
-    Adopted, Adoption, EXPECTATION, LOOK, Label, Lines, Patch, Program, Size, Terminal, address,
-    adopt, bound_to, boxes, changed, repainted, typed,
+    Adoption, EXPECTATION, LOOK, Label, Lines, Patch, Program, Size, Terminal, address, adopt,
+    bound_to, boxes, changed, repainted, typed,
 };
 
 use crate::audio::Stack;
