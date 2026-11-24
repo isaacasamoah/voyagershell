@@ -907,6 +907,11 @@ canvas's own read after the attach.
   with its terminal while the Home view is shown. The first milliseconds, where
   the create lands while Home is still being prepared, are covered by
   `created-while-preparing-is-drawn`, which holds the attach.
+- `voyage-click-while-preparing-is-kept` shows the Fleet view, relaunches, holds
+  the terminal attach and clicks Home, waits until the app has drawn a picture
+  that is not prepared, then clicks the Voyage in the sidebar. It passes when
+  the held attach was released after that click and the saved layout then shows
+  the Fleet view, which is the held click acting once the preparation ended.
 
 #### Scripted tool calls
 

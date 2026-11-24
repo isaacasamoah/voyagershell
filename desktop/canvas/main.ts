@@ -167,7 +167,7 @@ export default class Canvas extends View {
   declare openings: Map<string, Opening>;
   declare created: ReadonlySet<string>;
   declare editing: Editing | null | undefined;
-  declare afterRename: Action | null | undefined;
+  declare heldNavigation: Action | null | undefined;
   declare chat: Chat;
   declare refreshRequested: boolean;
   closeVoyage = new VoyageClose();
@@ -574,12 +574,13 @@ export default class Canvas extends View {
       }
       if (action.operation === "save-arrangement" && this.savingLayout) {
         this.pendingLayout = action;
+      } else if (
+        ["home", "select-voyage", "select-fleet"].includes(action.operation)
+      ) {
+        this.heldNavigation = action;
+        cx.notify();
       } else if (this.editing?.saving || this.savingLayout) {
-        if (
-          ["home", "select-voyage", "select-fleet"].includes(action.operation)
-        )
-          this.afterRename = action;
-        else this.status = "Wait for the name change to finish.";
+        this.status = "Wait for the name change to finish.";
         cx.notify();
       } else if (action.operation !== "inspect") {
         this.status =
@@ -712,9 +713,9 @@ export default class Canvas extends View {
           } else if (this.editing?.pending) {
             this.editing.pending = false;
             this.saveName(this.editing, task);
-          } else if (this.afterRename) {
-            const next = this.afterRename;
-            this.afterRename = null;
+          } else if (this.heldNavigation) {
+            const next = this.heldNavigation;
+            this.heldNavigation = null;
             this.run(next, task);
           }
         } else {
@@ -728,7 +729,10 @@ export default class Canvas extends View {
             this.editing.saving = false;
             this.status += " Rename was not sent.";
           }
-          this.afterRename = null;
+          if (this.heldNavigation) {
+            this.heldNavigation = null;
+            this.status += " The held click was not sent.";
+          }
         }
         this.finishPresentation(
           task,

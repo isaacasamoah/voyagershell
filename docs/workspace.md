@@ -842,6 +842,15 @@ task, and only while the canvas is not busy. A busy canvas reads when its
 current action finishes. Render only reads the notice and starts the activity
 read.
 
+A Home, Voyage or Fleet click that reaches `run` while the canvas is busy is
+kept in one slot, `heldNavigation`, and a newer click replaces it. It covers
+every run, including the read that follows a dock, because a click made a few
+tenths of a second after a dock would otherwise be dropped while that read
+prepares the Vessels. `run` sends the held click when the run in progress ends
+applied and fresh. When that run does not apply, the canvas drops the click and
+adds "The held click was not sent." to the status. Any other action that
+reaches `run` while the canvas is busy is not sent, and the status says so.
+
 Each notice carries the actual Core document revision and a separate package
 revision. Package remove/restore advances only the package revision without
 saving a layout or changing its CAS revision. The canvas reads the latest snapshot

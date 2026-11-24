@@ -97,7 +97,10 @@ Read a frame by these rules:
   `label`.
 - Wait for `prepared` before an input that starts a workspace action. The
   canvas answers an action that arrives earlier with "Workspace preparation is
-  pending. This action was not sent."
+  pending. This action was not sent." The exceptions are the Home, Voyage and
+  Fleet clicks. The canvas keeps the latest of them and sends it when the run
+  in progress ends. If that run fails, the status says "The held click was not
+  sent."
 - `bounds` are logical pixels from the top left of the window's drawable area.
   Multiply by `window.scale` for device pixels, then add the window's position
   on the screen.

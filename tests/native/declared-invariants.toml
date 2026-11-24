@@ -229,6 +229,18 @@ gap = "Known edge: a click on the floating avatar, which exists only after the p
 confidence = "stated"
 
 [[invariant]]
+id = "navigation-click-is-kept-while-busy"
+says = "A click on Home, a Voyage or a Fleet made while the canvas is still finishing something, such as following a dock, is kept and acts when that finishes. If that run fails, the canvas says the click was not sent."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac via Voyager, 24 Nov 21:1x. A Fleet click made within about 200 ms of a dock was dropped by the canvas, and Isaac chose to keep it and send it once the dock settles, the same rule that rename and layout save already use."
+features = ["fleets", "voyages", "selection"]
+guard = []
+check = ["journey:home-create/voyage-click-while-preparing-is-kept"]
+gap = "The case holds the canvas busy with the Home preparation and clicks a Voyage. A Fleet click made right after a dock is measured by a 44-try sweep that is not a journey, so no journey case runs that exact timing."
+confidence = "stated"
+
+[[invariant]]
 id = "one-window-by-default"
 says = "Launching the app again reveals the existing window and avatar. A second instance opens only when the person asks for one explicitly, such as New Window from the right-click menu."
 kind = "user"

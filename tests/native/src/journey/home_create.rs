@@ -1,18 +1,19 @@
 use super::socket_dock::{render_error, request_line, send_line, show_fleet, voyager_caller};
 use super::{Cases, Verdict, cases};
 use crate::core_relay::Fault;
-use crate::inspection::Target;
+use crate::inspection::{self, Target};
 use crate::native::{Native, STATUS_AFTER_CLICK, Terminal, bound_terminal, now_millis};
 use anyhow::{Context as _, Result};
 use voyager_contract::{
-    Action, ContentDestination, Context, PlacementId, PlacementInsertion, PlacementOwner, Side,
-    WorkspaceView,
+    Action, ContentDestination, Context, PlacementId, PlacementInsertion, PlacementOwner,
+    RenameTarget, Side, WorkspaceView,
 };
 
 cases! {
     CreatedWhilePreparingIsDrawn => "created-while-preparing-is-drawn",
     HomeClickThenCreateDrawsTheVessel => "created-right-after-a-home-click-is-drawn",
     CreatedDuringAvatarHomeClickIsDrawn => "created-during-avatar-home-click-is-drawn",
+    VoyageClickWhilePreparingIsKept => "voyage-click-while-preparing-is-kept",
 }
 
 pub const CONTROL: Case = Case::CreatedWhilePreparingIsDrawn;
@@ -148,16 +149,7 @@ fn create_during(
             },
         )
         .ok();
-    let released = native.watch(|native| {
-        let ledger =
-            std::fs::read_to_string(native.system.evidence.join(crate::core_relay::LEDGER))
-                .unwrap_or_default();
-        Ok(ledger
-            .lines()
-            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-            .find(|line| line["arm"].as_u64() == Some(arm.id) && line["event"] == "released")
-            .and_then(|line| line["releasedAtMs"].as_u64()))
-    })?;
+    let released = released_at(native, &arm)?;
     let verdict = Verdict::new()
         .expect(
             "the create was sent while the Home preparation's terminal attach was held",
@@ -185,6 +177,68 @@ fn create_during(
         .observed("sentAtMs", sent)?
         .observed("releasedAtMs", released)?
         .observed("added", &added)
+}
+
+fn released_at(native: &Native, arm: &crate::core_relay::Arm) -> Result<Option<u64>> {
+    native.watch(|native| {
+        let ledger =
+            std::fs::read_to_string(native.system.evidence.join(crate::core_relay::LEDGER))
+                .unwrap_or_default();
+        Ok(ledger
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .find(|line| line["arm"].as_u64() == Some(arm.id) && line["event"] == "released")
+            .and_then(|line| line["releasedAtMs"].as_u64()))
+    })
+}
+
+fn voyage_click_while_preparing(native: &mut Native) -> Result<Verdict> {
+    show_fleet(native)?;
+    let voyage = native
+        .document()?
+        .context("Missing saved layout")?
+        .1
+        .selected_voyage
+        .context("The layout has no selected Voyage")?;
+    native.close()?;
+    native.launch()?;
+    let arm = native
+        .system
+        .arm_core(ATTACH, Fault::Hold { ms: HELD_MS })?;
+    native.observe("the app prepared before the click", |_| Some(()))?;
+    native.click(&Target::HOME)?;
+    let held = native.watch(|native| native.system.arm_spent(&arm))?;
+    let preparing = native
+        .watch(|native| {
+            Ok(inspection::read(&native.inspection())?
+                .filter(|frame| !frame.prepared)
+                .map(|frame| frame.sequence))
+        })?
+        .is_some();
+    native.click(&Target::name(&RenameTarget::Voyage { id: voyage }))?;
+    let clicked = now_millis();
+    let released = released_at(native, &arm)?;
+    let view = native.settle(
+        "the view after the Voyage click that waited for the preparation",
+        |seen| Some(seen.document.view.clone()),
+        |view| *view == WorkspaceView::Fleet,
+    );
+    Verdict::new()
+        .expect(
+            "the Home preparation held its terminal attach, so the canvas was still preparing",
+            held.is_some() && preparing,
+        )
+        .expect(
+            "the Voyage click was made before the held attach was released",
+            released.is_some_and(|at| at > clicked),
+        )
+        .expect(
+            "the Voyage click made while the canvas prepared was kept and opened the Voyage's Fleet view once the preparation ended",
+            view.as_ref().is_ok_and(|view| *view == WorkspaceView::Fleet),
+        )
+        .observed("held", &held)?
+        .observed("clickedAtMs", clicked)?
+        .observed("releasedAtMs", released)
 }
 
 fn create_at_once(native: &mut Native, id: &str) -> Result<Verdict> {
@@ -253,6 +307,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 native.click(&Target::AVATAR)
             })
         },
+    )?;
+    cases.check(
+        native,
+        Case::VoyageClickWhilePreparingIsKept,
+        voyage_click_while_preparing,
     )?;
     Ok(())
 }
