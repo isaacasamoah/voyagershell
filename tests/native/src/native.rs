@@ -621,7 +621,11 @@ impl Native {
         fs::create_dir_all(&profile)?;
         let inspection = self.inspection();
         let stop = self.system.evidence.join(frames::STOP);
-        let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
+        let mut extra_env = vec![
+            ("RUST_LOG", "debug"),
+            ("RUST_BACKTRACE", "full"),
+            ("VOYAGER_TRACE_TOOLS", "1"),
+        ];
         if self.probe_frames {
             extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
             extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));

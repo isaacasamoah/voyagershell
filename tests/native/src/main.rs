@@ -596,6 +596,14 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/home_create.rs"),
     ),
     (
+        "src/journey/first_frame.rs",
+        include_bytes!("journey/first_frame.rs"),
+    ),
+    (
+        "src/journey/lost_fleet_click.rs",
+        include_bytes!("journey/lost_fleet_click.rs"),
+    ),
+    (
         "src/journey/layout_compat.rs",
         include_bytes!("journey/layout_compat.rs"),
     ),
