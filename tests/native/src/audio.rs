@@ -118,6 +118,10 @@ impl Recording {
         Ok(Samples::raw(&fs::read(&self.path)?))
     }
 
+    pub fn captured_ms(&self) -> Result<u64> {
+        Ok(fs::metadata(&self.path)?.len() / 2 * 1000 / u64::from(speech::RATE))
+    }
+
     pub fn alive(&mut self) -> Result<bool> {
         Ok(self.owned.child.try_wait()?.is_none())
     }

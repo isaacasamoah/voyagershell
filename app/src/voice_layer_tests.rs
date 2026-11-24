@@ -11,11 +11,18 @@ use std::{
     time::Instant,
 };
 
+#[path = "voice_layer_talk_over_tests.rs"]
+mod talk_over;
+
 enum Step {
     Frame(Vec<i16>),
     Click,
     WantFloor,
     Fail,
+    Reply(Reply),
+    Wait(Duration),
+    See(Arc<Mutex<Vec<Phase>>>),
+    QuietUntil(Phase, usize),
 }
 
 enum Mic {
@@ -37,6 +44,26 @@ impl Frames for Script {
                 Some(Step::Click) => click(&self.shared),
                 Some(Step::WantFloor) => self.floor.wanted.store(true, Ordering::SeqCst),
                 Some(Step::Fail) => return Err(io::Error::other("ended")),
+                Some(Step::Reply(reply)) => {
+                    let floor = self.floor.clone();
+                    thread::spawn(move || drop(floor.offer(reply)));
+                    while !self.floor.is_wanted() {
+                        thread::yield_now();
+                    }
+                }
+                Some(Step::Wait(time)) => thread::sleep(time),
+                Some(Step::See(seen)) => {
+                    let phase = self.shared.state.lock().unwrap().snapshot.phase.clone();
+                    seen.lock().unwrap().push(phase);
+                }
+                Some(Step::QuietUntil(phase, frames)) => {
+                    let reached = self.shared.state.lock().unwrap().snapshot.phase == phase;
+                    if !reached && frames > 0 {
+                        self.steps.push_front(Step::QuietUntil(phase, frames - 1));
+                        thread::sleep(Duration::from_millis(1));
+                        return Ok(quiet());
+                    }
+                }
                 None => {
                     self.shared.update(|state| state.shutdown = true);
                     return Ok(quiet());
@@ -61,6 +88,7 @@ struct Fake {
     speakers: AtomicUsize,
     shared: Arc<Shared>,
     floor: Arc<Floor>,
+    live: bool,
 }
 
 struct Voice {
@@ -103,6 +131,12 @@ impl Audio for Fake {
 
     fn speaker(&self, _: u32) -> io::Result<Box<dyn Speaker>> {
         self.speakers.fetch_add(1, Ordering::SeqCst);
+        if self.live {
+            return Ok(Box::new(talk_over::Live {
+                played: self.played.clone(),
+                cut: self.cut.clone(),
+            }));
+        }
         Ok(Box::new(Voice {
             played: self.played.clone(),
             cut: self.cut.clone(),
@@ -288,6 +322,7 @@ impl Rig {
                 speakers: AtomicUsize::new(0),
                 shared: shared.clone(),
                 floor: floor.clone(),
+                live: false,
             },
             voyager: Standin {
                 standing,
@@ -422,25 +457,6 @@ fn a_click_mid_sentence_turns_voice_off_and_drops_what_was_said() {
     assert!(rig.said().is_empty());
     assert!(rig.played().is_empty());
     assert!(!rig.snapshot().on);
-    assert_eq!(rig.opened(), 1);
-}
-
-#[test]
-fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
-    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
-    *rig.audio.while_playing.lock().unwrap() = Some(click);
-    rig.shared.update(|state| state.snapshot.on = true);
-    thread::scope(|scope| {
-        scope.spawn(|| rig.serve("open the roadmap"));
-        wait_until(|| {
-            let snapshot = rig.snapshot();
-            !snapshot.on && snapshot.phase == Phase::Ready
-        });
-        rig.shared.update(|state| state.shutdown = true);
-    });
-    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
-    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
-    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
     assert_eq!(rig.opened(), 1);
 }
 
@@ -947,6 +963,7 @@ fn voice_is_ready_while_a_clip_is_still_rendering_and_keeps_it_once_rendered() {
                     vocabulary: Arc::new(Vec::new),
                     audio: Arc::new(Silent),
                     trace: Trace::off(),
+                    talk_over: TalkOver::Off,
                 },
             );
         })

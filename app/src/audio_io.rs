@@ -19,6 +19,7 @@ const FLOOR_FACTOR: f32 = 3.0;
 const START_PROBABILITY: f32 = 0.3;
 const SPEAKING_PROBABILITY: f32 = 0.15;
 const PLAYING_LOOK: Duration = Duration::from_millis(20);
+const HEADPHONE_FORMS: [&str; 3] = ["headset", "headphone", "hands-free"];
 
 pub trait SpeechDetector {
     fn probability(&mut self, frame: &[i16]) -> f32;
@@ -124,6 +125,11 @@ impl Gate {
 
     pub fn utterance(self) -> Vec<i16> {
         self.kept.into_iter().flatten().collect()
+    }
+
+    pub fn take(&mut self) -> Vec<i16> {
+        self.stage = Stage::Waiting { run: 0 };
+        self.kept.drain(..).flatten().collect()
     }
 }
 
@@ -261,6 +267,42 @@ impl Drop for Playing {
             let _ = self.child.wait();
         }
     }
+}
+
+pub fn headphones_in_use() -> bool {
+    let read = |arguments: &[&str]| {
+        Command::new("pactl")
+            .arg("--format=json")
+            .args(arguments)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| output.stdout)
+    };
+    let (Some(server), Some(sinks)) = (read(&["info"]), read(&["list", "sinks"])) else {
+        return false;
+    };
+    default_sink_is_headphones(&server, &sinks).unwrap_or(false)
+}
+
+fn default_sink_is_headphones(server: &[u8], sinks: &[u8]) -> Option<bool> {
+    let server: serde_json::Value = serde_json::from_slice(server).ok()?;
+    let sinks: serde_json::Value = serde_json::from_slice(sinks).ok()?;
+    let name = server["default_sink_name"].as_str()?;
+    let sink = sinks.as_array()?.iter().find(|sink| sink["name"] == name)?;
+    let form = sink["properties"]["device.form_factor"].as_str();
+    let active = sink["active_port"].as_str();
+    let port = sink["ports"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|port| active.is_some_and(|active| port["name"] == active));
+    Some(
+        form.is_some_and(|form| HEADPHONE_FORMS.contains(&form))
+            || port.is_some_and(|port| port["type"] == "Headphones"),
+    )
 }
 
 pub fn wav(rate: u32, pcm: &[u8]) -> Vec<u8> {
@@ -727,6 +769,62 @@ mod tests {
         bytes[22] = 2;
         assert!(parse_wav(&bytes).is_none());
         assert!(parse_wav(b"nope").is_none());
+    }
+
+    #[test]
+    fn a_gate_that_gave_up_an_utterance_hears_the_next_one_without_settling_again() {
+        let mut gate = Gate::new(Box::new(Loudness));
+        let turn = |gate: &mut Gate| {
+            let frames = spoken(20).chain((0..PAUSE_FRAMES).map(|_| quiet()));
+            let ended: Vec<Heard> = frames.filter_map(|frame| gate.push(frame)).collect();
+            assert_eq!(ended.last(), Some(&Heard::Ended(End::Pause)));
+            gate.take().len()
+        };
+        for _ in 0..SETTLE_FRAMES {
+            gate.push(quiet());
+        }
+        let first = turn(&mut gate);
+        assert!(!gate.speaking());
+        assert_eq!(turn(&mut gate), first);
+    }
+
+    const SERVER: &str = r#"{"default_sink_name": "desk"}"#;
+
+    fn sinks(form: &str, active: &str) -> String {
+        format!(
+            r#"[{{"name": "other", "properties": {{"device.form_factor": "headset"}}, "active_port": null, "ports": []}},
+            {{"name": "desk", "properties": {{{form}}}, "active_port": "{active}",
+              "ports": [{{"name": "speaker", "type": "Speaker"}}, {{"name": "jack", "type": "Headphones"}}]}}]"#
+        )
+    }
+
+    #[test]
+    fn the_default_output_counts_as_headphones_by_its_form_or_its_active_port() {
+        for form in HEADPHONE_FORMS {
+            let listed = sinks(&format!(r#""device.form_factor": "{form}""#), "speaker");
+            let worn = default_sink_is_headphones(SERVER.as_bytes(), listed.as_bytes());
+            assert_eq!(worn, Some(true), "{form}");
+        }
+        let by_port = sinks("", "jack");
+        assert_eq!(
+            default_sink_is_headphones(SERVER.as_bytes(), by_port.as_bytes()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn a_speaker_another_sinks_headset_and_an_unreadable_answer_are_not_headphones() {
+        for listed in [
+            sinks("", "speaker"),
+            sinks(r#""device.form_factor": "speaker""#, "speaker"),
+            "[]".to_owned(),
+            "not json".to_owned(),
+        ] {
+            let worn = default_sink_is_headphones(SERVER.as_bytes(), listed.as_bytes());
+            assert_ne!(worn, Some(true), "{listed}");
+        }
+        let unnamed = default_sink_is_headphones(b"{}", sinks("", "jack").as_bytes());
+        assert_eq!(unnamed, None);
     }
 
     #[test]

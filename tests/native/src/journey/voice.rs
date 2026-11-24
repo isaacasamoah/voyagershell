@@ -4,6 +4,7 @@ use crate::audio::room;
 use crate::audio::speech::{
     self as speech, DOCK_ON_THIS_FLEET, HELLO_HOW_ARE_YOU, HEY_IM_HERE, Kind, OPEN_THE_ROADMAP,
     OPEN_THEN_DOCK, PAUSED_WORDS, RENAME_THE_FLEET, RENAME_TO_HARBOR, Samples,
+    WHAT_ABOUT_THE_TESTS,
 };
 use crate::audio::voice::{
     self, CONNECTING, LISTENING, READY, Turn, median, word_errors, words_contain, words_match,
@@ -22,6 +23,7 @@ cases! {
     SmallTalkIsAnswered => "small-talk-is-answered-by-the-voice",
     RequestGetsNoChatReply => "request-gets-no-chat-reply",
     OfferGoesToVoyager => "small-talk-that-draws-an-offer-goes-to-voyager",
+    AutoKeepsTheMicrophonePaused => "auto-on-speakers-keeps-the-microphone-paused",
     TurnWaitsForTheSentence => "turn-waits-for-the-sentence",
     StartThumpIsNotSpeech => "start-thump-is-not-speech",
     ConnectingThenListening => "connecting-then-listening",
@@ -57,6 +59,7 @@ const LOOK_LINES: [&str; 4] = ["one-sec", "let-me-look", "checking", "okay-check
 const SURE_LINES: [&str; 4] = ["sure", "okay", "got-it", "sure-thing"];
 const SPOKEN_AS: &str = "Docked on this fleet. The Fleet was already open.";
 const OTHER: &str = "Opened the roadmap on the right.";
+pub(super) const REPLY_PIECES: [&str; 2] = ["Docked on this fleet.", "The Fleet was already open."];
 const REMOVED: &[u8] = br#"{"terminal":"t-removed-9999"}"#;
 const REFUSED: &str = "Not sent";
 const LONG_SPOKEN: &str = "Here's where things stand. The canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today. Want me to walk through any of it?";
@@ -135,6 +138,68 @@ fn spoken(words: &str) -> String {
     format!("[spoken] {words}")
 }
 
+pub(super) fn engine_ready(native: &mut Native) -> Result<Verdict> {
+    let label = native.drawn_label_past(
+        &Target::VOICE_CONTROL,
+        ENGINE_START,
+        "the voice control ready after the engine loads",
+        |label| label == READY,
+    )?;
+    let memory = voice::memory();
+    Verdict::new()
+        .expect("the voice control reads Start voice", label == READY)
+        .expect(
+            "the engine program runs and holds memory while idle",
+            memory.engine_mb.is_some(),
+        )
+        .observed("label", label)?
+        .observed("idleMemory", memory)
+}
+
+pub(super) fn bind_voyager(native: &mut Native) -> Result<(Verdict, Option<String>)> {
+    let terminal = until("the app to bind the Voyager it started", || {
+        let bound = std::fs::read_to_string(native.profile_path("voyager.json")).ok();
+        let named = bound
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|value| value["terminal"].as_str().map(str::to_owned));
+        let live = named.filter(|terminal| {
+            native
+                .system
+                .watch("terminal.get", json!({"terminal":terminal}))
+                .is_ok_and(|found| found["state"] == "live")
+        });
+        Ok(live)
+    })?;
+    let verdict = Verdict::new()
+        .expect(
+            "the app bound a live Voyager at launch",
+            !terminal.is_empty(),
+        )
+        .observed("terminal", &terminal)?;
+    Ok((verdict, Some(terminal)))
+}
+
+pub(super) fn needs_the_engine(native: &Native) -> Result<()> {
+    anyhow::ensure!(
+        native.audio.is_some() && native.voice_engine.is_some(),
+        "The voice journeys need --audio on and --voice-engine"
+    );
+    Ok(())
+}
+
+pub(super) fn while_playing(talked: &voice::TalkedOver) -> Vec<&voice::Look> {
+    let ended = talked
+        .marks
+        .iter()
+        .find(|mark| mark.event == "speech-ended" || mark.event == "speech-cut")
+        .map_or(u64::MAX, |mark| mark.at_ms);
+    talked
+        .looks
+        .iter()
+        .filter(|look| look.at_ms >= talked.reply_started_ms && look.at_ms < ended)
+        .collect()
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let driven = drive_cases(native, cases);
     let kept = voice::keep_engine_log(native);
@@ -142,27 +207,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 }
 
 fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
-    anyhow::ensure!(
-        native.audio.is_some() && native.voice_engine.is_some(),
-        "The voice journey needs --audio on and --voice-engine"
-    );
-    cases.check(native, Case::EngineReady, |native| {
-        let label = native.drawn_label_past(
-            &Target::VOICE_CONTROL,
-            ENGINE_START,
-            "the voice control ready after the engine loads",
-            |label| label == READY,
-        )?;
-        let memory = voice::memory();
-        Verdict::new()
-            .expect("the voice control reads Start voice", label == READY)
-            .expect(
-                "the engine program runs and holds memory while idle",
-                memory.engine_mb.is_some(),
-            )
-            .observed("label", label)?
-            .observed("idleMemory", memory)
-    })?;
+    needs_the_engine(native)?;
+    cases.check(native, Case::EngineReady, engine_ready)?;
     cases.check(native, Case::NoCaptureWithoutClick, |native| {
         let seen = voice::without_capture(native, QUIET_MIC)?;
         let ever = seen.iter().any(|recorders| !recorders.is_empty());
@@ -173,29 +219,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("looks", seen.len())
     })?;
-    let Some(voyager) = cases.make(native, Case::VoyagerIsBound, |native| {
-        let terminal = until("the app to bind the Voyager it started", || {
-            let bound = std::fs::read_to_string(native.profile_path("voyager.json")).ok();
-            let named = bound
-                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-                .and_then(|value| value["terminal"].as_str().map(str::to_owned));
-            let live = named.filter(|terminal| {
-                native
-                    .system
-                    .watch("terminal.get", json!({"terminal":terminal}))
-                    .is_ok_and(|found| found["state"] == "live")
-            });
-            Ok(live)
-        })?;
-        let verdict = Verdict::new()
-            .expect(
-                "the app bound a live Voyager at launch",
-                !terminal.is_empty(),
-            )
-            .observed("terminal", &terminal)?;
-        Ok((verdict, Some(terminal)))
-    })?
-    else {
+    let Some(voyager) = cases.make(native, Case::VoyagerIsBound, bind_voyager)? else {
         return Ok(());
     };
     cases.check(native, Case::SmallTalkIsAnswered, |native| {
@@ -276,6 +300,54 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect("the words are sent to Voyager", said.sent)
             .observed("conversation", json!(said))
+    })?;
+    cases.check(native, Case::AutoKeepsTheMicrophonePaused, |native| {
+        let talked = voice::talk_during_reply(
+            native,
+            &DOCK_ON_THIS_FLEET,
+            Some(&WHAT_ABOUT_THE_TESTS),
+            "auto-paused",
+            &["speech-ended"],
+        )?;
+        let fed = talked.fed.as_ref().context("No speech was fed over the reply")?;
+        let ended = talked
+            .marks
+            .iter()
+            .find(|mark| mark.event == "speech-ended")
+            .map(|mark| mark.at_ms);
+        anyhow::ensure!(
+            ended.is_none_or(|ended| ended >= fed.until_ms),
+            "Inconclusive: the reply ended before the speech was fed over it, so the case shows nothing"
+        );
+        let playing = while_playing(&talked);
+        let after_reply = |event: &str| {
+            talked
+                .marks
+                .iter()
+                .filter(|mark| mark.event == event && mark.at_ms >= talked.reply_started_ms)
+                .count()
+        };
+        Verdict::new()
+            .expect(
+                "the speech fed while the reply plays never cuts it",
+                after_reply("speech-cut") == 0,
+            )
+            .expect(
+                "the reply plays to its end, every piece once",
+                ended.is_some() && pieces_of(&talked.marks) == REPLY_PIECES,
+            )
+            .expect(
+                "the speech fed while the reply plays is never a turn and nothing more is sent",
+                after_reply("utterance-ended") == 0
+                    && after_reply("heard") == 0
+                    && after_reply("sent") == 0,
+            )
+            .expect(
+                "the control reads Busy while the reply plays and never the open microphone",
+                playing.iter().any(|look| look.label == voice::BUSY)
+                    && playing.iter().all(|look| look.label != voice::SPEAKING_OPEN),
+            )
+            .observed("talkedOver", talked)
     })?;
     cases.check(native, Case::TurnWaitsForTheSentence, |native| {
         let speech = Samples::silence(ROOM_SILENCE_MS).then(&Samples::paused_request()?);
@@ -1010,7 +1082,7 @@ fn write_down(native: &mut Native) -> Result<Vec<Written>> {
     Ok(written)
 }
 
-fn pieces_of(marks: &[voice::Mark]) -> Vec<String> {
+pub(super) fn pieces_of(marks: &[voice::Mark]) -> Vec<String> {
     marks
         .iter()
         .filter(|mark| mark.event == "piece-started")

@@ -63,6 +63,22 @@ pub enum Decorations {
     Client,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TalkOver {
+    On,
+}
+
+impl TalkOver {
+    pub const VARIABLE: &str = "VOYAGER_VOICE_TALK_OVER";
+
+    pub fn value(self) -> &'static str {
+        match self {
+            TalkOver::On => "on",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Sidebar {
@@ -230,6 +246,7 @@ pub struct Native {
     pub audio_requested: bool,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
+    pub talk_over: Option<TalkOver>,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -287,6 +304,7 @@ impl Native {
             audio_requested: false,
             audio: None,
             voice_engine: None,
+            talk_over: None,
             surface,
             display: None,
             x11: None,
@@ -648,6 +666,9 @@ impl Native {
             extra_env.push(("VOYAGER_OMNI_DIR", engine));
             extra_env.push(("VOYAGER_VOICE_TRACE", &trace));
         }
+        if let Some(talk_over) = self.talk_over {
+            extra_env.push((TalkOver::VARIABLE, talk_over.value()));
+        }
         let viewer = self.system.spawn(
             &self.candidate.path,
             &[
@@ -673,7 +694,7 @@ impl Native {
         self.verify()?;
         save(
             self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"coreSeededAt":self.seeded_at,"startedAt":stamp(),"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
+            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"coreSeededAt":self.seeded_at,"talkOver":self.talk_over,"startedAt":stamp(),"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
         )
     }
 

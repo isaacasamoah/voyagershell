@@ -1104,7 +1104,8 @@ a refusal to read in the ledger and not a verifier error.
 environment can put speech into a program's microphone path and capture the speech that
 the program plays. It needs no candidate build and starts no app. `run --audio on` starts
 the same audio server before the app launches, so a journey runs with it. The `voice`
-journey is the first reader. See The voice journey below.
+and `voice-talk-over` journeys read it. See The voice journey and Talking over a reply
+below.
 
 The proof is captured samples at the monitor of a null sink in a private audio server. It
 is not a physical speaker, a microphone or an ear, and it does not show that anyone can
@@ -1254,6 +1255,7 @@ to the microphone and records the speaker.
 | `engine-ready` (setup) | The control reads Start voice once the engine has loaded and warmed up. The acknowledgement clips are kept after that, on the app's own thread. |
 | `no-capture-without-click` | The audio server lists no recorder on the microphone while nobody clicks. This is the control case. |
 | `voyager-stands-in` (setup) | A program that echoes what it is sent runs under Core, and the app's own binding file names it, as Voyager's start will. |
+| `auto-on-speakers-keeps-the-microphone-paused` | The app runs with Auto, because the journey leaves `VOYAGER_VOICE_TALK_OVER` unset, and the fixture's `speaker` sink reports no headphones. "What about the tests?" is fed while the reply to "Dock on this fleet." plays. The reply is never cut and plays both of its pieces once. No turn ends, nothing is heard and nothing more is sent. The control reads Busy while the reply plays and never Listening while speaking. If the reply ended before the feed did, the case ends inconclusive, because it then shows nothing. |
 | `turn-waits-for-the-sentence` | After 3 s of silence, a request with a 1.35 s pause between its two sentences, just under the 1.5 s end-of-turn silence, is one turn. It ends only after the whole request was fed, and the words come back as spoken. |
 | `start-thump-is-not-speech` | A 0.1 s, 120 Hz thump as the microphone opens, then 3 s of silence and an Edge sentence with natural pauses, gives one turn that ends after the sentence and holds all of it. On main before this rule it ended 0.77 s after the click. |
 | `connecting-then-listening` | A click shows Connecting, then Listening. The app's own trace shows at least 0.28 s between the microphone opening and listening. |
@@ -1261,7 +1263,7 @@ to the microphone and records the speaker.
 | `click-turns-voice-off` | A click while listening shows Start voice and closes the microphone. Speech fed afterwards is never heard. |
 | `room-sound-is-never-a-turn` | Voice is clicked on and five minutes of room sound with no speech in it are fed. The sound is quiet room tone, a soft fan and then a loud one, bursts of typing, a distant door and the echo tail of a spoken reply. No turn ends, no acknowledgement plays and nothing reaches Voyager. The words heard in any turn, the turns dropped after hearing and each sound's start time are recorded. On main before this rule the room sound made 10 turns, and each was sent. |
 | `request-in-room-sound-is-sent` | A request spoken among the soft fan and typing is exactly one turn, and Voyager receives it once with the spoken marker and the words heard. The case checks the gate, not hearing. The words heard and their word errors against "Rename this fleet to review." are recorded. Over this fan, Omni heard "Remind this fleet to renew.". Word-for-word hearing is checked in quiet by `requests-are-written-down`. |
-| `quiet-voice-is-a-turn` | "Dock on this fleet." is fed four times, each with 3 s of room sound before and after. It is fed at 0.15 and at 0.06 of its committed level over room tone, and at 0.15 over the soft fan and over the loud fan. Each feed is exactly one turn, and each turn is sent to Voyager once. Before each feed the case waits, with voice on, until no reply is owed and none holds the audio floor. That means the last turn heard or sent has its reply started, refused, answered in chat or missed, and a reply that started has ended and been followed by listening. A turn owes its reply from the moment it is heard, since sending took 1.5 s after the turn was heard in a run at a load under 6. Every voice case starts from a quiet app, because `voice::turn_on` waits until no reply is playing before it clicks, since a reply owed to a microphone that is off does not play until voice is on again, and then waits right after the click until no reply is owed or playing. The bounds on the microphone opening and the control reading Listening start after that wait, so a late reply does not use up their time. `voice::turn_off` waits until no reply is owed or playing before it clicks off, so no case ends with a reply owed. Every wait is appended to `voice-waits.jsonl` in the evidence with its kind and its milliseconds. Once voice is on, a missing voice trace fails the wait with the reason "voice trace missing", so a missing trace never reads as a clear floor. Each feed that runs with the microphone open (`voice::feed_turn`, `voice::feed_until_listening`, `voice::feed_and_settle` and `voice::speak_and_hear_reply`) runs `voice::await_floor` first. If the 60 s floor wait passes first, the case fails with the reason "previous reply still playing after 60 s" and feeds nothing. The same wait runs in `voice::turn_on`, so the first voice case that turns voice on after such a reply fails the same way. The wait time is recorded with each quiet feed. The words heard and their word errors are recorded. The speech-band onset this detector replaced heard none of the 0.15 and 0.06 feeds over room tone in a simulation of the gate. |
+| `quiet-voice-is-a-turn` | "Dock on this fleet." is fed four times, each with 3 s of room sound before and after. It is fed at 0.15 and at 0.06 of its committed level over room tone, and at 0.15 over the soft fan and over the loud fan. Each feed is exactly one turn, and each turn is sent to Voyager once. Before each feed the case waits, with voice on, until no reply is owed and none holds the audio floor. That means the last turn heard or sent has its reply started, refused, answered in chat or missed, and a reply that started has ended and been followed by listening. A turn owes its reply from the moment it is heard, since sending took 1.5 s after the turn was heard in a run at a load under 6. Words heard right after the speech that cut a reply, with no new microphone opened between, were spoken over that reply. They owe nothing new unless they are sent, so a backchannel or a stop owes no reply and a steer owes its answer. A cut ends a reply's playing, because the app marks `speech-cut` and no `speech-ended` when it stops the player, and a resume plays again from its `speaker-opened` mark to its `speech-ended`. Every voice case starts from a quiet app, because `voice::turn_on` waits until no reply is playing before it clicks, since a reply owed to a microphone that is off does not play until voice is on again, and then waits right after the click until no reply is owed or playing. The bounds on the microphone opening and the control reading Listening start after that wait, so a late reply does not use up their time. `voice::turn_off` waits until no reply is owed or playing before it clicks off, so no case ends with a reply owed. Every wait is appended to `voice-waits.jsonl` in the evidence with its kind and its milliseconds. Once voice is on, a missing voice trace fails the wait with the reason "voice trace missing", so a missing trace never reads as a clear floor. Each feed that runs with the microphone open (`voice::feed_turn`, `voice::feed_until_listening`, `voice::feed_and_settle` and `voice::speak_and_hear_reply`) runs `voice::await_floor` first. If the 60 s floor wait passes first, the case fails with the reason "previous reply still playing after 60 s" and feeds nothing. The same wait runs in `voice::turn_on`, so the first voice case that turns voice on after such a reply fails the same way. The wait time is recorded with each quiet feed. The words heard and their word errors are recorded. The speech-band onset this detector replaced heard none of the 0.15 and 0.06 feeds over room tone in a simulation of the gate. |
 | `rename-is-heard-and-acknowledged` | The words Omni heard equal the words spoken, the routing call chooses none for this plain command and no line plays, listening resumes without a click, and the microphone closes when voice is clicked off. |
 | `small-talk-is-answered-by-the-voice` | Before the app's first launch the verifier plants a 28.88 s steady 220 Hz tone as the kept "One sec." clip, at the cache path the app reads, the length of the longest run-on clip a journey kept. The case first waits up to 60 s, `CLIPS_KEPT`, for the app to render that clip again, then up to 60 s more for the app's `clips-kept` mark, which says every clip is kept, so later cases find their clips. Each kept clip's file name and length in milliseconds is then recorded, so a clip the engine rendered far too long shows in the evidence. It fails at once if the planted bytes are still there or the mark never comes. "Hello, how are you?" then gets the voice's own reply, and nothing reaches Voyager's stand-in. No acknowledgement line plays before the reply. The case records its single-turn first sound and sets no bound on it. The engine's hearing of the speaker capture holds at least half of the reply's words. |
 | `request-gets-no-chat-reply` | "Rename this fleet to Harbor." plays only the line its routing choice names, nothing for none and a kept clip from that choice's four for look or sure, gets no chat reply, and is sent to Voyager. The choice is recorded. |
@@ -1303,7 +1305,7 @@ The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds e
 
 Fifteen more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
-words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
+words without the spoken marker. The app then makes no spoken turn of them, so no reply line comes for the request that was sent, and a candidate built with it fails the first request's wait for its owed reply, in `request-gets-no-chat-reply`, with the reason "previous reply still playing after 60 s".
 `tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
 spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads
 every reply the app spoke in the whole run, fails.
@@ -1323,7 +1325,65 @@ every reply the app spoke in the whole run, fails.
 
 `small-talk-is-answered-by-the-voice`, `request-gets-no-chat-reply` and `small-talk-that-draws-an-offer-goes-to-voyager` run right after the Voyager binding setup, before any other turn. A control stops at its first failing case, so in that order each small-talk control fails its own case first instead of an older case that its break also reaches. Moving them changed the order only, not any expectation. Seven controls cover small talk, the acknowledgement and the kept clips. `tests/native/controls/voice-chat-off.patch` never trusts the model's chat answer, so every turn goes to Voyager, and `small-talk-is-answered-by-the-voice` fails on it. `tests/native/controls/voice-chat-promise.patch` turns every work answer into the chat reply "Sure, I'll do that now.", a reply that promises an action, and `request-gets-no-chat-reply` fails on it. `tests/native/controls/voice-offer-off.patch` removes the check for offer words, so the offering reply is spoken as chat, and `small-talk-that-draws-an-offer-goes-to-voyager` fails on it. `tests/native/controls/voice-ack-drop.patch` no longer plays the chosen line, while still marking it, so the speaker holds nothing for a look or sure turn, and a case that requires the chosen line itself at the speaker fails on it. `tests/native/controls/voice-ack-ignored.patch` plays a look line whatever the routing call chose, so a plain command that chose none gets a line, and a case that requires no line for none fails on it. `tests/native/controls/voice-kept-clip.patch` drops the length check on a kept clip, so the planted run-on clip is kept as it is, and `small-talk-is-answered-by-the-voice` fails on it. `tests/native/controls/voice-trim-late.patch` trims a kept clip from 145 ms after its first sound instead of 145 ms before it, so every kept clip opens on its first sound, and `acknowledgement-is-prompt` fails on it.
 
-When the journey ends, pass or fail, it keeps the last 4000 lines of the engine program's own terminal in `voice-engine.log` in the evidence, so a slow or odd turn can be read against the engine's requests. The words-reach-voyager case already holds that scrollback free of audio payloads. The journey does not cover a stalled engine. The battery does not run `voice`, because it has no engine folder to give it. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
+`auto-on-speakers-keeps-the-microphone-paused` runs right after the three small-talk cases. `tests/native/controls/voice-talk-over-auto.patch` reads Auto as headphones whatever the output is, so the microphone stays open while a reply plays. The fed speech then cuts the reply and becomes a turn, and `auto-on-speakers-keeps-the-microphone-paused` fails on it. The cases before it feed no speech while a reply plays, so an open microphone does not change what they observe.
+
+When `voice` or `voice-talk-over` ends, pass or fail, it keeps the last 4000 lines of the engine program's own terminal in `voice-engine.log` in the evidence, so a slow or odd turn can be read against the engine's requests. The words-reach-voyager case already holds that scrollback free of audio payloads. The journey does not cover a stalled engine. The battery does not run `voice` or `voice-talk-over`, because it has no engine folder to give them. The sandbox launches Voyager as the verifier's stand-in `claude`, which reports idle to Core when it starts, working while it handles a line and idle again when it is done, through the OSC 7501 report that a foreground program prints, as real Claude does. It answers a prompt that starts with the spoken marker with a typed turn and then a spoken turn through the hooks in its launch settings, and the sandbox binds the `voyager` command beside the candidate so those settings carry the reply hooks.
+
+### Talking over a reply
+
+`voice-talk-over` needs `--audio on` and `--voice-engine DIR`, as `voice` does, and it
+starts with the same two setup cases. `Journey::talk_over` in `src/journey.rs` gives this
+journey `TalkOver::On`, and `Native::start` in `src/native.rs` then launches the app with
+`VOYAGER_VOICE_TALK_OVER=on` beside its other variables. No other journey sets the
+variable, so `voice` runs with Auto. `launch.json` records the setting as `talkOver`, and
+`voyager-verification journeys` prints it. The fixture's `speaker` sink reports no
+headphone form factor, so Auto reads it as a loudspeaker, and only On keeps the
+microphone open while a reply plays. The microphone hears only `mic_feed`, so the app
+never hears its own reply here.
+
+`talk_during_reply` in `src/audio/voice.rs` is the shared action. It records the
+speaker, clicks voice on, feeds a request and waits for the app's `speech-started` mark,
+as `click_off_during_reply` does. The marks it returns begin at the click, so they hold the
+request's own `sent`. A case counts `sent` only after the reply's `speech-started` mark. The stop case reads the stand-in's screen from before its request, so it
+expects exactly one more `[spoken]` line there, the request itself. It then feeds the case's speech over the reply, waits
+for the case's end marks in order, watches for 2 s more and clicks voice off. At each
+look it records the control's drawn label and whether the app records the microphone.
+
+| Case | What it shows |
+| --- | --- |
+| `engine-ready` (setup) | As in `voice`. |
+| `voyager-is-bound` (setup) | As in `voice`. |
+| `wave-is-green-while-a-reply-plays` | "Dock on this fleet." is fed, and the stand-in's reply of two sentences plays. While it plays, the control reads Listening while speaking at least once and never Busy, the app records the microphone at every look, and the reply plays to its end. This is the control case. |
+| `backchannel-resumes-the-sentence` | "Yeah." is fed while the reply plays. The reply is cut at one of its two pieces. A new speaker stream then plays from the start of that piece to the end of the reply, and nothing is sent. The time from the onset of the fed speech to the start of the first 1 s of quiet at the speaker is recorded, and so is the time to the app's `speech-cut` mark. Both count from the start of the feed plus the clip's own lead of quiet, so they include the time the player takes to start. If the words are not heard as "Yeah.", the case ends inconclusive with the blame on hearing. |
+| `steer-reaches-voyager-as-cut-off` | "What about the tests?" is fed while the reply plays. The stand-in prints exactly one `[spoken] [cut off] You were saying: "<the piece cut>". Not heard: <n> more sentences. They say: <the words heard>` prompt, built from the app's `speech-cut` and `heard` marks, and it has one more cut-off prompt than before the case. The app marks `sent` once, and no piece of the cut reply starts again before the answer. The stand-in's screen is compared with its whitespace removed, so a wrapped line still matches. |
+| `stop-leaves-it-stopped` | "Open the roadmap." gets the 117-word reply, and "Stop." is fed while it plays. The reply is cut and does not resume, nothing is sent, and the control reads Listening. The speaker goes quiet for 1 s after the fed speech's onset and has no window above the onset level again to the end of the capture, and the capture reaches the last look of the 2 s watch, so a recorder that stopped early cannot pass as quiet. The recorder writes a little behind real time, 5 to 34 ms in the first run with this check, so `talk_during_reply` keeps recording after the watch until the capture reaches that look, for at most 500 ms, and records that drain time. A capture that never gets there within 500 ms still fails the case. The opened chat holds the whole reply, and its last sentence was never spoken. If the request is not heard as the roadmap, or "Stop." is heard as other words, the case ends inconclusive with the blame on hearing. It opens the chat, so it runs last. |
+
+Each case has its control, and each control changes only the branch that its case reads,
+so the cases before it still pass.
+`tests/native/controls/voice-talk-over.patch` reads `on` as Auto, so the fixture's
+speakers pause the microphone. The control then reads Busy while the reply plays and the
+app stops recording, and `wave-is-green-while-a-reply-plays` fails.
+`tests/native/controls/voice-backchannel.patch` leaves the reply stopped after a
+backchannel, and `backchannel-resumes-the-sentence` fails.
+`tests/native/controls/voice-cut-off.patch` sends a steer as a plain spoken prompt, and
+`steer-reaches-voyager-as-cut-off` fails.
+`tests/native/controls/voice-stop.patch` plays the reply again after a stop, and
+`stop-leaves-it-stopped` fails.
+
+The three clips were made with Edge text to speech, as the other Edge phrases were. "Yeah." is padded with quiet to 1.2 s, because every committed phrase is longer than 1 s:
+
+```sh
+edge-tts --voice en-GB-SoniaNeural --text "Yeah." --write-media a.mp3
+ffmpeg -i a.mp3 -af apad=whole_dur=1.2 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact yeah.wav
+edge-tts --voice en-GB-SoniaNeural --text "Stop." --write-media b.mp3
+ffmpeg -i b.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact stop.wav
+edge-tts --voice en-GB-SoniaNeural --text "What about the tests?" --write-media c.mp3
+ffmpeg -i c.mp3 -ar 48000 -ac 1 -sample_fmt s16 -map_metadata -1 -fflags +bitexact -flags:a +bitexact what-about-the-tests.wav
+```
+
+The journey shows On with a microphone that hears only the fed speech. It does not show
+headphones that the system labels, a loudspeaker that the microphone hears, a real voice
+or a room.
 
 ### Negative controls
 
@@ -1562,7 +1622,9 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 
 The environment is the `ENVIRONMENT` table in `src/sandbox.rs`, plus the private
 `DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HC_SESSION` and `HC_SOCKET` that the
-driver sets. No variable comes from the caller. The table forces Mesa software
+driver sets. The driver adds the candidate's own variables at launch, such as
+`VOYAGER_VOICE_TALK_OVER=on` for a journey whose `talk_over` is On. No variable comes
+from the caller. The table forces Mesa software
 rendering. On a host with a vendor GPU driver, Xvfb otherwise loads that
 driver's EGL library and crashes, because the sandbox has no GPU devices. The
 network namespace has loopback only. It also hides the host's abstract sockets,

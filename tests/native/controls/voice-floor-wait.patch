@@ -1,14 +1,13 @@
 diff --git a/app/src/voice_speaker.rs b/app/src/voice_speaker.rs
-index 233c468d..774213a8 100644
 --- a/app/src/voice_speaker.rs
 +++ b/app/src/voice_speaker.rs
-@@ -139,6 +139,9 @@ fn say(parts: &Parts, line: Line) {
+@@ -145,6 +145,9 @@ fn say(parts: &Parts, line: Line) {
              eprintln!("{CUT_AT_LIMIT}");
          }
      }
 +    if matches!(&line, Line::Reply(text) if text.as_str().starts_with("Docked on this fleet")) {
 +        std::thread::sleep(std::time::Duration::from_secs(100));
 +    }
-     let first = clip_of(parts, &line);
-     let _floor = parts.floor.take();
-     if (parts.stopped)() {
+     let (_floor, first, rest) = match (&line, clip_of(parts, &line)) {
+         (Line::Reply(text), Ok((first, words))) if mic_stays_open(parts) => {
+             let reply = Reply {

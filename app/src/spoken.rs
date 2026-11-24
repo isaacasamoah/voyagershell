@@ -6,9 +6,20 @@ use voyager_contract::VesselId;
 
 pub const MARKER: &str = "[spoken]";
 pub const REPLY_MARKER: &str = "[vy]";
+pub const CUT_OFF: &str = "[cut off]";
 
 pub fn prompt(words: &str) -> String {
     format!("{MARKER} {words}")
+}
+
+pub fn cut_off_prompt(heard_last: &str, unheard: usize, words: &str) -> String {
+    format!(
+        "{MARKER} {CUT_OFF} You were saying: \"{heard_last}\". Not heard: {unheard} more sentences. They say: {words}"
+    )
+}
+
+pub fn cut_off_rule() -> String {
+    format!("A {CUT_OFF} prompt continues your previous answer.")
 }
 
 pub fn is_spoken(prompt: &str) -> bool {
@@ -156,6 +167,16 @@ mod tests {
         assert_eq!(strip_reply_marker("  Docked it.  "), "  Docked it.  ");
         assert_eq!(strip_reply_marker(""), "");
         assert!(matches!(strip_reply_marker("Docked it."), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn a_cut_off_prompt_says_where_the_reply_stopped_and_what_the_person_said() {
+        let prompt = cut_off_prompt("Then I tidied the tabs.", 2, "open the logs instead");
+        assert_eq!(
+            prompt,
+            "[spoken] [cut off] You were saying: \"Then I tidied the tabs.\". Not heard: 2 more sentences. They say: open the logs instead"
+        );
+        assert!(is_spoken(&prompt));
     }
 
     #[test]

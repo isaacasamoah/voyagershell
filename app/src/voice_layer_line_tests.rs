@@ -74,3 +74,22 @@ fn a_chosen_line_that_is_not_kept_plays_nothing_and_marks_no_acknowledgement() {
     assert_eq!(line_marks(Some(Phrase::OneSec)), (0, vec![]));
     assert_eq!(line_marks(None), (1, vec![mark(Phrase::OneSec)]));
 }
+
+#[test]
+fn a_click_while_the_acknowledgement_plays_lets_it_finish_and_the_request_still_goes() {
+    let rig = Rig::new(vec![Mic::Opens(sentence())], Standing::Idle, false);
+    *rig.audio.while_playing.lock().unwrap() = Some(click);
+    rig.shared.update(|state| state.snapshot.on = true);
+    thread::scope(|scope| {
+        scope.spawn(|| rig.serve("open the roadmap"));
+        wait_until(|| {
+            let snapshot = rig.snapshot();
+            !snapshot.on && snapshot.phase == Phase::Ready
+        });
+        rig.shared.update(|state| state.shutdown = true);
+    });
+    assert_eq!(rig.said(), vec!["[spoken] open the roadmap"]);
+    assert_eq!(rig.played(), vec![mark(Phrase::OneSec)]);
+    assert_eq!(rig.audio.cut.lock().unwrap().clone(), vec![false]);
+    assert_eq!(rig.opened(), 1);
+}

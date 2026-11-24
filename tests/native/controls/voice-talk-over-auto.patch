@@ -1,0 +1,12 @@
+diff --git a/app/src/voice_speaker.rs b/app/src/voice_speaker.rs
+--- a/app/src/voice_speaker.rs
++++ b/app/src/voice_speaker.rs
+@@ -130,7 +130,7 @@ fn mic_stays_open(parts: &Parts) -> bool {
+     match parts.talk_over {
+         TalkOver::On => true,
+         TalkOver::Off => false,
+-        TalkOver::Auto => parts.audio.headphones(),
++        TalkOver::Auto => parts.audio.headphones() || true,
+     }
+ }
+ 

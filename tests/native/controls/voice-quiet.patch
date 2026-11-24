@@ -1,5 +1,4 @@
 diff --git a/app/src/audio_io.rs b/app/src/audio_io.rs
-index 61ff7c69..ebd17a0e 100644
 --- a/app/src/audio_io.rs
 +++ b/app/src/audio_io.rs
 @@ -9,7 +9,7 @@ use std::{
@@ -17,9 +16,9 @@ index 61ff7c69..ebd17a0e 100644
  const SPEAKING_PROBABILITY: f32 = 0.15;
 +const EMPHASIS: f32 = 0.97;
  const PLAYING_LOOK: Duration = Duration::from_millis(20);
+ const HEADPHONE_FORMS: [&str; 3] = ["headset", "headphone", "hands-free"];
  
- pub trait SpeechDetector {
-@@ -47,6 +48,8 @@ enum Stage {
+@@ -48,6 +49,8 @@ enum Stage {
  pub struct Gate {
      detector: Box<dyn SpeechDetector>,
      floors: VecDeque<f32>,
@@ -28,7 +27,7 @@ index 61ff7c69..ebd17a0e 100644
      stage: Stage,
      kept: VecDeque<Vec<i16>>,
      since_sound: usize,
-@@ -58,6 +61,8 @@ impl Gate {
+@@ -59,6 +62,8 @@ impl Gate {
          Self {
              detector,
              floors: VecDeque::new(),
@@ -37,7 +36,7 @@ index 61ff7c69..ebd17a0e 100644
              stage: Stage::Settling { seen: 0 },
              kept: VecDeque::new(),
              since_sound: PAUSE_FRAMES,
-@@ -65,8 +70,11 @@ impl Gate {
+@@ -66,8 +71,11 @@ impl Gate {
      }
  
      pub fn push(&mut self, frame: Vec<i16>) -> Option<Heard> {
@@ -49,7 +48,7 @@ index 61ff7c69..ebd17a0e 100644
          let sounding = above_floor(&mut self.floors, plain_level(&frame)) || speech;
          if !matches!(self.stage, Stage::Settling { .. }) {
              self.since_sound = if sounding { 0 } else { self.since_sound + 1 };
-@@ -114,6 +122,19 @@ impl Gate {
+@@ -115,6 +123,19 @@ impl Gate {
          }
      }
  

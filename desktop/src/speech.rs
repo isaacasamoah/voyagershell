@@ -81,6 +81,30 @@ impl Speech {
     }
 }
 
+fn colour(phase: &Phase) -> u32 {
+    match phase {
+        Phase::Listening | Phase::SpeakingOpen => 0x94bda0,
+        Phase::Connecting => 0xd9b26a,
+        Phase::NoMicrophone => 0xc98585,
+        _ => 0x989ba9,
+    }
+}
+
+fn hint(notice: Option<&str>, phase: &Phase) -> String {
+    match (notice, phase) {
+        (Some(notice), _) => notice.to_owned(),
+        (None, Phase::Starting) => "Loading voice…".into(),
+        (None, Phase::Connecting) => "Connecting…".into(),
+        (None, Phase::Listening) => "Listening".into(),
+        (None, Phase::NoMicrophone) => "Can't hear the microphone".into(),
+        (None, Phase::Hearing) => "Listening to what you said…".into(),
+        (None, Phase::SpeakingOpen) => "Listening. Talk any time to interrupt.".into(),
+        (None, Phase::Speaking) => "Mic paused while Voyager speaks.".into(),
+        (None, Phase::Unavailable(reason)) => reason.clone(),
+        _ => String::new(),
+    }
+}
+
 impl Render for Speech {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let phase = &self.state.phase;
@@ -89,27 +113,12 @@ impl Render for Speech {
             phase,
             Phase::Starting | Phase::Unavailable(_) | Phase::Stopped
         );
-        let color = match phase {
-            Phase::Listening => rgb(0x94bda0),
-            Phase::Connecting => rgb(0xd9b26a),
-            Phase::NoMicrophone => rgb(0xc98585),
-            _ => rgb(0x989ba9),
-        };
         let wave = svg()
             .path("speech-wave.svg")
             .w(px(14.))
             .h(px(12.))
-            .text_color(color);
-        let status = match (&self.state.notice, phase) {
-            (Some(notice), _) => notice.clone(),
-            (None, Phase::Starting) => "Loading voice…".into(),
-            (None, Phase::Connecting) => "Connecting…".into(),
-            (None, Phase::Listening) => "Listening".into(),
-            (None, Phase::NoMicrophone) => "Can't hear the microphone".into(),
-            (None, Phase::Hearing) => "Listening to what you said…".into(),
-            (None, Phase::Unavailable(reason)) => reason.clone(),
-            _ => String::new(),
-        };
+            .text_color(rgb(colour(phase)));
+        let status = hint(self.state.notice.as_deref(), phase);
         let label = if on { "Turn voice off" } else { "Start voice" };
         let layer = self.layer.clone();
         let control = Button::new("voyager-speech")
@@ -137,6 +146,7 @@ impl Render for Speech {
             Phase::Listening => "Listening".to_owned(),
             Phase::NoMicrophone => "Can't hear the microphone".to_owned(),
             Phase::Hearing | Phase::Acknowledging | Phase::Speaking => "Busy".to_owned(),
+            Phase::SpeakingOpen => "Listening while speaking".to_owned(),
             _ => label.to_owned(),
         };
         div()
@@ -166,5 +176,53 @@ impl Render for VoiceHint {
             .text_size(px(10.))
             .text_color(colors.muted_foreground)
             .child(self.0.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GREEN: u32 = 0x94bda0;
+    const GREY: u32 = 0x989ba9;
+
+    #[test]
+    fn the_wave_is_green_only_while_the_microphone_hears_the_person() {
+        for phase in [Phase::Listening, Phase::SpeakingOpen] {
+            assert_eq!(colour(&phase), GREEN, "{phase:?}");
+        }
+        for phase in [
+            Phase::Ready,
+            Phase::Hearing,
+            Phase::Acknowledging,
+            Phase::Speaking,
+        ] {
+            assert_eq!(colour(&phase), GREY, "{phase:?}");
+        }
+        for phase in [Phase::Connecting, Phase::NoMicrophone] {
+            assert!(![GREEN, GREY].contains(&colour(&phase)), "{phase:?}");
+        }
+    }
+
+    #[test]
+    fn a_speaking_voyager_says_whether_the_person_can_talk_over_it() {
+        assert_eq!(
+            hint(None, &Phase::SpeakingOpen),
+            "Listening. Talk any time to interrupt."
+        );
+        assert_eq!(
+            hint(None, &Phase::Speaking),
+            "Mic paused while Voyager speaks."
+        );
+        assert_eq!(hint(None, &Phase::Listening), "Listening");
+        assert_eq!(hint(None, &Phase::Hearing), "Listening to what you said…");
+        assert_eq!(hint(None, &Phase::Acknowledging), "");
+    }
+
+    #[test]
+    fn a_notice_replaces_the_hint_in_every_phase() {
+        for phase in [Phase::Speaking, Phase::SpeakingOpen, Phase::Listening] {
+            assert_eq!(hint(Some("Not sent."), &phase), "Not sent.", "{phase:?}");
+        }
     }
 }

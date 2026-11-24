@@ -27,8 +27,9 @@ const SESSION_LINE: &str =
     "This is the app's background Voyager session, which runs with VOYAGER_BACKGROUND=1.";
 pub(crate) fn rules() -> String {
     format!(
-        "{SESSION_LINE} {}\n{}",
+        "{SESSION_LINE} {} {}\n{}",
         crate::spoken::reply_rule(),
+        crate::spoken::cut_off_rule(),
         crate::spoken::guide()
     )
 }
@@ -228,6 +229,7 @@ mod tests {
         let text = rules();
         assert!(text.starts_with(SESSION_LINE));
         assert!(text.contains(&crate::spoken::reply_rule()));
+        assert!(text.contains("A [cut off] prompt continues your previous answer."));
         assert!(text.ends_with(&crate::spoken::guide()));
         assert!(text.contains("Run voyager --skill"));
         assert!(!text.to_lowercase().contains("oru"));

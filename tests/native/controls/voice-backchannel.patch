@@ -1,0 +1,12 @@
+diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
+--- a/app/src/voice_layer.rs
++++ b/app/src/voice_layer.rs
+@@ -338,7 +338,7 @@ impl Exchange<'_> {
+             return self.play_from(held, at);
+         }
+         match interjection(&heard) {
+-            Interjection::Backchannel => self.play_from(held, at),
++            Interjection::Backchannel => Stage::Listening,
+             Interjection::Stop => Stage::Listening,
+             Interjection::Steer => Stage::Answering(Decided::Voyager(
+                 spoken::cut_off_prompt(held.piece(at), held.unheard(at), &heard),

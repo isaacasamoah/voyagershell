@@ -34,8 +34,8 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    early. Waiting 1.5 s instead of 0.6 s adds 0.9 s between the end of speech and
    the acknowledgement. The time from the end of the turn to the clip's first sound is
    unchanged. In ten runs of the voice journey on the CPU engine it was 187 to 206 ms,
-   with a median of 201 ms. A model that judges the end of a turn and interruptions
-   are later work.
+   with a median of 201 ms. A model that judges the end of a turn is later work.
+   Interruptions are described in [Talking over Voyager](#talking-over-voyager).
 4. Hearing and routing start the moment the turn ends, and nothing plays while they
    run. The control shows Hearing. The routing call chooses the acknowledgement for a
    request for Voyager from a closed set, and the app owns its words, as
@@ -57,7 +57,8 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    for it.
 
 The microphone is closed whenever the app's own audio plays, so the app never hears
-its own voice as a turn. There are no interruptions.
+its own voice as a turn. The one exception is a reply played with talk over on, which
+[Talking over Voyager](#talking-over-voyager) describes.
 
 A click turns voice off in any state. It stops listening at once and drops a sentence
 that the person was still speaking. Audio that is already playing, the acknowledgement or
@@ -307,8 +308,10 @@ is never quiet but the listener does not take the sound as speech, a reply waits
 then plays. If the listener takes the sound as speech, such as a steady loud sound, the
 reply waits until that turn ends, which can be as late as the 30 s cap. The 3 s is a
 target. It has not been measured in a real room.
-The listener checks the switch again once it holds the floor, so a click-off while a reply plays never opens the microphone again. Listening resumes when it ends. The reply thread and its floor lock are interim. One
-audio thread that owns the microphone and the speaker is later work.
+The listener checks the switch again once it holds the floor, so a click-off while a reply plays never opens the microphone again. Listening resumes when it ends. With
+talk over off, the reply thread plays the reply and the floor lock keeps the microphone
+closed. With talk over on, the listening thread plays it and keeps the microphone open,
+as [Talking over Voyager](#talking-over-voyager) describes.
 
 ### One piece at a time
 
@@ -370,6 +373,107 @@ the next render. On the loaded CPU 15 of 18 runs had no wait, and the other thre
 at most 1.2, 3.9 and 8.6 s once, when one 13-word sentence took 10.2 s to render 4.8 s
 of audio.
 
+### Talking over Voyager
+
+With talk over on, the microphone stays open while a reply plays, and speech stops the
+reply. `voice_settings::TalkOver` is the setting. It is `Auto`, `On` or `Off`, and
+`Auto` is the default. `Off` keeps the paused microphone described above. `On` always
+keeps the microphone open. `Auto` keeps it open only when the default output is
+headphones.
+
+`TalkOver::from_environment` is the one place the setting is read. It reads the launch
+variable `VOYAGER_VOICE_TALK_OVER` once, when the voice layer starts. The values are
+`auto`, `on` and `off` in any letter case, and an unset variable means `Auto`. Any
+other value also means `Auto`, and the app logs one line that names the variable and
+the value it got. The app has no stored voice setting yet, so the variable is the only
+way to change it.
+
+`audio_io::headphones_in_use` answers that. It runs `pactl --format=json info` and
+`pactl --format=json list sinks`, which only read. The default sink counts as
+headphones when its `device.form_factor` is `headset`, `headphone` or `hands-free`, or
+when its active port has the type `Headphones`. A failed command, an answer that cannot
+be read and a missing default sink all count as speakers, so the microphone is paused.
+The reply thread asks once for each reply, after the first piece is rendered, so
+plugging headphones in or out takes effect at the next reply. A Bluetooth or USB
+speaker that reports no form factor is read as a speaker. Headphones that the system
+does not label need `On`.
+
+The reply thread never plays a talk-over reply itself. It offers the reply to the
+listening thread through `voice_parts::Floor`, as a `Reply` that holds the spoken text,
+the first rendered clip and the stream of the clips still rendering. The listening
+thread takes the offer at the moment it would have stepped aside, which is the same
+quiet moment a reply waits for with talk over off. It then plays the reply and keeps
+reading the microphone, so one thread owns both. If no listener holds the floor,
+because voice was clicked off or the microphone is out, the reply thread takes its
+offer back and plays or notes the reply as it does with talk over off. Only a reply is
+offered. A fixed clip still takes the floor, and so does a reply while talk over is
+off.
+
+The listening thread moves the reply through four states, `Stage` in `voice_layer.rs`.
+
+| State | Meaning | What ends it |
+| --- | --- | --- |
+| `Playing` | The reply sounds and the microphone is read. | Speech starts, which gives `Cut`, or the last piece ends, which gives `Listening`. |
+| `Cut` | The reply is stopped at a piece and the person is speaking. | Their turn ends and is heard, which gives any of the other three. |
+| `Listening` | The reply is over, and listening goes on with the same microphone. | Nothing. It is the end. |
+| `Answering` | The reply is over, and the person's words need an answer. | Nothing. The turn is answered as any other. |
+
+The gate's speech onset, 0.1 s of frames at or above 0.3, stops the reply at once.
+`voice_talk_over::Playing` runs the speaker's finish on a helper thread and asks it to
+cut, which kills the player. The helper looks for that request every 20 ms. The voice
+interruption experiment of 23 Nov 2026 measured the onset at a median of 140 ms and a
+killed player silent within 12 ms, both on synthetic speech outside the app. Neither is
+measured in the app or on a real voice.
+
+The reply's clips stay in memory while it is talked over, in `voice_talk_over::Held`,
+so a resume replays them without another render. `Playing` records when each piece it
+hands to the player starts to sound. That is the time the piece before it ends, or the
+time of the hand-off when the player had run dry. The piece cut is the last one whose
+start has passed. The player's own 40 ms buffer is not counted.
+
+When the person's turn ends, the engine hears it and `voice_talk_over::interjection`
+sorts the words. It lowercases them, keeps only letters and digits, and compares the
+whole utterance with two tables. It never looks for a word inside a sentence, so "yeah
+but wait, open the logs" is a steer.
+
+| Kind | Whole utterance | What follows |
+| --- | --- | --- |
+| Backchannel | yeah, mm-hm, mm-hmm, mhm, uh-huh, okay, ok, right, sure, got it | The reply plays again from the start of the piece it was cut in. |
+| Stop | stop, wait, hang on, hold on, never mind, shush | The reply stays stopped and nothing is sent. |
+| Steer | Anything else | The words go to Voyager and the reply stays stopped. |
+
+A turn with no letter or digit in it, such as a cough, resumes the reply as a
+backchannel does. If hearing fails, "I didn't catch that." plays and the reply stays
+stopped. A steer goes through the same send as any request, so Voyager's standing and a
+refusal are handled the same way. It makes no routing call. `spoken::cut_off_prompt`
+builds its prompt in this shape.
+
+`[spoken] [cut off] You were saying: "<the piece cut>". Not heard: <n> more sentences. They say: <the words>`
+
+The count is of the pieces after the one cut. The rules Voyager reads at every prompt
+carry `spoken::cut_off_rule`, which says that such a prompt continues its previous
+answer. The whole reply is added to the chat when its first piece starts, as with talk
+over off, so the part that was not spoken is in the chat after a cut.
+
+The control shows `Phase::SpeakingOpen` while a reply plays with the microphone open.
+It is green, and its tooltip reads "Listening. Talk any time to interrupt.". With the
+microphone paused the phase is `Phase::Speaking`. It is grey, and its tooltip reads "Mic
+paused while Voyager speaks.". When speech cuts the reply the control shows Listening, and then Hearing
+while the engine hears the words. The wave is green only while the microphone is read.
+
+A click-off while a reply plays with the microphone open closes the microphone at once
+and lets every piece finish, as it does with talk over off. The control shows
+`Phase::Speaking` for the rest of that reply, because the microphone is closed. A
+microphone stream that ends does the same and then shows "Can't hear the microphone".
+
+These limits are known. The acknowledgement and every fixed clip still pause the
+microphone. For the first 0.3 s after the microphone opens the gate is settling and
+hears no onset. With `On` and loudspeakers the app hears its own reply as speech and
+cuts it. The backchannel and stop words are matched as the engine spells them, and its
+spelling of sounds such as "mm-hm" is not measured. No real voice or room has been
+tried, so how often a cough, a keyboard or another person stops a reply is not known.
+The trace marks `speech-cut` with the words of the piece cut.
+
 ### How Voyager talks
 
 Voice is the primary surface, and the chat is an alternative. Voyager should sound
@@ -392,15 +496,16 @@ what failed and why. A spoken answer is the whole answer, with no lists, symbols
 paths or code, and it never points to the chat.
 
 The background Voyager reads the guide in two places. Its launch prompt is the
-background-session line, the reply-marker rule `spoken::reply_rule` and the guide.
+background-session line, the reply-marker rule `spoken::reply_rule`, the cut-off rule
+`spoken::cut_off_rule` and the guide.
 Claude Code ignores the launch prompt on a resumed conversation, so the focus hook
 sends the same text after the dock line at every prompt. The background-session line
 stays beside the marker rule because it is part of the marker mechanism. It lets
 Voyager drop a personal reply prefix that the person's own instructions name. The
-hook text is 4,032 bytes, and a test holds it under 4,100, because it is sent on
+hook text is 4,084 bytes, and a test holds it under 4,100, because it is sent on
 every prompt. It adds no tool call or round trip. The bound is the text's length plus
 about 70 bytes, so any longer wording fails the test and is timed again before the
-bound moves. The guide grew from a 3,130-byte hook text, and the voice model and the
+bound moves. The cut-off rule added 52 bytes to the 4,032 that the guide alone gives. The guide grew from a 3,130-byte hook text, and the voice model and the
 small-talk router read it too. On the voice journey's `acknowledgement-is-prompt`
 case, the longer guide measured a first-sound median of 236 ms against 254 ms for the
 shorter one, and a heard-to-routed median of 885.5 ms against 886 ms. The voice
@@ -410,7 +515,8 @@ you are", because the voice model has no `voyager` or `hc` commands.
 Three checks hold this in place. A unit test in `spoken.rs` holds the joined guide
 to the approved text byte for byte, by length and sha256, so any drift in wording
 fails. A unit test in `focus_hook.rs` holds the hook text under 4,100 bytes and
-checks that it carries the background-session line, the marker rule and the guide.
+checks that it carries the background-session line, the marker rule, the cut-off rule
+and the guide.
 The `adopt-by-label` journey's `focus-hook-names-dock` case reads the stand-in
 agent's scrollback and requires the docked Vessel's name to end the first line of
 the hook's context, so the dock still comes first ahead of the longer guide.
@@ -512,6 +618,7 @@ The engine looks for a runtime folder and the model files.
 | Setting | Meaning |
 | --- | --- |
 | `VOYAGER_OMNI_DIR` | The runtime folder. Defaults to `voyager/voice/omni` in the user cache folder. |
+| `VOYAGER_VOICE_TALK_OVER` | Whether speech can stop a reply, as `auto`, `on` or `off`. Defaults to `auto`. [Talking over Voyager](#talking-over-voyager) describes it. |
 | `VOYAGER_OMNI_SERVER` | The server program, for a test machine that runs a local llama.cpp build. |
 | `VOYAGER_OMNI_GPU_LAYERS` | How many layers the server puts on a graphics card. Defaults to 0, the CPU build. |
 
@@ -613,4 +720,11 @@ spoken among that sound is sent word for word, two turns in a row each get a spo
 reply with the speaker echoed into the microphone, and a click turns voice off. A long
 reply of 117 words is heard back by the engine with at most a tenth of its words wrong,
 its long sentences split at a comma or at the limit, and its numbers are spoken as
-words.
+words. With Auto on the fixture's speakers, speech fed while a reply plays neither
+cuts it nor becomes a turn.
+
+The `voice-talk-over` journey in [the verification guide](../tests/native/README.md#talking-over-a-reply)
+launches the app with talk over on. While a reply plays the wave is in the open-microphone
+state. "Yeah." cuts the reply, which then plays again from the start of the piece it cut.
+"Stop." leaves it stopped, sends nothing and leaves the whole reply in the chat. A sentence
+reaches Voyager's stand-in as one cut-off prompt.

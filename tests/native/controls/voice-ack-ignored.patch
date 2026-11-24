@@ -1,12 +1,12 @@
 diff --git a/app/src/voice_layer.rs b/app/src/voice_layer.rs
 --- a/app/src/voice_layer.rs
 +++ b/app/src/voice_layer.rs
-@@ -394,7 +394,7 @@
+@@ -541,7 +541,7 @@ impl Exchange<'_> {
              }
-             Decided::Voyager(heard, ack) => {
+             Decided::Voyager(prompt, ack) => {
                  self.trace.mark_words("acknowledgement-chosen", ack.key());
 -                let held = acknowledge(standing, ack, turn);
 +                let held = acknowledge(standing, Ack::Look, turn);
-                 self.hand_off(&heard, held, speaker, &mut notice)
+                 self.hand_off(&prompt, held, speaker, &mut notice)
              }
          };

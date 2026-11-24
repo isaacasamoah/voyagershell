@@ -1,15 +1,16 @@
 use crate::{
     audio_io::{Capture, Playing, SpeechDetector},
     silero::Silero,
-    speech::{Clip, Phrase, Standing},
+    speech::{Clip, Phrase, SpokenText, Standing},
 };
 use std::{
     fs::OpenOptions,
     io::{self, Write},
     path::PathBuf,
     sync::{
-        Arc, Mutex, MutexGuard, PoisonError,
+        Arc, Mutex, MutexGuard, PoisonError, TryLockError,
         atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
     },
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -41,6 +42,7 @@ pub enum Phase {
     Hearing,
     Acknowledging,
     Speaking,
+    SpeakingOpen,
     Unavailable(String),
     Stopped,
 }
@@ -51,6 +53,15 @@ pub trait Frames {
 
 pub type Finish = Box<dyn FnOnce(&dyn Fn() -> bool) + Send>;
 pub type Clips = Box<dyn Iterator<Item = Clip> + Send>;
+pub(crate) type Rendered = Result<(Clip, String), String>;
+
+pub(crate) const RATE_CHANGED: &str = "The voice engine changed its sample rate within a reply";
+
+pub(crate) struct Reply {
+    pub text: SpokenText,
+    pub first: Clip,
+    pub rest: Receiver<Rendered>,
+}
 
 pub trait Speaker: Send {
     fn play(self: Box<Self>, clips: Clips) -> Finish;
@@ -60,12 +71,16 @@ pub trait Audio: Send + Sync {
     fn microphone(&self) -> io::Result<Box<dyn Frames>>;
     fn speaker(&self, rate: u32) -> io::Result<Box<dyn Speaker>>;
     fn detector(&self) -> Box<dyn SpeechDetector>;
+    fn headphones(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Default)]
 pub struct Floor {
     lock: Mutex<()>,
     pub(crate) wanted: AtomicBool,
+    offered: Mutex<Option<Reply>>,
 }
 
 impl Floor {
@@ -89,7 +104,33 @@ impl Floor {
     }
 
     pub fn is_wanted(&self) -> bool {
-        self.wanted.load(Ordering::SeqCst)
+        self.wanted.load(Ordering::SeqCst) || self.offered().is_some()
+    }
+
+    fn offered(&self) -> MutexGuard<'_, Option<Reply>> {
+        self.offered.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub(crate) fn offer(&self, reply: Reply) -> Option<(MutexGuard<'_, ()>, Reply)> {
+        *self.offered() = Some(reply);
+        loop {
+            if self.offered().is_none() {
+                return None;
+            }
+            let floor = match self.lock.try_lock() {
+                Ok(floor) => floor,
+                Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+                Err(TryLockError::WouldBlock) => {
+                    thread::sleep(FLOOR_LOOK);
+                    continue;
+                }
+            };
+            return self.offered().take().map(|reply| (floor, reply));
+        }
+    }
+
+    pub(crate) fn accept(&self) -> Option<Reply> {
+        self.offered().take()
     }
 }
 
@@ -112,6 +153,10 @@ impl Audio for System {
 
     fn detector(&self) -> Box<dyn SpeechDetector> {
         Box::new(Silero::new())
+    }
+
+    fn headphones(&self) -> bool {
+        crate::audio_io::headphones_in_use()
     }
 }
 

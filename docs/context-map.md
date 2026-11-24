@@ -197,12 +197,15 @@ Owns files:
 - `app/src/http1.rs`
 - `app/src/voice_layer.rs`
 - `app/src/voice_layer_tests.rs`
+- `app/src/voice_layer_talk_over_tests.rs`
 - `app/src/voice_layer_line_tests.rs`
 - `app/src/voice_voyager.rs`
 - `app/src/voice_reply.rs`
 - `app/src/voice_route.rs`
 - `app/src/voice_parts.rs`
 - `app/src/voice_speaker.rs`
+- `app/src/voice_settings.rs`
+- `app/src/voice_talk_over.rs`
 - `app/tests/voice_engine.rs`
 - `contract/src/administrator.rs`
 - `contract/src/conversation.rs`

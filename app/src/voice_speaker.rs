@@ -1,8 +1,9 @@
 use crate::{
     replies::Replies,
     speech::{CEILING_CUT, CUT_AT_LIMIT, Clip, Kept, Speaking},
-    voice_parts::{Audio, Floor, Phase, Trace, Voyager},
+    voice_parts::{Audio, Floor, Phase, RATE_CHANGED, Rendered, Reply, Trace, Voyager},
     voice_reply::{Line, PARTIAL, Watcher},
+    voice_settings::TalkOver,
 };
 use std::{
     sync::{
@@ -27,6 +28,7 @@ pub(crate) struct Parts {
     pub status: Arc<dyn Fn(Phase, Option<String>) + Send + Sync>,
     pub stopped: Arc<dyn Fn() -> bool + Send + Sync>,
     pub on: Arc<dyn Fn() -> bool + Send + Sync>,
+    pub talk_over: TalkOver,
 }
 
 pub(crate) fn spawn(parts: Parts) {
@@ -57,8 +59,6 @@ pub(crate) fn spawn(parts: Parts) {
         }
     });
 }
-
-type Rendered = Result<(Clip, String), String>;
 
 fn clip_of(parts: &Parts, line: &Line) -> Rendered {
     match line {
@@ -124,6 +124,14 @@ fn label_of(line: &Line, first: &str) -> String {
     }
 }
 
+fn mic_stays_open(parts: &Parts) -> bool {
+    match parts.talk_over {
+        TalkOver::On => true,
+        TalkOver::Off => false,
+        TalkOver::Auto => parts.audio.headphones(),
+    }
+}
+
 fn say(parts: &Parts, line: Line) {
     if !(parts.on)() {
         note_unspoken(parts, &line);
@@ -137,8 +145,20 @@ fn say(parts: &Parts, line: Line) {
             eprintln!("{CUT_AT_LIMIT}");
         }
     }
-    let first = clip_of(parts, &line);
-    let _floor = parts.floor.take();
+    let (_floor, first, rest) = match (&line, clip_of(parts, &line)) {
+        (Line::Reply(text), Ok((first, words))) if mic_stays_open(parts) => {
+            let reply = Reply {
+                text: text.clone(),
+                first,
+                rest: rest_of(parts, &line),
+            };
+            let Some((floor, reply)) = parts.floor.offer(reply) else {
+                return;
+            };
+            (floor, Ok((reply.first, words)), Some(reply.rest))
+        }
+        (_, first) => (parts.floor.take(), first, None),
+    };
     if (parts.stopped)() {
         return;
     }
@@ -149,7 +169,10 @@ fn say(parts: &Parts, line: Line) {
     (parts.status)(Phase::Speaking, None);
     let notice = match first {
         Err(reason) => Some(reason),
-        Ok(first) => play_all(parts, &line, first, rest_of(parts, &line)),
+        Ok(first) => {
+            let rest = rest.unwrap_or_else(|| rest_of(parts, &line));
+            play_all(parts, &line, first, rest)
+        }
     };
     let after = if (parts.on)() {
         Phase::Connecting
@@ -189,7 +212,7 @@ fn play_all(
                 }
                 return Some(clip);
             }
-            Ok(_) => "The voice engine changed its sample rate within a reply".to_owned(),
+            Ok(_) => RATE_CHANGED.to_owned(),
             Err(reason) => reason,
         };
         *reported.lock().unwrap_or_else(PoisonError::into_inner) = Some(reason);
@@ -248,11 +271,18 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct Ears {
+        worn: AtomicBool,
+        asked: AtomicUsize,
+    }
+
     struct Out(
         Arc<Mutex<Vec<usize>>>,
         Arc<Mutex<Vec<bool>>>,
         Arc<AtomicBool>,
         Arc<AtomicUsize>,
+        Arc<Ears>,
     );
 
     impl Audio for Out {
@@ -271,6 +301,11 @@ mod tests {
 
         fn detector(&self) -> Box<dyn crate::audio_io::SpeechDetector> {
             Box::new(crate::audio_io::Loudness)
+        }
+
+        fn headphones(&self) -> bool {
+            self.4.asked.fetch_add(1, Ordering::SeqCst);
+            self.4.worn.load(Ordering::SeqCst)
         }
     }
 
@@ -321,10 +356,15 @@ mod tests {
         noted: Arc<Mutex<Vec<(String, usize)>>>,
         cut: Arc<Mutex<Vec<bool>>>,
         slow: Arc<AtomicBool>,
+        ears: Arc<Ears>,
     }
 
     impl Rig {
         fn start(standing: Standing) -> Self {
+            Self::talking_over(standing, TalkOver::Auto)
+        }
+
+        fn talking_over(standing: Standing, talk_over: TalkOver) -> Self {
             let played = Arc::new(Mutex::default());
             let opened = Arc::new(AtomicUsize::new(0));
             let phases: Arc<Mutex<Vec<Phase>>> = Arc::default();
@@ -338,6 +378,7 @@ mod tests {
             let halted = stop.clone();
             let on = Arc::new(AtomicBool::new(true));
             let listening = on.clone();
+            let ears: Arc<Ears> = Arc::default();
             spawn(Parts {
                 speaking: Arc::new(Reader),
                 clips: Phrase::ALL
@@ -358,6 +399,7 @@ mod tests {
                     cut.clone(),
                     slow.clone(),
                     opened.clone(),
+                    ears.clone(),
                 )),
                 voyager: Arc::new(Here(standing, played.clone(), noted.clone())),
                 replies: replies.clone(),
@@ -366,6 +408,7 @@ mod tests {
                 status: Arc::new(move |phase, _| recorded.lock().unwrap().push(phase)),
                 stopped: Arc::new(move || halted.load(Ordering::SeqCst)),
                 on: Arc::new(move || listening.load(Ordering::SeqCst)),
+                talk_over,
             });
             Self {
                 played,
@@ -378,6 +421,18 @@ mod tests {
                 noted,
                 cut,
                 slow,
+                ears,
+            }
+        }
+
+        fn offered(&self) -> Reply {
+            let until = Instant::now() + Duration::from_secs(3);
+            loop {
+                if let Some(reply) = self.floor.accept() {
+                    return reply;
+                }
+                assert!(Instant::now() < until, "no reply was offered");
+                thread::sleep(Duration::from_millis(5));
             }
         }
 
@@ -629,5 +684,84 @@ mod tests {
         drop(held);
         rig.wait_for(1);
         assert_eq!(rig.played.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn with_headphones_each_reply_is_offered_to_the_listener_and_the_headphones_are_read_once() {
+        let rig = Rig::start(Standing::Idle);
+        rig.ears.worn.store(true, Ordering::SeqCst);
+        let listening = rig.floor.hold();
+        rig.say("p1", true, "Renamed it. Then I tidied the tabs.");
+        let first = rig.offered();
+        assert_eq!(first.text.as_str(), "Renamed it. Then I tidied the tabs.");
+        assert_eq!(first.first.pcm.len(), "Renamed it.".len());
+        let rest = first.rest.recv().unwrap().unwrap();
+        assert_eq!(rest.0.pcm.len(), "Then I tidied the tabs.".len());
+        rig.say("p2", true, "Done.");
+        assert_eq!(rig.offered().text.as_str(), "Done.");
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(rig.ears.asked.load(Ordering::SeqCst), 2);
+        assert!(rig.played.lock().unwrap().is_empty());
+        assert!(rig.phases.lock().unwrap().is_empty());
+        drop(listening);
+    }
+
+    #[test]
+    fn talk_over_on_offers_the_reply_and_off_never_does_without_reading_the_headphones() {
+        let on = Rig::talking_over(Standing::Idle, TalkOver::On);
+        let listening = on.floor.hold();
+        on.say("p1", true, "Renamed it.");
+        assert_eq!(on.offered().text.as_str(), "Renamed it.");
+        assert_eq!(on.ears.asked.load(Ordering::SeqCst), 0);
+        drop(listening);
+        let off = Rig::talking_over(Standing::Idle, TalkOver::Off);
+        off.ears.worn.store(true, Ordering::SeqCst);
+        let listening = off.floor.hold();
+        off.say("p1", true, "Done.");
+        thread::sleep(Duration::from_millis(500));
+        assert!(off.floor.accept().is_none());
+        assert!(off.floor.is_wanted());
+        drop(listening);
+        off.wait_for(1);
+        assert_eq!(off.played.lock().unwrap().clone(), vec!["Done.".len()]);
+        assert_eq!(off.ears.asked.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn an_offered_reply_that_no_listener_takes_is_played_with_the_microphone_paused() {
+        let rig = Rig::talking_over(Standing::Idle, TalkOver::On);
+        rig.say("p1", true, "Renamed it. More.");
+        rig.wait_for(2);
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(
+            rig.played.lock().unwrap().clone(),
+            vec!["Renamed it.".len(), "More.".len()]
+        );
+        assert_eq!(
+            rig.phases.lock().unwrap().clone(),
+            vec![Phase::Speaking, Phase::Connecting]
+        );
+    }
+
+    #[test]
+    fn an_offered_reply_left_waiting_at_a_click_off_is_noted_in_the_chat_and_not_played() {
+        let rig = Rig::talking_over(Standing::Idle, TalkOver::On);
+        let listening = rig.floor.hold();
+        rig.say("p1", true, "Renamed it.");
+        let until = Instant::now() + Duration::from_secs(3);
+        while !rig.floor.is_wanted() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+        rig.on.store(false, Ordering::SeqCst);
+        drop(listening);
+        let until = Instant::now() + Duration::from_secs(3);
+        while rig.noted.lock().unwrap().is_empty() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            rig.noted.lock().unwrap().clone(),
+            vec![("Renamed it.".to_owned(), 0)]
+        );
+        assert!(rig.played.lock().unwrap().is_empty());
     }
 }
