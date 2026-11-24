@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use voyager_contract::{
-    Axis, Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, Side,
-    Split, SplitShare, Vessel,
+    Axis, Fleet, Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout,
+    Side, Split, SplitShare, Vessel, Voyage,
 };
 
 pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Result<(), String> {
@@ -314,10 +314,49 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct Group<'a> {
     pub members: &'a [Placement],
     pub root: &'a Option<Split>,
     pub maximized: &'a Option<PlacementId>,
+}
+
+impl<'a> Group<'a> {
+    pub(crate) fn of_fleet(fleet: &'a Fleet) -> Self {
+        Self {
+            members: &fleet.placements,
+            root: &fleet.root,
+            maximized: &fleet.maximized_placement,
+        }
+    }
+
+    pub(crate) fn of_portals(voyage: &'a Voyage) -> Option<Self> {
+        voyage.portal_layout.as_ref().map(|presentation| Self {
+            members: &voyage.portals,
+            root: &presentation.root,
+            maximized: &presentation.maximized_placement,
+        })
+    }
+
+    pub(crate) fn placed(self, id: &PlacementId) -> bool {
+        contains(self.root, id)
+    }
+
+    pub(crate) fn shown(self, id: &PlacementId) -> bool {
+        self.placed(id)
+            && self
+                .members
+                .iter()
+                .any(|panel| &panel.id == id && !panel.hidden)
+    }
+
+    pub(crate) fn on_screen(self, id: &PlacementId) -> bool {
+        self.shown(id)
+            && self
+                .maximized
+                .as_ref()
+                .is_none_or(|selected| selected == id)
+    }
 }
 
 pub(crate) struct GroupMut<'a> {
@@ -331,23 +370,12 @@ pub(crate) fn group<'a>(layout: &'a Layout, owner: &PlacementOwner) -> Result<Gr
         match owner {
             PlacementOwner::Fleet { id } => {
                 if let Some(fleet) = voyage.fleets.iter().find(|fleet| &fleet.id == id) {
-                    return Ok(Group {
-                        members: &fleet.placements,
-                        root: &fleet.root,
-                        maximized: &fleet.maximized_placement,
-                    });
+                    return Ok(Group::of_fleet(fleet));
                 }
             }
             PlacementOwner::Portals { voyage: id } if &voyage.id == id => {
-                let presentation = voyage
-                    .portal_layout
-                    .as_ref()
-                    .ok_or("Portal arrangement is unavailable")?;
-                return Ok(Group {
-                    members: &voyage.portals,
-                    root: &presentation.root,
-                    maximized: &presentation.maximized_placement,
-                });
+                return Group::of_portals(voyage)
+                    .ok_or_else(|| "Portal arrangement is unavailable".into());
             }
             _ => (),
         }
@@ -988,5 +1016,123 @@ mod tests {
                 .is_err()
         );
         assert_eq!(model.layout, before);
+    }
+
+    fn placement(id: &str, hidden: bool) -> Placement {
+        Placement {
+            id: PlacementId(id.into()),
+            vessel: voyager_contract::VesselId(id.into()),
+            name: id.into(),
+            name_origin: Default::default(),
+            hidden,
+        }
+    }
+
+    fn leaf(id: &str) -> Split {
+        Split::Leaf {
+            placement: PlacementId(id.into()),
+        }
+    }
+
+    fn pair(first: &str, second: &str) -> Option<Split> {
+        Some(Split::Branch {
+            axis: Axis::Horizontal,
+            share: Default::default(),
+            first: Box::new(leaf(first)),
+            second: Box::new(leaf(second)),
+        })
+    }
+
+    fn fleet() -> Fleet {
+        Fleet {
+            id: voyager_contract::FleetId("fleet".into()),
+            name: "Fleet".into(),
+            closed: false,
+            placements: vec![
+                placement("shown", false),
+                placement("hidden", true),
+                placement("closed", false),
+            ],
+            root: pair("shown", "hidden"),
+            maximized_placement: None,
+        }
+    }
+
+    fn portals(layout: Option<PortalLayout>) -> Voyage {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Work".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let mut voyage = model.layout.voyages.remove(0);
+        voyage.portals = vec![
+            placement("portal", false),
+            placement("tucked", true),
+            placement("other", false),
+        ];
+        voyage.portal_layout = layout;
+        voyage
+    }
+
+    fn id(id: &str) -> PlacementId {
+        PlacementId(id.into())
+    }
+
+    #[test]
+    fn a_fleet_placement_is_placed_while_in_the_tree_and_shown_unless_hidden() {
+        let fleet = fleet();
+        let group = Group::of_fleet(&fleet);
+        for (name, placed, shown) in [
+            ("shown", true, true),
+            ("hidden", true, false),
+            ("closed", false, false),
+            ("missing", false, false),
+        ] {
+            assert_eq!(group.placed(&id(name)), placed, "{name} placed");
+            assert_eq!(group.shown(&id(name)), shown, "{name} shown");
+            assert_eq!(group.on_screen(&id(name)), shown, "{name} on screen");
+        }
+    }
+
+    #[test]
+    fn a_maximized_placement_leaves_only_itself_on_screen() {
+        let mut fleet = fleet();
+        fleet.placements.push(placement("beside", false));
+        fleet.root = Some(Split::Branch {
+            axis: Axis::Vertical,
+            share: Default::default(),
+            first: Box::new(pair("shown", "hidden").unwrap()),
+            second: Box::new(leaf("beside")),
+        });
+        fleet.maximized_placement = Some(id("beside"));
+        let group = Group::of_fleet(&fleet);
+        assert!(group.on_screen(&id("beside")));
+        assert!(!group.on_screen(&id("shown")));
+        assert!(group.shown(&id("shown")));
+        assert!(group.placed(&id("hidden")));
+    }
+
+    #[test]
+    fn portals_answer_the_same_questions_and_have_none_without_an_arrangement() {
+        assert!(Group::of_portals(&portals(None)).is_none());
+        let mut voyage = portals(Some(PortalLayout {
+            root: Some(Split::Branch {
+                axis: Axis::Vertical,
+                share: Default::default(),
+                first: Box::new(pair("portal", "tucked").unwrap()),
+                second: Box::new(leaf("other")),
+            }),
+            ..PortalLayout::default()
+        }));
+        let group = Group::of_portals(&voyage).unwrap();
+        assert!(group.placed(&id("portal")) && group.on_screen(&id("portal")));
+        assert!(group.placed(&id("tucked")) && !group.shown(&id("tucked")));
+        assert!(!group.placed(&id("closed")));
+        voyage.portal_layout.as_mut().unwrap().maximized_placement = Some(id("other"));
+        let group = Group::of_portals(&voyage).unwrap();
+        assert!(group.on_screen(&id("other")));
+        assert!(group.shown(&id("portal")) && !group.on_screen(&id("portal")));
     }
 }

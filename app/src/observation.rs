@@ -218,25 +218,13 @@ pub(crate) fn capture(
             voyage.fleets.iter().any(|fleet| {
                 (matches!(layout.view, WorkspaceView::Home)
                     || Some(&fleet.id) == layout.selected_fleet.as_ref())
-                    && crate::panels::contains(
-                        &crate::panels::visible(&fleet.root, &fleet.placements),
-                        id,
-                    )
-                    && fleet
-                        .maximized_placement
-                        .as_ref()
-                        .is_none_or(|selected| selected == id)
-            }) || voyage.portal_layout.as_ref().is_some_and(|column| {
-                column.visible
-                    && crate::panels::contains(
-                        &crate::panels::visible(&column.root, &voyage.portals),
-                        id,
-                    )
-                    && column
-                        .maximized_placement
-                        .as_ref()
-                        .is_none_or(|selected| selected == id)
-            })
+                    && crate::panels::Group::of_fleet(fleet).on_screen(id)
+            }) || voyage
+                .portal_layout
+                .as_ref()
+                .is_some_and(|column| column.visible)
+                && crate::panels::Group::of_portals(voyage)
+                    .is_some_and(|portals| portals.on_screen(id))
         });
         if !found || !panels.iter().any(|panel| &panel.placement_id == id) {
             return Err("Active placement is not visible in the selected workspace".into());

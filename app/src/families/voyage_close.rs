@@ -230,16 +230,17 @@ impl Closing {
                     .iter()
                     .filter(|fleet| !fleet.closed)
                     .any(|fleet| {
-                        let root = panels::visible(&fleet.root, &fleet.placements);
-                        fleet.placements.iter().any(|panel| {
-                            panel.vessel == content.id && panels::contains(&root, &panel.id)
-                        })
+                        let group = panels::Group::of_fleet(fleet);
+                        fleet
+                            .placements
+                            .iter()
+                            .any(|panel| panel.vessel == content.id && group.shown(&panel.id))
                     })
-                    || voyage.portal_layout.as_ref().is_some_and(|column| {
-                        let root = panels::visible(&column.root, &voyage.portals);
-                        voyage.portals.iter().any(|panel| {
-                            panel.vessel == content.id && panels::contains(&root, &panel.id)
-                        })
+                    || panels::Group::of_portals(voyage).is_some_and(|portals| {
+                        voyage
+                            .portals
+                            .iter()
+                            .any(|panel| panel.vessel == content.id && portals.shown(&panel.id))
                     }));
             if live.is_none() && !visible_note {
                 continue;

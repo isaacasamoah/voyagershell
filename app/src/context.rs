@@ -32,24 +32,18 @@ fn portal_panels<'a>(
     let Some(original) = layout.containers().find(|voyage| voyage.id == scoped.id) else {
         return Vec::new();
     };
-    let Some(column) = original
+    let Some(portals) = original
         .portal_layout
         .as_ref()
         .filter(|column| column.visible)
+        .and_then(|_| crate::panels::Group::of_portals(original))
     else {
         return Vec::new();
     };
-    let root = crate::panels::visible(&column.root, &original.portals);
     scoped
         .portals
         .iter()
-        .filter(|panel| {
-            crate::panels::contains(&root, &panel.id)
-                && column
-                    .maximized_placement
-                    .as_ref()
-                    .is_none_or(|id| *id == panel.id)
-        })
+        .filter(|panel| portals.on_screen(&panel.id))
         .collect()
 }
 
@@ -84,14 +78,13 @@ pub(crate) fn prepare(
             .or_else(|| voyage.fleets.iter().find(|fleet| !fleet.closed));
         let mut panels = Vec::new();
         if let Some(fleet) = fleet {
-            let root = crate::panels::visible(&fleet.root, &fleet.placements);
-            panels.extend(fleet.placements.iter().filter(|panel| {
-                crate::panels::contains(&root, &panel.id)
-                    && fleet
-                        .maximized_placement
-                        .as_ref()
-                        .is_none_or(|id| *id == panel.id)
-            }));
+            let group = crate::panels::Group::of_fleet(fleet);
+            panels.extend(
+                fleet
+                    .placements
+                    .iter()
+                    .filter(|panel| group.on_screen(&panel.id)),
+            );
         }
         panels.extend(portal_panels(layout, voyage));
         for panel in panels {

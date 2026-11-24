@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
 use voyager_contract::{
-    Layout, Placement, Split, VesselId, Voyage, WorkspaceView,
+    Layout, Placement, VesselId, Voyage, WorkspaceView,
     activity::{ActivityState, ReportedActivity},
     socket::{
         FleetOverview, Overview, PieceOverview, PortalsOverview, VesselStatus, VoyageOverview,
@@ -129,10 +129,9 @@ impl Reading<'_> {
                         name: fleet.name.clone(),
                         on_screen,
                         pieces: self.pieces(
-                            &fleet.root,
                             &fleet.placements,
+                            Some(crate::panels::Group::of_fleet(fleet)),
                             on_screen,
-                            fleet.maximized_placement.as_ref(),
                         ),
                     }
                 })
@@ -140,10 +139,9 @@ impl Reading<'_> {
             portals: PortalsOverview {
                 visible,
                 pieces: self.pieces(
-                    &column.and_then(|column| column.root.clone()),
                     &voyage.portals,
+                    crate::panels::Group::of_portals(voyage),
                     selected && visible,
-                    column.and_then(|column| column.maximized_placement.as_ref()),
                 ),
             },
         }
@@ -151,12 +149,10 @@ impl Reading<'_> {
 
     fn pieces(
         &self,
-        root: &Option<Split>,
         members: &[Placement],
+        group: Option<crate::panels::Group<'_>>,
         group_shown: bool,
-        maximized: Option<&voyager_contract::PlacementId>,
     ) -> Vec<PieceOverview> {
-        let visible = crate::panels::visible(root, members);
         members
             .iter()
             .map(|placement| {
@@ -174,8 +170,7 @@ impl Reading<'_> {
                         .unwrap_or_default(),
                     you: &placement.vessel == self.vessel,
                     on_screen: group_shown
-                        && crate::panels::contains(&visible, &placement.id)
-                        && maximized.is_none_or(|selected| selected == &placement.id),
+                        && group.is_some_and(|group| group.on_screen(&placement.id)),
                     terminal: backend.cloned(),
                     activity: backend.map(|backend| {
                         self.activity
@@ -192,7 +187,7 @@ impl Reading<'_> {
 mod tests {
     use super::*;
     use voyager_contract::{
-        Action, CoreTerminalId, PlacementId, PortalLayout, Vessel, activity::ActivityState,
+        Action, CoreTerminalId, PlacementId, PortalLayout, Split, Vessel, activity::ActivityState,
         canvas::PortalMode,
     };
 

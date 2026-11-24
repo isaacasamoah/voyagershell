@@ -210,7 +210,7 @@ fn closed_program(
 ) -> Option<(VesselId, CoreTerminalId)> {
     let owner = panels::owner_of(layout, id).ok()?;
     let group = panels::group(layout, &owner).ok()?;
-    if panels::contains(group.root, id) {
+    if group.placed(id) {
         return None;
     }
     let vessel = &group.members.iter().find(|panel| &panel.id == id)?.vessel;
@@ -257,20 +257,17 @@ pub(crate) fn visible_content(layout: &Layout, content: &VesselId) -> bool {
     let Some(voyage) = voyage else {
         return false;
     };
-    if let Some(column) = &voyage.portal_layout
-        && column.visible
+    if voyage
+        .portal_layout
+        .as_ref()
+        .is_some_and(|column| column.visible)
+        && let Some(portals) = panels::Group::of_portals(voyage)
+        && voyage
+            .portals
+            .iter()
+            .any(|panel| &panel.vessel == content && portals.on_screen(&panel.id))
     {
-        let root = panels::visible(&column.root, &voyage.portals);
-        if voyage.portals.iter().any(|panel| {
-            &panel.vessel == content
-                && panels::contains(&root, &panel.id)
-                && column
-                    .maximized_placement
-                    .as_ref()
-                    .is_none_or(|id| id == &panel.id)
-        }) {
-            return true;
-        }
+        return true;
     }
     let fleet = if layout.view == WorkspaceView::Home {
         voyage.fleets.first()
@@ -281,15 +278,11 @@ pub(crate) fn visible_content(layout: &Layout, content: &VesselId) -> bool {
             .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
     };
     fleet.is_some_and(|fleet| {
-        let root = panels::visible(&fleet.root, &fleet.placements);
-        fleet.placements.iter().any(|panel| {
-            &panel.vessel == content
-                && panels::contains(&root, &panel.id)
-                && fleet
-                    .maximized_placement
-                    .as_ref()
-                    .is_none_or(|id| id == &panel.id)
-        })
+        let group = panels::Group::of_fleet(fleet);
+        fleet
+            .placements
+            .iter()
+            .any(|panel| &panel.vessel == content && group.on_screen(&panel.id))
     })
 }
 
