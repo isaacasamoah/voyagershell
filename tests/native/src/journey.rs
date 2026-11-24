@@ -173,6 +173,10 @@ impl Journey {
         !matches!(self, Self::VoyagerCommand)
     }
 
+    pub fn traces_tools(self) -> bool {
+        matches!(self, Self::AvatarDrag)
+    }
+
     pub fn core_delay(self) -> Option<&'static str> {
         match self {
             Self::SlowSave => Some(slow_save::HOLD),

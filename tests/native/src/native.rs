@@ -226,6 +226,7 @@ pub struct Native {
     pub hc: Pinned,
     pub script: Option<Script>,
     pub probe_frames: bool,
+    pub trace_tools: bool,
     pub audio_requested: bool,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
@@ -282,6 +283,7 @@ impl Native {
             hc,
             script: None,
             probe_frames: false,
+            trace_tools: false,
             audio_requested: false,
             audio: None,
             voice_engine: None,
@@ -622,6 +624,9 @@ impl Native {
         let inspection = self.inspection();
         let stop = self.system.evidence.join(frames::STOP);
         let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
+        if self.trace_tools {
+            extra_env.push(("VOYAGER_TRACE_TOOLS", "1"));
+        }
         if self.probe_frames {
             extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
             extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));

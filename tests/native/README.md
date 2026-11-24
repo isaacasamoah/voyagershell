@@ -422,7 +422,11 @@ row whose ink reaches past it and both rows with the padding masked.
 The `avatar-drag` journey proves that a held avatar follows the pointer under
 load, that terminals wait for the drag without losing output, and that a drag
 can still end in a dock. `DRAG_REST` in `src/native/settle.rs` is the product's
-120 ms rest. The first four cases use the first terminal. Each types a program
+120 ms rest. The journey starts the app with `VOYAGER_TRACE_TOOLS` set
+(`Journey::traces_tools`), so `native.log` records when each workspace request
+reaches the owner. A labelled terminal is adopted only while no request is in
+flight and the owner's layout is current, so that log shows which one held back
+an adoption that never came. The first four cases use the first terminal. Each types a program
 that clears the terminal at once and prints after five seconds, so the previous
 case's output is gone before the drag and the drag can begin first. It then holds the avatar and circles it in the
 terminal's lower right in segments of 25 moves. Each look at the terminal masks
