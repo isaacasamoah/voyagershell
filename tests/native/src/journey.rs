@@ -856,6 +856,30 @@ mod tests {
                 &["bad-split-places-nothing"],
             ),
             (
+                Journey::AgentSplit,
+                "agent-resize-refused",
+                &["bad-split-places-nothing", "voyager-resizes-a-split"],
+            ),
+            (
+                Journey::AgentSplit,
+                "agent-split-keeps-maximize",
+                &["bad-split-places-nothing", "voyager-resizes-a-split"],
+            ),
+            (
+                Journey::AgentSplit,
+                "new-piece-shows-after-unmaximize",
+                &[
+                    "bad-split-places-nothing",
+                    "voyager-resizes-a-split",
+                    "agent-split-keeps-maximize",
+                ],
+            ),
+            (
+                Journey::AgentSplit,
+                "voyager-split-clears-maximize",
+                &["bad-split-places-nothing", "voyager-resizes-a-split"],
+            ),
+            (
                 Journey::TerminalInput,
                 "a-drag-released-over-another-terminal-does-not-copy-that-terminals-older-selection",
                 &["input-reaches-one-terminal-while-another-floods"],
@@ -880,6 +904,17 @@ mod tests {
                     .iter()
                     .all(|case| !earlier.contains(case))
             );
+        }
+        for journey in Journey::ALL {
+            for (later, _) in journey.needs() {
+                assert!(
+                    table
+                        .iter()
+                        .any(|(listed, name, _)| listed == journey && name == later),
+                    "{}: the need of {later} has no row in the table",
+                    journey.name()
+                );
+            }
         }
         Ok(())
     }

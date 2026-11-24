@@ -2028,6 +2028,8 @@ Each picked case still gets what it needs:
   pick the earlier case too. The `socket-dock`, `profile`, `portals`, `chat`, `agent-split`,
   `terminal-input` and `adopt-by-label` journeys declare the needs of the cases that use state
   an earlier case made. Other journeys declare theirs when a crew needs a case alone.
+- A new case's needs are part of its pull request. The table test in `journey.rs` has a row
+  for every declared need, fails when a need is removed, and fails when a declared need has no row.
 
 A partial run cannot be read as a full pass. `observations.json` and `checks.json` carry
 `"selection"` with `partial`, `picked`, `included` and `leftOut`, and each left-out case

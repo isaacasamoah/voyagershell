@@ -104,7 +104,8 @@ which cases were picked, included and left out and that the run is partial, and 
 run is never a full pass. List it in the manifest input with `"partial": true`. If a picked
 case did not run, the run fails and names the earlier cases it left out. A partial run
 prints a `PARTIAL: N cases left out, not a journey pass` summary line that lists the cases left
-out, and it never goes on a `Journeys run:` line. The README section "Running chosen cases"
+out, and it never goes on a `Journeys run:` line. A new case's needs are part of its pull
+request, and the table test in `journey.rs` checks them. The README section "Running chosen cases"
 has the rest.
 
 ## Verdict manifest
