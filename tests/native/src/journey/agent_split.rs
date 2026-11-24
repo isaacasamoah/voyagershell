@@ -410,7 +410,8 @@ fn resize(fleet: &FleetId, share: u16) -> Result<Action> {
 
 fn labelled(native: &Native, first: &Terminal, name: &str, place: &str) -> Result<PlacementId> {
     let label = Label::new(name, place, "bash");
-    Ok(adopt(native, first, &label, Adoption::Saved)?.placement.id)
+    let [adopted] = adopt(native, first, [label], Adoption::Saved)?;
+    Ok(adopted.placement.id)
 }
 
 fn arguments(argv: &Value) -> Vec<String> {
@@ -539,7 +540,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             let name = format!("split-{word}");
             let place = format!("fleet:{}:{word}:{}", fleet.0, anchor.0);
             let label = Label::new(&name, &place, "bash");
-            let placed = adopt(native, &first, &label, Adoption::Drawn)?.placement;
+            let [adopted] = adopt(native, &first, [label], Adoption::Drawn)?;
+            let placed = adopted.placement;
             landed.push(native.observe(
                 "the labelled shell drawn beside the named placement",
                 |seen| {

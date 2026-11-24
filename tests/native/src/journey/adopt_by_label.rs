@@ -2,7 +2,8 @@ use super::layout::avatar_on_dock;
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{
-    Adoption, Label, Native, Seen, Terminal, address, adopt, bound_to, fleets, typed, voyages,
+    Adopted, Adoption, Label, Native, Seen, Terminal, address, adopt, bound_to, fleets, typed,
+    voyages,
 };
 use crate::system::{TimedOut, until};
 use crate::x11::Key;
@@ -172,7 +173,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let crew = cases.make(native, Case::AgentInFleet, |native| {
         let place = format!("fleet:{}", fleet.0);
         let label = Label::new("crew", &place, "claude 'Review x.rs'");
-        let terminal = adopt(native, &first, &label, Adoption::Drawn)?.terminal;
+        let [Adopted { terminal, .. }] = adopt(native, &first, [label], Adoption::Drawn)?;
         let placed = native.observe("the labelled agent drawn as a Vessel in its Fleet", |seen| {
             adopted(seen, &terminal, |layout| {
                 fleets(layout)
@@ -230,7 +231,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::AgentInPortal, |native| {
         let place = format!("portal:{}", voyage.0);
         let label = Label::new("lookout", &place, "claude 'Watch CI'");
-        let terminal = adopt(native, &first, &label, Adoption::Drawn)?.terminal;
+        let [Adopted { terminal, .. }] = adopt(native, &first, [label], Adoption::Drawn)?;
         let placed = native.observe("the labelled agent drawn as a Portal", |seen| {
             adopted(seen, &terminal, |layout| {
                 voyages(layout)
@@ -343,7 +344,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
         let place = format!("fleet:{}", made.0);
         let label = Label::new("lead", &place, "claude 'Lead the crew'");
-        let lead = adopt(native, &first, &label, Adoption::Saved)?;
+        let [lead] = adopt(native, &first, [label], Adoption::Saved)?;
         let (terminal, placement) = (lead.terminal, lead.placement.id);
         native.click(&Target::name(&RenameTarget::Fleet { id: made.clone() }))?;
         let shown = native.observe(
@@ -455,7 +456,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let place = format!("fleet:{}", fleet.0);
         let program = format!("claude --settings '{HOOK_SETTINGS}' 'Review y.rs'");
         let label = Label::new("hooked", &place, &program);
-        let terminal = adopt(native, &first, &label, Adoption::Drawn)?.terminal;
+        let [Adopted { terminal, .. }] = adopt(native, &first, [label], Adoption::Drawn)?;
         let placed = native.observe("the hooked agent drawn as a Vessel in its Fleet", |seen| {
             adopted(seen, &terminal, |layout| {
                 fleets(layout)
@@ -606,7 +607,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
         let place = format!("fleet:{}", fleet.0);
         let label = Label::new("finisher", &place, "claude 'Finish early'");
-        let adopted = adopt(native, &first, &label, Adoption::Saved)?;
+        let [adopted] = adopt(native, &first, [label], Adoption::Saved)?;
         let (finisher, placed) = (adopted.terminal, adopted.placement.id);
         let own = native.observe("the Vessel Isaac opened bound to its terminal", |seen| {
             let content = seen
@@ -624,7 +625,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             parent: false,
             ..Label::new("keeper", &place, "bash")
         };
-        let adopted = adopt(native, &first, &label, Adoption::Saved)?;
+        let [adopted] = adopt(native, &first, [label], Adoption::Saved)?;
         let (keeper, held) = (adopted.terminal, adopted.placement.id);
         let (_, before) = native.document()?.context("Missing saved layout")?;
         let kept: Vec<Held> = live_adopted(&before, &live_addresses(native)?)
@@ -733,7 +734,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
         let place = format!("fleet:{}", fleet.0);
         let label = Label::new("wanderer", &place, "bash -c 'sleep 6'");
-        let adopted = adopt(native, &first, &label, Adoption::Saved)?;
+        let [adopted] = adopt(native, &first, [label], Adoption::Saved)?;
         let (wanderer, placement) = (adopted.terminal, adopted.placement.id);
         until("Core reporting the program finished", || {
             let reported = native

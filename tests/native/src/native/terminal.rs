@@ -4,7 +4,7 @@ use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Geometry, Key, Pixels};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
@@ -303,19 +303,36 @@ pub enum Adoption {
 }
 
 impl Adoption {
-    fn reached(self, seen: &Seen, placement: &Placement) -> bool {
-        match self {
-            Self::Saved => true,
-            Self::Drawn => seen.shows(&Target::terminal(&placement.id)),
+    fn stage(self, seen: &Seen, placement: Option<&Placement>) -> Stage {
+        match (self, placement) {
+            (_, None) => Stage::Unsaved,
+            (Self::Drawn, Some(placement)) if !seen.shows(&Target::terminal(&placement.id)) => {
+                Stage::Undrawn
+            }
+            _ => Stage::Reached,
         }
     }
 
-    fn expected(self, name: &str) -> String {
+    fn expected(self, labels: &[Label]) -> String {
+        let names: Vec<&str> = labels.iter().map(|label| label.name).collect();
+        let names = names.join(", ");
+        let noun = if labels.len() == 1 {
+            "terminal"
+        } else {
+            "terminals"
+        };
         match self {
-            Self::Saved => format!("the labelled terminal {name} saved as a Vessel"),
-            Self::Drawn => format!("the labelled terminal {name} drawn as a Vessel"),
+            Self::Saved => format!("the labelled {noun} {names} saved in the layout"),
+            Self::Drawn => format!("the labelled {noun} {names} drawn on the canvas"),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stage {
+    Unsaved,
+    Undrawn,
+    Reached,
 }
 
 pub struct Adopted {
@@ -323,16 +340,90 @@ pub struct Adopted {
     pub placement: Placement,
 }
 
-pub fn adopt(native: &Native, from: &Terminal, label: &Label, wanted: Adoption) -> Result<Adopted> {
-    typed(from, native, &label.command())?;
-    let terminal = address(native, label.name)?;
-    let placement = native.observe(&wanted.expected(label.name), |seen| {
-        bound_to(seen.document, &terminal).filter(|placement| wanted.reached(seen, placement))
-    })?;
-    Ok(Adopted {
-        terminal,
-        placement,
-    })
+pub fn adopt<const N: usize>(
+    native: &Native,
+    from: &Terminal,
+    labels: [Label; N],
+    wanted: Adoption,
+) -> Result<[Adopted; N]> {
+    for label in &labels {
+        typed(from, native, &label.command())?;
+    }
+    let terminals = labels
+        .iter()
+        .map(|label| address(native, label.name))
+        .collect::<Result<Vec<_>>>()?;
+    let mut stages = vec![Stage::Unsaved; N];
+    let placed = native.observe(&wanted.expected(&labels), |seen| {
+        let found: Vec<Option<Placement>> = terminals
+            .iter()
+            .map(|terminal| bound_to(seen.document, terminal))
+            .collect();
+        stages = found
+            .iter()
+            .map(|placement| wanted.stage(seen, placement.as_ref()))
+            .collect();
+        stages
+            .iter()
+            .all(|stage| *stage == Stage::Reached)
+            .then(|| found.into_iter().flatten().collect::<Vec<_>>())
+    });
+    let placements = match placed.map_err(|error| error.downcast::<Unseen>()) {
+        Ok(placements) => placements,
+        Err(Ok(Unseen(expected))) => {
+            let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+            let missed = unplaced(&labels, &terminals, &stages, &listed);
+            return Err(Unseen(format!("{expected} ({missed})")).into());
+        }
+        Err(Err(error)) => return Err(error),
+    };
+    terminals
+        .into_iter()
+        .zip(placements)
+        .map(|(terminal, placement)| Adopted {
+            terminal,
+            placement,
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .ok()
+        .context("Adoption kept one placement for each label")
+}
+
+fn unplaced(labels: &[Label], terminals: &[String], stages: &[Stage], listed: &Value) -> String {
+    let reported = |terminal: &str| {
+        listed["terminals"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|entry| entry["address"] == terminal)
+    };
+    labels
+        .iter()
+        .zip(terminals)
+        .zip(stages)
+        .filter_map(|((label, terminal), stage)| {
+            let placed = match stage {
+                Stage::Unsaved => "has no placement",
+                Stage::Undrawn => "is saved but not drawn",
+                Stage::Reached => return None,
+            };
+            let core = match reported(terminal.as_str()) {
+                None => "Core no longer lists it".to_owned(),
+                Some(entry) => {
+                    let state = entry["state"].as_str().unwrap_or("without a state");
+                    let tagged = if entry["labels"]["voyager.place"] == label.place {
+                        format!("with voyager.place={}", label.place)
+                    } else {
+                        "without that label".to_owned()
+                    };
+                    format!("Core reports it {state} {tagged}")
+                }
+            };
+            Some(format!("{} at {terminal} {placed}, and {core}", label.name))
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 pub fn address(native: &Native, name: &str) -> Result<String> {
@@ -1249,5 +1340,38 @@ mod tests {
             "Core reports no cols for the terminal t4"
         );
         assert!(Size::reported(&json!({"cols":70000,"rows":41}), "t4").is_err());
+    }
+
+    #[test]
+    fn a_missed_adoption_names_every_label_still_waiting() {
+        let place = "fleet:fleet-4";
+        let labels =
+            ["load-0", "load-1", "load-2", "load-3"].map(|name| Label::new(name, place, "bash"));
+        let terminals = ["t6", "t7", "t8", "t9"].map(str::to_owned);
+        let stages = [
+            Stage::Reached,
+            Stage::Unsaved,
+            Stage::Undrawn,
+            Stage::Unsaved,
+        ];
+        let listed = json!({"terminals":[
+            {"address":"t6","state":"live","labels":{"voyager.place":place}},
+            {"address":"t7","state":"live","labels":{"voyager.place":place}},
+            {"address":"t8","state":"finished","labels":{}},
+        ]});
+        assert_eq!(
+            unplaced(&labels, &terminals, &stages, &listed),
+            "load-1 at t7 has no placement, and Core reports it live with voyager.place=fleet:fleet-4; \
+             load-2 at t8 is saved but not drawn, and Core reports it finished without that label; \
+             load-3 at t9 has no placement, and Core no longer lists it"
+        );
+        assert_eq!(
+            Adoption::Drawn.expected(&labels[..2]),
+            "the labelled terminals load-0, load-1 drawn on the canvas"
+        );
+        assert_eq!(
+            Adoption::Saved.expected(&labels[..1]),
+            "the labelled terminal load-0 saved in the layout"
+        );
     }
 }
