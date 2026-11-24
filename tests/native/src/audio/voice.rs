@@ -1256,7 +1256,7 @@ const LONGEST_FRAMES: usize = 750;
 const PAUSE_FRAMES: usize = 15;
 const QUIET_RMS: f64 = 100.0;
 
-pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
+pub fn window_ranges(narrow: &[i16]) -> Vec<std::ops::Range<usize>> {
     let frame = 320;
     let loud: Vec<bool> = narrow
         .chunks(frame)
@@ -1270,16 +1270,38 @@ pub fn windows(narrow: &[i16]) -> Vec<&[i16]> {
     for (index, is_loud) in loud.iter().enumerate() {
         quiet = if *is_loud { 0 } else { quiet + 1 };
         let length = index + 1 - start;
-        if (quiet >= PAUSE_FRAMES && length >= WINDOW_FRAMES) || length >= LONGEST_FRAMES {
+        if quiet >= PAUSE_FRAMES && length >= WINDOW_FRAMES {
             start = index + 1;
-            cuts.push(start * frame);
+        } else if length >= LONGEST_FRAMES {
+            start = quietest_cut(&loud[start + WINDOW_FRAMES..=index])
+                .map_or(index + 1, |at| start + WINDOW_FRAMES + at);
+            quiet = 0;
+        } else {
+            continue;
         }
+        cuts.push((start * frame).min(narrow.len()));
     }
     cuts.push(narrow.len());
     cuts.windows(2)
-        .map(|pair| &narrow[pair[0].min(narrow.len())..pair[1]])
-        .filter(|window| window.iter().any(|s| s.unsigned_abs() >= 1000))
+        .map(|pair| pair[0].min(narrow.len())..pair[1])
+        .filter(|range| {
+            narrow[range.clone()]
+                .iter()
+                .any(|s| s.unsigned_abs() >= 1000)
+        })
         .collect()
+}
+
+fn quietest_cut(loud: &[bool]) -> Option<usize> {
+    let mut best: Option<(usize, usize)> = None;
+    let mut run = 0;
+    for (index, is_loud) in loud.iter().enumerate() {
+        run = if *is_loud { 0 } else { run + 1 };
+        if run > 0 && best.is_none_or(|(longest, _)| run > longest) {
+            best = Some((run, index + 1 - run / 2));
+        }
+    }
+    best.map(|(_, at)| at)
 }
 
 pub fn marks_between(marks: &[Mark], event: &str, from: &str, to: &str) -> usize {
@@ -1377,9 +1399,10 @@ pub fn transcribe_long(native: &Native, name: &str, said: &Conversation) -> Resu
     let reply_from = usize::try_from(reply_from_ms)?
         .saturating_mul(16)
         .min(narrow.len());
-    windows(&narrow[reply_from..])
+    let reply = &narrow[reply_from..];
+    window_ranges(reply)
         .into_iter()
-        .map(|window| hear_16k(native, window))
+        .map(|range| hear_16k(native, &reply[range]))
         .collect()
 }
 
@@ -1611,12 +1634,174 @@ mod tests {
         );
     }
 
+    type Spoken = (Vec<i16>, Vec<(std::ops::Range<usize>, String)>);
+
+    fn spoken(sentences: &[&str], between: usize) -> Spoken {
+        let (word, gap) = (16_000 * 3 / 10, 16_000 / 20);
+        let mut narrow = Vec::new();
+        let mut spans = Vec::new();
+        for sentence in sentences {
+            let start = narrow.len();
+            for _ in sentence.split_whitespace() {
+                narrow.extend(std::iter::repeat_n(3000i16, word));
+                narrow.extend(std::iter::repeat_n(0i16, gap));
+            }
+            spans.push((start..narrow.len(), (*sentence).to_owned()));
+            narrow.extend(std::iter::repeat_n(0i16, between));
+        }
+        (narrow, spans)
+    }
+
+    fn heard_whole_sentences(spoken: &Spoken) -> (Vec<std::ops::Range<usize>>, String) {
+        let (narrow, spans) = spoken;
+        let windows = window_ranges(narrow);
+        let heard = windows
+            .iter()
+            .flat_map(|window| {
+                spans
+                    .iter()
+                    .filter(|(span, _)| window.start <= span.start && span.end <= window.end)
+                    .map(|(_, text)| text.clone())
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        (windows, heard)
+    }
+
+    const REPLY: &str = "Here's where things stand. The canvas change is merged, and the build passed on the second try. The voice work is split into three pieces, and the first one is in review, the second is being tested right now, and the third is waiting for a build slot that should free up soon. The run changed one thousand two hundred lines in four minutes, about fifty percent faster than yesterday, and memory peaked at six point five gigabytes. Two tests were slow on the last run but they passed in the end so I left them alone and nothing about them needs you to do anything at all today. Want me to walk through any of it?";
+
+    const PIECES: [&str; 9] = [
+        "Here's where things stand.",
+        "The canvas change is merged, and the build passed on the second try.",
+        "The voice work is split into three pieces, and the first one is in review, the second is being tested right now,",
+        "and the third is waiting for a build slot that should free up soon.",
+        "The run changed one thousand two hundred lines in four minutes,",
+        "about fifty percent faster than yesterday, and memory peaked at six point five gigabytes.",
+        "Two tests were slow on the last run but they passed in the end so I left them alone",
+        "and nothing about them needs you to do anything at all today.",
+        "Want me to walk through any of it?",
+    ];
+
+    fn said_with(after: usize, again: usize) -> Vec<&'static str> {
+        let mut said = Vec::new();
+        for (index, piece) in PIECES.iter().enumerate() {
+            said.push(*piece);
+            if index == after {
+                said.push(PIECES[again]);
+            }
+        }
+        said
+    }
+
+    fn repeats() -> Vec<Vec<&'static str>> {
+        let mut all: Vec<Vec<&str>> = (0..PIECES.len())
+            .map(|index| said_with(index, index))
+            .collect();
+        all.extend([said_with(4, 2), said_with(5, 3), said_with(5, 4)]);
+        all
+    }
+
+    #[test]
+    fn a_window_that_reaches_the_ceiling_is_cut_in_its_longest_quiet_stretch_not_mid_sentence() {
+        let sentences: Vec<String> = (0..6)
+            .map(|number| {
+                (0..9)
+                    .map(|index| format!("w{number}x{index}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let sentences: Vec<&str> = sentences.iter().map(String::as_str).collect();
+        let spoken = spoken(&sentences, 16_000 / 5);
+        let (windows, heard) = heard_whole_sentences(&spoken);
+        assert!(windows.len() >= 2);
+        assert!(spoken.1.iter().all(|(span, _)| {
+            windows
+                .iter()
+                .all(|window| !(span.start < window.start && window.start < span.end))
+        }));
+        assert_eq!(word_errors(&heard, &sentences.join(" ")), (0, 54));
+    }
+
+    #[test]
+    fn a_pause_cut_on_the_last_partial_frame_stays_inside_the_capture() {
+        for partial in [1, 160, 319] {
+            let narrow: Vec<i16> =
+                [vec![3000i16; 16_000 * 9], vec![0i16; 320 * 14 + partial]].concat();
+            let windows = window_ranges(&narrow);
+            assert_eq!(windows.len(), 1, "partial {partial}");
+            assert_eq!(windows[0], 0..narrow.len(), "partial {partial}");
+        }
+    }
+
+    #[test]
+    fn a_ceiling_cut_on_the_last_partial_frame_stays_inside_the_capture() {
+        for partial in [1, 160, 319] {
+            let narrow = vec![3000i16; 320 * 749 + partial];
+            let windows = window_ranges(&narrow);
+            assert_eq!(windows.len(), 1, "partial {partial}");
+            assert_eq!(windows[0], 0..narrow.len(), "partial {partial}");
+        }
+    }
+
+    #[test]
+    fn a_reply_with_no_quiet_at_all_is_still_cut_at_the_ceiling() {
+        let narrow = vec![3000i16; 16_000 * 20];
+        let windows = window_ranges(&narrow);
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[0], 0..16_000 * 15);
+    }
+
+    #[test]
+    fn a_perfectly_heard_reply_counts_as_perfect_at_every_cut() {
+        let words: Vec<&str> = PIECES
+            .iter()
+            .flat_map(|piece| piece.split_whitespace())
+            .collect();
+        for cut in 0..=words.len() {
+            let heard = [words[..cut].join(" "), words[cut..].join(" ")];
+            assert_eq!(
+                word_errors(&digits_as_words(&heard.join(" ")), REPLY),
+                (0, 117),
+                "cut at word {cut}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_piece_said_again_counts_wrong_at_every_cut() {
+        for said in repeats() {
+            let words: Vec<&str> = said
+                .iter()
+                .flat_map(|piece| piece.split_whitespace())
+                .collect();
+            for cut in 0..=words.len() {
+                let heard = [words[..cut].join(" "), words[cut..].join(" ")];
+                let (errors, _) = word_errors(&digits_as_words(&heard.join(" ")), REPLY);
+                assert!(errors > 0, "hidden at cut {cut} of {said:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_piece_said_again_straight_after_itself_is_heard_and_counted_wrong() {
+        for said in repeats() {
+            let spoken = spoken(&said, 16_000 / 5);
+            let (_, heard) = heard_whole_sentences(&spoken);
+            let (errors, _) = word_errors(&digits_as_words(&heard), REPLY);
+            assert!(errors > 0, "hidden in {said:?}");
+        }
+        let no_pause = spoken(&said_with(3, 3), 0);
+        let (_, heard) = heard_whole_sentences(&no_pause);
+        assert!(word_errors(&digits_as_words(&heard), REPLY).0 > 0);
+    }
+
     #[test]
     fn the_capture_is_cut_into_windows_at_its_pauses() {
         let voiced = vec![3000i16; 16_000 * 9];
         let pause = vec![0i16; 16_000];
         let narrow: Vec<i16> = [voiced.clone(), pause.clone(), voiced, pause].concat();
-        let cut = windows(&narrow);
+        let cut = window_ranges(&narrow);
         assert_eq!(cut.len(), 2);
         assert!(cut.iter().all(|window| window.len() <= 16_000 * 15));
     }
