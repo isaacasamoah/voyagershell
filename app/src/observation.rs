@@ -638,4 +638,59 @@ mod tests {
             Some(CoreTerminalId("t1".into()))
         );
     }
+
+    #[test]
+    fn an_active_portal_is_observed_only_while_its_column_shows_it() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Project".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let voyage = model.layout.voyages[0].id.clone();
+        for address in ["t1", "t2"] {
+            model
+                .adopt(
+                    voyager_contract::place::Place::Portal {
+                        voyage: voyage.clone(),
+                    },
+                    &CoreTerminalId(address.into()),
+                    "/tmp".into(),
+                    voyager_contract::launch::Launch::Terminal,
+                    None,
+                )
+                .unwrap();
+        }
+        let portal = model.layout.voyages[0].portals[0].id.clone();
+        let other = model.layout.voyages[0].portals[1].id.clone();
+        let observe = |model: &Model| {
+            capture(
+                &Arc::new(model.layout.clone()),
+                7,
+                &Context::Workspace,
+                Some(portal.clone()),
+                None,
+            )
+        };
+        assert!(observe(&model).is_ok());
+        for visible in [false, true] {
+            model
+                .apply(Action::SetPortalPresentation {
+                    voyage: voyage.clone(),
+                    visible: Some(visible),
+                    mode: None,
+                    width: None,
+                })
+                .unwrap();
+            assert_eq!(observe(&model).is_ok(), visible);
+        }
+        model
+            .apply(Action::SetPlacementMaximized {
+                id: other,
+                maximized: true,
+            })
+            .unwrap();
+        assert!(observe(&model).is_err());
+    }
 }
