@@ -1215,4 +1215,39 @@ mod tests {
         assert_eq!(placed("content-8"), Some("placement-9"));
         assert_eq!(placed("content-1"), None);
     }
+
+    #[test]
+    fn a_label_types_the_hc_run_command_it_names() {
+        let label = Label::new("crew", "fleet:fleet-2", "claude 'Review x.rs'");
+        assert_eq!(
+            label.command(),
+            "hc run --bg --name crew --label voyager.place=fleet:fleet-2 claude 'Review x.rs'"
+        );
+        let orphan = Label {
+            parent: false,
+            ..Label::new("keeper", "fleet:fleet-2", "bash")
+        };
+        assert_eq!(
+            orphan.command(),
+            "hc run --bg --no-parent --name keeper --label voyager.place=fleet:fleet-2 bash"
+        );
+    }
+
+    #[test]
+    fn a_size_is_the_cols_and_rows_core_reports() {
+        let reported = json!({"address":"t4","state":"live","cols":132,"rows":41});
+        assert_eq!(
+            Size::reported(&reported, "t4").unwrap(),
+            Size {
+                cols: 132,
+                rows: 41
+            }
+        );
+        let error = Size::reported(&json!({"address":"t4","rows":41}), "t4").unwrap_err();
+        assert_eq!(
+            format!("{error}"),
+            "Core reports no cols for the terminal t4"
+        );
+        assert!(Size::reported(&json!({"cols":70000,"rows":41}), "t4").is_err());
+    }
 }
