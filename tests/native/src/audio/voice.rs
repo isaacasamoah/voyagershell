@@ -30,6 +30,7 @@ const ONSET_WINDOW: usize = 960;
 const SIGNATURES: [&str; 3] = ["UklGR", "input_audio", "RIFF"];
 const AFTER_FEED_MS: u64 = 2500;
 const CUT_QUIET_MS: u64 = 1000;
+const DRAIN_CEILING: Duration = Duration::from_millis(500);
 const WINDOW_MS: u64 = 20;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -786,6 +787,7 @@ pub struct TalkedOver {
     pub silent_at_speaker_ms: Option<u64>,
     pub sound_after_silence_ms: Option<u64>,
     pub captured_until_ms: u64,
+    pub drain_ms: Option<u64>,
     pub onset_to_silence_ms: Option<u64>,
     pub onset_to_cut_ms: Option<u64>,
     pub reached: Vec<String>,
@@ -821,6 +823,16 @@ fn silent_from(samples: &Samples, began: u64, from_ms: u64) -> Option<u64> {
 
 fn captured_ms(samples: &Samples) -> u64 {
     u64::try_from(samples.0.len()).unwrap_or(u64::MAX) * 1000 / u64::from(RATE)
+}
+
+fn drain_to(
+    target_ms: u64,
+    ceiling: Duration,
+    mut captured_until: impl FnMut() -> Result<u64>,
+) -> Result<Option<u64>> {
+    poll(ceiling, Duration::from_millis(5), true, || {
+        Ok((captured_until()? >= target_ms).then(|| now_millis().saturating_sub(target_ms)))
+    })
 }
 
 fn sound_from(samples: &Samples, began: u64, from_ms: u64) -> Option<u64> {
@@ -899,6 +911,12 @@ pub fn talk_during_reply(
         looks.push(look(native)?);
         Ok(None::<()>)
     })?;
+    let drain_ms = match looks.last().map(|look| look.at_ms) {
+        Some(last_look) => drain_to(last_look, DRAIN_CEILING, || {
+            Ok(began + capture.captured_ms()?)
+        })?,
+        None => Some(0),
+    };
     let (samples, _) = capture.finish(stack.folder(), name)?;
     let marks = fresh()?;
     turn_off(native)?;
@@ -913,6 +931,7 @@ pub fn talk_during_reply(
         silent_at_speaker_ms,
         sound_after_silence_ms,
         captured_until_ms,
+        drain_ms,
         onset_to_silence_ms: onset
             .zip(silent_at_speaker_ms)
             .and_then(|(onset, silent)| silent.checked_sub(onset)),
@@ -2496,6 +2515,23 @@ mod tests {
         assert_eq!(sound_from(&resumed, 0, silent), Some(70 * WINDOW_MS));
         assert_eq!(captured_ms(&resumed), 71 * WINDOW_MS);
         assert_eq!(silent_from(&windows(&[&loud; 80]), 0, 0), None);
+    }
+
+    #[test]
+    fn a_capture_that_stops_short_never_drains_and_one_that_catches_up_does() {
+        let ceiling = Duration::from_millis(60);
+        let started = std::time::Instant::now();
+        let stuck = drain_to(1000, ceiling, || Ok(990)).unwrap();
+        assert_eq!(stuck, None);
+        assert!(started.elapsed() >= ceiling);
+        let mut written = 970;
+        let caught = drain_to(1000, ceiling, || {
+            written += 10;
+            Ok(written)
+        })
+        .unwrap();
+        assert!(caught.is_some());
+        assert!(written >= 1000);
     }
 
     #[test]
