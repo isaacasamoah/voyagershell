@@ -118,6 +118,7 @@ Owns files:
 - `app/src/scope.rs`
 - `app/src/context.rs`
 - `app/src/panels.rs`
+- `app/src/panels_tests.rs`
 - `app/src/canvas.rs`
 - `contract/src/lib.rs`
 - `contract/src/place.rs`

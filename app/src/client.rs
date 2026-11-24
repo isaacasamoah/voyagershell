@@ -960,16 +960,14 @@ fn note_exit_target(
                 .iter()
                 .filter(|fleet| !fleet.closed)
                 .flat_map(|fleet| {
-                    fleet.placements.iter().filter(|panel| {
-                        !panel.hidden && crate::panels::contains(&fleet.root, &panel.id)
-                    })
+                    fleet
+                        .placements
+                        .iter()
+                        .filter(|panel| crate::panels::Group::of_fleet(fleet).shown(&panel.id))
                 })
                 .chain(voyage.portals.iter().filter(|panel| {
-                    !panel.hidden
-                        && voyage
-                            .portal_layout
-                            .as_ref()
-                            .is_some_and(|column| crate::panels::contains(&column.root, &panel.id))
+                    crate::panels::Group::of_portals(voyage)
+                        .is_some_and(|portals| portals.shown(&panel.id))
                 }))
         })
         .filter(|panel| &panel.vessel == content);

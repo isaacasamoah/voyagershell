@@ -157,14 +157,11 @@ fn owners(
                 fleet
                     .placements
                     .iter()
-                    .filter(|placement| crate::panels::contains(&fleet.root, &placement.id))
+                    .filter(|placement| crate::panels::Group::of_fleet(fleet).placed(&placement.id))
                     .collect(),
             ));
         }
-        let root = voyage
-            .portal_layout
-            .as_ref()
-            .and_then(|portals| portals.root.clone());
+        let portals = crate::panels::Group::of_portals(voyage);
         result.push((
             &voyage.id,
             PlacementOwner::Portals {
@@ -173,7 +170,7 @@ fn owners(
             voyage
                 .portals
                 .iter()
-                .filter(|placement| crate::panels::contains(&root, &placement.id))
+                .filter(|placement| portals.is_some_and(|portals| portals.placed(&placement.id)))
                 .collect(),
         ));
     }

@@ -57,9 +57,11 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                         .as_ref()
                         .filter(|selected| *selected == id)
                         .cloned(),
-                    root: crate::panels::contains(&fleet.root, id).then(|| Split::Leaf {
-                        placement: id.clone(),
-                    }),
+                    root: crate::panels::Group::of_fleet(fleet)
+                        .placed(id)
+                        .then(|| Split::Leaf {
+                            placement: id.clone(),
+                        }),
                 });
             }
         }

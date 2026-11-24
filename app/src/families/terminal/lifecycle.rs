@@ -10,22 +10,21 @@ fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, VesselId)> {
     let mut result = Vec::new();
     for voyage in layout.containers() {
         for fleet in voyage.fleets.iter() {
-            let root = panels::visible(&fleet.root, &fleet.placements);
+            let group = panels::Group::of_fleet(fleet);
             result.extend(
                 fleet
                     .placements
                     .iter()
-                    .filter(|panel| panels::contains(&root, &panel.id))
+                    .filter(|panel| group.shown(&panel.id))
                     .map(|panel| (panel.id.clone(), panel.vessel.clone())),
             );
         }
-        if let Some(column) = &voyage.portal_layout {
-            let root = panels::visible(&column.root, &voyage.portals);
+        if let Some(portals) = panels::Group::of_portals(voyage) {
             result.extend(
                 voyage
                     .portals
                     .iter()
-                    .filter(|panel| panels::contains(&root, &panel.id))
+                    .filter(|panel| portals.shown(&panel.id))
                     .map(|panel| (panel.id.clone(), panel.vessel.clone())),
             );
         }

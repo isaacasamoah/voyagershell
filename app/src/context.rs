@@ -25,6 +25,24 @@ fn append_preview(output: &mut String, text: &str) {
     output.push_str(&text[..text.floor_char_boundary(length)]);
 }
 
+fn fleet_panels<'a>(layout: &Layout, voyage: &'a voyager_contract::Voyage) -> Vec<&'a Placement> {
+    let Some(fleet) = voyage
+        .fleets
+        .iter()
+        .filter(|fleet| !fleet.closed)
+        .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
+        .or_else(|| voyage.fleets.iter().find(|fleet| !fleet.closed))
+    else {
+        return Vec::new();
+    };
+    let group = crate::panels::Group::of_fleet(fleet);
+    fleet
+        .placements
+        .iter()
+        .filter(|panel| group.on_screen(&panel.id))
+        .collect()
+}
+
 fn portal_panels<'a>(
     layout: &Layout,
     scoped: &'a voyager_contract::Voyage,
@@ -32,24 +50,18 @@ fn portal_panels<'a>(
     let Some(original) = layout.containers().find(|voyage| voyage.id == scoped.id) else {
         return Vec::new();
     };
-    let Some(column) = original
+    let Some(portals) = original
         .portal_layout
         .as_ref()
         .filter(|column| column.visible)
+        .and_then(|_| crate::panels::Group::of_portals(original))
     else {
         return Vec::new();
     };
-    let root = crate::panels::visible(&column.root, &original.portals);
     scoped
         .portals
         .iter()
-        .filter(|panel| {
-            crate::panels::contains(&root, &panel.id)
-                && column
-                    .maximized_placement
-                    .as_ref()
-                    .is_none_or(|id| *id == panel.id)
-        })
+        .filter(|panel| portals.on_screen(&panel.id))
         .collect()
 }
 
@@ -76,23 +88,7 @@ pub(crate) fn prepare(
         if matches!(layout.context, Context::Workspace) && !selected {
             continue;
         }
-        let fleet = voyage
-            .fleets
-            .iter()
-            .filter(|fleet| !fleet.closed)
-            .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
-            .or_else(|| voyage.fleets.iter().find(|fleet| !fleet.closed));
-        let mut panels = Vec::new();
-        if let Some(fleet) = fleet {
-            let root = crate::panels::visible(&fleet.root, &fleet.placements);
-            panels.extend(fleet.placements.iter().filter(|panel| {
-                crate::panels::contains(&root, &panel.id)
-                    && fleet
-                        .maximized_placement
-                        .as_ref()
-                        .is_none_or(|id| *id == panel.id)
-            }));
-        }
+        let mut panels = fleet_panels(layout, voyage);
         panels.extend(portal_panels(layout, voyage));
         for panel in panels {
             if remaining == 0 || text.len() == 4096 {
@@ -527,5 +523,62 @@ mod tests {
             .unwrap();
         assert!(portal_panels(&model.layout, &selected.voyages[0]).is_empty());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_fleet_half_lists_shown_placements_unless_another_is_maximized() {
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Work".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let first = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+        for (address, side) in [
+            ("t2", voyager_contract::Side::Right),
+            ("t3", voyager_contract::Side::Bottom),
+        ] {
+            model
+                .adopt(
+                    voyager_contract::place::Place::Fleet {
+                        id: fleet.clone(),
+                        beside: Some((side, first.clone())),
+                    },
+                    &voyager_contract::CoreTerminalId(address.into()),
+                    "/tmp".into(),
+                    voyager_contract::launch::Launch::Terminal,
+                    None,
+                    voyager_contract::caller::Caller::Agent,
+                )
+                .unwrap();
+        }
+        let placements = &model.layout.voyages[0].fleets[0].placements;
+        let (second, third) = (placements[1].id.clone(), placements[2].id.clone());
+        let listed = |model: &crate::workspace::Model| {
+            fleet_panels(&model.layout, &model.layout.voyages[0])
+                .into_iter()
+                .map(|panel| panel.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            listed(&model),
+            [first.clone(), second.clone(), third.clone()]
+        );
+        model
+            .apply(voyager_contract::Action::SetPlacementHidden {
+                id: second,
+                hidden: true,
+            })
+            .unwrap();
+        assert_eq!(listed(&model), [first, third.clone()]);
+        model
+            .apply(voyager_contract::Action::SetPlacementMaximized {
+                id: third.clone(),
+                maximized: true,
+            })
+            .unwrap();
+        assert_eq!(listed(&model), [third]);
     }
 }

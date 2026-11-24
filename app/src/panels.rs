@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use voyager_contract::{
-    Axis, Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, Side,
-    Split, SplitShare, Vessel,
+    Axis, Fleet, Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout,
+    Side, Split, SplitShare, Vessel, Voyage,
 };
 
 pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Result<(), String> {
@@ -314,10 +314,49 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct Group<'a> {
     pub members: &'a [Placement],
     pub root: &'a Option<Split>,
     pub maximized: &'a Option<PlacementId>,
+}
+
+impl<'a> Group<'a> {
+    pub(crate) fn of_fleet(fleet: &'a Fleet) -> Self {
+        Self {
+            members: &fleet.placements,
+            root: &fleet.root,
+            maximized: &fleet.maximized_placement,
+        }
+    }
+
+    pub(crate) fn of_portals(voyage: &'a Voyage) -> Option<Self> {
+        voyage.portal_layout.as_ref().map(|presentation| Self {
+            members: &voyage.portals,
+            root: &presentation.root,
+            maximized: &presentation.maximized_placement,
+        })
+    }
+
+    pub(crate) fn placed(self, id: &PlacementId) -> bool {
+        contains(self.root, id)
+    }
+
+    pub(crate) fn shown(self, id: &PlacementId) -> bool {
+        self.placed(id)
+            && self
+                .members
+                .iter()
+                .any(|panel| &panel.id == id && !panel.hidden)
+    }
+
+    pub(crate) fn on_screen(self, id: &PlacementId) -> bool {
+        self.shown(id)
+            && self
+                .maximized
+                .as_ref()
+                .is_none_or(|selected| selected == id)
+    }
 }
 
 pub(crate) struct GroupMut<'a> {
@@ -331,23 +370,12 @@ pub(crate) fn group<'a>(layout: &'a Layout, owner: &PlacementOwner) -> Result<Gr
         match owner {
             PlacementOwner::Fleet { id } => {
                 if let Some(fleet) = voyage.fleets.iter().find(|fleet| &fleet.id == id) {
-                    return Ok(Group {
-                        members: &fleet.placements,
-                        root: &fleet.root,
-                        maximized: &fleet.maximized_placement,
-                    });
+                    return Ok(Group::of_fleet(fleet));
                 }
             }
             PlacementOwner::Portals { voyage: id } if &voyage.id == id => {
-                let presentation = voyage
-                    .portal_layout
-                    .as_ref()
-                    .ok_or("Portal arrangement is unavailable")?;
-                return Ok(Group {
-                    members: &voyage.portals,
-                    root: &presentation.root,
-                    maximized: &presentation.maximized_placement,
-                });
+                return Group::of_portals(voyage)
+                    .ok_or_else(|| "Portal arrangement is unavailable".into());
             }
             _ => (),
         }
@@ -837,156 +865,5 @@ pub(crate) fn insert_leaf(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::workspace::Model;
-    use voyager_contract::{Action, ContentDestination};
-
-    #[test]
-    fn reopen_transfers_only_the_retained_panel_inside_its_voyage() {
-        let mut model = Model::default();
-        model
-            .apply(Action::CreateVoyage {
-                name: "Work".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        let voyage = model.layout.voyages[0].id.clone();
-        let first = model.layout.voyages[0].fleets[0].placements[0].clone();
-        model
-            .apply(Action::CreateVessel {
-                type_id: crate::vessel_type::NOTES_TYPE.into(),
-                destination: ContentDestination::Placement {
-                    owner: PlacementOwner::Fleet {
-                        id: model.layout.voyages[0].fleets[0].id.clone(),
-                    },
-                    insertion: PlacementInsertion::Beside {
-                        id: first.id.clone(),
-                        side: Side::Right,
-                    },
-                },
-                launch: None,
-            })
-            .unwrap();
-        let source = model.layout.voyages[0].fleets[0].clone();
-        let panel = source.placements[0].clone();
-        let retained = source.placements[1].clone();
-        model
-            .apply(Action::SaveArrangement {
-                owner: PlacementOwner::Fleet {
-                    id: source.id.clone(),
-                },
-                name: "Original".into(),
-            })
-            .unwrap();
-        model
-            .apply(Action::RemovePlacement {
-                id: panel.id.clone(),
-            })
-            .unwrap();
-        model
-            .apply(Action::CreateFleet {
-                voyage,
-                name: "Next".into(),
-            })
-            .unwrap();
-        let target = &mut model.layout.voyages[0].fleets[1];
-        let owner = PlacementOwner::Fleet {
-            id: target.id.clone(),
-        };
-        let insertion = PlacementInsertion::Beside {
-            id: target.placements[0].id.clone(),
-            side: Side::Left,
-        };
-        let action = Action::ReopenPlacement {
-            id: panel.id.clone(),
-            destination: ContentDestination::Placement {
-                owner: owner.clone(),
-                insertion: insertion.clone(),
-            },
-        };
-        let snapshot = std::sync::Arc::new(model.layout.clone());
-        crate::scope::check(
-            &snapshot,
-            Some(&voyager_contract::Context::Voyage {
-                id: model.layout.voyages[0].id.clone(),
-            }),
-            &action,
-        )
-        .unwrap();
-        for scope in [
-            voyager_contract::Context::Fleet {
-                id: source.id.clone(),
-            },
-            voyager_contract::Context::Fleet {
-                id: model.layout.voyages[0].fleets[1].id.clone(),
-            },
-            voyager_contract::Context::Vessel {
-                id: panel.id.clone(),
-            },
-        ] {
-            assert!(crate::scope::check(&snapshot, Some(&scope), &action).is_err());
-        }
-        for destination in [
-            PlacementOwner::Portals {
-                voyage: model.layout.voyages[0].id.clone(),
-            },
-            PlacementOwner::Fleet {
-                id: model.layout.home.as_ref().unwrap().fleets[0].id.clone(),
-            },
-        ] {
-            let before = model.layout.clone();
-            assert!(
-                model
-                    .apply(Action::ReopenPlacement {
-                        id: panel.id.clone(),
-                        destination: ContentDestination::Placement {
-                            owner: destination,
-                            insertion: PlacementInsertion::Empty
-                        }
-                    })
-                    .is_err()
-            );
-            assert_eq!(model.layout, before);
-        }
-        let contents = model.layout.vessels.clone();
-        let context = model.layout.context.clone();
-        let selected = model.layout.selected_fleet.clone();
-        model.apply(action).unwrap();
-        assert_eq!(model.layout.vessels, contents);
-        assert_eq!(model.layout.context, context);
-        assert_eq!(model.layout.selected_fleet, selected);
-        assert_eq!(
-            model.layout.voyages[0].fleets[0].placements.as_slice(),
-            std::slice::from_ref(&retained)
-        );
-        let target = group(&model.layout, &owner).unwrap();
-        assert_eq!(target.members[0].name, "Terminal 1");
-        assert_eq!(target.members[1].name, "Terminal 1");
-        assert_ne!(target.members[0].id, target.members[1].id);
-        assert_eq!(
-            group(&model.layout, &owner).unwrap().members.last(),
-            Some(&panel)
-        );
-        assert!(contains(
-            group(&model.layout, &owner).unwrap().root,
-            &panel.id
-        ));
-        assert_eq!(
-            model.layout.arrangements[0].root,
-            Some(Split::Leaf {
-                placement: retained.id
-            })
-        );
-        let before = model.layout.clone();
-        assert!(
-            model
-                .apply(Action::ReopenPlacement {
-                    id: panel.id.clone(),
-                    destination: ContentDestination::Placement { owner, insertion }
-                })
-                .is_err()
-        );
-        assert_eq!(model.layout, before);
-    }
-}
+#[path = "panels_tests.rs"]
+mod tests;
