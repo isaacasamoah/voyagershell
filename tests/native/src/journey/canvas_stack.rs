@@ -130,7 +130,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let proposed = selecting(&stacked(&document(native)?.1.canvas, RESIZED), 1);
         let fresh = update(native, &provider, "stack-resized", &proposed)?;
         let (version, prior) = document(native)?;
-        let stale = replay(native, &provider, "stack-stale", &fresh.inspected, &prior.canvas)?;
+        let conflicting = stacked(&prior.canvas, ALTERNATE);
+        let stale = replay(native, &provider, "stack-stale", &fresh.inspected, &conflicting)?;
         let (after, current) = document(native)?;
         native.keep_window("stack-stale")?;
         let message = stale

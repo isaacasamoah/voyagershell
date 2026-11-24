@@ -743,9 +743,12 @@ second is a copy whose sidebar is 280 pixels wide.
   existing child. The canvas, Vessels, Voyages, context, selected Voyage and Fleet, and
   the layout's version must not change.
 - `update-carries-inspected-version` proposes a new stack, with a 300-pixel sidebar,
-  and checks that the update carried the version its inspect saw and was applied. The
-  same canvas is then sent again with the version from before that update. It must be
-  refused, with a reason that starts with "Layout changed", and nothing may change.
+  and checks that the update carried the version its inspect saw and was applied. A
+  different stack, the current one with its first view selected and its second view
+  280 pixels wide, is then sent with the version from before that update. It writes the
+  canvas that the update moved, so it must be refused, with a reason that starts with
+  "Layout changed", and nothing may change. Sending the current canvas again would write
+  nothing and apply without a conflict, so it cannot prove the check.
 - `terminal-and-content-kept` checks that after the updates the terminal Vessel still
   names the same Core terminal. That terminal must run the same shell, with the same
   pid and start time, and Core must still hold the marker printed before the updates.
