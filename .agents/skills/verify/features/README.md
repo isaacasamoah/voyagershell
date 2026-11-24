@@ -18,10 +18,9 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Terminal I/O | covered | none | covered | covered | terminal-input | terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
 | Selection | covered | none | covered | covered | terminal-input | - | linux |
-| Clipboard | python-only | none | none | python-only | terminal-input | notes-lifetime | linux |
-| Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
+| Clipboard | python-only | none | none | python-only | terminal-input | conversation-ux | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | avatar-drag, socket-dock | avatar, portal-avatar | linux |
-| Chat / conversation | python-only | none | python-only | python-only | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
+| Chat / conversation | python-only | none | python-only | python-only | chat | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop | linux |
 | Voice | covered | none | none | python-only | voice, voice-talk-over | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | covered | none | none | covered | worktrees | - | linux |

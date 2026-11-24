@@ -1,14 +1,17 @@
 diff --git a/app/src/layout_store.rs b/app/src/layout_store.rs
-index 574cc0fd..612e8ccf 100644
+index 00f26cbd..5c91007f 100644
 --- a/app/src/layout_store.rs
 +++ b/app/src/layout_store.rs
-@@ -141,6 +141,9 @@ fn back_up(core: &mut Core, name: &str) -> Result<(), Error> {
+@@ -140,7 +140,11 @@ fn back_up(core: &mut Core, name: &str) -> Result<(), Error> {
+ 
  fn prepared(layout: Layout, cwd: &str) -> Result<Layout, String> {
      crate::canvas::validate(&layout.canvas)?;
-     let mut layout = Model::prepare(layout, cwd)?;
+-    Model::prepare(layout, cwd)
++    let mut layout = Model::prepare(layout, cwd)?;
 +    if let voyager_contract::canvas::Node::Stack { selected, .. } = &mut layout.canvas.root {
 +        *selected = 0;
 +    }
-     crate::content::rename::synchronize_labels(&mut layout);
-     Ok(layout)
++    Ok(layout)
  }
+ 
+ pub(crate) fn load(
