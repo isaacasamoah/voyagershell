@@ -868,9 +868,12 @@ canvas's own read after the attach.
   the click and opened no terminal, and the case fails on the product. If the
   click never reached the app, it ends inconclusive and blames the fixture.
 - `created-right-after-a-home-click-is-drawn` shows the Fleet view, clicks Home in
-  the sidebar and sends the create from Voyager's terminal at once, with no hold
-  on the terminal attach. It passes when the create was applied and the new Home
-  Vessel is drawn with its terminal while the Home view is shown.
+  the sidebar, waits until the saved layout shows the Home view and then sends
+  the create from Voyager's terminal at once, with no hold on the terminal
+  attach. It passes when the create was applied and the new Home Vessel is drawn
+  with its terminal while the Home view is shown. The first milliseconds, where
+  the create lands while Home is still being prepared, are covered by
+  `created-while-preparing-is-drawn`, which holds the attach.
 
 #### Scripted tool calls
 
