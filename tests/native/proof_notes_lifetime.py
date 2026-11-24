@@ -7,7 +7,7 @@ from pathlib import Path
 from secrets import token_hex
 
 from proof_clipboard import Clipboard
-from proof_conversation import package_turn, private_turn, provider_processes
+from proof_conversation import is_stale_refusal, package_turn, private_turn, provider_processes
 from proof_foundation_notes import notes, observe_owned_exit, wait
 from proof_process import exit_observation, process_identity
 from proof_workspace import click_control, core_rpc, review_frame, stop_existing_core
@@ -310,9 +310,7 @@ def prove(
                 or (
                     tool["status"] == "rejected"
                     and tool["action"]["action"]["operation"] == "create-vessel"
-                    and tool["text"].startswith(
-                        "Workspace request refused: invalid_workspace: Layout changed; part of what this change touches moved since version "
-                    )
+                    and is_stale_refusal(tool["text"])
                 )
             )
             for tool in tools
