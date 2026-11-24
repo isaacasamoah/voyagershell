@@ -470,9 +470,9 @@ the circle's area and the avatar's resting place.
   the glide, and a rest run waits 11 s and reads it once, so neither pays for
   reads while the printer runs. A dragged run is inconclusive, never a pass,
   when its print began before the drag, when it had not finished by the end,
-  or when a pause reached the rest. The case writes `throughput.json` before
-  judging: the rest and dragged medians, the rest band, every run and the
-  machine's load at its start and end. It passes when every dragged run ended
+  or when a pause reached the rest. Before judging, the case writes the rest
+  and dragged medians, the rest band, every run and the machine's load at its
+  start and end to `throughput.json`. It passes when every dragged run ended
   within the drag and, when the one-minute load at its start is under 16, the
   median dragged time is no slower than the slowest rest time plus the rest
   runs' spread. At 16 or more the timing is recorded and not judged. Under Xvfb
@@ -497,7 +497,7 @@ the circle's area and the avatar's resting place.
   and then holds `DOCK_FOLLOW_MARGIN`, 400 ms. That margin is a timing margin,
   not a state wait. On main, the canvas drops a Fleet click made while it
   finishes a dock's follow-up inspect (issue 38), and no observable state marks
-  the end of that follow-up: an inspect request line does not say which run it
+  the end of that follow-up. An inspect request line does not say which run it
   belongs to. Clicks made 300 ms or more after a dock were kept in 70 of 70
   measured trials. A state wait replaces the margin once one exists. It then
   grabs as the hidden Fleet's tab is clicked and drops where another home

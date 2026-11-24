@@ -655,6 +655,22 @@ features:
     native_journeys: [terminal-input]
     python_journeys: [terminal-grid, portal-terminal]
     invariants:
+      - id: terminal-output-is-kept
+        kind: user
+        says: 'A terminal Vessel''s screen and scrollback show every line its Program prints, in order, and the Program never waits on the view, during an avatar drag as at rest.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/avatar/drag.rs#RedrawAtRest']
+        checks: ['journey:avatar-drag/kept', 'journey:avatar-drag/throughput']
+        formal: []
+        journeys: [avatar-drag]
+      - id: terminals-wait-for-the-drag
+        kind: user
+        says: 'While the user moves the avatar, terminal Vessels keep their last drawn screen, and they show their current output once the pointer has rested 120 ms or the drag ends.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/avatar/drag.rs#Hold']
+        checks: ['journey:avatar-drag/still', 'journey:avatar-drag/caught-up', 'journey:avatar-drag/docks']
+        formal: []
+        journeys: [avatar-drag]
       - id: typing-feels-immediate
         kind: user
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
@@ -837,7 +853,7 @@ features:
     state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
     checks: []
-    native_journeys: [socket-dock]
+    native_journeys: [avatar-drag, socket-dock]
     python_journeys: [avatar, portal-avatar]
     invariants:
       - id: context-follows-dock
@@ -879,6 +895,30 @@ features:
         checks: []
         formal: []
         journeys: []
+      - id: avatar-drag-follows-pointer
+        kind: user
+        says: 'While the user drags the avatar, it is drawn under the pointer on every display frame, at idle and up to the load in the usage envelope.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/avatar/drag.rs#Drag']
+        checks: ['journey:avatar-drag/idle', 'journey:avatar-drag/streaming', 'journey:avatar-drag/fleets', 'journey:avatar-drag/after-switch', 'journey:avatar-drag/drop-after-switch']
+        formal: []
+        journeys: [avatar-drag]
+      - id: terminal-output-is-kept
+        kind: user
+        says: 'A terminal Vessel''s screen and scrollback show every line its Program prints, in order, and the Program never waits on the view, during an avatar drag as at rest.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/avatar/drag.rs#RedrawAtRest']
+        checks: ['journey:avatar-drag/kept', 'journey:avatar-drag/throughput']
+        formal: []
+        journeys: [avatar-drag]
+      - id: terminals-wait-for-the-drag
+        kind: user
+        says: 'While the user moves the avatar, terminal Vessels keep their last drawn screen, and they show their current output once the pointer has rested 120 ms or the drag ends.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/avatar/drag.rs#Hold']
+        checks: ['journey:avatar-drag/still', 'journey:avatar-drag/caught-up', 'journey:avatar-drag/docks']
+        formal: []
+        journeys: [avatar-drag]
       - id: any-agent-works
         kind: structure
         says: 'The avatar and Voyager work with any installed agent, and VoyagerShell stays orthogonal to a developer''s agent setup. Agent-specific code lives only in that agent''s adapter.'
@@ -893,6 +933,7 @@ features:
       - contract/src/avatar_animation.rs
       - desktop/src/avatar.rs
       - desktop/src/avatar/click.rs
+      - desktop/src/avatar/drag.rs
       - desktop/src/avatar/paint.rs
       - desktop/src/avatar/view.rs
       - desktop/src/avatar_motion.rs
@@ -1885,6 +1926,7 @@ features:
       - tests/native/src/journey/adopt_by_label.rs
       - tests/native/src/journey/agent_split.rs
       - tests/native/src/journey/arrangement.rs
+      - tests/native/src/journey/avatar_drag.rs
       - tests/native/src/journey/chat.rs
       - tests/native/src/journey/core_events.rs
       - tests/native/src/journey/home_create.rs
