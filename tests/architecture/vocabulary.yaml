@@ -804,7 +804,7 @@ terms:
     meaning: 'An outcome the application could not confirm. Its caller asks the provider and settles it, retries only what a read proves did not happen and never restores a process automatically.'
   - term: Reply marker
     context: application-queue
-    meaning: 'The token [vy] that Voyager starts every reply with. The app strips it where it stores the reply, before the reply is spoken or noted in the chat.'
+    meaning: 'The token [vy] that Voyager starts every reply with. The app keeps only the text after the first one where it stores the reply, and removes any later one, before the reply is spoken or noted in the chat.'
     code: [REPLY_MARKER]
   - term: VOYAGER_BACKGROUND
     context: application-queue

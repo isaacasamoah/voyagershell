@@ -273,7 +273,7 @@ impl Slot {
             .messages
             .iter()
             .map(|message| Message {
-                text: strip_reply_marker(&message.text).to_owned(),
+                text: strip_reply_marker(&message.text).into_owned(),
                 ..message.clone()
             })
             .collect();
@@ -281,7 +281,7 @@ impl Slot {
             Some(Stopping::Text(text)) => {
                 let text = strip_reply_marker(text);
                 Some(Ending::Stopped {
-                    text: text.to_owned(),
+                    text: text.clone().into_owned(),
                     matched: self.whole()
                         && messages
                             .last()

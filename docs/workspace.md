@@ -265,7 +265,10 @@ claude` hook and the three `voyager reply --hook claude` hooks described in
 Voyager's replies when the app knows the path of the `voyager` command. The
 environment value stays out of argv, so the terminal still matches the test
 below. The identity prompt sends Voyager to `voyager --skill` and asks it to
-start every reply with the reply marker `[vy]`. The `voyager` entry is read for
+start every reply with the reply marker `[vy]`. The launch also passes
+`--disallowedTools` with the task tools, `TaskCreate`, `TaskUpdate`, `TaskList`,
+`TaskGet` and `TodoWrite`, so Claude Code's reminder about them is never added
+to the conversation, on a fresh start or a resume. The `voyager` entry is read for
 Voyager alone and does not appear in the Create Vessel picker.
 
 At launch the app forgets what `voyager.json` held and decides again from two
@@ -332,12 +335,14 @@ whose `Stop` has not come when the next turn starts reads as lost until it does.
 `Replies::stop_missing` says the latest turn has no `Stop` two seconds after Core
 reported the terminal done, a grace period that is a target to measure.
 
-`Replies` strips a leading reply marker, `[vy]`, from every message text and
-from the `Stop` text when it hands a turn out. The marker is matched only as the
-first word, so a reply without it reads unchanged, and the strip happens once,
+`Replies` keeps only what follows the first reply marker, `[vy]`, in every
+message text and in the `Stop` text when it hands a turn out. Text before the
+first marker is dropped and every later marker is removed, so the chat and the
+speech never carry the marker or anything ahead of it. A reply without the
+marker reads unchanged, and the strip happens once,
 upstream of the speech filter and the chat note. The match test above compares
 the texts after the strip. When a turn's `Stop` text carries text and neither it
-nor any message of the turn starts with the marker, `Replies` writes one line to
+nor any message of the turn holds the marker, `Replies` writes one line to
 standard error, once per turn, that gives the unix time and says the marker was
 missing. The line holds no reply text and the miss changes nothing else.
 

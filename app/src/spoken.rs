@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
+};
 use voyager_contract::VesselId;
 
 pub const MARKER: &str = "[spoken]";
@@ -21,16 +24,19 @@ pub fn reply_rule() -> String {
     )
 }
 
-pub fn strip_reply_marker(text: &str) -> &str {
-    let trimmed = text.trim_start();
-    match trimmed.strip_prefix(REPLY_MARKER) {
-        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => rest.trim_start(),
-        _ => text,
+pub fn strip_reply_marker(text: &str) -> Cow<'_, str> {
+    let Some((_, after)) = text.split_once(REPLY_MARKER) else {
+        return Cow::Borrowed(text);
+    };
+    if after.contains(REPLY_MARKER) {
+        Cow::Owned(after.split(REPLY_MARKER).map(str::trim_start).collect())
+    } else {
+        Cow::Borrowed(after.trim_start())
     }
 }
 
 pub fn has_reply_marker(text: &str) -> bool {
-    strip_reply_marker(text).len() != text.len()
+    text.contains(REPLY_MARKER)
 }
 
 pub const WHO: &str = include_str!("spoken_who.md");
@@ -114,23 +120,52 @@ mod tests {
     }
 
     #[test]
-    fn a_leading_reply_marker_is_removed_and_nothing_else_is() {
+    fn a_reply_is_what_follows_its_first_marker() {
         assert_eq!(strip_reply_marker("[vy] Docked it."), "Docked it.");
         assert_eq!(strip_reply_marker("  [vy]\nDocked it."), "Docked it.");
         assert_eq!(strip_reply_marker("[vy]"), "");
-        assert_eq!(strip_reply_marker("Docked it."), "Docked it.");
-        assert_eq!(strip_reply_marker("Docked [vy] it."), "Docked [vy] it.");
+        assert_eq!(strip_reply_marker("Docked [vy] it."), "it.");
         assert_eq!(strip_reply_marker("[vyx] Docked it."), "[vyx] Docked it.");
         assert_eq!(strip_reply_marker("[VY] Docked it."), "[VY] Docked it.");
-        assert_eq!(strip_reply_marker("[vy] [vy] Again."), "[vy] Again.");
     }
 
     #[test]
-    fn a_reply_has_the_marker_only_when_it_starts_with_it() {
+    fn text_before_the_marker_is_never_part_of_the_reply() {
+        let reminder =
+            "The task tools haven't been used recently. Consider TaskCreate.\n[vy] Docked it.";
+        assert_eq!(strip_reply_marker(reminder), "Docked it.");
+        assert_eq!(strip_reply_marker("Thinking aloud.\n\n[vy]"), "");
+    }
+
+    #[test]
+    fn later_markers_are_removed_wherever_they_sit() {
+        assert_eq!(strip_reply_marker("[vy] [vy] Again."), "Again.");
+        assert_eq!(strip_reply_marker("[vy] Done. [vy] More."), "Done. More.");
+        assert_eq!(
+            strip_reply_marker("[vy] Done.\n[vy]\nMore."),
+            "Done.\nMore."
+        );
+        assert_eq!(strip_reply_marker("[vy] Done. [vy]"), "Done. ");
+        assert_eq!(strip_reply_marker("[vy]Docked[vy]it."), "Dockedit.");
+        assert!(!strip_reply_marker("note [vy] a [vy] b [vy]").contains(REPLY_MARKER));
+    }
+
+    #[test]
+    fn a_reply_with_no_marker_is_kept_whole() {
+        assert_eq!(strip_reply_marker("Docked it."), "Docked it.");
+        assert_eq!(strip_reply_marker("  Docked it.  "), "  Docked it.  ");
+        assert_eq!(strip_reply_marker(""), "");
+        assert!(matches!(strip_reply_marker("Docked it."), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn a_reply_has_the_marker_when_it_appears_anywhere() {
         assert!(has_reply_marker("[vy] Done."));
         assert!(has_reply_marker("[vy]"));
+        assert!(has_reply_marker("Done. [vy]"));
+        assert!(has_reply_marker("Reminder text.\n[vy] Done."));
         assert!(!has_reply_marker("Done."));
-        assert!(!has_reply_marker("Done. [vy]"));
+        assert!(!has_reply_marker("[vyx] Done."));
         assert!(!has_reply_marker(""));
     }
 

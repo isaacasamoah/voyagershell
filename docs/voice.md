@@ -247,7 +247,9 @@ reply is never judged spoken by guessing which prompt came last. The voice layer
 the same store of Voyager's replies that the chat reads, `app/src/replies.rs`, on its
 own thread, off the canvas path. A typed turn, a Core note and a turn of any other
 Vessel stay silent. The store has already removed the reply marker `[vy]` that
-Voyager starts every reply with, so neither the filter below nor the chat note holds it.
+Voyager starts every reply with, and any text ahead of the first marker, so neither
+the filter below nor the chat note holds them. The reply is only what follows the
+first marker. That text alone is spoken and shown, and the marker never is.
 
 A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
 candidate when its final `Stop` is recorded and Core answers that Voyager is not
