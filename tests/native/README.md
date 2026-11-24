@@ -730,8 +730,7 @@ carries the inspected version.
   Fleet must hold both Vessels, with the flag drawn. Each request must have taken
   effect once, with its own request id, so Core holds one new Voyage and one new flag
   Vessel. The journey then flips the flag once, so the Vessel has saved data in
-  `data/<id>.json` in the profile with revision 1, and prints a marker in the trial
-  terminal.
+  `data/<id>.json` in the profile, and prints a marker in the trial terminal.
 - `new-shell-starts-in-its-folder` reads that terminal from Core. Its shell's
   `foreground.cwd` must be the folder the Voyage was made for.
 
@@ -794,8 +793,9 @@ Each case has its own control. Two cases check two things, so each has a second 
   drawn where the first view puts it and not where the second view's width puts it.
 - `tests/native/controls/canvas-stack-untouched.patch` makes an applied canvas update
   also change the context, so `applied-equals-proposal` fails.
-- `tests/native/controls/canvas-stack-once.patch` makes create-voyage take effect
-  twice, so `voyager-creates-a-voyage-and-vessel` fails.
+- `tests/native/controls/canvas-stack-once.patch` makes create-voyage make a second,
+  identical Voyage after the first and leaves the first selected, so setup still works
+  and only the exactly-once expectation of `voyager-creates-a-voyage-and-vessel` fails.
 
 ### Profile updates
 

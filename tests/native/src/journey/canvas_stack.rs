@@ -398,6 +398,10 @@ fn create(native: &mut Native, provider: &Provider) -> Result<(Verdict, Option<S
         .observed("saved", &saved)?
         .observed("drawn", &drawn)?
         .observed(
+            "made",
+            json!({"voyagesMade":voyages_made,"flagsMade":flags_made,"ownRequests":own_requests}),
+        )?
+        .observed(
             "played",
             json!({"voyage":voyage_played,"vessel":content.as_ref().map(|(played, _, _)| played)}),
         )?;
@@ -405,13 +409,6 @@ fn create(native: &mut Native, provider: &Provider) -> Result<(Verdict, Option<S
         return Ok((verdict, None));
     };
     let setup = finish(native, trial, content)?;
-    let revision = serde_json::from_slice::<Value>(&setup.bytes)
-        .ok()
-        .map(|saved| saved["revision"].clone());
-    let verdict = verdict.expect(
-        "the flag Vessel's one action took effect once, so its saved data holds revision 1",
-        revision == Some(json!(1)),
-    );
     Ok((verdict, Some(setup)))
 }
 

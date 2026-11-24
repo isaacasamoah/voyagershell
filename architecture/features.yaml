@@ -1620,10 +1620,18 @@ features:
         journeys: [canvas-stack, outcomes, voice, voyager-command, workspace]
       - id: canvas-applied-as-proposed
         kind: user
-        says: 'A canvas update that the app applies is saved exactly as proposed, with no node, size or stack selection added, dropped or changed.'
+        says: 'A canvas update that the app applies is saved exactly as proposed, with no node, size or stack selection added, dropped or changed. It leaves the Vessels, Voyages, context and selected Voyage and Fleet as they were.'
         owner: placement
         guards: ['type:app/src/canvas.rs#validate']
         checks: ['journey:canvas-stack/applied-equals-proposal']
+        formal: []
+        journeys: [canvas-stack]
+      - id: request-takes-effect-once
+        kind: user
+        says: 'A workspace request that the app applies takes effect once. One create-voyage makes one Voyage, one create-vessel makes one Vessel, and each request carries its own request id.'
+        owner: application-queue
+        guards: ['type:app/src/client.rs#request_id']
+        checks: ['journey:canvas-stack/voyager-creates-a-voyage-and-vessel']
         formal: []
         journeys: [canvas-stack]
       - id: change-carries-inspected-version
