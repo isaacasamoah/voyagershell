@@ -21,12 +21,7 @@ import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared, NoticeListener } from "voyager_native";
 import { Chat } from "./chat.js";
-import {
-  errorMessage,
-  outcome,
-  startingNotice,
-  statusLine,
-} from "./status.js";
+import { errorMessage, outcome, startingNotice, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
