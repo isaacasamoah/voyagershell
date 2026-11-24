@@ -694,6 +694,8 @@ mod tests {
                 "tests/native/controls/canvas-stack-kept.patch".to_owned(),
                 "tests/native/controls/canvas-stack-quit.patch".to_owned(),
                 "tests/native/controls/canvas-stack-reopened.patch".to_owned(),
+                "tests/native/controls/canvas-stack-untouched.patch".to_owned(),
+                "tests/native/controls/canvas-stack-once.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

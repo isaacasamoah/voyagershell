@@ -727,9 +727,11 @@ carries the inspected version.
   "Stack trial" in the sandbox's second project folder, then `create-vessel` for a
   `flag` Vessel beside that Voyage's terminal. Both calls must return Applied. Core
   must hold the new Voyage saved in that folder with its terminal started, and its
-  Fleet must hold both Vessels, with the flag drawn. The journey then flips the flag
-  once, so the Vessel has saved data in `data/<id>.json` in the profile, and prints a
-  marker in the trial terminal.
+  Fleet must hold both Vessels, with the flag drawn. Each request must have taken
+  effect once, with its own request id, so Core holds one new Voyage and one new flag
+  Vessel. The journey then flips the flag once, so the Vessel has saved data in
+  `data/<id>.json` in the profile with revision 1, and prints a marker in the trial
+  terminal.
 - `new-shell-starts-in-its-folder` reads that terminal from Core. Its shell's
   `foreground.cwd` must be the folder the Voyage was made for.
 
@@ -737,7 +739,8 @@ The proposed canvas is a stack of two views. The first is the current canvas, an
 second is a copy whose sidebar is 280 pixels wide.
 
 - `applied-equals-proposal` selects the second view. The update must return Applied,
-  and Core must hold the canvas exactly as proposed.
+  and Core must hold the canvas exactly as proposed, with the Vessels, Voyages, context
+  and selected Voyage and Fleet as they were.
 - `invalid-stack-refused-unchanged` selects a third view, which the stack does not
   have. The update must be refused, with the reason that the selection must name an
   existing child. The canvas, Vessels, Voyages, context, selected Voyage and Fleet, and
@@ -759,9 +762,11 @@ second is a copy whose sidebar is 280 pixels wide.
   while Core and its programs carry on. The run's sandbox outlives each launch of the
   app, so a provider the app leaves running would still be there.
 - `selection-after-relaunch` launches again. Core must hold the same canvas, with the
-  stack's second view selected, at the layout version it had before Quit.
+  stack's second view selected, at the layout version it had before Quit. The frame
+  must draw that view too, which the sidebar toggle's left edge shows: it must sit
+  where it did before Quit, since the second view's sidebar is wider than the first's.
 
-Each case has its own control.
+Each case has its own control. Two cases check two things, so each has a second control.
 
 - `tests/native/controls/canvas-stack-created.patch` makes the chat's workspace tool
   answer `create-voyage` with an inspect, so `voyager-creates-a-voyage-and-vessel`
@@ -779,7 +784,11 @@ Each case has its own control.
 - `tests/native/controls/canvas-stack-quit.patch` makes the provider's shutdown return
   without stopping it, so `conversation-stops-on-quit` fails.
 - `tests/native/controls/canvas-stack-reopened.patch` resets a stack's selection to its
-  first view on load, so `selection-after-relaunch` fails.
+  first view on load, so `selection-after-relaunch` fails on the drawn frame.
+- `tests/native/controls/canvas-stack-untouched.patch` makes an applied canvas update
+  also change the context, so `applied-equals-proposal` fails.
+- `tests/native/controls/canvas-stack-once.patch` makes create-voyage take effect
+  twice, so `voyager-creates-a-voyage-and-vessel` fails.
 
 ### Profile updates
 

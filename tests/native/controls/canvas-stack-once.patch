@@ -1,0 +1,14 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index d076354e..414b1986 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -387,6 +387,9 @@ impl Model {
+     }
+ 
+     pub fn apply(&mut self, action: Action) -> Result<(), String> {
++        if matches!(action, Action::CreateVoyage { .. }) {
++            self.change(action.clone())?;
++        }
+         self.change(action)?;
+         self.remember_fleet();
+         Ok(())

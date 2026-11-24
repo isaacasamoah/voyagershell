@@ -79,8 +79,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let stack = stacked(&document(native)?.1.canvas, ALTERNATE);
     let applied = cases.make(native, Case::Applied, |native| {
         let proposed = selecting(&stack, 1);
+        let earlier = document(native)?.1;
         let update = update(native, &provider, "stack-selected", &proposed)?;
-        let saved = document(native)?.1.canvas;
+        let current = document(native)?.1;
+        let saved = current.canvas.clone();
+        let rest = Layout {
+            canvas: saved.clone(),
+            ..earlier
+        };
         native.keep_window("stack-selected")?;
         Ok((
             Verdict::new()
@@ -91,6 +97,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .expect(
                     "Core holds the canvas exactly as proposed, with the second view selected",
                     saved == proposed,
+                )
+                .expect(
+                    "the applied update left the Vessels, Voyages, context and selected Voyage and Fleet as they were",
+                    unchanged(&rest, &current),
                 )
                 .observed("proposed", &proposed)?
                 .observed("saved", &saved)?
@@ -202,6 +212,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     let quit = cases.make(native, Case::Quit, |native| {
         let before = document(native)?;
+        let drawn = native.observe("the sidebar toggle drawn before Quit", |seen| {
+            seen.left_edge(&Target::SIDEBAR_TOGGLE)
+        })?;
         let conversation = provider.relay_pid().map(Identity::read).transpose()?;
         native.close()?;
         let ended = conversation.as_ref().map(|identity| {
@@ -220,9 +233,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 ended == Some(true),
             )
             .observed("conversation", &conversation)?;
-        Ok((verdict, Some(before)))
+        Ok((verdict, Some((before, drawn))))
     })?;
-    let Some((version, before)) = quit else {
+    let Some(((version, before), drawn)) = quit else {
         return Ok(());
     };
     cases.check(native, Case::Reopened, |native| {
@@ -233,6 +246,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |canvas| *canvas == before.canvas,
         );
         let (after, layout) = document(native)?;
+        let edge = native
+            .observe("the sidebar toggle drawn after the relaunch", |seen| {
+                seen.left_edge(&Target::SIDEBAR_TOGGLE)
+            })
+            .ok();
         native.keep_window("stack-reopened")?;
         Verdict::new()
             .expect(
@@ -240,9 +258,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 layout.canvas == before.canvas && layout.canvas == selected,
             )
             .expect("the relaunch drew that canvas", reopened.is_ok())
+            .expect(
+                "the relaunch drew the second view, with its sidebar as wide as before Quit",
+                edge.is_some_and(|edge| (edge - drawn).abs() < 1.0),
+            )
             .expect("the layout's version is the same", after == version)
             .observed("before", &before.canvas)?
-            .observed("after", &layout.canvas)
+            .observed("after", &layout.canvas)?
+            .observed("toggleLeftEdge", json!({"beforeQuit":drawn,"afterRelaunch":edge}))
     })
 }
 
@@ -317,6 +340,32 @@ fn create(native: &mut Native, provider: &Provider) -> Result<(Verdict, Option<S
         None => None,
     };
     let drawn = content.as_ref().and_then(|(_, _, drawn)| drawn.clone());
+    let (_, now) = document(native)?;
+    let voyages_made = voyages(&now)
+        .filter(|voyage| {
+            voyage.name == VOYAGE && !before.voyages.iter().any(|old| old.id == voyage.id)
+        })
+        .count();
+    let flags_made = now
+        .vessels
+        .iter()
+        .filter(|vessel| {
+            vessel.type_id == TYPE && !before.vessels.iter().any(|old| old.id == vessel.id)
+        })
+        .count();
+    let requests = [
+        voyage_returned
+            .as_ref()
+            .map(|text| text["requestId"].clone()),
+        content
+            .as_ref()
+            .and_then(|(_, returned, _)| returned.as_ref().map(|text| text["requestId"].clone())),
+    ];
+    let own_requests = matches!(
+        &requests,
+        [Some(voyage), Some(vessel)]
+            if voyage.as_str().is_some_and(|id| !id.is_empty()) && voyage != vessel
+    );
     let verdict = Verdict::new()
         .expect(
             "Voyager's create-voyage call through its chat tool returned Applied",
@@ -336,6 +385,10 @@ fn create(native: &mut Native, provider: &Provider) -> Result<(Verdict, Option<S
             "the new Fleet holds its terminal and the new flag Vessel, and the window draws the flag",
             drawn.as_ref().is_some_and(|(_, placed)| *placed == 2),
         )
+        .expect(
+            "each of the two requests took effect once, with its own request id: one new Voyage and one new flag Vessel",
+            voyages_made == 1 && flags_made == 1 && own_requests,
+        )
         .observed("saved", &saved)?
         .observed("drawn", &drawn)?
         .observed(
@@ -346,6 +399,13 @@ fn create(native: &mut Native, provider: &Provider) -> Result<(Verdict, Option<S
         return Ok((verdict, None));
     };
     let setup = finish(native, trial, content)?;
+    let revision = serde_json::from_slice::<Value>(&setup.bytes)
+        .ok()
+        .map(|saved| saved["revision"].clone());
+    let verdict = verdict.expect(
+        "the flag Vessel's one action took effect once, so its saved data holds revision 1",
+        revision == Some(json!(1)),
+    );
     Ok((verdict, Some(setup)))
 }
 

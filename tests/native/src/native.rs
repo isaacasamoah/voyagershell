@@ -159,6 +159,10 @@ impl Seen<'_> {
     pub fn label(&self, target: &Target) -> Option<&str> {
         target.find(self.frame)?.label.as_deref()
     }
+
+    pub fn left_edge(&self, target: &Target) -> Option<f32> {
+        Some(target.find(self.frame)?.bounds.x)
+    }
 }
 
 enum Glance<T> {
