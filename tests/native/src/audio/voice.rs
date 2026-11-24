@@ -947,14 +947,21 @@ pub fn feed_and_settle(native: &Native, name: &str, samples: &Samples) -> Result
     })
 }
 
+const REPLY_STARTS: [&str; 4] = [
+    "speech-started",
+    "refusal-started",
+    "chat-started",
+    "missed",
+];
+
 fn reply_is_owed(marks: &[Mark]) -> bool {
     marks
         .iter()
-        .rposition(|mark| mark.event == "sent")
-        .is_some_and(|sent| {
-            !marks[sent..]
+        .rposition(|mark| mark.event == "heard" || mark.event == "sent")
+        .is_some_and(|turn| {
+            !marks[turn..]
                 .iter()
-                .any(|mark| mark.event == "speech-started")
+                .any(|mark| REPLY_STARTS.contains(&mark.event.as_str()))
         })
 }
 
@@ -1912,6 +1919,90 @@ mod tests {
         fs::remove_file(&path).unwrap();
         assert!(read.unwrap().is_empty());
         assert!(floor_is_clear(&[]));
+    }
+
+    #[test]
+    fn a_heard_turn_owes_a_reply_before_it_is_sent() {
+        let heard = trace(&["capture-open", "listening", "utterance-ended", "heard"]);
+        assert!(reply_is_owed(&heard));
+        assert!(!floor_is_clear(&heard));
+        assert!(!reply_is_settled(&heard));
+        assert!(reply_has_stopped(&heard));
+    }
+
+    #[test]
+    fn a_heard_turn_that_is_routing_still_owes_its_reply() {
+        let routing = trace(&["heard", "routed", "acknowledgement-started"]);
+        assert!(!reply_is_settled(&routing));
+        assert!(!floor_is_clear(&routing));
+    }
+
+    #[test]
+    fn an_acknowledgement_line_never_ends_the_reply_a_sent_turn_owes() {
+        let looking = trace(&[
+            "heard",
+            "routed",
+            "acknowledgement-chosen",
+            "acknowledgement-started",
+            "sent",
+            "acknowledgement-started",
+        ]);
+        assert!(reply_is_owed(&looking));
+        assert!(!reply_is_settled(&looking));
+        assert!(!floor_is_clear(&looking));
+        let replied = trace(&[
+            "heard",
+            "routed",
+            "acknowledgement-chosen",
+            "acknowledgement-started",
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "listening",
+        ]);
+        assert!(reply_is_settled(&replied));
+        assert!(floor_is_clear(&replied));
+    }
+
+    #[test]
+    fn a_refused_chatted_or_missed_turn_owes_no_spoken_reply() {
+        for ending in ["refusal-started", "chat-started", "missed"] {
+            let turn = trace(&["heard", "routed", ending]);
+            assert!(reply_is_settled(&turn), "{ending}");
+            assert!(floor_is_clear(&turn), "{ending}");
+        }
+    }
+
+    #[test]
+    fn a_later_heard_turn_owes_its_own_reply_after_an_earlier_one_played() {
+        let turns = trace(&[
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-ended",
+            "listening",
+            "heard",
+        ]);
+        assert!(!reply_is_settled(&turns));
+        assert!(!floor_is_clear(&turns));
+    }
+
+    #[test]
+    fn a_heard_turn_that_never_gets_a_reply_fails_the_turn_on_and_off_waits() {
+        let waits: [fn(&[Mark]) -> bool; 2] = [floor_is_clear, reply_is_settled];
+        for clear in waits {
+            let error = wait_for(
+                || Ok(trace(&["heard", "routed"])),
+                Duration::from_millis(50),
+                clear,
+            )
+            .unwrap_err();
+            assert!(
+                format!("{error:#}").starts_with("previous reply still playing after "),
+                "{error:#}"
+            );
+            assert!(error.downcast_ref::<Defect>().is_some());
+        }
     }
 
     #[test]
