@@ -1,0 +1,21 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index 58a9f3fa..14fd3a91 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -606,8 +606,15 @@ impl Model {
+                 return Err("Vessel package operations require the application owner".into());
+             }
+             Action::Home => self.layout.view = WorkspaceView::Home,
+-            Action::UpdateCanvas { canvas } => {
++            Action::UpdateCanvas { mut canvas } => {
+                 crate::canvas::validate(&canvas)?;
++                if !matches!(
++                    self.layout.canvas.root,
++                    voyager_contract::canvas::Node::Stack { .. }
++                ) && let voyager_contract::canvas::Node::Stack { selected, .. } = &mut canvas.root
++                {
++                    *selected = 0;
++                }
+                 self.layout.canvas = canvas;
+             }
+             Action::SetSidebar { collapsed } => self.layout.canvas.sidebar_collapsed = collapsed,

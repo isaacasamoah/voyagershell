@@ -2,6 +2,7 @@ mod adopt_by_label;
 mod agent_split;
 mod arrangement;
 mod avatar_drag;
+mod canvas_stack;
 mod chat;
 mod core_events;
 mod home_create;
@@ -158,6 +159,7 @@ journeys! {
     HomeCreate => "home-create" in home_create, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    CanvasStack => "canvas-stack" in canvas_stack, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     VoyagerCommand => "voyager-command" in voyager_command, sidebar: None, window: None;
     AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
@@ -685,6 +687,13 @@ mod tests {
                 "tests/native/controls/voice-backchannel.patch".to_owned(),
                 "tests/native/controls/voice-cut-off.patch".to_owned(),
                 "tests/native/controls/voice-stop.patch".to_owned(),
+                "tests/native/controls/canvas-stack-created.patch".to_owned(),
+                "tests/native/controls/canvas-stack-folder.patch".to_owned(),
+                "tests/native/controls/canvas-stack-applied.patch".to_owned(),
+                "tests/native/controls/canvas-stack-inspected.patch".to_owned(),
+                "tests/native/controls/canvas-stack-kept.patch".to_owned(),
+                "tests/native/controls/canvas-stack-quit.patch".to_owned(),
+                "tests/native/controls/canvas-stack-reopened.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

@@ -15,7 +15,7 @@ cases! {
 
 pub const CONTROL: Case = Case::LastGood;
 
-const TYPE: &str = "flag";
+pub(super) const TYPE: &str = "flag";
 const MANIFEST: &str = "vessels/flag/manifest.json";
 
 fn open_picker(native: &Native, terminal: &Terminal) -> Result<()> {

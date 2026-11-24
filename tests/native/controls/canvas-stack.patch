@@ -1,0 +1,19 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index 58a9f3fa..f07a6f28 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -606,7 +606,13 @@ impl Model {
+                 return Err("Vessel package operations require the application owner".into());
+             }
+             Action::Home => self.layout.view = WorkspaceView::Home,
+-            Action::UpdateCanvas { canvas } => {
++            Action::UpdateCanvas { mut canvas } => {
++                if let voyager_contract::canvas::Node::Stack {
++                    selected, children, ..
++                } = &mut canvas.root
++                {
++                    *selected = (*selected).min(children.len().saturating_sub(1) as u16);
++                }
+                 crate::canvas::validate(&canvas)?;
+                 self.layout.canvas = canvas;
+             }
