@@ -581,7 +581,21 @@ impl Native {
     }
 
     pub fn live_terminals(&self) -> Result<Vec<String>> {
-        Ok(self.sizes()?.into_keys().collect())
+        let listed = self.system.rpc("terminal.list", json!({"all":true}))?;
+        let mut live = listed["terminals"]
+            .as_array()
+            .context("Core listed no terminals")?
+            .iter()
+            .filter(|terminal| terminal["state"] == "live")
+            .map(|terminal| {
+                terminal["address"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .context("A listed terminal has no address")
+            })
+            .collect::<Result<Vec<_>>>()?;
+        live.sort();
+        Ok(live)
     }
 
     pub fn sizes(&self) -> Result<BTreeMap<String, Size>> {
