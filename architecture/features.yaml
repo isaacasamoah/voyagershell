@@ -1096,6 +1096,7 @@ features:
           - 'test:app/src/voice_speaker.rs#talk_over_on_offers_the_reply_and_off_never_does_without_reading_the_headphones'
           - 'test:app/src/voice_speaker.rs#with_headphones_each_reply_is_offered_to_the_listener_and_the_headphones_are_read_once'
           - 'test:app/src/voice_layer_talk_over_tests.rs#speech_over_a_reply_stops_it_and_a_backchannel_resumes_at_the_piece_it_cut'
+          - 'test:app/src/voice_layer_talk_over_tests.rs#a_resumed_reply_never_reaches_text_from_before_its_reply_tag'
           - 'test:app/src/voice_layer_talk_over_tests.rs#a_bare_stop_leaves_the_reply_stopped_with_the_unspoken_rest_in_the_chat'
           - 'test:app/src/voice_layer_talk_over_tests.rs#other_words_over_a_reply_reach_voyager_once_as_a_cut_off_prompt'
           - 'test:desktop/src/speech.rs#the_wave_is_green_only_while_the_microphone_hears_the_person'

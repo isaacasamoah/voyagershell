@@ -1,4 +1,5 @@
 use super::*;
+use crate::spoken::strip_reply_marker;
 use crate::voice_parts::Rendered;
 use std::sync::mpsc::{self, Sender};
 
@@ -31,6 +32,7 @@ const SHORT: usize = 20;
 const LONG: usize = 120_000;
 const LAST: usize = 30;
 const REPLY: &str = "One. Two. Three.";
+const TAGGED: &str = "Let me check the fleets first.\n[vy] One. Two. Three.";
 
 fn piece(length: usize) -> Clip {
     Clip {
@@ -40,12 +42,16 @@ fn piece(length: usize) -> Clip {
 }
 
 fn reply_of(rendered: &[usize]) -> (Reply, Sender<Rendered>) {
+    reply_from(REPLY, rendered)
+}
+
+fn reply_from(text: &str, rendered: &[usize]) -> (Reply, Sender<Rendered>) {
     let (rendering, rest) = mpsc::channel();
     for length in &rendered[1..] {
         rendering.send(Ok((piece(*length), String::new()))).unwrap();
     }
     let reply = Reply {
-        text: SpokenText::from_reply(REPLY).unwrap(),
+        text: SpokenText::from_reply(text).unwrap(),
         first: piece(rendered[0]),
         rest,
     };
@@ -75,7 +81,11 @@ fn spoken_over(reply: Reply, seen: &Arc<Mutex<Vec<Phase>>>) -> Vec<Mic> {
 }
 
 fn talked_over(heard: &'static str) -> (Rig, Vec<Phase>) {
-    let (reply, _rendering) = reply_of(&[SHORT, LONG]);
+    talked_over_reply(REPLY, heard)
+}
+
+fn talked_over_reply(text: &str, heard: &'static str) -> (Rig, Vec<Phase>) {
+    let (reply, _rendering) = reply_from(text, &[SHORT, LONG]);
     let seen = Arc::default();
     let mut rig = Rig::new(spoken_over(reply, &seen), Standing::Idle, false);
     rig.audio.live = true;
@@ -97,6 +107,26 @@ fn speech_over_a_reply_stops_it_and_a_backchannel_resumes_at_the_piece_it_cut() 
         assert!(rig.said().is_empty(), "{heard}");
         assert_eq!(rig.notes(), vec![REPLY], "{heard}");
     }
+}
+
+#[test]
+fn a_resumed_reply_never_reaches_text_from_before_its_reply_tag() {
+    let reply = strip_reply_marker(TAGGED);
+    let (rig, seen) = talked_over_reply(&reply, "Yeah.");
+    assert_eq!(rig.played(), vec![SHORT, LONG, LONG]);
+    assert_eq!(
+        seen,
+        vec![Phase::SpeakingOpen, Phase::Listening, Phase::SpeakingOpen]
+    );
+    assert!(rig.said().is_empty());
+    assert_eq!(rig.notes(), vec![REPLY]);
+    let (rig, _) = talked_over_reply(&reply, "Open the logs.");
+    assert_eq!(
+        rig.said(),
+        vec![
+            "[spoken] [cut off] You were saying: \"Two.\". Not heard: 1 more sentences. They say: Open the logs."
+        ]
+    );
 }
 
 #[test]
