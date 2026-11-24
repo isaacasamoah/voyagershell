@@ -763,8 +763,12 @@ second is a copy whose sidebar is 280 pixels wide.
   app, so a provider the app leaves running would still be there.
 - `selection-after-relaunch` launches again. Core must hold the same canvas, with the
   stack's second view selected, at the layout version it had before Quit. The frame
-  must draw that view too, which the sidebar toggle's left edge shows: it must sit
-  where it did before Quit, since the second view's sidebar is wider than the first's.
+  must draw that view too. The frame has no sidebar element, so the sidebar toggle's
+  left edge stands in for the sidebar's width. The toggle sits at the sidebar's right
+  edge less a fixed offset, so that offset cancels out. The journey reads the edge
+  once at the start, with the first view drawn. After the relaunch settles, the edge
+  must sit that far right by the difference between the selected view's sidebar width
+  and the first view's, both read from the canvases, within less than one pixel.
 
 Each case has its own control. Two cases check two things, so each has a second control.
 
@@ -784,7 +788,10 @@ Each case has its own control. Two cases check two things, so each has a second 
 - `tests/native/controls/canvas-stack-quit.patch` makes the provider's shutdown return
   without stopping it, so `conversation-stops-on-quit` fails.
 - `tests/native/controls/canvas-stack-reopened.patch` resets a stack's selection to its
-  first view on load, so `selection-after-relaunch` fails on the drawn frame.
+  first view on every load, and the app loads its layout after each save, so the live
+  drawn view is lost too. Only `selection-after-relaunch` reads the drawn view, and the
+  earlier cases read Core alone, so it is the case that fails, with the toggle's edge
+  drawn where the first view puts it and not where the second view's width puts it.
 - `tests/native/controls/canvas-stack-untouched.patch` makes an applied canvas update
   also change the context, so `applied-equals-proposal` fails.
 - `tests/native/controls/canvas-stack-once.patch` makes create-voyage take effect

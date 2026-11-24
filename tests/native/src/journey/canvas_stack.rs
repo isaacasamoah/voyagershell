@@ -76,7 +76,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("foreground", &foreground)
     })?;
-    let stack = stacked(&document(native)?.1.canvas, ALTERNATE);
+    let original = document(native)?.1.canvas;
+    let first_pixels = sidebar_pixels(&original);
+    let first_edge = native.observe("the first view's sidebar toggle drawn", |seen| {
+        seen.left_edge(&Target::SIDEBAR_TOGGLE)
+    })?;
+    let stack = stacked(&original, ALTERNATE);
     let applied = cases.make(native, Case::Applied, |native| {
         let proposed = selecting(&stack, 1);
         let earlier = document(native)?.1;
@@ -212,9 +217,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     let quit = cases.make(native, Case::Quit, |native| {
         let before = document(native)?;
-        let drawn = native.observe("the sidebar toggle drawn before Quit", |seen| {
-            seen.left_edge(&Target::SIDEBAR_TOGGLE)
-        })?;
         let conversation = provider.relay_pid().map(Identity::read).transpose()?;
         native.close()?;
         let ended = conversation.as_ref().map(|identity| {
@@ -233,9 +235,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 ended == Some(true),
             )
             .observed("conversation", &conversation)?;
-        Ok((verdict, Some((before, drawn))))
+        Ok((verdict, Some(before)))
     })?;
-    let Some(((version, before), drawn)) = quit else {
+    let Some((version, before)) = quit else {
         return Ok(());
     };
     cases.check(native, Case::Reopened, |native| {
@@ -251,6 +253,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 seen.left_edge(&Target::SIDEBAR_TOGGLE)
             })
             .ok();
+        let expected = sidebar_pixels(&before.canvas)
+            .zip(first_pixels)
+            .map(|(shown, first)| first_edge + f32::from(shown) - f32::from(first));
         native.keep_window("stack-reopened")?;
         Verdict::new()
             .expect(
@@ -259,13 +264,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect("the relaunch drew that canvas", reopened.is_ok())
             .expect(
-                "the relaunch drew the second view, with its sidebar as wide as before Quit",
-                edge.is_some_and(|edge| (edge - drawn).abs() < 1.0),
+                "the relaunch drew the second view, with the sidebar toggle where that view's sidebar width puts it",
+                edge.zip(expected)
+                    .is_some_and(|(edge, expected)| (edge - expected).abs() < 1.0),
             )
             .expect("the layout's version is the same", after == version)
             .observed("before", &before.canvas)?
             .observed("after", &layout.canvas)?
-            .observed("toggleLeftEdge", json!({"beforeQuit":drawn,"afterRelaunch":edge}))
+            .observed("toggleLeftEdge", json!({"firstView":first_edge,"expected":expected,"afterRelaunch":edge}))
     })
 }
 
@@ -511,6 +517,25 @@ fn stacked(canvas: &Canvas, pixels: u16) -> Canvas {
             children: vec![root, alternate],
         },
         ..canvas.clone()
+    }
+}
+
+fn sidebar_pixels(canvas: &Canvas) -> Option<u16> {
+    let view = match &canvas.root {
+        Node::Stack {
+            selected, children, ..
+        } => children.get(usize::from(*selected))?,
+        root => root,
+    };
+    let Node::Row { children, .. } = view else {
+        return None;
+    };
+    match children.first()? {
+        Node::Block {
+            size: Size::Fixed { pixels },
+            ..
+        } => Some(*pixels),
+        _ => None,
     }
 }
 
