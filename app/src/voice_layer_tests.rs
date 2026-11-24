@@ -963,6 +963,7 @@ fn voice_is_ready_while_a_clip_is_still_rendering_and_keeps_it_once_rendered() {
                     vocabulary: Arc::new(Vec::new),
                     audio: Arc::new(Silent),
                     trace: Trace::off(),
+                    talk_over: TalkOver::Off,
                 },
             );
         })
