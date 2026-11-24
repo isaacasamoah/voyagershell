@@ -480,6 +480,20 @@ the circle's area and the avatar's resting place.
   then with four more in each of three hidden Fleets. Each passes when the held
   avatar is drawn under the pointer at the end of the glide and the load
   programs were running.
+- `after-switch` shows a hidden Fleet, clicks the home Fleet's tab and grabs
+  the avatar at once, then glides it as `fleets` does. It passes when the held
+  avatar is drawn under the pointer at the end. The grab must come within 50 ms
+  of the click (`GRAB_AFTER_SWITCH`), so the new layout lands during the drag;
+  a later grab ends the run inconclusive. Its control is a build that still
+  ends a drag when the canvas reports a new layout.
+- `drop-after-switch` grabs the same way, then drops on the widest Vessel of
+  the home Fleet, which only the new layout shows, and expects a dock there.
+  It then grabs as the hidden Fleet's tab is clicked and drops where another
+  home Vessel was, and expects no dock on that Vessel. Each drop waits until
+  the new Fleet is shown under the held avatar, so the drop is judged against
+  the layout current at release. The first drop's control is the build that
+  ends a drag on a new layout. The second's is a build that judges the drop
+  against the targets presented at the press.
 - `docks` circles the avatar over a streaming terminal and ends the glide at
   the centre of the widest other terminal's pane. It aims at the pane, not
   the Vessel name, because a pane among nine tiled terminals can be too narrow

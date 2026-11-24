@@ -2,8 +2,8 @@ use super::layout::{avatar_bounds, avatar_on_dock};
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::{Target, region};
 use crate::native::{
-    DRAG_REST, Held, LOOK, Moved, Native, PRINT_AT_REST, Terminal, Wheel, changed, fleets, hold,
-    now_millis, voyages,
+    DRAG_REST, GRAB_AFTER_SWITCH, Held, LOOK, Moved, Native, PRINT_AT_REST, Seen, Stopwatch,
+    Terminal, Wheel, changed, fleets, hold, now_millis, voyages,
 };
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Geometry, Pixels};
@@ -22,6 +22,8 @@ cases! {
     Idle => "idle",
     Streaming => "streaming",
     Fleets => "fleets",
+    AfterSwitch => "after-switch",
+    DropAfterSwitch => "drop-after-switch",
     Docks => "docks",
 }
 
@@ -642,12 +644,7 @@ fn follows(native: &mut Native, case: Case, expected: usize) -> Result<Verdict> 
     let moves = held.glide(&planned)?;
     let followed = held
         .until("the held avatar under the pointer", |seen| {
-            let drawn = region(seen.frame, &avatar_bounds(seen)?);
-            let inside = drawn.x <= end.0
-                && end.0 <= drawn.x + i16::try_from(drawn.width).ok()?
-                && drawn.y <= end.1
-                && end.1 <= drawn.y + i16::try_from(drawn.height).ok()?;
-            inside.then_some(())
+            drawn_under(seen, end).then_some(())
         })
         .is_ok();
     held.release()?;
@@ -664,6 +661,147 @@ fn follows(native: &mut Native, case: Case, expected: usize) -> Result<Verdict> 
         .observed("moves", moves.len())?
         .observed("longest pause ms", longest_pause(&moves))?
         .observed("running", Value::from(load))
+}
+
+fn drawn_under(seen: &Seen, end: (i16, i16)) -> bool {
+    avatar_bounds(seen).is_some_and(|bounds| {
+        let drawn = region(seen.frame, &bounds);
+        i16::try_from(drawn.width)
+            .ok()
+            .zip(i16::try_from(drawn.height).ok())
+            .is_some_and(|(width, height)| {
+                drawn.x <= end.0
+                    && end.0 <= drawn.x + width
+                    && drawn.y <= end.1
+                    && end.1 <= drawn.y + height
+            })
+    })
+}
+
+fn switch_and_grab<'a>(native: &'a Native, onto: &FleetId) -> Result<(Held<'a>, Stopwatch)> {
+    let clicked = Stopwatch::start();
+    native.click(&Target::name(&RenameTarget::Fleet { id: onto.clone() }))?;
+    let held = native.hold(&Target::AVATAR)?;
+    Ok((held, clicked))
+}
+
+fn grabbed_in_time(clicked: Stopwatch, pressed: Stopwatch) -> Result<()> {
+    let gap = clicked.until(pressed);
+    ensure!(
+        gap.within(GRAB_AFTER_SWITCH),
+        "The grab came {} ms after the Fleet click, past the 50 ms this case needs, so it cannot judge a grab during the switch; rerun it",
+        serde_json::to_value(gap)?
+    );
+    Ok(())
+}
+
+fn avatar_place(native: &Native) -> Result<(i16, i16)> {
+    native.observe("the avatar's place", |seen| {
+        Some(centre_of(region(seen.frame, &avatar_bounds(seen)?)))
+    })
+}
+
+fn after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Result<Verdict> {
+    let native: &Native = native;
+    show(native, away)?;
+    let planned = path(native)?;
+    let end = *planned.last().context("The glide has no points")?;
+    let (mut held, clicked) = switch_and_grab(native, home)?;
+    let pressed = Stopwatch::start();
+    held.glide(&planned)?;
+    let followed = held
+        .until("the held avatar under the pointer", |seen| {
+            drawn_under(seen, end).then_some(())
+        })
+        .is_ok();
+    held.release()?;
+    native.keep_window("drag-after-switch")?;
+    grabbed_in_time(clicked, pressed)?;
+    Verdict::new()
+        .expect(
+            "a grab pressed within 50 ms of a Fleet click follows the pointer to the end of the glide",
+            followed,
+        )
+        .observed("click to press ms", clicked.until(pressed))
+}
+
+fn widest_vessel(
+    native: &Native,
+    fleet: &FleetId,
+    other_than: Option<&PlacementId>,
+) -> Result<(PlacementId, (i16, i16))> {
+    native.observe("the widest Vessel of the shown Fleet", |seen| {
+        (seen.document.selected_fleet.as_ref() == Some(fleet)).then_some(())?;
+        let widest = seen
+            .frame
+            .elements
+            .iter()
+            .filter(|element| {
+                element.role == voyager_contract::inspection::Role::Terminal
+                    && other_than.is_none_or(|other| element.key != other.0)
+            })
+            .max_by(|left, right| left.bounds.width.total_cmp(&right.bounds.width))?;
+        Some((
+            PlacementId(widest.key.clone()),
+            centre_of(region(seen.frame, &widest.bounds)),
+        ))
+    })
+}
+
+fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Result<Verdict> {
+    let native: &Native = native;
+    show(native, home)?;
+    let (fresh, fresh_at) = widest_vessel(native, home, None)?;
+    show(native, away)?;
+    let (mut held, clicked) = switch_and_grab(native, home)?;
+    let pressed = Stopwatch::start();
+    held.glide(&line(avatar_place(native)?, fresh_at))?;
+    let carried = held
+        .until("the new Fleet shown under the held avatar", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(home) && drawn_under(seen, fresh_at))
+                .then_some(())
+        })
+        .is_ok();
+    held.release()?;
+    let docked_new = native
+        .observe("the avatar docked on the new Fleet's Vessel", |seen| {
+            docked_on(&seen.document.context, avatar_on_dock(seen), &fresh).then_some(())
+        })
+        .is_ok();
+    grabbed_in_time(clicked, pressed)?;
+    let (stale, stale_at) = widest_vessel(native, home, Some(&fresh))?;
+    let (mut held, clicked_again) = switch_and_grab(native, away)?;
+    let pressed_again = Stopwatch::start();
+    held.glide(&line(avatar_place(native)?, stale_at))?;
+    let carried_again = held
+        .until("the other Fleet shown under the held avatar", |seen| {
+            (seen.document.selected_fleet.as_ref() == Some(away) && drawn_under(seen, stale_at))
+                .then_some(())
+        })
+        .is_ok();
+    held.release()?;
+    let settled = native.observe("the drop settled on the other Fleet", |seen| {
+        (seen.document.selected_fleet.as_ref() == Some(away)).then(|| seen.document.context.clone())
+    })?;
+    native.keep_window("drag-drop-after-switch")?;
+    grabbed_in_time(clicked_again, pressed_again)?;
+    Verdict::new()
+        .expect(
+            "the held avatar followed both drags through their Fleet switch",
+            carried && carried_again,
+        )
+        .expect(
+            "a drag that began as the Fleet switched docks on a Vessel only the new Fleet shows",
+            docked_new,
+        )
+        .expect(
+            "a drop where a Vessel of the old Fleet was does not dock on that Vessel",
+            !matches!(&settled, Scope::Vessel { id } if *id == stale),
+        )
+        .observed(
+            "click to press ms",
+            [clicked.until(pressed), clicked_again.until(pressed_again)],
+        )
 }
 
 fn docks(native: &mut Native, streaming: &Terminal) -> Result<Verdict> {
@@ -761,6 +899,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::Fleets, |native| {
         follows(native, Case::Fleets, loaded)
     })?;
+    cases.check(native, Case::AfterSwitch, |native| {
+        after_switch(native, &hidden[0], &home)
+    })?;
+    cases.check(native, Case::DropAfterSwitch, |native| {
+        drop_after_switch(native, &hidden[0], &home)
+    })?;
+    show(native, &home)?;
     let placement = native.observe("a streaming Vessel's placement", |seen| {
         fleets(seen.document)
             .find(|fleet| fleet.id == home)?

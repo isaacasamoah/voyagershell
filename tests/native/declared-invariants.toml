@@ -481,7 +481,7 @@ source = "Isaac, 22 Nov 2026: moving the avatar is a primary action and should b
 features = ["avatar"]
 guard = ["type:desktop/src/avatar/drag.rs#Drag"]
 type_gap = "Drag holds one position derived from the latest pointer move and the grab offset, so the drawn avatar follows the pointer. No type bounds how late a frame draws it."
-check = ["journey:avatar-drag/idle", "journey:avatar-drag/streaming", "journey:avatar-drag/fleets"]
+check = ["journey:avatar-drag/idle", "journey:avatar-drag/streaming", "journey:avatar-drag/fleets", "journey:avatar-drag/after-switch", "journey:avatar-drag/drop-after-switch"]
 gap = "No frame budget is judged until tests/native has a GPU surface. The cases prove the avatar reaches the pointer under each load, but under Xvfb and llvmpipe a present alone takes 40 to 117 ms. Load from builds beside the app is not covered."
 confidence = "stated"
 

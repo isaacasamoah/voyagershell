@@ -37,6 +37,7 @@ pub const STATUS_AFTER_CLICK: Owed = Owed::millis(600);
 pub const PROBE_AFTER_DOCK: Owed = Owed::millis(50);
 pub const PROBE_LATEST: Owed = Owed::millis(60);
 pub const DRAG_REST: Owed = Owed::millis(120);
+pub const GRAB_AFTER_SWITCH: Owed = Owed::millis(50);
 pub const PRINT_AT_REST: Owed = Owed::secs(11);
 pub const ENGINE_START: Owed = Owed::secs(90);
 pub const QUIET_MIC: Owed = Owed::secs(2);

@@ -974,9 +974,6 @@ impl Binding {
                         changed |= projection_changed;
                         avatar.scope = scope;
                         avatar.version = version;
-                        if avatar.projection_key != key {
-                            avatar.cancel_drag(cx);
-                        }
                         avatar.projection_key = key.to_owned();
                         if projection_changed {
                             cx.notify();
