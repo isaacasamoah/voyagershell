@@ -244,6 +244,7 @@ fn docking_on_a_portal_opens_its_voyage_and_focuses_the_portal() {
             "/work".into(),
             Launch::Terminal,
             None,
+            Caller::Agent,
         )
         .unwrap();
     let id = model.layout.voyages[0].portals[0].id.clone();
@@ -292,11 +293,25 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
     let into_fleet = PlacementOwner::Fleet { id: fleet.clone() };
     let t5 = CoreTerminalId("t5".into());
     assert_eq!(
-        model.adopt(empty(&into_fleet), &t5, "/work".into(), agent.clone(), None),
+        model.adopt(
+            empty(&into_fleet),
+            &t5,
+            "/work".into(),
+            agent.clone(),
+            None,
+            Caller::Agent
+        ),
         Ok(true)
     );
     assert_eq!(
-        model.adopt(empty(&into_fleet), &t5, "/work".into(), agent.clone(), None),
+        model.adopt(
+            empty(&into_fleet),
+            &t5,
+            "/work".into(),
+            agent.clone(),
+            None,
+            Caller::Agent
+        ),
         Ok(false)
     );
     let adopted = model.layout.vessels.last().unwrap().clone();
@@ -314,7 +329,14 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
         voyage: voyage.clone(),
     };
     assert_eq!(
-        model.adopt(empty(&portal), &t6, "/work".into(), Launch::Terminal, None),
+        model.adopt(
+            empty(&portal),
+            &t6,
+            "/work".into(),
+            Launch::Terminal,
+            None,
+            Caller::Agent
+        ),
         Ok(true)
     );
     let column = model.layout.voyages[0].portal_layout.as_ref().unwrap();
@@ -326,13 +348,27 @@ fn a_labelled_terminal_is_placed_once_in_its_open_fleet_or_portal() {
     let t7 = CoreTerminalId("t7".into());
     assert!(
         model
-            .adopt(empty(&unknown), &t7, "/".into(), Launch::Terminal, None)
+            .adopt(
+                empty(&unknown),
+                &t7,
+                "/".into(),
+                Launch::Terminal,
+                None,
+                Caller::Agent
+            )
             .is_err()
     );
     model.layout.voyages[0].fleets[0].closed = true;
     assert!(
         model
-            .adopt(empty(&into_fleet), &t7, "/".into(), Launch::Terminal, None)
+            .adopt(
+                empty(&into_fleet),
+                &t7,
+                "/".into(),
+                Launch::Terminal,
+                None,
+                Caller::Agent
+            )
             .is_err()
     );
     assert!(
@@ -363,6 +399,7 @@ fn an_adopted_terminal_takes_its_core_name_unless_a_neighbour_holds_it() {
                 "/work".into(),
                 Launch::Terminal,
                 name.map(str::to_owned),
+                Caller::Agent,
             )
             .unwrap();
         model.layout.voyages[0].fleets[0]
@@ -417,11 +454,7 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
     for (caller, name) in [(None, "By hand"), (Some(&agent_vessel), "Crew")] {
         let (voyage, name) = (a.clone(), name.into());
         model
-            .apply_from(
-                caller,
-                Defaults::Table,
-                Action::CreateFleet { voyage, name },
-            )
+            .apply_from(caller, Caller::Person, Action::CreateFleet { voyage, name })
             .unwrap();
     }
     let fleets = &model.layout.voyages[0].fleets;
@@ -441,7 +474,14 @@ fn a_fleet_made_by_hand_opens_a_terminal_and_one_made_for_a_labelled_agent_waits
     };
     assert!(
         model
-            .adopt(empty(&owner), &agent, "/tmp".into(), launch, None)
+            .adopt(
+                empty(&owner),
+                &agent,
+                "/tmp".into(),
+                launch,
+                None,
+                Caller::Agent
+            )
             .unwrap()
     );
     let crew = &model.layout.voyages[0].fleets[3];
@@ -481,7 +521,7 @@ fn a_fleet_voyager_makes_for_the_person_opens_a_terminal_and_names_its_program()
         model
             .apply_from(
                 Some(&voyager),
-                Defaults::Table,
+                Caller::Voyager,
                 Action::CreateFleetWithVessel {
                     voyage: a.clone(),
                     name: name.into(),
@@ -566,8 +606,8 @@ fn voyagers_vessel_is_placed_once_as_a_portal_on_home_and_survives_a_reopen() {
 
 fn create_beside(
     model: &mut Model,
-    caller: Option<&VesselId>,
-    defaults: Defaults,
+    program: Option<&VesselId>,
+    caller: Caller,
     type_id: &str,
     launch: Option<LaunchSpec>,
 ) -> Result<Option<Launch>, String> {
@@ -577,8 +617,8 @@ fn create_beside(
     };
     let beside = fleet.placements[0].id.clone();
     model.apply_from(
+        program,
         caller,
-        defaults,
         Action::CreateVessel {
             type_id: type_id.into(),
             destination: ContentDestination::Placement {
@@ -619,7 +659,7 @@ fn plain_defaults_start_an_agent_plain_unless_it_names_permissions_and_table_def
         create_beside(
             &mut model,
             Some(&other),
-            Defaults::Plain,
+            Caller::Agent,
             "agent",
             codex(None)
         ),
@@ -627,11 +667,11 @@ fn plain_defaults_start_an_agent_plain_unless_it_names_permissions_and_table_def
     );
     let table = crate::agent_programs::argv("codex", None, None, None).unwrap();
     assert!(table.len() > 1);
-    for (caller, name) in [(Some(&voyager), "Voyager"), (None, "the person")] {
-        let created = create_beside(&mut model, caller, Defaults::Table, "agent", codex(None))
+    for (program, caller) in [(Some(&voyager), Caller::Voyager), (None, Caller::Person)] {
+        let created = create_beside(&mut model, program, caller, "agent", codex(None))
             .unwrap()
             .unwrap();
-        assert_eq!(crate::launch::argv(&created).unwrap(), table, "{name}");
+        assert_eq!(crate::launch::argv(&created).unwrap(), table, "{caller:?}");
     }
     let listed =
         crate::agent_programs::argv("codex", None, None, Some(Permissions::ReadOnly)).unwrap();
@@ -639,7 +679,7 @@ fn plain_defaults_start_an_agent_plain_unless_it_names_permissions_and_table_def
         create_beside(
             &mut model,
             Some(&other),
-            Defaults::Plain,
+            Caller::Agent,
             "agent",
             codex(Some(Permissions::ReadOnly))
         ),
@@ -658,7 +698,7 @@ fn a_launch_on_a_type_that_takes_none_is_refused_and_places_nothing() {
         ("notes", Some(LaunchSpec::Terminal)),
     ] {
         assert!(
-            create_beside(&mut model, Some(&other), Defaults::Plain, type_id, launch).is_err(),
+            create_beside(&mut model, Some(&other), Caller::Agent, type_id, launch).is_err(),
             "{type_id}"
         );
         assert_eq!(model.layout, before, "{type_id}");
@@ -666,7 +706,7 @@ fn a_launch_on_a_type_that_takes_none_is_refused_and_places_nothing() {
 }
 
 #[test]
-fn only_the_vessel_on_the_bound_terminal_keeps_the_table_default() {
+fn only_the_vessel_on_the_bound_terminal_is_voyager_and_no_vessel_is_the_person() {
     let (mut model, ..) = two_voyages();
     let beside = model.layout.voyages[0].fleets[0].placements[0].id.clone();
     let owner = PlacementOwner::Fleet {
@@ -692,27 +732,18 @@ fn only_the_vessel_on_the_bound_terminal_keeps_the_table_default() {
         ids.push(vessel.id.clone());
     }
     let binding = crate::voyager_binding::Binding::unbound();
-    assert_eq!(
-        binding.launch_defaults(&model.layout, Some(&ids[0])),
-        Defaults::Plain
-    );
+    assert_eq!(binding.caller(&model.layout, Some(&ids[0])), Caller::Agent);
     binding.bind(CoreTerminalId("t1".into())).unwrap();
     assert_eq!(
-        binding.launch_defaults(&model.layout, Some(&ids[0])),
-        Defaults::Table
+        binding.caller(&model.layout, Some(&ids[0])),
+        Caller::Voyager
     );
-    assert_eq!(
-        binding.launch_defaults(&model.layout, Some(&ids[1])),
-        Defaults::Plain
-    );
-    assert_eq!(
-        binding.launch_defaults(&model.layout, None),
-        Defaults::Table
-    );
+    assert_eq!(binding.caller(&model.layout, Some(&ids[1])), Caller::Agent);
+    assert_eq!(binding.caller(&model.layout, None), Caller::Person);
     let named_voyager = VesselId(VOYAGER_VESSEL.into());
     assert_eq!(
-        binding.launch_defaults(&model.layout, Some(&named_voyager)),
-        Defaults::Plain
+        binding.caller(&model.layout, Some(&named_voyager)),
+        Caller::Agent
     );
 }
 
@@ -729,7 +760,7 @@ fn a_vessel_is_not_created_in_a_closed_fleet() {
     let before = model.layout.clone();
     let refused = model.apply_from(
         Some(&VesselId("content-9".into())),
-        Defaults::Plain,
+        Caller::Agent,
         Action::CreateVessel {
             type_id: "terminal".into(),
             destination: ContentDestination::Placement {
@@ -761,6 +792,7 @@ fn a_missing_placement_gets_the_same_message_through_the_label_and_through_creat
             "/work".into(),
             Launch::Terminal,
             None,
+            Caller::Agent,
         )
         .unwrap_err();
     assert_eq!(
@@ -768,15 +800,14 @@ fn a_missing_placement_gets_the_same_message_through_the_label_and_through_creat
         format!("Fleet {} has no visible placement placement-404", fleet.0)
     );
     for caller in [None, Some(VesselId("content-9".into()))] {
-        let defaults = if caller.is_some() {
-            Defaults::Plain
-        } else {
-            Defaults::Table
-        };
         let by_operation = model
             .apply_from(
                 caller.as_ref(),
-                defaults,
+                if caller.is_some() {
+                    Caller::Agent
+                } else {
+                    Caller::Person
+                },
                 Action::CreateVessel {
                     type_id: "terminal".into(),
                     destination: ContentDestination::Placement {
@@ -791,5 +822,110 @@ fn a_missing_placement_gets_the_same_message_through_the_label_and_through_creat
             )
             .unwrap_err();
         assert_eq!(by_operation, by_label);
+    }
+}
+
+fn maximized_pair() -> (Model, PlacementOwner, PlacementId) {
+    let (mut model, ..) = two_voyages();
+    let fleet = &model.layout.voyages[0].fleets[0];
+    let owner = PlacementOwner::Fleet {
+        id: fleet.id.clone(),
+    };
+    let first = fleet.placements[0].id.clone();
+    create_beside(&mut model, None, Caller::Person, "terminal", None).unwrap();
+    model
+        .apply(Action::SetPlacementMaximized {
+            id: first.clone(),
+            maximized: true,
+        })
+        .unwrap();
+    (model, owner, first)
+}
+
+fn placed(model: &mut Model, owner: &PlacementOwner, route: &str, caller: Caller) -> PlacementId {
+    let PlacementOwner::Fleet { id } = owner.clone() else {
+        panic!("the pair sits in a Fleet");
+    };
+    let first = model.layout.voyages[0].fleets[0].placements[0].id.clone();
+    let place = match route {
+        "create-vessel" => None,
+        "label with a side" => Some(Place::Fleet {
+            id,
+            beside: Some((voyager_contract::Side::Left, first)),
+        }),
+        "label without a side" => Some(Place::Fleet { id, beside: None }),
+        other => panic!("no route {other}"),
+    };
+    match place {
+        Some(place) => {
+            let terminal = CoreTerminalId("t30".into());
+            model
+                .adopt(
+                    place,
+                    &terminal,
+                    "/work".into(),
+                    Launch::Terminal,
+                    None,
+                    caller,
+                )
+                .unwrap();
+        }
+        None => {
+            let program = VesselId("content-9".into());
+            let program = (caller != Caller::Person).then_some(&program);
+            create_beside(model, program, caller, "terminal", None).unwrap();
+        }
+    }
+    model.layout.voyages[0].fleets[0]
+        .placements
+        .last()
+        .unwrap()
+        .id
+        .clone()
+}
+
+#[test]
+fn an_agent_placement_keeps_the_maximize_and_the_new_piece_shows_after_restore() {
+    for route in ["create-vessel", "label with a side", "label without a side"] {
+        let (mut model, owner, first) = maximized_pair();
+        let new = placed(&mut model, &owner, route, Caller::Agent);
+        let fleet = &model.layout.voyages[0].fleets[0];
+        assert_eq!(fleet.placements.len(), 3, "{route}");
+        assert_eq!(fleet.maximized_placement.as_ref(), Some(&first), "{route}");
+        assert!(panels::contains(&fleet.root, &new), "{route}");
+        panels::repair_maximized(panels::group_mut(&mut model.layout, &owner).unwrap());
+        assert_eq!(
+            model.layout.voyages[0].fleets[0]
+                .maximized_placement
+                .as_ref(),
+            Some(&first),
+            "{route}"
+        );
+        model
+            .apply(Action::SetPlacementMaximized {
+                id: first.clone(),
+                maximized: false,
+            })
+            .unwrap();
+        let fleet = &model.layout.voyages[0].fleets[0];
+        assert_eq!(fleet.maximized_placement, None, "{route}");
+        let shown = panels::visible(&fleet.root, &fleet.placements);
+        assert!(panels::contains(&shown, &new), "{route}");
+    }
+}
+
+#[test]
+fn a_placement_by_the_person_or_voyager_clears_the_maximize() {
+    for (caller, route) in [
+        (Caller::Person, "create-vessel"),
+        (Caller::Voyager, "create-vessel"),
+        (Caller::Voyager, "label with a side"),
+        (Caller::Voyager, "label without a side"),
+    ] {
+        let (mut model, owner, _) = maximized_pair();
+        let new = placed(&mut model, &owner, route, caller);
+        let fleet = &model.layout.voyages[0].fleets[0];
+        assert_eq!(fleet.maximized_placement, None, "{caller:?} {route}");
+        assert!(panels::contains(&fleet.root, &new), "{caller:?} {route}");
     }
 }

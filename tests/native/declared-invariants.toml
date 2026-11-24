@@ -449,6 +449,18 @@ gap = "Only Linux X11 evidence exists. The journey starts the stand-in codex, no
 confidence = "stated"
 
 [[invariant]]
+id = "agent-splits-keep-the-maximize"
+says = "A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet's maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent's, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel."
+kind = "user"
+owner = "application-queue"
+source = "Preserve Isaac's explicit placement; Voyager's answer B and the admiral's decisions (a) and (b), 22 Nov 2026, after the owner asked that any agent can split a placement."
+features = ["adopted-vessels", "agent-vessels", "split-resize-maximize"]
+guard = ["type:contract/src/caller.rs#Caller"]
+check = ["journey:agent-split/agent-split-keeps-maximize", "journey:agent-split/voyager-split-clears-maximize", "journey:agent-split/new-piece-shows-after-unmaximize"]
+gap = "Only Linux X11 evidence exists."
+confidence = "stated"
+
+[[invariant]]
 id = "avatar-stays-fast"
 says = "Each avatar tool call is one round trip and finishes within the limit in the usage envelope. A dock adds model work only when a dock behaviour the user chose asks for it."
 kind = "user"

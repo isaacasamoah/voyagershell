@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use voyager_contract::CoreTerminalId;
+use voyager_contract::{CoreTerminalId, Layout, VesselId, caller::Caller};
 
 pub const FILE: &str = "voyager.json";
 
@@ -47,24 +47,20 @@ impl Binding {
         self.terminal.lock().ok().and_then(|bound| bound.clone())
     }
 
-    pub(crate) fn launch_defaults(
-        &self,
-        layout: &voyager_contract::Layout,
-        caller: Option<&voyager_contract::VesselId>,
-    ) -> voyager_contract::launch::Defaults {
-        let Some(caller) = caller else {
-            return voyager_contract::launch::Defaults::Table;
+    pub(crate) fn caller(&self, layout: &Layout, program: Option<&VesselId>) -> Caller {
+        let Some(program) = program else {
+            return Caller::Person;
         };
         let is_voyager = layout
             .vessels
             .iter()
-            .find(|vessel| &vessel.id == caller)
+            .find(|vessel| &vessel.id == program)
             .and_then(|vessel| vessel.backend.as_ref())
             .is_some_and(|terminal| self.names(terminal));
         if is_voyager {
-            voyager_contract::launch::Defaults::Table
+            Caller::Voyager
         } else {
-            voyager_contract::launch::Defaults::Plain
+            Caller::Agent
         }
     }
 

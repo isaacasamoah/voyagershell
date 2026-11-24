@@ -95,7 +95,18 @@ a terminal otherwise. The placement takes the terminal's Core name and keeps it
 as a deliberate name, so a later folder change does not rename it. When Core
 gives no name, or another member of the group already holds it, the placement
 gets the default `Terminal N`. Adoption starts nothing, because the terminal is already
-running. When a later launch finds that the adopted terminal is gone or ended,
+running.
+
+Adoption leaves the Fleet's or Portal column's maximized placement alone, so the
+person's view does not change. The new placement still joins the split, and it
+shows when the person restores the view. Every labelled terminal counts as a
+working agent's. Core records a `parent` for each terminal, but a program can
+name any parent with `hc run --parent`, and Core parentage grants no rights, so
+the app does not read it to decide who started a terminal. If the parent decided,
+an agent could name Voyager and clear the person's maximize. Voyager clears a
+maximize through `create-vessel`, where the bound-terminal record identifies it.
+`Adoptions::settle` in `app/src/adoption.rs` passes the `Caller::Agent` of
+`contract/src/caller.rs` for every labelled terminal. When a later launch finds that the adopted terminal is gone or ended,
 `prepare_reopen` in `app/src/families/terminal/lifecycle.rs` deletes the
 Vessel, its placement and its saved-layout leaves, and starts no shell. Reopening
 can never use such a record, because it refuses ended programs.
@@ -156,8 +167,9 @@ a `SocketReply` (`contract/src/socket.rs`, generated as
   `voyager.place` label, and an extra idle terminal beside that program is
   clutter. The first labelled terminal is adopted into the empty split, so it
   takes the Fleet's first slot. The structure family in `app/src/families/structure.rs`
-  passes the calling program to `Model::apply_from` in `app/src/workspace.rs`,
-  which picks the Fleet's `FirstVessel` from it. The wire `Action` is the same
+  passes the calling program and its `Caller` to `Model::apply_from` in
+  `app/src/workspace.rs`, which picks the Fleet's `FirstVessel` from the
+  program. The wire `Action` is the same
   for every caller. Until a labelled terminal arrives, the Fleet looks like
   one whose last Vessel was closed. It shows an empty canvas that offers "Choose
   content".
@@ -202,13 +214,18 @@ only to Voyager, which must name a Fleet as its destination, and a Portal
 destination is refused. The field stands in
 for the rank record that Release 0.2 adds.
 
-`create-vessel` resolves an agent launch that names no permissions in one of two
-ways. `Binding::launch_defaults` in `app/src/voyager_binding.rs` asks the same
-record whether the calling Vessel's terminal is the bound one. A bound Voyager,
-and the person, get the agent table's default. Any other Vessel gets the plain
-mode, with the program's own arguments and no permission flags, the same as a
-plain program start through Core. Naming `permissions` selects that row of the
-table for either.
+`Binding::caller` in `app/src/voyager_binding.rs` asks the same record who sent
+a request. A request with no calling program is the person's. A Vessel whose
+terminal is the bound one is Voyager, and any other Vessel is a working agent.
+The queue in `app/src/client_structure.rs` asks once and passes the `Caller` to
+the structure family. `create-vessel` resolves an agent launch that names no
+permissions from it. Voyager and the person get the agent table's default. A
+working agent gets the plain mode, with the program's own arguments and no
+permission flags, the same as a plain program start through Core. Naming
+`permissions` selects that row of the table for either. A working agent's
+`create-vessel` beside a placement also leaves the Fleet's maximized placement
+alone, and the new placement shows when the person restores the view. Voyager's
+and the person's clear it.
 
 The app reads the file once, when it starts. After that it holds the value in
 memory, and only its own write changes it, so an edit to the file while the app
@@ -559,8 +576,9 @@ targets are rejected before publication; a narrow projection omits other IDs.
 
 Maximize renders the existing content through a temporary leaf. The accepted
 split tree, saved layouts, backend bindings and explicit context remain intact.
-Preparation retains all accepted-tree terminal and Notes entities. Ordinary
-splits clear maximize; loading an arrangement clears an omitted or redundant
+Preparation retains all accepted-tree terminal and Notes entities. A split by the
+person or by Voyager clears maximize, and a split by a working agent keeps it
+(see [Labelled terminals become Vessels](#labelled-terminals-become-vessels)); loading an arrangement clears an omitted or redundant
 target. Go there to an occluded sibling restores the tree. A same-Fleet move
 retains a still-present target.
 

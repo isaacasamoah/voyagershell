@@ -1,0 +1,13 @@
+diff --git a/app/src/panels.rs b/app/src/panels.rs
+index c9fdaf26..d8116f05 100644
+--- a/app/src/panels.rs
++++ b/app/src/panels.rs
+@@ -582,7 +582,7 @@ pub(crate) fn insert(
+         }
+     }
+     group.members.push(panel);
+-    if maximize == Maximize::Clear {
++    if maximize == Maximize::Clear || maximize == Maximize::Keep {
+         *group.maximized = None;
+     }
+     Ok(())

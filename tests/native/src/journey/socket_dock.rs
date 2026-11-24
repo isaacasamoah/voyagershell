@@ -129,13 +129,13 @@ pub(super) fn members(layout: &Layout, fleet: &FleetId) -> Vec<PlacementId> {
         .unwrap_or_default()
 }
 
-fn maximized(layout: &Layout, fleet: &FleetId) -> Option<PlacementId> {
+pub(super) fn maximized(layout: &Layout, fleet: &FleetId) -> Option<PlacementId> {
     fleets(layout)
         .find(|item| &item.id == fleet)
         .and_then(|item| item.maximized_placement.clone())
 }
 
-fn set_maximized(placement: &PlacementId, maximized: bool) -> Action {
+pub(super) fn set_maximized(placement: &PlacementId, maximized: bool) -> Action {
     Action::SetPlacementMaximized {
         id: placement.clone(),
         maximized,

@@ -6,6 +6,7 @@ use std::{
 };
 use voyager_contract::{
     CoreTerminalId, Layout,
+    caller::Caller,
     launch::Launch,
     place::{LABEL, Place},
 };
@@ -109,6 +110,7 @@ impl Adoptions {
                         labelled.cwd.clone(),
                         labelled.launch.clone(),
                         labelled.name.clone(),
+                        Caller::Agent,
                     )
                     .map_err(|error| {
                         format!("Terminal {} was not placed: {error}", labelled.terminal.0)
@@ -315,14 +317,17 @@ mod tests {
         (model, ids.0, ids.1)
     }
 
+    fn labelled_with(origin: Value) -> Labelled {
+        let origin: Origin = serde_json::from_value(origin).unwrap();
+        Labelled::of("t9", origin).unwrap()
+    }
+
     fn labelled_at(text: &str) -> Labelled {
-        let origin: Origin = serde_json::from_value(json!({
+        labelled_with(json!({
             "argv": ["bash"],
             "cwd": "/work",
             "labels": {LABEL: text}
         }))
-        .unwrap();
-        Labelled::of("t9", origin).unwrap()
     }
 
     fn settled(layout: &Layout, pending: Vec<Labelled>) -> (Layout, Option<String>) {
@@ -436,5 +441,50 @@ mod tests {
         let (layout, _) = settled(&model.layout, vec![bad, good]);
         assert_eq!(layout.vessels.len(), model.layout.vessels.len() + 1);
         assert_eq!(layout.voyages[0].fleets[0].placements.len(), 2);
+    }
+
+    fn maximized_crew() -> (
+        Model,
+        voyager_contract::FleetId,
+        voyager_contract::PlacementId,
+    ) {
+        let (mut model, fleet, first) = crew();
+        let mut terminal = labelled_at(&format!("fleet:{}:right:{}", fleet.0, first.0));
+        terminal.terminal = CoreTerminalId("t20".into());
+        let (layout, _) = settled(&model.layout, vec![terminal]);
+        model.layout = layout;
+        model
+            .apply(voyager_contract::Action::SetPlacementMaximized {
+                id: first.clone(),
+                maximized: true,
+            })
+            .unwrap();
+        (model, fleet, first)
+    }
+
+    #[test]
+    fn a_labelled_terminal_keeps_the_maximize_even_when_core_names_voyager_its_parent() {
+        for side in [true, false] {
+            let (model, fleet, first) = maximized_crew();
+            let text = if side {
+                format!("fleet:{}:left:{}", fleet.0, first.0)
+            } else {
+                format!("fleet:{}", fleet.0)
+            };
+            let terminal = labelled_with(json!({
+                "argv": ["bash"],
+                "cwd": "/work",
+                "parent": "t1",
+                "labels": {LABEL: text}
+            }));
+            let (layout, shown) = settled(&model.layout, vec![terminal]);
+            let case = format!("side {side}");
+            assert_eq!(shown, None, "{case}");
+            let placed = &layout.voyages[0].fleets[0];
+            assert_eq!(placed.placements.len(), 3, "{case}");
+            let new = &placed.placements[2].id;
+            assert!(crate::panels::contains(&placed.root, new), "{case}");
+            assert_eq!(placed.maximized_placement, Some(first.clone()), "{case}");
+        }
     }
 }

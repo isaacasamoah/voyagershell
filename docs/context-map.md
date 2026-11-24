@@ -94,6 +94,7 @@ Owns files:
 - `app/tests/quit.rs`
 - `app/tests/selected_stop.rs`
 - `contract/src/activity.rs`
+- `contract/src/caller.rs`
 - `contract/src/launch.rs`
 - `contract/src/observation.rs`
 - `contract/src/operations.rs`

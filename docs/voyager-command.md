@@ -55,6 +55,11 @@ hc run --bg --name review --label voyager.place=fleet:<fleet id>:right:<placemen
   `top` or `bottom`. The placement must belong to that Fleet. Ids hold only
   letters, digits, `.`, `_` and `-`, so a colon always separates the parts.
   Splitting does not resize anything. Only Voyager and the person resize.
+- When the person has maximized a placement in that Fleet, your new Vessel
+  does not change their view. It joins the split and shows when they restore
+  the view. Every placement made through the label counts as a working
+  agent's, even one that Voyager starts. If you are Voyager and want the view
+  cleared, use `create-vessel` beside a placement instead.
 - VoyagerShell adds the Vessel when Core reports the new terminal. A known
   agent program, such as `claude` or `codex`, shows as an agent Vessel. Any
   other program shows as a terminal Vessel.
@@ -317,7 +322,9 @@ Run `voyager focus` to read it back. Its `scope` names the placement you docked
 on.
 
 Add a Vessel of the type `flag` beside a placement of a Fleet. Any Vessel may
-do this. Take the Fleet
+do this. From a working agent it keeps the person's maximized placement, and the
+new Vessel shows when they restore the view. From Voyager it clears the
+maximize, as the person's own split does. Take the Fleet
 id and the placement id from the reply of the create request above, or from
 `voyager status`. `side` is `left`, `right`, `top` or `bottom`.
 

@@ -1,0 +1,13 @@
+diff --git a/app/src/panels.rs b/app/src/panels.rs
+index c9fdaf26..ce5a050f 100644
+--- a/app/src/panels.rs
++++ b/app/src/panels.rs
+@@ -581,6 +581,8 @@ pub(crate) fn insert(
+             });
+         }
+     }
++    let mut panel = panel;
++    panel.hidden = maximize == Maximize::Keep && group.maximized.is_some();
+     group.members.push(panel);
+     if maximize == Maximize::Clear {
+         *group.maximized = None;

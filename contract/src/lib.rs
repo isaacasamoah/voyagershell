@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 pub mod activity;
 pub mod avatar_animation;
+pub mod caller;
 mod panels;
 pub use panels::{Arrangement, PlacementInsertion, PlacementOwner, PortalLayout};
 pub mod administrator;

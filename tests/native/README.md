@@ -302,6 +302,39 @@ No case runs `voyager status`, so the status picture does not reach this journey
   `is offered only to Voyager; nothing was queued`, and the saved and drawn
   split keep Voyager's share.
 
+The last three cases prove that a working agent's split keeps the person's
+maximize and that Voyager's split clears it. They use the two Vessels of the
+second Fleet. Voyager maximizes the left one with `set-placement-maximized`
+before each split, when it is not still maximized. The area that both Vessels
+filled before the first maximize is the Fleet's area.
+
+- `agent-split-keeps-maximize` splits four times while the left Vessel is
+  maximized. It types two labelled `bash` starts into the left Vessel's shell,
+  first with `fleet:<id>:right:<left placement id>` and then with only
+  `fleet:<id>`, it sends `create-vessel` beside the right Vessel from the
+  first terminal, and it runs `hc run --bg` with `voyager.place=fleet:<id>:bottom:<left
+  placement id>` and Voyager's `HC_TERMINAL_ID`, so Core records Voyager's
+  terminal as the new terminal's `parent`. The fixture's stand-in `claude` runs
+  no typed command, so the verifier starts that one the way a command inside
+  Voyager's terminal would. Every labelled placement counts as a working
+  agent's, so that last start keeps the maximize too. It passes when neither
+  caller is Voyager's terminal, the command exits 0, and after each split the
+  saved layout still names the left Vessel as maximized, the new Vessel is in
+  the Fleet's split tree and the canvas draws only the left Vessel, filling
+  the Fleet's area. It records the `parent` that Core reports for the last
+  terminal, or null when Core reports none, for information only.
+- `new-piece-shows-after-unmaximize` sends `set-placement-maximized` with
+  `"maximized":false` from Voyager's terminal. It passes when the command
+  exits 0, the saved layout holds no maximized Vessel, the Vessel from the
+  first labelled start is drawn with a non-empty frame inside the Fleet's area
+  and right of the left Vessel without overlapping it, and its shell prints
+  `PIECE-42`.
+- `voyager-split-clears-maximize` sends `create-vessel` beside the right Vessel
+  from Voyager's terminal while the left Vessel is maximized. It passes when
+  the command exits 0, the new Vessel is in the Fleet's split tree, the saved
+  layout holds no maximized Vessel and the canvas draws both the left Vessel
+  and the new one.
+
 The `worktrees` journey proves that a Voyage on a git repository makes,
 guards and removes a linked worktree from its row's context menu. Before the
 first case it makes the fixture's second project folder a git repository with
@@ -1263,6 +1296,15 @@ instead, so Create Codex from an entry that names no permissions starts the
 stand-in with no arguments. A candidate built with it must fail
 `person-keeps-table-default` on the expectations for that entry and on those
 only. The shipped entry names its arguments, so its expectations still hold.
+`tests/native/controls/agent-keeps-maximize-clears.patch` clears the maximize
+for every caller again. A candidate built with it must fail
+`agent-split-keeps-maximize`.
+`tests/native/controls/agent-voyager-keeps.patch` treats Voyager as a working
+agent, so its splits keep the maximize. A candidate built with it must fail
+`voyager-split-clears-maximize`.
+`tests/native/controls/agent-keep-hides-piece.patch` keeps the maximize but
+leaves the new piece undrawn after the restore. A candidate built with it must
+fail `new-piece-shows-after-unmaximize`.
 
 The `home-create` patch makes the canvas open only the created Vessels named in
 the reply to its own request, as it did before. `created-while-preparing-is-drawn`

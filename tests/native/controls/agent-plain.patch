@@ -1,13 +1,13 @@
-diff --git a/app/src/voyager_binding.rs b/app/src/voyager_binding.rs
-index 14265fdb..dab15022 100644
---- a/app/src/voyager_binding.rs
-+++ b/app/src/voyager_binding.rs
-@@ -64,7 +64,7 @@ impl Binding {
-         if is_voyager {
-             voyager_contract::launch::Defaults::Table
-         } else {
--            voyager_contract::launch::Defaults::Plain
-+            voyager_contract::launch::Defaults::Table
+diff --git a/contract/src/caller.rs b/contract/src/caller.rs
+index 0ec19fbe..c9740f05 100644
+--- a/contract/src/caller.rs
++++ b/contract/src/caller.rs
+@@ -11,7 +11,7 @@ impl Caller {
+     pub fn launch_defaults(self) -> Defaults {
+         match self {
+             Self::Person | Self::Voyager => Defaults::Table,
+-            Self::Agent => Defaults::Plain,
++            Self::Agent => Defaults::Table,
          }
      }
  

@@ -3,6 +3,7 @@ use voyager_contract::{
     Action, ContentDestination, Context, CoreTerminalId, Fleet, FleetId, LastUsed, LastVessel,
     Layout, Placement, PlacementId, PlacementInsertion, PlacementOwner, PortalLayout, RenameTarget,
     Split, Vessel, VesselId, Voyage, VoyageId, WorkspaceView,
+    caller::Caller,
     launch::{Defaults, Launch, LaunchSpec},
     place::Place,
 };
@@ -187,6 +188,7 @@ impl Model {
                 name_origin: voyager_contract::NameOrigin::Deliberate,
                 hidden: false,
             },
+            Caller::Person,
         )?;
         Ok(true)
     }
@@ -221,12 +223,19 @@ impl Model {
         owner: &PlacementOwner,
         insertion: PlacementInsertion,
         panel: Placement,
+        caller: Caller,
     ) -> Result<(), String> {
+        let maximize = if caller.keeps_maximize() {
+            panels::Maximize::Keep
+        } else {
+            panels::Maximize::Clear
+        };
         panels::insert(
             panels::group_mut(&mut self.layout, owner)?,
             owner,
             insertion,
             panel,
+            maximize,
         )?;
         if let PlacementOwner::Portals { voyage } = owner {
             self.layout
@@ -246,6 +255,7 @@ impl Model {
         cwd: String,
         launch: Launch,
         core_name: Option<String>,
+        caller: Caller,
     ) -> Result<bool, String> {
         let (owner, insertion) = place.into_parts();
         let owner = &owner;
@@ -277,14 +287,14 @@ impl Model {
             content.backend = Some(terminal.clone());
             content.adopted = true;
         }
-        self.insert(owner, insertion, panel)?;
+        self.insert(owner, insertion, panel, caller)?;
         Ok(true)
     }
 
     pub(crate) fn apply_from(
         &mut self,
         program: Option<&VesselId>,
-        defaults: Defaults,
+        caller: Caller,
         action: Action,
     ) -> Result<(), String> {
         match action {
@@ -297,7 +307,7 @@ impl Model {
                 type_id,
                 destination,
                 launch,
-            } => self.create_vessel(type_id, destination, launch, defaults),
+            } => self.create_vessel(type_id, destination, launch, caller),
             action => self.apply(action),
         }
     }
@@ -327,18 +337,18 @@ impl Model {
         type_id: String,
         destination: ContentDestination,
         launch: Option<LaunchSpec>,
-        defaults: Defaults,
+        caller: Caller,
     ) -> Result<(), String> {
         let ContentDestination::Placement { owner, insertion } = destination;
         if !crate::content::valid_type_id(&type_id) {
             return Err("Unsupported Vessel type".into());
         }
         self.require_open(&owner)?;
-        let launch = crate::launch::requested(&type_id, launch, defaults)?;
+        let launch = crate::launch::requested(&type_id, launch, caller.launch_defaults())?;
         let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
         let name = panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);
         let panel = self.placement(cwd, type_id, name, launch)?;
-        self.insert(&owner, insertion, panel)
+        self.insert(&owner, insertion, panel, caller)
     }
 
     fn add_fleet(
@@ -814,7 +824,7 @@ impl Model {
                 type_id,
                 destination,
                 launch,
-            } => self.create_vessel(type_id, destination, launch, Defaults::Table)?,
+            } => self.create_vessel(type_id, destination, launch, Caller::Person)?,
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();
                 if name.is_empty() || name.len() > 128 {

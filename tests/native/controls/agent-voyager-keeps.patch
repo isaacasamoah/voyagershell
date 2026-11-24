@@ -1,0 +1,15 @@
+diff --git a/contract/src/caller.rs b/contract/src/caller.rs
+index 0ec19fbe..659cde0b 100644
+--- a/contract/src/caller.rs
++++ b/contract/src/caller.rs
+@@ -17,8 +17,8 @@ impl Caller {
+ 
+     pub fn keeps_maximize(self) -> bool {
+         match self {
+-            Self::Person | Self::Voyager => false,
+-            Self::Agent => true,
++            Self::Person => false,
++            Self::Voyager | Self::Agent => true,
+         }
+     }
+ }
