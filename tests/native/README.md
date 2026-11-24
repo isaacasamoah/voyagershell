@@ -1305,7 +1305,7 @@ The 40 requests are in `tests/native/fixtures/hearing/`. `sentences.tsv` holds e
 
 Fifteen more controls follow the same rule. `tests/native/controls/voice-turn.patch` puts back
 the turn constants from before this rule. It has no settling and ends a turn after 0.6 s of quiet. A candidate built with it must fail `turn-waits-for-the-sentence`. `tests/native/controls/voice-handoff.patch` sends the
-words without the spoken marker, and a candidate built with it must fail `words-reach-voyager`.
+words without the spoken marker. The app then makes no spoken turn of them, so no reply line comes for the request that was sent, and a candidate built with it fails the first request's wait for its owed reply, in `request-gets-no-chat-reply`, with the reason "previous reply still playing after 60 s".
 `tests/native/controls/voice-speak.patch` speaks every turn, whether the ledger marked it
 spoken or not. The stand-in's typed turn is then spoken, so `typed-reply-is-silent`, which reads
 every reply the app spoke in the whole run, fails.
