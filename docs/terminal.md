@@ -82,7 +82,8 @@ These definitions describe what each user action does.
   Clicking the avatar while it is home opens the home Voyage and the window
   stays up. Clicking it while it is docked anywhere else changes nothing. A click
   made while a dock is still waiting for its reply waits for that reply and then
-  does what a click does where the avatar lands: open home, or nothing.
+  does what a click does where the avatar lands, which is to open home or to do
+  nothing.
 - **Closing a Vessel or Portal.** The panel's close button hides the placement
   and keeps its backend program running in Core. It never stops a program.
   This is unchanged.

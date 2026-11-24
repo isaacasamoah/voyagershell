@@ -218,7 +218,7 @@ confidence = "stated"
 
 [[invariant]]
 id = "avatar-click-opens-home"
-says = "Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands: open home, or nothing."
+says = "Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands, which is to open home or to do nothing."
 kind = "user"
 owner = "desktop-presentation"
 source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'; Isaac, 23 Nov 2026: a click while docked anywhere else does nothing, which keeps that click free for a docking menu per Vessel type"
