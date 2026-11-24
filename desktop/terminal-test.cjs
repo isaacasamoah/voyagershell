@@ -1506,6 +1506,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     message: "Workspace busy or unavailable; nothing was queued",
   });
   view.render({});
+  assert.notEqual(
+    view.status,
+    "Refused. Workspace busy or unavailable; nothing was queued",
+    "render leaves the avatar's reply to the notice handler",
+  );
+  await notice();
   assert.equal(
     view.status,
     "Refused. Workspace busy or unavailable; nothing was queued",
@@ -1516,7 +1522,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     status: "uncertain",
     message: "Workspace result unconfirmed; do not repeat the request",
   });
-  view.render({});
+  await notice();
   assert.equal(
     view.status,
     "Uncertain. Workspace result unconfirmed; do not repeat the request",

@@ -17,7 +17,7 @@ import {
 } from "./panels.js";
 import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
-import { changedBesidesRevision } from "./status.js";
+import { changedBesidesRevision, errorMessage } from "./status.js";
 function noteFocus(workspace, id, cx) {
   if (workspace.layout?.view !== "fleet") return;
   cx.spawn(() =>
@@ -61,9 +61,10 @@ export function inspectNotice(workspace, cx) {
   }
 }
 export function giveKeyboardBack(workspace, cx) {
+  const target = workspace.focused;
   cx.spawn(async (task) => {
     await Promise.resolve();
-    focusDocked(workspace, task);
+    if (workspace.focused === target) focusDocked(workspace, task);
   });
 }
 export function inspectOutsideRender(workspace, cx) {
@@ -86,6 +87,12 @@ export function acceptDockResult(workspace, cx) {
   }
 }
 export function noticeArrived(workspace, cx) {
+  cx.notify();
+  try {
+    acceptDockResult(workspace, cx);
+  } catch (error) {
+    workspace.status = errorMessage(error);
+  }
   const notice = workspace_notice();
   if (
     notice.revision !== workspace.workspaceNotice.revision ||

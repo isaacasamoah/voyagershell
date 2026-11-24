@@ -962,7 +962,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
     };
     const realAccept = built.acceptSnapshot.bind(built);
     built.acceptSnapshot = (reply, where) => {
-      accepted.push(where === cx || renderPhase ? "render" : "task");
+      accepted.push(where === cx || renderPhase ? "at once" : "task");
       return realAccept(reply, where);
     };
     return built;
@@ -981,19 +981,19 @@ test("a dock follows once for each dock revision, once no request is preparing",
     view.acceptSnapshot(next, task);
     done?.(next, task);
   };
-  const render = () => {
+  const deliver = () => {
     acceptDockResult(view, cx);
     followDockNotice(view, cx);
   };
   view.acceptSnapshot(reply("placement-3"), cx);
-  render();
+  deliver();
   assert.deepEqual(focused, [], "the first notice only records the dock");
   result = JSON.stringify(reply("placement-11"));
   next = reply("placement-11");
   dockRevision = "1";
   owner = null;
-  render();
-  render();
+  deliver();
+  deliver();
   assert.equal(
     inspects,
     0,
@@ -1012,11 +1012,11 @@ test("a dock follows once for each dock revision, once no request is preparing",
   dockRevision = "2";
   owner = null;
   view.busy = true;
-  render();
+  deliver();
   assert.deepEqual(focused, [], "a dock waits while a request prepares");
   view.busy = false;
-  render();
-  render();
+  deliver();
+  deliver();
   await settle();
   assert.deepEqual(
     only(focused),
@@ -1026,13 +1026,13 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(inspects, 2, "a dock from another caller runs one inspect");
   focused.length = 0;
   view.acceptSnapshot(reply("placement-3"), cx);
-  render();
+  deliver();
   assert.deepEqual(focused, [], "a re-read with no new dock does not follow");
   assert.equal(inspects, 2, "a re-read with no new dock runs no inspect");
   dockRevision = "3";
   owner = null;
-  render();
-  render();
+  deliver();
+  deliver();
   await settle();
   assert.deepEqual(
     only(focused),
@@ -1048,9 +1048,9 @@ test("a dock follows once for each dock revision, once no request is preparing",
   next = reply("placement-11");
   dockRevision = "4";
   owner = null;
-  render();
+  deliver();
   result = JSON.stringify(reply("placement-11"));
-  render();
+  deliver();
   await settle();
   assert.deepEqual(
     only(focused),
@@ -1064,7 +1064,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   inspects = 0;
   dockRevision = "6";
   owner = null;
-  render();
+  deliver();
   view.busy = true;
   await settle();
   assert.equal(
@@ -1078,7 +1078,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
     "the dock does not follow while that request runs",
   );
   view.busy = false;
-  render();
+  deliver();
   await settle();
   assert.deepEqual(
     only(focused),
@@ -1095,11 +1095,11 @@ test("a dock follows once for each dock revision, once no request is preparing",
     ...reply("placement-11"),
     requestId: "avatar-dock-reply-alone",
   });
-  render();
+  deliver();
   assert.deepEqual(
     focused,
     [],
-    "the keyboard does not move while the canvas draws",
+    "the keyboard does not move while the notice handler runs",
   );
   await settle();
   assert.deepEqual(
@@ -1110,7 +1110,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(focused.length, 1, "and exactly once");
   next = reply("placement-11");
   dockRevision = "8";
-  render();
+  deliver();
   await settle();
   assert.equal(
     focused.length,
@@ -1120,13 +1120,29 @@ test("a dock follows once for each dock revision, once no request is preparing",
   focused.length = 0;
   dockRevision = "9";
   owner = null;
-  render();
+  deliver();
   await settle();
   assert.deepEqual(
     only(focused),
     ["content-10"],
     "a dock that no avatar reply preceded, with the keyboard elsewhere, still gets it back after its inspect",
   );
+  focused.length = 0;
+  moveFocus(view, { placement: "placement-11" }, cx);
+  result = JSON.stringify({
+    ...reply("placement-11"),
+    requestId: "avatar-dock-then-click",
+  });
+  owner = null;
+  deliver();
+  moveFocus(view, { placement: "placement-3" }, cx);
+  await settle();
+  assert.deepEqual(
+    focused,
+    [],
+    "a click on another Vessel between a reply's accept and its keyboard handoff keeps the keyboard where the person put it",
+  );
+  assert.equal(view.focused, "placement-3");
   const open = (...ids) =>
     new Map(ids.map((id) => [id, { status: "applied" }]));
   const avatarReply = (requestId) => {
@@ -1134,7 +1150,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
     owner = null;
     accepted.length = 0;
     inspects = 0;
-    render();
+    deliver();
   };
   noticeRevision = view.version;
   view.workspaceNotice = { ...view.workspaceNotice, revision: noticeRevision };
@@ -1143,14 +1159,14 @@ test("a dock follows once for each dock revision, once no request is preparing",
   assert.equal(
     accepted.includes("task"),
     false,
-    "an avatar reply is accepted in render, as before, so its layout and receipt land with the reply",
+    "an avatar reply is accepted at once in the notice handler, so its layout and receipt land with the reply",
   );
-  assert.equal(accepted[0], "render");
+  assert.equal(accepted[0], "at once");
   assert.equal(view.dockReceipt, "avatar-home");
   assert.equal(
     inspects,
     0,
-    "an avatar reply starts no inspect while the canvas draws, because the request it starts asks for a redraw",
+    "an avatar reply starts no inspect while the notice handler runs, but from a task after it",
   );
   assert.equal(view.refreshRequested, true);
   await settle();
@@ -1174,7 +1190,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   await settle();
   assert.equal(
     accepted[0],
-    "render",
+    "at once",
     "a reply during another request is accepted at once",
   );
   assert.equal(inspects, 0, "it reads nothing while the other request runs");
@@ -1254,7 +1270,7 @@ test("a dock follows once for each dock revision, once no request is preparing",
   result = JSON.stringify(reply("placement-3"));
   dockRevision = "5";
   owner = null;
-  render();
+  deliver();
   await settle();
   assert.deepEqual(
     prepared,

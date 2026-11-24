@@ -812,9 +812,11 @@ first render registers its handler, then calls it once. The listener cannot
 tell a refused handler from one that throws, so a failed call is retried once,
 with the next handler a render registers. If that call fails too, the listener
 logs it and waits for the next notice, so a broken handler cannot run on every
-frame. The handler records the
-notice, follows a new dock revision, and starts the read through
-`inspectOutsideRender` in `panel-view.ts`. That function reads from a spawned
+frame. The avatar raises the same listener when its state changes, so its
+reply reaches the canvas without waiting for a draw. The handler asks for a
+redraw, accepts any avatar reply waiting, records the notice, follows a new dock
+revision, and starts the read through `inspectOutsideRender` in
+`panel-view.ts`. That function reads from a spawned
 task, and only while the canvas is not busy. A busy canvas reads when its
 current action finishes. Render only reads the notice and starts the activity
 read.
@@ -1269,8 +1271,10 @@ remembered one and gives that terminal keyboard focus unless a chat, a rename or
 a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
 step. It records the dock, runs the inspect and gives the keyboard from that
 request's completion, because a focus asked for while the canvas renders does
-not reach the terminal. `acceptDockResult`, beside it, runs at each render. It
-accepts the avatar's reply as a snapshot. `followDockNotice` runs from the
+not reach the terminal. `acceptDockResult`, beside it, runs first in the notice handler. It
+accepts the avatar's reply as a snapshot. When the reply applied, it gives the
+keyboard to the docked Vessel from a task, unless a click moved the focused
+placement after the accept. `followDockNotice` runs from the
 notice handler and again when a request ends. When no request is preparing and
 the notice's dock revision differs from the last one recorded, it runs
 `followDock` once. Every dock follows this one way, from the avatar, an agent or
