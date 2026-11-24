@@ -1,4 +1,4 @@
-use super::{Defect, GLANCE, Native, Stopwatch, Wheel, pid, placed};
+use super::{Defect, GLANCE, Native, Seen, Stopwatch, Wheel, pid, placed};
 use crate::inspection::{Target, Unseen, centre, region};
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Geometry, Key, Pixels};
@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use std::time::Duration;
 use voyager_contract::inspection::Frame;
-use voyager_contract::{CoreTerminalId, Layout, PlacementId, VesselId};
+use voyager_contract::{CoreTerminalId, Layout, Placement, PlacementId, VesselId};
 
 pub const EXPECTATION: Duration = Duration::from_secs(4);
 pub const LOOK: Duration = Duration::from_millis(10);
@@ -270,12 +270,129 @@ fn padding(area: Geometry, inset: u16) -> [Geometry; 4] {
     ]
 }
 
+pub struct Label<'a> {
+    pub name: &'a str,
+    pub place: &'a str,
+    pub program: &'a str,
+    pub parent: bool,
+}
+
+impl<'a> Label<'a> {
+    pub fn new(name: &'a str, place: &'a str, program: &'a str) -> Self {
+        Self {
+            name,
+            place,
+            program,
+            parent: true,
+        }
+    }
+
+    fn command(&self) -> String {
+        let parent = if self.parent { "" } else { " --no-parent" };
+        format!(
+            "hc run --bg{parent} --name {} --label voyager.place={} {}",
+            self.name, self.place, self.program
+        )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Adoption {
+    Saved,
+    Drawn,
+}
+
+impl Adoption {
+    fn reached(self, seen: &Seen, placement: &Placement) -> bool {
+        match self {
+            Self::Saved => true,
+            Self::Drawn => seen.shows(&Target::terminal(&placement.id)),
+        }
+    }
+
+    fn expected(self, name: &str) -> String {
+        match self {
+            Self::Saved => format!("the labelled terminal {name} saved as a Vessel"),
+            Self::Drawn => format!("the labelled terminal {name} drawn as a Vessel"),
+        }
+    }
+}
+
+pub struct Adopted {
+    pub terminal: String,
+    pub placement: Placement,
+}
+
+pub fn adopt(native: &Native, from: &Terminal, label: &Label, wanted: Adoption) -> Result<Adopted> {
+    typed(from, native, &label.command())?;
+    let terminal = address(native, label.name)?;
+    let placement = native.observe(&wanted.expected(label.name), |seen| {
+        bound_to(seen.document, &terminal).filter(|placement| wanted.reached(seen, placement))
+    })?;
+    Ok(Adopted {
+        terminal,
+        placement,
+    })
+}
+
+pub fn address(native: &Native, name: &str) -> Result<String> {
+    until(&format!("Core naming the terminal {name}"), || {
+        let listed = native.system.watch("terminal.list", json!({"all":true}))?;
+        Ok(listed["terminals"].as_array().and_then(|terminals| {
+            terminals
+                .iter()
+                .find(|terminal| terminal["name"] == name)
+                .and_then(|terminal| terminal["address"].as_str())
+                .map(str::to_owned)
+        }))
+    })
+}
+
+pub fn bound_to(layout: &Layout, address: &str) -> Option<Placement> {
+    let content = layout.vessels.iter().find(|content| {
+        content
+            .backend
+            .as_ref()
+            .is_some_and(|backend| backend.0 == address)
+    })?;
+    placed(layout)
+        .find(|placement| placement.vessel == content.id)
+        .cloned()
+}
+
+pub fn typed(terminal: &Terminal, native: &Native, text: &str) -> Result<()> {
+    terminal.focus(native)?;
+    terminal.echoed(native, text)?;
+    native.press(Key::Return)
+}
+
 #[derive(Serialize)]
 pub struct Terminal {
     #[serde(rename = "terminal")]
     address: CoreTerminalId,
     placement: PlacementId,
     shell: Identity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Size {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl Size {
+    pub(super) fn reported(terminal: &serde_json::Value, address: &str) -> Result<Self> {
+        let count = |name: &str| {
+            terminal[name]
+                .as_u64()
+                .and_then(|count| u16::try_from(count).ok())
+                .with_context(|| format!("Core reports no {name} for the terminal {address}"))
+        };
+        Ok(Self {
+            cols: count("cols")?,
+            rows: count("rows")?,
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -506,17 +623,18 @@ impl Terminal {
         native.wheel(&self.target(), direction, WHEEL_CLICKS)
     }
 
-    pub fn cell(&self, native: &Native, column: u16, row: u16) -> Result<Geometry> {
+    pub fn size(&self, native: &Native) -> Result<Size> {
         let reported = native
             .system
             .rpc("terminal.get", json!({"terminal":self.address}))?;
-        let count = |name: &str| {
-            reported[name]
-                .as_u64()
-                .and_then(|count| u16::try_from(count).ok())
-                .with_context(|| format!("Core reports no {name} for {}", self.target()))
-        };
-        let (columns, rows) = (count("cols")?, count("rows")?);
+        Size::reported(&reported, &self.address.0)
+    }
+
+    pub fn cell(&self, native: &Native, column: u16, row: u16) -> Result<Geometry> {
+        let Size {
+            cols: columns,
+            rows,
+        } = self.size(native)?;
         let target = self.target();
         let (area, scale) = native.wait_for(&target.to_string(), PATIENCE, |frame| {
             Some((

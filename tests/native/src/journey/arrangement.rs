@@ -508,6 +508,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::WindowResizeFitsGrid, |native| {
         let shell = &shells.terminals[0];
         let before = grid(native, shell, "GRID-W")?;
+        let core_before = native.sizes()?;
         let (width, height) = native.window_size()?;
         let (smaller_width, smaller_height) = (width - 300, height - 200);
         native.resize_window(smaller_width, smaller_height)?;
@@ -515,6 +516,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             Target::terminal(&shells.first).find(seen.frame).map(drop)
         })?;
         let after = grid(native, shell, "GRID-X")?;
+        let core_after = native.sizes()?;
         Verdict::new()
             .expect(
                 "the first shell's grid lost rows and columns when the window shrank",
@@ -525,6 +527,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 running(&shell.program(native)?),
             )
             .observed("grid", json!({"before":before,"after":after}))?
+            .observed(
+                "core",
+                json!({"shell":shell,"before":core_before,"after":core_after}),
+            )?
             .observed(
                 "window",
                 json!({"before":[width,height],"after":[smaller_width,smaller_height]}),

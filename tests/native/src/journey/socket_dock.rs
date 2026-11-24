@@ -1,10 +1,9 @@
-use super::adopt_by_label::{address, bound_to};
 use super::{Cases, Verdict, cases};
 use crate::core_relay::Fault;
 use crate::inspection::Target;
 use crate::native::{
     CANVAS_REFRESH, Decorations, FRAME_POLL, Native, PROBE_AFTER_DOCK, PROBE_LATEST, Seen,
-    Terminal, bound_terminal, fleets, now_millis,
+    Terminal, address, bound_terminal, bound_to, fleets, now_millis,
 };
 use crate::sandbox::COMMAND;
 use crate::x11::Key;

@@ -1,8 +1,9 @@
-use super::adopt_by_label::{address, bound_to};
 use super::layout::{avatar_on_dock, without_adopted_records, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Decorations, Native, Seen, Stopwatch, Terminal, bound_terminal, voyages};
+use crate::native::{
+    Decorations, Native, Seen, Stopwatch, Terminal, address, bound_terminal, bound_to, voyages,
+};
 use crate::system::{Identity, until};
 use crate::x11::{Observed, Request};
 use anyhow::{Context as _, Result};

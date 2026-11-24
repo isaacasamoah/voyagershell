@@ -12,7 +12,10 @@ pub use settle::{
     STATUS_AFTER_CLICK, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis, hold,
     now_millis,
 };
-pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
+pub use terminal::{
+    Adopted, Adoption, EXPECTATION, LOOK, Label, Lines, Patch, Program, Size, Terminal, address,
+    adopt, bound_to, boxes, changed, repainted, typed,
+};
 
 use crate::audio::Stack;
 use crate::frames;
@@ -578,21 +581,23 @@ impl Native {
     }
 
     pub fn live_terminals(&self) -> Result<Vec<String>> {
+        Ok(self.sizes()?.into_keys().collect())
+    }
+
+    pub fn sizes(&self) -> Result<BTreeMap<String, Size>> {
         let listed = self.system.rpc("terminal.list", json!({"all":true}))?;
-        let mut live = listed["terminals"]
+        listed["terminals"]
             .as_array()
             .context("Core listed no terminals")?
             .iter()
             .filter(|terminal| terminal["state"] == "live")
             .map(|terminal| {
-                terminal["address"]
+                let address = terminal["address"]
                     .as_str()
-                    .map(str::to_owned)
-                    .context("A listed terminal has no address")
+                    .context("A listed terminal has no address")?;
+                Ok((address.to_owned(), Size::reported(terminal, address)?))
             })
-            .collect::<Result<Vec<_>>>()?;
-        live.sort();
-        Ok(live)
+            .collect()
     }
 
     fn start(&mut self) -> Result<()> {

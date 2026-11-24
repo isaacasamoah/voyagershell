@@ -1,9 +1,11 @@
-use super::adopt_by_label::{address, bound_to, typed};
 use super::arrangement::{same_rect, union};
 use super::socket_dock::{from_another_vessel, maximized, members, set_maximized};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, bound_terminal, fleets, voyages};
+use crate::native::{
+    Adoption, Label, Native, Seen, Terminal, address, adopt, bound_terminal, bound_to, fleets,
+    typed, voyages,
+};
 use crate::sandbox::{CORE, SECOND_PROJECT};
 use crate::system::until;
 use crate::x11::Key;
@@ -407,15 +409,8 @@ fn resize(fleet: &FleetId, share: u16) -> Result<Action> {
 }
 
 fn labelled(native: &Native, first: &Terminal, name: &str, place: &str) -> Result<PlacementId> {
-    typed(
-        first,
-        native,
-        &format!("hc run --bg --name {name} --label voyager.place={place} bash"),
-    )?;
-    let terminal = address(native, name)?;
-    native.observe("the labelled shell saved as a Vessel", |seen| {
-        bound_to(seen.document, &terminal).map(|placed| placed.id)
-    })
+    let label = Label::new(name, place, "bash");
+    Ok(adopt(native, first, &label, Adoption::Saved)?.placement.id)
 }
 
 fn arguments(argv: &Value) -> Vec<String> {
@@ -542,25 +537,18 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let mut landed = Vec::new();
         for (side, word) in SIDES {
             let name = format!("split-{word}");
-            typed(
-                &first,
-                native,
-                &format!(
-                    "hc run --bg --name {name} --label voyager.place=fleet:{}:{word}:{} bash",
-                    fleet.0, anchor.0
-                ),
-            )?;
-            let terminal = address(native, &name)?;
+            let place = format!("fleet:{}:{word}:{}", fleet.0, anchor.0);
+            let label = Label::new(&name, &place, "bash");
+            let placed = adopt(native, &first, &label, Adoption::Drawn)?.placement;
             landed.push(native.observe(
                 "the labelled shell drawn beside the named placement",
                 |seen| {
-                    let placed = bound_to(seen.document, &terminal)?;
                     Some(Landed {
                         side,
                         drawn: Target::terminal(&placed.id).find(seen.frame)?.bounds,
                         beside: Target::terminal(&anchor).find(seen.frame)?.bounds,
                         held: held_by(seen.document, &fleet, &anchor),
-                        placement: placed.id,
+                        placement: placed.id.clone(),
                     })
                 },
             )?);

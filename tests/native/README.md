@@ -32,6 +32,8 @@ The environment is not yet accepted as a complete implementation of that design.
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal, provider, content and authority journeys | The `portals` and `chat` journeys are native. Content and authority coverage stays in the retained Python drivers; Rust migration and parity incomplete. |
 | Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. `quit-restore` asserts the window buttons, the corner grip and the close button, and `workspace` asserts the drag, the double-click and the tab drag. See Client decorations and window requests below. |
+| Core terminal sizes | Implemented. `Terminal::size` gives the `cols` and `rows` that Core reports for one terminal, and `Native::sizes` gives them for every live terminal. `arrangement/window-resize-fits-grid` records both beside the shell's own `stty size`. See Journeys below. |
+| Adopting labelled terminals | Implemented. `adopt` starts one terminal with a `voyager.place` label and returns its Core address and placement once it is saved or drawn. `adopt-by-label` and `agent-split` start their labelled terminals with it. See Locating controls below. |
 | Speech in and speech out on Linux | Implemented by `audio-selftest` and `run --audio on`. Samples only, no microphone or speaker. See Audio below. |
 | Window-manager behavior, IME, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
@@ -163,7 +165,13 @@ process has exited. The next `launch` lets the app's `hc connect` start a new
 Core and binds that Core's identity. The verifier starts a Core only to seed a
 Core document, as `--core-document` below describes.
 `Native::live_terminals` returns the sorted addresses of the terminals that
-Core reports live. `Terminal::program` returns the state, PID and `argv` that
+Core reports live. `Native::sizes` maps each of those addresses to the `cols`
+and `rows` that the same `terminal.list` reply reports, and
+`Terminal::size` reads them from `terminal.get` for one bound terminal. A
+journey reads a terminal's width and height through these, never by typing
+`stty size`. `window-resize-fits-grid` keeps `stty size` as its own check and
+records Core's sizes before and after the resize under `core` in
+`observations.json`. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
 process. A journey judges these values as expectations. `Native::context_click`
 aims at a control the way `click` does and presses the secondary button,
@@ -1635,8 +1643,7 @@ the expected and the seen point, and a different answer is a fixture error.
 `Terminal::cell` gives the rectangle of one terminal cell in the same pixels
 and `Terminal::click_cell` clicks the centre of that cell. `column` and `row`
 count from 0. The app does not publish its cell size, so the verifier derives
-it. It reads `cols` and `rows` from Core's `terminal.get` for the bound
-terminal and takes the terminal element's area from the latest frame. It
+it. It reads `cols` and `rows` through `Terminal::size` and takes the terminal element's area from the latest frame. It
 removes the padding, which is 8 logical pixels times `window.scale`, from each
 edge. A cell is the inner width divided by `cols` and the inner height
 divided by `rows`, each rounded down, and the first cell starts inside the
@@ -1674,7 +1681,14 @@ candidate's checkout. `line` clicks its own terminal before it types, so the
 text cannot reach another control that holds the keyboard. `enter` types `cd`
 with a folder and waits until Core reports that folder for the shell.
 `Terminal::bind` binds the terminal of one Vessel, and `Terminal::first` binds
-the first one. Every bound shell is adopted, so cleanup waits for its exit and
+the first one. `adopt` types `hc run --bg --name NAME --label
+voyager.place=PLACE PROGRAM` into a bound shell, with `--no-parent` when the
+`Label` asks for it. It then waits for Core to name the terminal and for the
+layout to bind it to a placement. `Adoption::Saved` returns once the layout
+holds the placement, which is all a Fleet that is not shown allows.
+`Adoption::Drawn` also waits until the frame draws the terminal. It starts one
+terminal per call, so a journey that adopts several calls it once for each,
+in order, and each placement is known before the next terminal starts. Every bound shell is adopted, so cleanup waits for its exit and
 `processes.json` lists it as `shell PLACEMENT`. The `workspace` journey binds
 the shell of every Vessel that it creates. `split_right` in
 `src/journey/layout.rs` is the one way to split a Vessel with a terminal, and
