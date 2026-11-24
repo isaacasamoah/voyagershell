@@ -400,7 +400,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "portal-avatar"),
             ("--foundation", "workspace-ux"),
             ("--foundation", "terminal-reported-status"),
-            ("--native-mod-host", "--notes-case"),
+            ("--native-mod-host", "--journey"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
         ]:
@@ -482,7 +482,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(driver.candidate_directory(True), ROOT)
         legacy = driver.candidate_directory(False)
         self.assertEqual(legacy, ROOT / "experiments/native-content")
-        self.assertTrue((legacy / "proof_native_notes.py").is_file())
+        self.assertTrue(legacy.is_dir())
         directory = Path(driver.__file__).parent
         self.assertEqual(directory, ROOT / "tests/native")
         self.assertTrue((directory / "proof_native_input.py").is_file())

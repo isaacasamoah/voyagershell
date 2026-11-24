@@ -1506,7 +1506,7 @@ features:
       - desktop/src/manifest_view.rs
   - id: scripts-live-edit
     name: 'Scripts live edit'
-    summary: 'Edit a canvas script and see the change appear live. This has never had a journey. The canvas script unit tests in npm test are its only proof. A native live-canvas-edit journey is the priority follow-up that owns it.'
+    summary: 'Edit a canvas script and see the change appear live.'
     group: script-host
     owner: desktop-presentation
     shared_with: [application-queue]

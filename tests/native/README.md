@@ -2424,7 +2424,7 @@ Select one route explicitly:
 
 - `--foundation` reproduces retained native product journeys with this launcher and these helpers.
 - `--reference` runs the retained Electron fixture.
-- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained canvas/Notes journeys.
+- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained canvas journeys.
 - `--native-avatar` runs the original avatar experiment's own historical driver.
 
 Root help lists the choices. Route help lists that driver's options:

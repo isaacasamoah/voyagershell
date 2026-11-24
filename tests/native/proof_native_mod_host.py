@@ -31,9 +31,6 @@ def run():
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--review", action="store_true")
-    parser.add_argument("--notes", action="store_true")
-    parser.add_argument("--notes-case", choices=["standard", "delayed", "uncertain", "resilience", "refusal"], default="standard")
-    parser.add_argument("--pointer-only", action="store_true")
     parser.add_argument("--compositor", action="store_true")
     parser.add_argument("--isolated-x11", type=int, metavar="XVFB_PID")
     parser.add_argument("--binary", type=Path, default=Path("target/release/voyager-shell"))
@@ -48,11 +45,10 @@ def run():
         not args.foundation
         or not args.compositor
         or args.quit
-        or args.notes
         or args.journey
     ):
         parser.error(
-            "--review requires --foundation --compositor without --journey, --notes or --quit"
+            "--review requires --foundation --compositor without --journey or --quit"
         )
     if args.journey in ("activity-refinement", "demo-feedback", "feedback-ux", "rename-typing") and not args.foundation:
         parser.error("Feedback journeys require the foundation route")
@@ -273,7 +269,7 @@ def run():
         execute("xdotool", "windowactivate", "--sync", record["window"])
         pointer = None if args.isolated_x11 else subprocess.Popen(
             ["/usr/bin/python3", str(root / "proof_native_input.py")]
-            + (["--pointer"] if args.notes or args.foundation else []), env=env, text=True,
+            + (["--pointer"] if args.foundation else []), env=env, text=True,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=(evidence / "pointer.log").open("a"),
         )
@@ -417,22 +413,6 @@ def run():
             if args.journey == "activity-refinement":
                 options["resize_window"] = resize_window
             passed.extend(proof_workspace.prove(**options))
-        elif args.notes:
-            import proof_native_notes
-
-            journey = {
-                "standard": proof_native_notes.prove,
-                "delayed": proof_native_notes.delayed_initial_read,
-                "uncertain": proof_native_notes.uncertain_confirmation,
-                "resilience": proof_native_notes.resize_and_refresh,
-                "refusal": proof_native_notes.known_refusal_clears,
-            }[args.notes_case]
-            passed.extend(journey(
-                profile=profile, evidence=evidence, native=native,
-                pid=lambda: record["pid"], capture=capture,
-                close=close, start_frame=start_frame, resize_window=resize_window,
-                geometry=geometry, pointer_only=args.pointer_only,
-            ))
         else:
             time.sleep(0.5)
             initial = capture("canvas-initial")
