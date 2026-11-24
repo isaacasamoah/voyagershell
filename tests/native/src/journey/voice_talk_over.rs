@@ -243,6 +243,15 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && heard_lines(&screen, SPOKEN) == heard_lines(&before, SPOKEN) + 1,
             )
             .expect(
+                "the speaker goes quiet after the stop and stays quiet",
+                talked.silent_at_speaker_ms.is_some()
+                    && talked.sound_after_silence_ms.is_none()
+                    && talked
+                        .looks
+                        .last()
+                        .is_some_and(|look| talked.captured_until_ms >= look.at_ms),
+            )
+            .expect(
                 "the control is drawn listening again",
                 last_look.as_deref() == Some(LISTENING),
             )

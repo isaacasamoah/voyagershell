@@ -1,4 +1,6 @@
-use super::{LOOK, SPEAKER, Stack, judge, judge::Score, speech::Samples, speech::Speech};
+use super::{
+    LOOK, SPEAKER, Stack, judge, judge::Score, speech::RATE, speech::Samples, speech::Speech,
+};
 use crate::inspection::Target;
 use crate::native::{
     CLIPS_KEPT, Defect, FLOOR_WAIT, LONG_REPLY_WAIT, Native, Owed, QUIET_MIC, REPLY_WAIT,
@@ -782,6 +784,8 @@ pub struct TalkedOver {
     pub reply_started_ms: u64,
     pub fed: Option<Fed>,
     pub silent_at_speaker_ms: Option<u64>,
+    pub sound_after_silence_ms: Option<u64>,
+    pub captured_until_ms: u64,
     pub onset_to_silence_ms: Option<u64>,
     pub onset_to_cut_ms: Option<u64>,
     pub reached: Vec<String>,
@@ -813,6 +817,24 @@ fn silent_from(samples: &Samples, began: u64, from_ms: u64) -> Option<u64> {
         }
     }
     None
+}
+
+fn captured_ms(samples: &Samples) -> u64 {
+    u64::try_from(samples.0.len()).unwrap_or(u64::MAX) * 1000 / u64::from(RATE)
+}
+
+fn sound_from(samples: &Samples, began: u64, from_ms: u64) -> Option<u64> {
+    let first = usize::try_from(from_ms.checked_sub(began)? / WINDOW_MS).ok()?;
+    samples
+        .0
+        .chunks(ONSET_WINDOW)
+        .enumerate()
+        .skip(first)
+        .find(|(_, chunk)| {
+            let sum: f64 = chunk.iter().map(|s| f64::from(*s).powi(2)).sum();
+            (sum / chunk.len() as f64).sqrt() > ONSET_LEVEL
+        })
+        .and_then(|(index, _)| Some(began + u64::try_from(index).ok()? * WINDOW_MS))
 }
 
 pub fn talk_during_reply(
@@ -882,10 +904,15 @@ pub fn talk_during_reply(
     turn_off(native)?;
     let onset = fed.as_ref().and_then(|fed| fed.onset_ms);
     let silent_at_speaker_ms = onset.and_then(|onset| silent_from(&samples, began, onset));
+    let sound_after_silence_ms =
+        silent_at_speaker_ms.and_then(|silent| sound_from(&samples, began, silent));
+    let captured_until_ms = began + captured_ms(&samples);
     let cut_ms = mark_of(&marks, "speech-cut").map(|mark| mark.at_ms);
     Ok(TalkedOver {
         reply_started_ms,
         silent_at_speaker_ms,
+        sound_after_silence_ms,
+        captured_until_ms,
         onset_to_silence_ms: onset
             .zip(silent_at_speaker_ms)
             .and_then(|(onset, silent)| silent.checked_sub(onset)),
@@ -1097,10 +1124,23 @@ const REPLY_STARTS: [&str; 4] = [
     "missed",
 ];
 
+fn spoken_over_a_reply(marks: &[Mark], heard: usize) -> bool {
+    marks[..heard]
+        .iter()
+        .rposition(|mark| {
+            matches!(
+                mark.event.as_str(),
+                "speech-cut" | "speech-started" | "heard" | "sent" | "capture-open"
+            )
+        })
+        .is_some_and(|at| marks[at].event == "speech-cut")
+}
+
 fn reply_is_owed(marks: &[Mark]) -> bool {
     marks
         .iter()
         .rposition(|mark| mark.event == "heard" || mark.event == "sent")
+        .filter(|&turn| marks[turn].event == "sent" || !spoken_over_a_reply(marks, turn))
         .is_some_and(|turn| {
             !marks[turn..]
                 .iter()
@@ -1113,9 +1153,12 @@ fn reply_is_playing(marks: &[Mark]) -> bool {
         .iter()
         .rposition(|mark| mark.event == "speech-started")
         .is_some_and(|started| {
-            !marks[started..]
-                .iter()
-                .any(|mark| mark.event == "speech-ended")
+            let since = &marks[started..];
+            !since.iter().any(|mark| mark.event == "speech-ended")
+                && since
+                    .iter()
+                    .rposition(|mark| mark.event == "speech-cut" || mark.event == "speaker-opened")
+                    .is_none_or(|at| since[at].event == "speaker-opened")
         })
 }
 
@@ -2313,6 +2356,181 @@ mod tests {
         ]);
         assert!(!reply_is_settled(&turns));
         assert!(!floor_is_clear(&turns));
+    }
+
+    #[test]
+    fn the_first_talk_over_runs_backchannel_owes_no_new_reply() {
+        let backchannel = trace(&[
+            "capture-open",
+            "listening",
+            "utterance-ended",
+            "heard",
+            "routed",
+            "acknowledgement-chosen",
+            "sent",
+            "capture-open",
+            "listening",
+            "piece-rendered",
+            "speech-started",
+            "speaker-opened",
+            "piece-started",
+            "speech-cut",
+            "piece-rendered",
+            "utterance-ended",
+            "heard",
+            "speaker-opened",
+            "piece-started",
+            "piece-started",
+            "speech-ended",
+        ]);
+        assert!(!reply_is_owed(&backchannel));
+        assert!(reply_is_settled(&backchannel));
+    }
+
+    #[test]
+    fn words_heard_over_a_reply_owe_no_new_reply_unless_they_are_sent() {
+        let resumed = &[
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-cut",
+            "heard",
+            "speaker-opened",
+            "piece-started",
+            "speech-ended",
+            "listening",
+        ];
+        assert!(reply_is_settled(&trace(resumed)));
+        assert!(floor_is_clear(&trace(resumed)));
+        let stopped = &[
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-cut",
+            "heard",
+            "listening",
+        ];
+        assert!(reply_is_settled(&trace(stopped)));
+        let steered = [
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-cut",
+            "heard",
+            "sent",
+        ];
+        assert!(reply_is_owed(&trace(&steered)));
+        assert!(!reply_is_settled(&trace(&steered)));
+        let answered = [
+            &steered[..],
+            &["speech-started", "speech-ended", "listening"],
+        ]
+        .concat();
+        assert!(reply_is_settled(&trace(&answered)));
+        assert!(floor_is_clear(&trace(&answered)));
+    }
+
+    #[test]
+    fn a_request_on_a_new_microphone_after_a_cut_still_owes_its_reply() {
+        let missed = [
+            "speech-started",
+            "speech-cut",
+            "utterance-ended",
+            "missed",
+            "capture-open",
+            "listening",
+            "utterance-ended",
+            "heard",
+        ];
+        let clicked_off = [
+            "speech-started",
+            "speech-cut",
+            "capture-open",
+            "listening",
+            "utterance-ended",
+            "heard",
+        ];
+        for turn in [&missed[..], &clicked_off[..]] {
+            assert!(reply_is_owed(&trace(turn)), "{turn:?}");
+            assert!(!reply_is_settled(&trace(turn)), "{turn:?}");
+        }
+    }
+
+    #[test]
+    fn a_cut_reply_stops_playing_until_a_resume_opens_a_speaker() {
+        let playing = ["speech-started", "speaker-opened", "piece-started"];
+        assert!(reply_is_playing(&trace(&playing)));
+        let cut = [&playing[..], &["speech-cut"]].concat();
+        assert!(!reply_is_playing(&trace(&cut)));
+        let resumed = [&cut[..], &["heard", "speaker-opened", "piece-started"]].concat();
+        assert!(reply_is_playing(&trace(&resumed)));
+        let ended = [&resumed[..], &["speech-ended"]].concat();
+        assert!(!reply_is_playing(&trace(&ended)));
+        let whole = [&playing[..], &["speech-ended"]].concat();
+        assert!(!reply_is_playing(&trace(&whole)));
+    }
+
+    #[test]
+    fn the_speaker_is_quiet_after_a_stop_only_when_no_window_is_loud_again() {
+        let loud = vec![2000_i16; ONSET_WINDOW];
+        let quiet = vec![0_i16; ONSET_WINDOW];
+        let windows = |pattern: &[&Vec<i16>]| {
+            Samples(
+                pattern
+                    .iter()
+                    .flat_map(|window| window.iter().copied())
+                    .collect(),
+            )
+        };
+        let still = [&loud; 10]
+            .into_iter()
+            .chain([&quiet; 60])
+            .collect::<Vec<_>>();
+        let stopped = windows(&still);
+        let silent = silent_from(&stopped, 0, 0).unwrap();
+        assert_eq!(silent, 10 * WINDOW_MS);
+        assert_eq!(sound_from(&stopped, 0, silent), None);
+        let again = [&still[..], &[&loud][..]].concat();
+        let resumed = windows(&again);
+        let silent = silent_from(&resumed, 0, 0).unwrap();
+        assert_eq!(sound_from(&resumed, 0, silent), Some(70 * WINDOW_MS));
+        assert_eq!(captured_ms(&resumed), 71 * WINDOW_MS);
+        assert_eq!(silent_from(&windows(&[&loud; 80]), 0, 0), None);
+    }
+
+    #[test]
+    fn a_turn_heard_with_no_cut_before_it_still_owes_its_reply() {
+        assert!(reply_is_owed(&trace(&["heard"])));
+        for ending in REPLY_STARTS {
+            assert!(!reply_is_owed(&trace(&["heard", ending])), "{ending}");
+        }
+        let resumed: &[&str] = &[
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-cut",
+            "heard",
+            "speaker-opened",
+            "speech-ended",
+            "listening",
+        ];
+        let stopped: &[&str] = &[
+            "heard",
+            "sent",
+            "speech-started",
+            "speech-cut",
+            "heard",
+            "listening",
+        ];
+        for before in [resumed, stopped] {
+            let fresh = [before, &["utterance-ended", "heard"]].concat();
+            assert!(reply_is_owed(&trace(&fresh)), "{fresh:?}");
+            assert!(!reply_is_settled(&trace(&fresh)), "{fresh:?}");
+            for ending in REPLY_STARTS {
+                let replied = [&fresh[..], &[ending]].concat();
+                assert!(!reply_is_owed(&trace(&replied)), "{replied:?}");
+            }
+        }
     }
 
     #[test]
