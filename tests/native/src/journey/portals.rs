@@ -21,7 +21,11 @@ cases! {
     ShowPortals => "show-portals",
     ClosePortal => "close-portal",
     ReopenPortal => "reopen-portal",
-    RelaunchRestoresPortal => "relaunch-restores-portal",
+    RelaunchRestoresPortal => "relaunch-restores-portal";
+    "show-portals" needs "hide-portals",
+    "close-portal" needs "show-portals",
+    "reopen-portal" needs "close-portal",
+    "relaunch-restores-portal" needs "reopen-portal",
 }
 
 pub const CONTROL: Case = Case::PortalAcrossFleets;

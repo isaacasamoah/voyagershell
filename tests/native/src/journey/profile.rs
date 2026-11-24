@@ -10,7 +10,9 @@ cases! {
     SeededTheme => "seeded-theme-drawn",
     LiveEdit => "live-edit-recolours",
     SecondBuild => "second-build-keeps-voyage",
-    SeededDocument => "seeded-core-document-kept",
+    SeededDocument => "seeded-core-document-kept";
+    "second-build-keeps-voyage" needs "live-edit-recolours",
+    "seeded-core-document-kept" needs "second-build-keeps-voyage",
 }
 
 pub const CONTROL: Case = Case::SeededTheme;

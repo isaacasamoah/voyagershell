@@ -27,7 +27,15 @@ cases! {
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
     AvatarClickWhileDockingHomeIsHeld => "avatar-click-while-docking-home-is-held",
     AvatarClickAwayChangesNothing => "avatar-click-away-changes-nothing",
-    VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
+    VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes";
+    "reread-keeps-clicked-pane" needs "socket-dock-takes-keyboard",
+    "redock-takes-keyboard" needs "reread-keeps-clicked-pane",
+    "typing-right-after-a-dock-reaches-the-vessel" needs "socket-dock-takes-keyboard",
+    "dock-home-keeps-keyboard" needs "socket-dock-takes-keyboard",
+    "avatar-click-at-home-opens-home" needs "socket-dock-takes-keyboard",
+    "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
+    "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
+    "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
 }
 
 pub const CONTROL: Case = Case::RedockTakesKeyboard;
@@ -45,6 +53,10 @@ struct Docked {
     fleet: FleetId,
     voyager: String,
     other: String,
+}
+
+fn focus_was_on(focus: Option<&PlacementId>, placement: &PlacementId) -> bool {
+    focus == Some(placement)
 }
 
 fn focused(seen: &Seen) -> Option<PlacementId> {
@@ -306,6 +318,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     cases.check(native, Case::RedockTakesKeyboard, |native| {
+        let before = native.observe("the canvas focus before the second dock", |seen| {
+            Some(focused(seen))
+        })?;
         let reply = from_voyager(
             native,
             &voyager,
@@ -333,6 +348,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 reply["reply"]["status"] == "applied",
             )
             .expect(
+                "the canvas focus was on the clicked first Vessel before the second dock",
+                focus_was_on(before.as_ref(), first.placement()),
+            )
+            .expect(
                 "the canvas focus returned to the docked Vessel",
                 followed.as_ref() == Some(&placed),
             )
@@ -345,6 +364,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 !first_screen.contains(&marker),
             )
             .observed("marker", &marker)?
+            .observed("before", &before)?
             .observed("followed", &followed)?
             .observed("docked", &docked_screen)?
             .observed("first", &first_screen)
@@ -899,8 +919,18 @@ fn minimises(sent: &[Observed]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Probe, judge_probe, nice_of, render_error};
+    use super::{Probe, focus_was_on, judge_probe, nice_of, render_error};
     use crate::native::{PROBE_AFTER_DOCK, PROBE_LATEST};
+    use voyager_contract::PlacementId;
+
+    #[test]
+    fn the_redock_precondition_fails_when_the_focus_never_left_the_docked_vessel() {
+        let docked = PlacementId("placement-1".to_owned());
+        let first = PlacementId("placement-2".to_owned());
+        assert!(focus_was_on(Some(&first), &first));
+        assert!(!focus_was_on(Some(&docked), &first));
+        assert!(!focus_was_on(None, &first));
+    }
 
     #[test]
     fn a_probe_sent_late_is_inconclusive_whether_or_not_it_landed() {

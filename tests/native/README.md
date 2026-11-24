@@ -2009,6 +2009,56 @@ The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
 inconclusive or unavailable.
 
+## Running chosen cases
+
+`run --case NAME[,NAME]` runs only the named cases of a journey, so a later case can be
+seen without rerunning the whole journey. A name that is not a case of the journey is
+refused, and the refusal lists the journey's cases. Cases run in their declared order.
+
+Each picked case still gets what it needs:
+
+- Cases declared `setup` in `cases!` always run.
+- A case that uses the state an earlier case made declares that in the journey, after
+  the case list, as in `cases! { First => "first", Second => "second"; "second" needs "first" }`.
+  A picked case pulls in the cases it needs, directly or through other needs, and the run
+  records them as included.
+- A journey that declares no needs for a case does not guess. If a picked case never runs
+  because an earlier case that it depends on was left out, the run fails and names the
+  picked case and the earlier cases that were left out. Declare the need in the journey, or
+  pick the earlier case too. The `socket-dock`, `profile`, `portals`, `chat`, `agent-split`,
+  `terminal-input` and `adopt-by-label` journeys declare the needs of the cases that use state
+  an earlier case made. Other journeys declare theirs when a crew needs a case alone.
+- A new case's needs are part of its pull request. The table test in `journey.rs` has a row
+  for every declared need, fails when a need is removed, and fails when a declared need has no row.
+
+A partial run cannot be read as a full pass. `observations.json` and `checks.json` carry
+`"selection"` with `partial`, `picked`, `included` and `leftOut`, and each left-out case
+has the status `left-out`. `manifest` refuses a run whose `checks.json` is partial unless
+the input lists it with `"partial": true`, refuses `"partial": true` on a full run, and then
+copies the selection into `verdict.json`, so a partial run is never cited as a full one.
+
+With every need of a journey declared, a pick never runs a case without the setup it
+uses. A case behind an early exit that an earlier case's result controls, such as the cases
+after the `open-portal` case, is reported as not run and fails the run when its earlier case is
+left out, so the run says so and never passes. Picking `seeded-core-document-kept` pulls in
+`second-build-keeps-voyage` and `live-edit-recolours`, because that case reads Core after the
+second build's relaunch, and read alone it would pass on a profile that no build had changed.
+Picking `relaunch-restores-portal` pulls in the cases that hide, show, close and reopen the
+Portal, because its check compares the layout from before the relaunch with the layout from after
+it, and the layout those cases leave behind is the one that needs restoring.
+
+A partial run says so on its own summary line. It prints
+`PARTIAL: N cases left out, not a journey pass. Left out: ...` with every left-out case
+listed, to the error stream after the report, and `checks.json` carries the same text as
+`"summary"`. A partial run never goes on a `Journeys run:` line. Name only the journeys
+that ran in full there. A picked case can be cited as the case it is, with the run marked partial.
+
+The `socket-dock` journey declares that `redock-takes-keyboard` needs
+`reread-keeps-clicked-pane`. The reread case clicks the first Vessel, so the focus is off
+the docked Vessel when the redock starts. The redock case records that focus first and
+expects it to be on the first Vessel, because a repeated dock that did nothing would
+otherwise pass its focus and typing checks on a Vessel that already had the keyboard.
+
 ## Run roles and the verdict manifest
 
 `run --role head|trunk|control|mutant` writes `"role"` into `checks.json`. It says

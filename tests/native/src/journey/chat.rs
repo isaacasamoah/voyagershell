@@ -22,7 +22,8 @@ cases! {
     ToolCallInspect => "tool-call-inspect",
     ToolCallEffect => "tool-call-effect",
     DockTakesYouThere => "dock-takes-you-there",
-    PeekStaysHere => "peek-stays-here",
+    PeekStaysHere => "peek-stays-here";
+    "peek-stays-here" needs "dock-takes-you-there",
 }
 
 pub const CONTROL: Case = Case::StreamedReply;

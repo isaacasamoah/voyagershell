@@ -95,6 +95,19 @@ source, prove the repair with an independent negative control, then rerun the
 affected app behavior. Record a bounded unresolved result and next action if the
 repair cannot be completed; do not silently substitute a custom rig. Never weaken an assertion, and never retry an uncertain effect that a read has not proved did not happen.
 
+## Running chosen cases
+
+`run --case NAME[,NAME]` runs only the named cases of a journey. An unknown name is
+refused with the journey's cases. Setup cases and the cases that a picked case needs, as
+the journey declares them, run too. The run's `observations.json` and `checks.json` say
+which cases were picked, included and left out and that the run is partial, and a partial
+run is never a full pass. List it in the manifest input with `"partial": true`. If a picked
+case did not run, the run fails and names the earlier cases it left out. A partial run
+prints a `PARTIAL: N cases left out, not a journey pass` summary line that lists the cases left
+out, and it never goes on a `Journeys run:` line. A new case's needs are part of its pull
+request, and the table test in `journey.rs` checks them. The README section "Running chosen cases"
+has the rest.
+
 ## Verdict manifest
 
 Run each verdict run with `--role head|trunk|control|mutant`. When the lanes are

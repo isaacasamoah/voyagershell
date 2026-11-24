@@ -31,7 +31,8 @@ cases! {
     EndedAwayAdoptedRemovedWhenShown => "ended-away-adopted-removed-when-shown",
     AgentExitInOwnShellKeepsShell => "agent-exit-in-own-shell-keeps-shell",
     UserStartedAgentVesselKeepsShell => "user-started-agent-vessel-keeps-shell",
-    TypedExitClosesVessel => "typed-exit-closes-vessel",
+    TypedExitClosesVessel => "typed-exit-closes-vessel";
+    "command-fleet-holds-only-its-agent" needs "command-creates-fleet",
 }
 
 const HOOK_SETTINGS: &str = r#"{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"/voyager/bin/voyager focus --hook claude"}]}]}}"#;
