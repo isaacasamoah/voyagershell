@@ -1,0 +1,13 @@
+diff --git a/app/src/client_terminal.rs b/app/src/client_terminal.rs
+index e59c1109..715f4600 100644
+--- a/app/src/client_terminal.rs
++++ b/app/src/client_terminal.rs
+@@ -122,7 +122,7 @@ pub(super) fn start_terminal(
+             "Terminal start {operation} is unconfirmed. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
+         )));
+     }
+-    let cwd = target.cwd.clone();
++    let cwd = String::from("/");
+     let launch = target.launch.clone().unwrap_or_default();
+     let accepted = created_vessels
+         .iter()

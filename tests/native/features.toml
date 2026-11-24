@@ -289,13 +289,13 @@ id = "scripts-live-edit"
 name = "Scripts live edit"
 path = "Edit a canvas script and see the change appear live."
 sources = ["desktop/canvas/main.ts", "contract/src/operations.rs", "desktop/src/bridge.rs", "desktop/script-types.json"]
-journeys = []
+journeys = ["canvas-stack"]
 platforms = ["linux"]
-python = ["canvas-stack"]
-behavior = "python-only"
-performance = "python-only"
-visual = "python-only"
-debug = "python-only"
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "none"
 
 [[feature]]
 id = "layout-compat"

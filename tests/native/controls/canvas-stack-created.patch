@@ -1,0 +1,16 @@
+diff --git a/app/src/administrator/inputs.rs b/app/src/administrator/inputs.rs
+index 4648df3f..3d4f2e30 100644
+--- a/app/src/administrator/inputs.rs
++++ b/app/src/administrator/inputs.rs
+@@ -32,7 +32,10 @@ pub(super) fn parse(tool: &str, arguments: &Value) -> Parsed {
+         "voyager_workspace" => serde_json::from_value::<WorkspaceInput>(arguments).map(|input| {
+             (
+                 input.expected_version,
+-                Dispatch::Workspace(input.action),
++                Dispatch::Workspace(match input.action {
++                    Action::CreateVoyage { .. } => Action::Inspect,
++                    action => action,
++                }),
+                 None,
+             )
+         }),

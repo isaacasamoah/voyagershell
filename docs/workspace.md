@@ -462,6 +462,17 @@ children of the owner module and add methods to `Owner`, so `client` and the
 owner module never name each other's children. `app/src/client.rs` holds the
 messages, the receipts, the front door glue and the public `Client` calls.
 
+**A change carries the version its inspect saw.** Every change other than navigation
+carries the layout version of an inspect. `route` in `app/src/families/structure.rs`
+applies it when that version is the current one. It also applies it when nothing the
+change touches has moved since that version, which `Seen::current` in
+`app/src/client_structure.rs` decides. Otherwise it refuses with "Layout changed; part of
+what this change touches moved since version N, and it is now M. Inspect the layout
+again, check your change still fits, then resend it with version M.", where N is the version the change carried and M
+is the current one. The reason names both versions so an agent can retry with the
+right one. The words before the first semicolon are what the person sees, as "the
+workspace changed first".
+
 **Inspect only reads.** A workspace inspect loads the stored layout, drops
 creation grants and unconfirmed starts that the layout no longer holds, and
 answers. It saves nothing. The two saves an inspect used to make happen at

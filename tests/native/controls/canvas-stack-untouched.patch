@@ -1,0 +1,14 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index d076354e..fced1b5d 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -623,6 +623,9 @@ impl Model {
+             Action::UpdateCanvas { canvas } => {
+                 crate::canvas::validate(&canvas)?;
+                 self.layout.canvas = canvas;
++                if let Some(id) = self.layout.selected_voyage.clone() {
++                    self.layout.context = Context::Voyage { id };
++                }
+             }
+             Action::SetSidebar { collapsed } => self.layout.canvas.sidebar_collapsed = collapsed,
+             Action::CreateVoyage { name, cwd } => {

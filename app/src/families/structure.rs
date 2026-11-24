@@ -31,8 +31,22 @@ pub(crate) struct Edit {
     pub(crate) created_notes: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Versions {
+    pub(crate) sent: u64,
+    pub(crate) now: u64,
+}
+
+pub(crate) fn changed(versions: Versions) -> String {
+    let Versions { sent, now } = versions;
+    format!(
+        "Layout changed; part of what this change touches moved since version {sent}, and it is now {now}. Inspect the layout again, check your change still fits, then resend it with version {now}."
+    )
+}
+
 pub(crate) fn route<'a>(
     fresh: bool,
+    versions: Versions,
     current: impl FnOnce() -> bool,
     layout: &Arc<Layout>,
     scope: Option<&Context>,
@@ -43,9 +57,7 @@ pub(crate) fn route<'a>(
         return Err(refused("Inspect the workspace before making a change"));
     }
     if !action.is_navigation() && !cancelling && !current() {
-        return Err(refused(
-            "Layout changed; inspect it before making a new request",
-        ));
+        return Err(refused(changed(versions)));
     }
     scope::check(layout, scope, action).map_err(refused)?;
     Ok(match action {
@@ -348,6 +360,35 @@ fn refused(message: impl Into<String>) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stale_change_is_refused_with_the_version_it_sent_and_the_current_one() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Crew".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let id = model.layout.voyages[0].fleets[0].id.clone();
+        let layout = Arc::new(model.layout);
+        let action = Action::Rename {
+            target: voyager_contract::RenameTarget::Fleet { id },
+            name: "Later".into(),
+        };
+        let versions = Versions { sent: 4, now: 7 };
+        let Err(Error::Rejected { kind, message }) =
+            route(true, versions, || false, &layout, None, &action)
+        else {
+            panic!("a stale rename was not refused");
+        };
+        assert_eq!(kind, "invalid_workspace");
+        assert_eq!(
+            message,
+            "Layout changed; part of what this change touches moved since version 4, and it is now 7. Inspect the layout again, check your change still fits, then resend it with version 7."
+        );
+        assert!(route(true, versions, || true, &layout, None, &action).is_ok());
+    }
 
     struct Core(Result<Terminal, Error>, Result<(), Error>);
 

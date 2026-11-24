@@ -574,6 +574,10 @@ impl Owner {
         }
         let route = structure::route(
             self.fresh,
+            structure::Versions {
+                sent: request.expected_version,
+                now: self.version.structure,
+            },
             || {
                 self.seen
                     .current(request.expected_version, self.version, &self.layout, || {

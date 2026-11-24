@@ -1,0 +1,13 @@
+diff --git a/app/src/families/structure.rs b/app/src/families/structure.rs
+index c12dd49f..a559c76b 100644
+--- a/app/src/families/structure.rs
++++ b/app/src/families/structure.rs
+@@ -56,7 +56,7 @@ pub(crate) fn route<'a>(
+     if !fresh && !cancelling {
+         return Err(refused("Inspect the workspace before making a change"));
+     }
+-    if !action.is_navigation() && !cancelling && !current() {
++    if !action.is_navigation() && !cancelling && !current() && false {
+         return Err(refused(changed(versions)));
+     }
+     scope::check(layout, scope, action).map_err(refused)?;

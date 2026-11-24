@@ -1,0 +1,16 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index 58a9f3fa..a5a27c01 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -609,6 +609,11 @@ impl Model {
+             Action::UpdateCanvas { canvas } => {
+                 crate::canvas::validate(&canvas)?;
+                 self.layout.canvas = canvas;
++                for vessel in &mut self.layout.vessels {
++                    if vessel.type_id == "terminal" {
++                        vessel.backend = None;
++                    }
++                }
+             }
+             Action::SetSidebar { collapsed } => self.layout.canvas.sidebar_collapsed = collapsed,
+             Action::CreateVoyage { name, cwd } => {

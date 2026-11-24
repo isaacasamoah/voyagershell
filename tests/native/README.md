@@ -708,6 +708,95 @@ invalid file and opens the menu again. The type must still be listed. Its contro
 patch, `tests/native/controls/manifest-vessel.patch`, makes the registry drop the last
 good manifest on a broken edit.
 
+### Canvas stack
+
+The `canvas-stack` journey changes the canvas the way Voyager does, through workspace
+tool calls that the stand-in provider plays in Voyager's own chat. The per-Vessel socket
+refuses `update-canvas`, so this is the administrator path. It runs on the same profile
+fixture as `manifest-vessel`, because its content Vessel is a `flag` Vessel.
+
+```sh
+tests/native/target/debug/voyager-verification run --journey canvas-stack --binary "$candidate" --sha256 "$expected" --profile-fixture tests/native/fixtures/manifest-vessel --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/canvas-stack"
+```
+
+The journey first docks the avatar home, so the chat acts on the whole workspace. Every
+change below is one chat turn, which plays an inspect and then one workspace call that
+carries the inspected version.
+
+- `voyager-creates-a-voyage-and-vessel` plays `create-voyage` for a Voyage named
+  "Stack trial" in the sandbox's second project folder, then `create-vessel` for a
+  `flag` Vessel beside that Voyage's terminal. Both calls must return Applied. Core
+  must hold the new Voyage saved in that folder with its terminal started, and its
+  Fleet must hold both Vessels, with the flag drawn. Each request must have taken
+  effect once, with its own request id, so Core holds one new Voyage and one new flag
+  Vessel. The journey then flips the flag once, so the Vessel has saved data in
+  `data/<id>.json` in the profile, and prints a marker in the trial terminal.
+- `new-shell-starts-in-its-folder` reads that terminal from Core. Its shell's
+  `foreground.cwd` must be the folder the Voyage was made for.
+
+The proposed canvas is a stack of two views. The first is the current canvas, and the
+second is a copy whose sidebar is 280 pixels wide.
+
+- `applied-equals-proposal` selects the second view. The update must return Applied,
+  and Core must hold the canvas exactly as proposed, with the Vessels, Voyages, context
+  and selected Voyage and Fleet as they were.
+- `invalid-stack-refused-unchanged` selects a third view, which the stack does not
+  have. The update must be refused, with the reason that the selection must name an
+  existing child. The canvas, Vessels, Voyages, context, selected Voyage and Fleet, and
+  the layout's version must not change.
+- `update-carries-inspected-version` proposes a new stack, with a 300-pixel sidebar,
+  and checks that the update carried the version its inspect saw and was applied. A
+  different stack, the current one with its first view selected and its second view
+  280 pixels wide, is then sent with the version from before that update. It writes the
+  canvas that the update moved, so it must be refused, with a reason that starts with
+  "Layout changed", and nothing may change. Sending the current canvas again would write
+  nothing and apply without a conflict, so it cannot prove the check.
+- `terminal-and-content-kept` checks that after the updates the terminal Vessel still
+  names the same Core terminal. That terminal must run the same shell, with the same
+  pid and start time, and Core must still hold the marker printed before the updates.
+  The flag Vessel's saved data must have the same bytes, and the same Core must serve
+  the app.
+- `conversation-stops-on-quit` reads Voyager's private conversation process, the
+  stand-in provider the app started, then quits with Ctrl+Q. That process must end,
+  while Core and its programs carry on. The run's sandbox outlives each launch of the
+  app, so a provider the app leaves running would still be there.
+- `selection-after-relaunch` launches again. Core must hold the same canvas, with the
+  stack's second view selected, at the layout version it had before Quit. The frame
+  must draw that view too. The frame has no sidebar element, so the sidebar toggle's
+  left edge stands in for the sidebar's width. The toggle sits at the sidebar's right
+  edge less a fixed offset, so that offset cancels out. The journey reads the edge
+  once at the start, with the first view drawn. After the relaunch settles, the edge
+  must sit that far right by the difference between the selected view's sidebar width
+  and the first view's, both read from the canvases, within less than one pixel.
+
+Each case has its own control. Two cases check two things, so each has a second control.
+
+- `tests/native/controls/canvas-stack-created.patch` makes the chat's workspace tool
+  answer `create-voyage` with an inspect, so `voyager-creates-a-voyage-and-vessel`
+  fails.
+- `tests/native/controls/canvas-stack-folder.patch` starts every new shell in `/`, so
+  `new-shell-starts-in-its-folder` fails.
+- `tests/native/controls/canvas-stack.patch` clamps an out-of-range stack selection to
+  the last view instead of refusing it, so `invalid-stack-refused-unchanged` fails.
+- `tests/native/controls/canvas-stack-applied.patch` starts a newly made stack on its
+  first view, so `applied-equals-proposal` fails.
+- `tests/native/controls/canvas-stack-inspected.patch` drops the version check, so the
+  stale replay applies and `update-carries-inspected-version` fails.
+- `tests/native/controls/canvas-stack-kept.patch` clears every terminal Vessel's Core
+  terminal when the canvas changes, so `terminal-and-content-kept` fails.
+- `tests/native/controls/canvas-stack-quit.patch` makes the provider's shutdown return
+  without stopping it, so `conversation-stops-on-quit` fails.
+- `tests/native/controls/canvas-stack-reopened.patch` resets a stack's selection to its
+  first view on every load, and the app loads its layout after each save, so the live
+  drawn view is lost too. Only `selection-after-relaunch` reads the drawn view, and the
+  earlier cases read Core alone, so it is the case that fails, with the toggle's edge
+  drawn where the first view puts it and not where the second view's width puts it.
+- `tests/native/controls/canvas-stack-untouched.patch` makes an applied canvas update
+  also change the context, so `applied-equals-proposal` fails.
+- `tests/native/controls/canvas-stack-once.patch` makes create-voyage make a second,
+  identical Voyage after the first and leaves the first selected, so setup still works
+  and only the exactly-once expectation of `voyager-creates-a-voyage-and-vessel` fails.
+
 ### Profile updates
 
 The `profile-updates` journey starts the build on a profile that an older build

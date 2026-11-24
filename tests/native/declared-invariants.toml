@@ -20,9 +20,9 @@ says = "Showing, hiding, closing, moving or switching to a Vessel or Portal neve
 kind = "user"
 owner = "placement"
 source = "AGENTS.md: 'Hiding, moving, switching Fleets or uninstalling a view must not stop its backend'; Isaac, 3 Nov 2026: 'Preserve the existing distinction between removing/hiding a view and explicitly stopping its program'; shells started at 17:55 and 20:49 on finished agents' Vessels (unit CC5); merges hide-keeps-backend and showing-starts-nothing per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
-features = ["vessels", "portals", "fleets"]
+features = ["vessels", "portals", "fleets", "scripts-live-edit"]
 guard = ["type:contract/src/lib.rs#Placement"]
-check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal", "journey:adopt-by-label/ended-away-adopted-removed-when-shown"]
+check = ["journey:portals/hide-portals", "journey:portals/portal-across-fleets", "journey:portals/close-portal", "journey:portals/reopen-portal", "journey:adopt-by-label/ended-away-adopted-removed-when-shown", "journey:canvas-stack/terminal-and-content-kept"]
 gap = "The linked control case, portals/portal-across-fleets, has a patch that changes portal visibility on a Fleet switch, so the clause that a view never starts or stops its Program is not proved to fail."
 confidence = "stated"
 
@@ -68,14 +68,14 @@ confidence = "inferred"
 
 [[invariant]]
 id = "placement-survives-relaunch"
-says = "The Voyages, Fleets, placements, Portals, names, arrangements, the avatar's dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus."
+says = "The Voyages, Fleets, placements, Portals, names, arrangements, the canvas with the view each stack has selected, the avatar's dock and closed Voyages are the same after a relaunch. Reopening a Voyage restores its last-used Fleet, Vessel, split focus and maximize focus."
 kind = "user"
 owner = "placement"
-source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'; Isaac, 14 Nov 2026 (voyage-reopens-where-left); gains the closed-Voyage clause of close-voyage-confirms and merges voyage-reopens-where-left per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026"
-features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-maximize"]
+source = "AGENTS.md: 'Preserve Isaac's explicit placement, supported options and agreed interactions'; Isaac, 14 Nov 2026 (voyage-reopens-where-left); gains the closed-Voyage clause of close-voyage-confirms and merges voyage-reopens-where-left per the declared invariants design, sections 3 and 3e, agreed by Isaac 19 Nov 2026; gains the canvas and its stack selections, Isaac via Voyager, 24 Nov about 11:05"
+features = ["voyages", "fleets", "fleet-arrangement", "portals", "split-resize-maximize", "scripts-live-edit"]
 guard = []
 type_gap = "The stored Layout keeps selected_voyage, selected_fleet and each LastUsed entry as separate ids, so a selected Fleet outside the selected Voyage, or a LastUsed naming a Fleet its Voyage lacks, can be written. No planned unit removes it."
-check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart", "journey:workspace/split-focus-remembered", "journey:workspace/reopen-voyage-restores-fleet", "journey:workspace/relaunch-restores-focus", "journey:workspace/maximize-focus-remembered", "journey:workspace/fleet-tab-focus-remembered"]
+check = ["journey:workspace/relaunch-restores", "journey:arrangement/relaunch-keeps-arrangement", "journey:portals/relaunch-restores-portal", "journey:quit-restore/relaunch-reattaches", "journey:voyage-close/closed-after-restart", "journey:workspace/split-focus-remembered", "journey:workspace/reopen-voyage-restores-fleet", "journey:workspace/relaunch-restores-focus", "journey:workspace/maximize-focus-remembered", "journey:workspace/fleet-tab-focus-remembered", "journey:canvas-stack/selection-after-relaunch"]
 gap = "The linked control case, quit-restore/relaunch-reattaches, has a patch that breaks reattach and not placement, so no linked case is proved to fail when placement, names, arrangement or the dock do not survive."
 confidence = "stated"
 
@@ -367,13 +367,24 @@ says = "The Conversation streams its reply and shows a Provider error. Its tool 
 kind = "user"
 owner = "conversation-provider"
 source = "AGENTS.md, Content and provider boundaries; Isaac, 3 Nov 2026 owner UX note: wants to rename a Vessel such as Terminal T1 and then address it through the native assistant using that new name; merges renamed-vessel-is-addressable per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
-features = ["chat", "vessels"]
-guard = []
+features = ["chat", "vessels", "scripts-live-edit"]
+guard = ["type:contract/src/administrator.rs#WorkspaceInput"]
 type_gap = "A conversation tool can be written by hand against a copy of the workspace, so a renamed Vessel keeps its old name there. S11b generates the avatar's tools from the operation catalogue."
-check = ["journey:chat/streamed-reply", "journey:chat/provider-error", "journey:chat/tool-call-inspect", "journey:chat/tool-call-effect"]
+check = ["journey:chat/streamed-reply", "journey:chat/provider-error", "journey:chat/tool-call-inspect", "journey:chat/tool-call-effect", "journey:canvas-stack/voyager-creates-a-voyage-and-vessel"]
 gap = "The rename half needs a new case that renames a Vessel and asks the Administrator for it by the new name. The linked control case, chat/streamed-reply, proves reply text only, so the tool-call clause is not proved to fail."
 confidence = "stated"
 
+
+[[invariant]]
+id = "conversation-ends-on-quit"
+says = "Quit stops Voyager's private conversation process and confirms it ended. Unlike Core and its programs, it does not carry on after Quit."
+kind = "user"
+owner = "conversation-provider"
+source = "Isaac via Voyager, 24 Nov about 11:05, through the Build commodore: keep the retained Python canvas-stack journey's private provider exit check as a native case"
+features = ["chat", "scripts-live-edit"]
+guard = ["type:app/src/codex.rs#shutdown"]
+check = ["journey:canvas-stack/conversation-stops-on-quit"]
+confidence = "stated"
 [[invariant]]
 id = "adopted-agents-follow-their-label"
 says = "An agent Program started through voyager appears in the Fleet or Portal its label names and can be docked. Its Vessel closes when its Program ends, and closing the agent removes its Vessel."
@@ -609,12 +620,56 @@ says = "An action the app declines leaves the state unchanged and shows the owne
 kind = "user"
 owner = "application-queue"
 source = "AGENTS.md: 'Preserve request/target identity, structured Core errors and the difference between known refusal and uncertain effect'"
-features = ["outcomes", "voyager-command-missing"]
+features = ["outcomes", "voyager-command-missing", "scripts-live-edit"]
 guard = []
 type_gap = "A refused Response has message: Option<String>, so a refusal with no reason can be built, and Status, Outcome and Unapplied each name refusal in their own words. DI16 makes one Outcome whose Refusal requires a reason."
-check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused", "journey:voice/refusal-is-in-the-chat", "journey:voyager-command/command-missing-line-drawn", "journey:voyager-command/no-voyager-bound", "journey:voyager-command/line-survives-a-layout-change"]
+check = ["journey:outcomes/refused-shows-reason", "journey:outcomes/tool-refusal-carries-reason", "journey:outcomes/close-refused-says-why", "journey:workspace/rename-empty-refused", "journey:voice/refusal-is-in-the-chat", "journey:voyager-command/command-missing-line-drawn", "journey:voyager-command/no-voyager-bound", "journey:voyager-command/line-survives-a-layout-change", "journey:canvas-stack/invalid-stack-refused-unchanged"]
 confidence = "stated"
 
+
+[[invariant]]
+id = "canvas-applied-as-proposed"
+says = "A canvas update that the app applies is saved exactly as proposed, with no node, size or stack selection added, dropped or changed. It leaves the Vessels, Voyages, context and selected Voyage and Fleet as they were."
+kind = "user"
+owner = "placement"
+source = "Isaac via Voyager, 24 Nov about 11:05, through the Build commodore: the scripts live-edit feature's canvas-stack checks become a native journey; Isaac via Voyager, 25 Nov 07:40"
+features = ["scripts-live-edit"]
+guard = ["type:app/src/canvas.rs#validate"]
+check = ["journey:canvas-stack/applied-equals-proposal"]
+confidence = "stated"
+
+[[invariant]]
+id = "request-takes-effect-once"
+says = "A workspace request that the app applies takes effect once. One create-voyage makes one Voyage, one create-vessel makes one Vessel, and each request carries its own request id."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 25 Nov 07:40"
+features = ["scripts-live-edit"]
+guard = ["type:app/src/client.rs#request_id"]
+check = ["journey:canvas-stack/voyager-creates-a-voyage-and-vessel"]
+confidence = "stated"
+
+[[invariant]]
+id = "change-carries-inspected-version"
+says = "A workspace change applies only when nothing it touches has changed since the inspect whose Layout version it carries. Otherwise it is refused with the reason below, and nothing changes. The reason is 'Layout changed; part of what this change touches moved since version N, and it is now M. Inspect the layout again, check your change still fits, then resend it with version M.', where N is the version sent and M the current one."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 24 Nov about 11:05, through the Build commodore: the scripts live-edit feature's canvas-stack checks become a native journey, and a stale refusal names both versions and what to do, so an agent can retry well"
+features = ["scripts-live-edit"]
+guard = ["type:app/src/families/structure.rs#route"]
+check = ["journey:canvas-stack/update-carries-inspected-version", "journey:workspace/stale-agent-edit-refused"]
+confidence = "stated"
+
+[[invariant]]
+id = "new-shell-starts-in-its-folder"
+says = "A new terminal starts its shell in its Vessel's folder, and a new Voyage's first terminal takes the folder the Voyage was made for. Core reports that folder as the shell's working directory."
+kind = "user"
+owner = "core-adapter"
+source = "Isaac via Voyager, 24 Nov about 11:05, through the Build commodore: the scripts live-edit feature's canvas-stack checks become a native journey"
+features = ["scripts-live-edit", "worktrees"]
+guard = ["type:app/src/client_terminal.rs#start_terminal"]
+check = ["journey:canvas-stack/new-shell-starts-in-its-folder", "journey:worktrees/new-worktree-creates-checkout-and-voyage"]
+confidence = "stated"
 [[invariant]]
 id = "status-is-reported-or-unknown"
 says = "A Program's status is Core's latest report or unknown. Silence, or a turn that ended while the agent's work continues, is never shown as idle or finished."

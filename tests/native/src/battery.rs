@@ -498,7 +498,7 @@ fn journey_inputs(
             }
             Ok(vec!["--profile-fixture".into(), updates.into()])
         }
-        Journey::ManifestVessel => {
+        Journey::ManifestVessel | Journey::CanvasStack => {
             let seeded = fixtures.join("manifest-vessel");
             if !seeded.is_dir() {
                 return Err(format!(
@@ -1025,6 +1025,7 @@ mod tests {
             Journey::Profile,
             Journey::ProfileUpdates,
             Journey::ManifestVessel,
+            Journey::CanvasStack,
             Journey::LayoutCompat,
             Journey::LayoutRefused,
             Journey::LayoutCorrupt,

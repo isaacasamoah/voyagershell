@@ -1,0 +1,20 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index d076354e..faca429b 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -387,7 +387,15 @@ impl Model {
+     }
+ 
+     pub fn apply(&mut self, action: Action) -> Result<(), String> {
++        let twin = matches!(action, Action::CreateVoyage { .. }).then(|| action.clone());
+         self.change(action)?;
++        if let Some(twin) = twin {
++            let voyage = self.layout.selected_voyage.clone();
++            let fleet = self.layout.selected_fleet.clone();
++            self.change(twin)?;
++            self.layout.selected_voyage = voyage;
++            self.layout.selected_fleet = fleet;
++        }
+         self.remember_fleet();
+         Ok(())
+     }

@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -9,6 +10,15 @@ from PIL import ImageChops
 from proof_workspace import click_control, core_rpc, named_button, review_frame, wait as wait_for
 from proof_clipboard import Clipboard
 from proof_process import exit_observation, observe_core_exit, process_identity
+
+STALE_REFUSAL = re.compile(
+    r"Workspace request refused: invalid_workspace: Layout changed; part of what this change touches moved since version (\d+), and it is now (\d+)\. Inspect the layout again, check your change still fits, then resend it with version (\d+)\."
+)
+
+
+def is_stale_refusal(text):
+    found = STALE_REFUSAL.fullmatch(text)
+    return bool(found) and found[2] == found[3] and int(found[1]) < int(found[2])
 
 
 def provider_processes(evidence):
@@ -654,8 +664,7 @@ def prove(
             or (
                 message["tool"]["status"] == "rejected"
                 and message["tool"]["action"]["action"]["operation"] == "create-vessel"
-                and message["text"]
-                == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
+                and is_stale_refusal(message["text"])
             )
             for message in tools
         ), tools
