@@ -97,6 +97,20 @@ The words in the table never name an action or claim a result, and none points t
 chat. When the routing call chose none and Voyager is idle, done or has no state yet,
 nothing plays and the words are sent.
 
+## Without the voyager command
+
+Voyager's replies reach the app through hooks that run the `voyager` command
+beside the app's executable. When that command is missing, the app does not
+start the background Voyager and binds none. The owner holds that reason, and
+the canvas reads it through `voyager_unbound` on every render. The canvas status
+line shows one line that says Voyager cannot reply because the command is
+missing, whenever no outcome line is showing, so a later change to the layout
+does not remove it. The line stays for the whole run of the app, because the
+app looks for the command only when it starts. Starting the app again with the
+command beside it clears the line and starts Voyager. The app does not search
+for the command elsewhere, retry or start Voyager without hooks, because a
+Voyager without hooks drops every reply and says nothing.
+
 ## Small talk
 
 After hearing, one text call to the Omni engine decides who answers. `voice_route::Route`

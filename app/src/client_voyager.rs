@@ -29,6 +29,9 @@ impl Owner {
         }
         self.voyager_started = true;
         self.sockets.binding().forget();
+        if self.client.replies.unbound().is_some() {
+            return;
+        }
         if let Err(error) = self.bring_up_voyager() {
             self.say(format!("Voyager was not started: {error:?}"));
         }

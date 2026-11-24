@@ -304,6 +304,7 @@ pub const WORKSPACE: Module = Module {
             ]),
         ),
         function("take_placement_notice", &[], Ty::Nullable(&Ty::Text)),
+        function("voyager_unbound", &[], Ty::Nullable(&Ty::Text)),
         function("reported_activity", &[], Ty::Text),
         promise("refresh_activity", &[], Ty::Void),
         function("stop_session", &[], Ty::Void),

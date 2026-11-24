@@ -83,12 +83,35 @@ struct State {
     unreadable: Option<Unreadable>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Unbound {
+    CommandMissing,
+}
+
+impl Unbound {
+    fn line(self) -> &'static str {
+        match self {
+            Self::CommandMissing => "Voyager can't reply: the voyager command is missing.",
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Replies {
     state: Arc<Mutex<State>>,
+    unbound: Arc<Mutex<Option<Unbound>>>,
 }
 
 impl Replies {
+    pub fn set_unbound(&self, reason: Option<Unbound>) {
+        *self.unbound.lock().unwrap_or_else(PoisonError::into_inner) = reason;
+    }
+
+    pub fn unbound(&self) -> Option<&'static str> {
+        let reason = *self.unbound.lock().unwrap_or_else(PoisonError::into_inner);
+        reason.map(Unbound::line)
+    }
+
     pub fn snapshot(&self) -> Snapshot {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         Snapshot {

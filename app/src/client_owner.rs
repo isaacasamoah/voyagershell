@@ -171,6 +171,11 @@ impl Owner {
         let binding = profile
             .as_deref()
             .map_or_else(Binding::unbound, Binding::load);
+        if profile.is_some() && crate::launch::command_path().is_none() {
+            client
+                .replies
+                .set_unbound(Some(crate::replies::Unbound::CommandMissing));
+        }
         Self {
             cwd,
             launches: profile.map(|profile| profile.join("launches.json")),

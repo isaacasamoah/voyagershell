@@ -21,6 +21,7 @@ mod slow_save;
 mod socket_dock;
 mod voice;
 mod voyage_close;
+mod voyager_command;
 mod workspace;
 mod worktrees;
 
@@ -148,6 +149,7 @@ journeys! {
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Voice => "voice" in voice, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    VoyagerCommand => "voyager-command" in voyager_command, sidebar: None, window: None;
 }
 
 impl Journey {
@@ -163,6 +165,10 @@ impl Journey {
                 Self::names().join(", ")
             ),
         }
+    }
+
+    pub fn beside_command(self) -> bool {
+        !matches!(self, Self::VoyagerCommand)
     }
 
     pub fn core_delay(self) -> Option<&'static str> {

@@ -31,6 +31,8 @@ mod linux {
     fn profile(session: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!("{session}-profile"));
         std::fs::create_dir_all(&path).unwrap();
+        let beside_test = std::env::current_exe().unwrap().with_file_name("voyager");
+        let _ = std::fs::hard_link(env!("CARGO_BIN_EXE_voyager"), beside_test);
         let stand_in = path.join("claude");
         std::fs::write(&stand_in, "#!/bin/sh\nexec sleep 120\n").unwrap();
         std::fs::set_permissions(&stand_in, std::fs::Permissions::from_mode(0o755)).unwrap();

@@ -22,7 +22,7 @@ groups:
   - id: assistant
     name: Private assistant
     plain: 'The avatar conversation, the Voyager tools it may call and the conversation client.'
-    features: [chat]
+    features: [chat, voyager-command-missing]
   - id: voice
     name: Voice
     plain: 'Speech input and output for the assistant.'

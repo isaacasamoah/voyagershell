@@ -2574,7 +2574,7 @@ function statusModule() {
     if (name === "voyager_native")
       return { Marker: MarkerStub, Status: { new: element } };
     if (name === "voyager_workspace")
-      return { take_placement_notice: () => null };
+      return { take_placement_notice: () => null, voyager_unbound: () => null };
     throw Error(name);
   });
   return exports;

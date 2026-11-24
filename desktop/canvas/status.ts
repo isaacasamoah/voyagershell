@@ -1,6 +1,10 @@
 import { div } from "gpui-kit";
 import { Marker, Status } from "voyager_native";
-import { notice, take_placement_notice } from "voyager_workspace";
+import {
+  notice,
+  take_placement_notice,
+  voyager_unbound,
+} from "voyager_workspace";
 import type { NativeElement } from "gpui-kit";
 import type { Reply } from "../../contract/generated/response";
 
@@ -46,18 +50,23 @@ export function noticed(owner: { status: string }): string {
   return owner.status;
 }
 
+export function unboundLine(): string {
+  return voyager_unbound() ?? "";
+}
+
 export function statusLine(
   text: string,
   refresh: NativeElement,
 ): NativeElement {
+  const shown = text || unboundLine();
   const view = div()
     .flex()
     .flex_col()
     .px(12)
     .py(6)
     .child(
-      Status.new("workspace-status", text).text_size(11).text_color("#ffcad3"),
+      Status.new("workspace-status", shown).text_size(11).text_color("#ffcad3"),
     )
     .child(refresh.child(Marker.new("workspace-refresh")));
-  return text ? view.child(Marker.new("workspace-status", "", text)) : view;
+  return shown ? view.child(Marker.new("workspace-status", "", shown)) : view;
 }
