@@ -842,7 +842,7 @@ features:
         journeys: []
       - id: avatar-click-opens-home
         kind: user
-        says: 'Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing.'
+        says: 'Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands: open home, or nothing.'
         owner: desktop-presentation
         guards: ['type:desktop/src/avatar/click.rs#Click']
         checks: ['journey:socket-dock/avatar-click-at-home-opens-home', 'journey:socket-dock/avatar-click-away-changes-nothing', 'journey:socket-dock/avatar-click-while-docking-home-is-held']
