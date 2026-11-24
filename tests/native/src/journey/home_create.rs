@@ -190,6 +190,9 @@ fn create_during(
 fn create_at_once(native: &mut Native, id: &str) -> Result<Verdict> {
     let (caller, request, before) = home_request(native, id)?;
     native.click(&Target::HOME)?;
+    native.observe("the Home view saved", |seen| {
+        (seen.document.view == WorkspaceView::Home).then_some(())
+    })?;
     let created = send_line(native, &caller, &request)?;
     let added = native
         .observe(
