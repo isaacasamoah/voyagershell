@@ -798,9 +798,9 @@ mod tests {
 
     #[test]
     fn a_picked_case_pulls_in_the_case_it_needs_and_leaves_the_rest_out() -> Result<()> {
-        let selection = picked(Journey::SocketDock, &["avatar-click-away-minimizes"])?;
+        let selection = picked(Journey::SocketDock, &["avatar-click-away-changes-nothing"])?;
         assert!(selection.partial);
-        assert_eq!(selection.picked, ["avatar-click-away-minimizes"]);
+        assert_eq!(selection.picked, ["avatar-click-away-changes-nothing"]);
         assert_eq!(selection.included, ["socket-dock-takes-keyboard"]);
         assert_eq!(
             selection.left_out.len(),
@@ -887,7 +887,7 @@ mod tests {
     #[test]
     fn a_partial_run_says_in_its_summary_that_it_is_not_a_journey_pass() -> Result<()> {
         let journey = Journey::SocketDock;
-        let selection = picked(journey, &["avatar-click-away-minimizes"])?;
+        let selection = picked(journey, &["avatar-click-away-changes-nothing"])?;
         let summary = selection.summary().expect("a partial run has a summary");
         assert!(
             summary.starts_with(&format!(
