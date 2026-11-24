@@ -815,8 +815,43 @@ mod tests {
         let table: &[(Journey, &str, &[&str])] = &[
             (
                 Journey::SocketDock,
+                "reread-keeps-clicked-pane",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
                 "redock-takes-keyboard",
                 &["socket-dock-takes-keyboard", "reread-keeps-clicked-pane"],
+            ),
+            (
+                Journey::SocketDock,
+                "typing-right-after-a-dock-reaches-the-vessel",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "dock-home-keeps-keyboard",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-at-home-opens-home",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-while-docking-home-is-held",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-away-changes-nothing",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "voyager-creates-and-maximizes",
+                &["socket-dock-takes-keyboard"],
             ),
             (
                 Journey::Profile,
