@@ -87,6 +87,7 @@ Owns files:
 - `app/src/families/worktree.rs`
 - `app/src/families/worktree/git.rs`
 - `app/src/tests.rs`
+- `app/src/dock_tests.rs`
 - `app/tests/exit_events.rs`
 - `app/tests/front_door.rs`
 - `app/tests/launch.rs`

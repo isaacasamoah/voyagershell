@@ -1,8 +1,7 @@
 diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
-index f44156ef..70494942 100644
 --- a/desktop/src/avatar/click.rs
 +++ b/desktop/src/avatar/click.rs
-@@ -24,7 +24,6 @@ impl Avatar {
+@@ -23,7 +23,6 @@ impl Avatar {
      pub(super) fn activate(&mut self, window: &Window, cx: &mut Context<Self>) {
          self.animate(Trigger::Click, cx);
          if self.pending.is_some() {

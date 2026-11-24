@@ -25,7 +25,8 @@ cases! {
     TypingRightAfterADockReachesTheVessel => "typing-right-after-a-dock-reaches-the-vessel",
     DockHomeKeepsKeyboard => "dock-home-keeps-keyboard",
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
-    AvatarClickAwayMinimizes => "avatar-click-away-minimizes",
+    AvatarClickWhileDockingHomeIsHeld => "avatar-click-while-docking-home-is-held",
+    AvatarClickAwayChangesNothing => "avatar-click-away-changes-nothing",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes",
 }
 
@@ -418,12 +419,21 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native.observe("the first Vessel focused by the click", |seen| {
             (focused(seen).as_ref() == Some(first.placement())).then_some(())
         })?;
+        let shown_before = native.document()?.context("Missing saved layout")?.1;
         native.drag(&Target::AVATAR, &Target::WORKSPACE_DOCK)?;
         native.settle(
             "the avatar docked home from the Fleet",
             |seen| (seen.document.context == Context::Workspace).then_some(()),
             |_| true,
         )?;
+        let shown_after = native.document()?.context("Missing saved layout")?.1;
+        let held = native
+            .settle(
+                "the canvas focus after the first dock home",
+                |seen| Some(focused(seen)),
+                |_| true,
+            )
+            .ok();
         let labels = native.drawn_labels(&Target::STATUS, CANVAS_REFRESH)?;
         let script_error = render_error(&labels);
         native.click(&Target::HOME)?;
@@ -520,7 +530,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         )?;
         Verdict::new()
             .expect(
-                "a dock home that hid the focused Vessel left no script error in the status line",
+                "a dock home from the Fleet view left the view where it was",
+                shown_after.view == shown_before.view,
+            )
+            .expect(
+                "a dock home left the selected Voyage and Fleet where they were",
+                shown_after.selected_voyage == shown_before.selected_voyage
+                    && shown_after.selected_fleet == shown_before.selected_fleet,
+            )
+            .expect(
+                "a dock home from the Fleet view left the keyboard on the Vessel that held it",
+                held.as_ref() == Some(&Some(first.placement().clone())),
+            )
+            .expect(
+                "a dock home left no script error in the status line",
                 !script_error,
             )
             .expect(
@@ -601,7 +624,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("requests", &sent)
     })?;
 
-    cases.check(native, Case::AvatarClickAwayMinimizes, |native| {
+    cases.check(native, Case::AvatarClickWhileDockingHomeIsHeld, |native| {
+        native.launch_as(Decorations::Client)?;
+        native.observe("the avatar drawn", |seen| {
+            seen.shows(&Target::AVATAR).then_some(())
+        })?;
         show_fleet(native)?;
         let fleet = native
             .document()?
@@ -610,57 +637,111 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .selected_fleet
             .context("The layout has no selected Fleet")?;
         let onto = Target::name(&RenameTarget::Fleet { id: fleet.clone() });
-        let docked_on_fleet = |native: &mut Native| {
-            native
-                .settle(
-                    "the avatar docked on the Fleet",
-                    |seen| {
-                        (seen.document.context == Context::Fleet { id: fleet.clone() })
-                            .then_some(())
-                    },
-                    |_| true,
-                )
-                .is_ok()
-        };
         native.drag(&Target::AVATAR, &onto)?;
-        let docked = docked_on_fleet(native);
-        let requests = native.window_requests()?.len();
-        native.click(&Target::AVATAR)?;
-        let answered = native.requests_after(requests, 1)?;
-        native.keep_window("avatar-click-away-minimizes-after-the-reply")?;
-        native.close()?;
-        native.launch()?;
-        native.observe("the avatar drawn after the relaunch", |seen| {
-            seen.shows(&Target::AVATAR).then_some(())
+        let dropped = native.picture()?;
+        native.settle(
+            "the avatar docked on the Fleet",
+            |seen| (seen.document.context == Context::Fleet { id: fleet.clone() }).then_some(()),
+            |_| true,
+        )?;
+        native.observe("a picture drawn after the drop", |seen| {
+            (seen.frame.sequence > dropped).then_some(())
         })?;
-        show_fleet(native)?;
-        let arm = native.system.arm_core(SAVE, Fault::Hold { ms: HELD_MS })?;
-        native.drag(&Target::AVATAR, &onto)?;
         let requests = native.window_requests()?.len();
+        let arm = native.system.arm_core(SAVE, Fault::Hold { ms: HELD_MS })?;
+        native.drag(&Target::AVATAR, &Target::WORKSPACE_DOCK)?;
         native.click(&Target::AVATAR)?;
         let clicked = now_millis();
-        let held = native.requests_after(requests, 1)?;
-        let redocked = docked_on_fleet(native);
-        let released = held_release(native, &arm)?;
-        native.keep_window("avatar-click-away-minimizes")?;
-        Verdict::new()
-            .expect("the avatar docked on the Fleet", docked && redocked)
-            .expect(
-                "a click after the dock's reply had arrived sent one iconic change-state request for the window",
-                minimises(&answered),
+        let opened = native
+            .settle(
+                "the Home view shown",
+                |seen| Some((seen.document.view.clone(), seen.document.context.clone())),
+                |(view, _)| *view == WorkspaceView::Home,
             )
+            .ok();
+        let released = held_release(native, &arm)?;
+        let sent = native.requests_through_quiet(requests)?;
+        native.keep_window("avatar-click-while-docking-home-is-held")?;
+        Verdict::new()
             .expect(
-                "the Core relay held the dock's save, so the second click came while the dock was unanswered",
+                "the Core relay held the dock home's save, so the click came while the dock was unanswered",
                 released.is_some_and(|released| clicked < released),
             )
             .expect(
-                "a click right after the drag onto a Fleet sent one iconic change-state request for the window",
-                minimises(&held),
+                "the avatar was docked home when the dock's reply landed",
+                opened
+                    .as_ref()
+                    .is_some_and(|(_, context)| *context == Context::Workspace),
             )
-            .observed("answeredRequests", &answered)?
-            .observed("heldRequests", &held)?
+            .expect(
+                "the click made while the dock waited was kept and opened the Home view once the reply landed",
+                opened
+                    .as_ref()
+                    .is_some_and(|(view, _)| *view == WorkspaceView::Home),
+            )
+            .expect(
+                "neither the dock nor the click sent a minimise request for the window",
+                !minimises(&sent),
+            )
             .observed("clickedAtMs", clicked)?
-            .observed("releasedAtMs", released)
+            .observed("releasedAtMs", released)?
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::AvatarClickAwayChangesNothing, |native| {
+        show_fleet(native)?;
+        let fleet = native
+            .document()?
+            .context("Missing saved layout")?
+            .1
+            .selected_fleet
+            .context("The layout has no selected Fleet")?;
+        let onto = Target::name(&RenameTarget::Fleet { id: fleet.clone() });
+        native.drag(&Target::AVATAR, &onto)?;
+        let docked = native
+            .settle(
+                "the avatar docked on the Fleet",
+                |seen| {
+                    (seen.document.context == Context::Fleet { id: fleet.clone() }).then_some(())
+                },
+                |_| true,
+            )
+            .is_ok();
+        let holder = native.settle(
+            "the keyboard back on a Vessel after the dock",
+            focused,
+            |_| true,
+        )?;
+        let layout_before =
+            serde_json::to_value(native.document()?.context("Missing saved layout")?.1)?;
+        let requests = native.window_requests()?.len();
+        native.click(&Target::AVATAR)?;
+        let sent = native.requests_through_quiet(requests)?;
+        let layout_after =
+            serde_json::to_value(native.document()?.context("Missing saved layout")?.1)?;
+        let holder_after = native.observe("the canvas focus after the click", |seen| {
+            Some(focused(seen))
+        })?;
+        let still_up = native.observe("the window still drawing the avatar", |seen| {
+            seen.shows(&Target::AVATAR).then_some(())
+        });
+        native.keep_window("avatar-click-away-changes-nothing")?;
+        Verdict::new()
+            .expect("the avatar docked on the Fleet", docked)
+            .expect(
+                "a click on the avatar docked away from home sent no request for the window",
+                sent.is_empty(),
+            )
+            .expect(
+                "the layout was the same after the click",
+                layout_before == layout_after,
+            )
+            .expect(
+                "the keyboard stayed on the Vessel that held it",
+                holder_after == Some(holder),
+            )
+            .expect("the window stayed up", still_up.is_ok())
+            .observed("requests", &sent)
     })?;
 
     cases.check(native, Case::VoyagerCreatesAndMaximizes, |native| {

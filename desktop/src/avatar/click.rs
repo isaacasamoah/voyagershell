@@ -7,15 +7,14 @@ use voyager_contract::{Action, Context as Scope};
 pub(super) enum Click {
     Restore,
     Home,
-    Minimize,
 }
 
 impl Click {
-    pub(super) fn of(floating: bool, scope: &Scope) -> Self {
+    pub(super) fn of(floating: bool, scope: &Scope) -> Option<Self> {
         match (floating, scope) {
-            (true, _) => Self::Restore,
-            (false, Scope::Workspace) => Self::Home,
-            (false, _) => Self::Minimize,
+            (true, _) => Some(Self::Restore),
+            (false, Scope::Workspace) => Some(Self::Home),
+            (false, _) => None,
         }
     }
 }
@@ -48,14 +47,9 @@ impl Avatar {
 
     fn click(&mut self, window: &Window, cx: &mut Context<Self>) {
         match Click::of(self.floating == Some(window.window_handle()), &self.scope) {
-            Click::Restore => self.restore_workspace(cx),
-            Click::Home => self.submit(Action::Home, cx),
-            Click::Minimize => {
-                if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some() {
-                    eprintln!("Avatar float trigger: activation");
-                }
-                self.float(window, cx);
-            }
+            Some(Click::Restore) => self.restore_workspace(cx),
+            Some(Click::Home) => self.submit(Action::Home, cx),
+            None => {}
         }
     }
 }
@@ -66,13 +60,13 @@ mod tests {
     use voyager_contract::FleetId;
 
     #[test]
-    fn a_click_opens_home_at_home_and_minimizes_anywhere_else() {
+    fn a_click_opens_home_at_home_and_does_nothing_anywhere_else() {
         let fleet = Scope::Fleet {
             id: FleetId("fleet".into()),
         };
-        assert_eq!(Click::of(false, &Scope::Workspace), Click::Home);
-        assert_eq!(Click::of(false, &fleet), Click::Minimize);
-        assert_eq!(Click::of(true, &Scope::Workspace), Click::Restore);
-        assert_eq!(Click::of(true, &fleet), Click::Restore);
+        assert_eq!(Click::of(false, &Scope::Workspace), Some(Click::Home));
+        assert_eq!(Click::of(false, &fleet), None);
+        assert_eq!(Click::of(true, &Scope::Workspace), Some(Click::Restore));
+        assert_eq!(Click::of(true, &fleet), Some(Click::Restore));
     }
 }

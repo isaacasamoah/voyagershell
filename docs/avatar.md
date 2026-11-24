@@ -118,10 +118,9 @@ tagline have one combined image name.
 The avatar is still at rest and runs finite animations on deliberate triggers.
 Hover starts one stretch on entry. Staying over the hit area does not repeat it.
 An applied dock replaces any active clip with a pronounced two-second float.
-Hover is ignored while a clip runs and is never queued. Click keeps its original
-minimize/restore action while the avatar is docked anywhere but home. While the
-avatar is home, a click sends the existing Home request and the window stays up. A click made while a dock is still
-waiting for its reply is kept, one deep with the latest winning, and acts when the reply returns.
+Hover is ignored while a clip runs and is never queued. Clicking the floating avatar restores the workspace. While the
+avatar is home, a click sends the existing Home request and the window stays up. While the avatar is docked anywhere
+else, a click changes nothing, so that click stays free for a later docking menu. A dock on the home dock leaves the view, the Voyage and the Fleet where they were, and only a click on the avatar at home opens the home Voyage. A dock on a Vessel or a Voyage inside Home still shows Home. A click made while a request is still waiting for its reply is kept, one deep with the latest winning, and acts when the reply returns, by where the avatar is docked then.
 Dragging keeps its placement behavior and sound.
 Shift-click and focused S also play the hover binding. Focused F5 reloads the
 profile's animation files. S and F5 use local press/release latches because the

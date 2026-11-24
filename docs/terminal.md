@@ -78,9 +78,12 @@ These definitions describe what each user action does.
   registers the window's single should-close handler, which dispatches `Quit`
   and refuses the immediate close; `desktop/src/quit.rs` then exits the app.
   This replaces the earlier warm close, where the close button minimised the
-  workspace and floated the avatar. Clicking the avatar while it is docked
-  anywhere but home, and the platform's minimise, still float it. Clicking the
-  avatar while it is home opens the home Voyage and the window stays up.
+  workspace and floated the avatar. The platform's minimise still floats it.
+  Clicking the avatar while it is home opens the home Voyage and the window
+  stays up. Clicking it while it is docked anywhere else changes nothing. A click
+  made while a dock is still waiting for its reply waits for that reply and then
+  does what a click does where the avatar lands, which is to open home or to do
+  nothing.
 - **Closing a Vessel or Portal.** The panel's close button hides the placement
   and keeps its backend program running in Core. It never stops a program.
   This is unchanged.
