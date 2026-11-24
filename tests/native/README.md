@@ -1343,7 +1343,9 @@ never hears its own reply here.
 
 `talk_during_reply` in `src/audio/voice.rs` is the shared action. It records the
 speaker, clicks voice on, feeds a request and waits for the app's `speech-started` mark,
-as `click_off_during_reply` does. It then feeds the case's speech over the reply, waits
+as `click_off_during_reply` does. The marks it returns begin at the click, so they hold the
+request's own `sent`. A case counts `sent` only after the reply's `speech-started` mark. The stop case reads the stand-in's screen from before its request, so it
+expects exactly one more `[spoken]` line there, the request itself. It then feeds the case's speech over the reply, waits
 for the case's end marks in order, watches for 2 s more and clicks voice off. At each
 look it records the control's drawn label and whether the app records the microphone.
 

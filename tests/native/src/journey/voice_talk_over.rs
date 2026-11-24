@@ -131,7 +131,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect(
                 "nothing is sent to Voyager",
-                count(&talked.marks, "sent") == 0,
+                count(after(&talked.marks, "speech-started"), "sent") == 0,
             )
             .observed("heard", heard)?
             .observed("onsetToSilenceAtSpeakerMs", talked.onset_to_silence_ms)?
@@ -182,7 +182,7 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect(
                 "the app sends it once",
-                count(&talked.marks, "sent") == 1,
+                count(after(&talked.marks, "speech-started"), "sent") == 1,
             )
             .expect(
                 "the cut reply never resumes",
@@ -239,8 +239,8 @@ fn drive_cases(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect(
                 "nothing is sent to Voyager",
-                count(&talked.marks, "sent") == 0
-                    && heard_lines(&screen, SPOKEN) == heard_lines(&before, SPOKEN),
+                count(after(&talked.marks, "speech-started"), "sent") == 0
+                    && heard_lines(&screen, SPOKEN) == heard_lines(&before, SPOKEN) + 1,
             )
             .expect(
                 "the control is drawn listening again",
