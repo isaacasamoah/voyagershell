@@ -865,7 +865,7 @@ test("navigation waits for a layout save and is cleared on refusal or uncertaint
         ? ["save-arrangement", "home"]
         : ["save-arrangement"],
     );
-    assert.equal(view.afterRename, null);
+    assert.equal(view.heldNavigation, null);
   }
 });
 
@@ -874,7 +874,54 @@ test("Home is retained while an entity rename is saving", () => {
   view.busy = true;
   view.editing = { saving: true };
   view.run({ operation: "home" }, cx);
-  assert.deepEqual(view.afterRename, { operation: "home" });
+  assert.deepEqual(view.heldNavigation, { operation: "home" });
+});
+
+test("a Home, Voyage or Fleet click made while the canvas is busy is held and a newer one replaces it", () => {
+  const { view, cx } = fixture("applied");
+  view.busy = true;
+  view.run({ operation: "select-fleet", id: "fleet-2" }, cx);
+  view.run({ operation: "select-voyage", id: "voyage-2" }, cx);
+  assert.deepEqual(view.heldNavigation, {
+    operation: "select-voyage",
+    id: "voyage-2",
+  });
+  assert.notEqual(
+    view.status,
+    "Workspace preparation is pending. This action was not sent.",
+  );
+});
+
+test("another action made while the canvas is busy is still not sent", () => {
+  const { view, cx } = fixture("applied");
+  view.busy = true;
+  view.run({ operation: "create-fleet", voyage: "voyage" }, cx);
+  assert.ok(!view.heldNavigation);
+  assert.equal(
+    view.status,
+    "Workspace preparation is pending. This action was not sent.",
+  );
+});
+
+test("a held click is sent when the busy run applies and reported when it does not", async () => {
+  for (const status of ["applied", "refused", "uncertain"]) {
+    const { view, cx, pending, layout, actions } = fixture("applied", status);
+    layout.vessels = [];
+    view.run({ operation: "inspect" }, cx);
+    view.run({ operation: "select-fleet", id: "fleet" }, cx);
+    assert.deepEqual(view.heldNavigation, {
+      operation: "select-fleet",
+      id: "fleet",
+    });
+    for (let index = 0; index < pending.length; index++) await pending[index];
+    assert.deepEqual(
+      actions,
+      status === "applied" ? ["inspect", "select-fleet"] : ["inspect"],
+    );
+    assert.equal(view.heldNavigation, null);
+    if (status !== "applied")
+      assert.match(view.status, /The held click was not sent\./);
+  }
 });
 
 test("a pending layout save cannot open another name editor", () => {
