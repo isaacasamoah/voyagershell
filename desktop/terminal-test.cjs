@@ -1051,6 +1051,17 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   const source = `${workspaceSource("VOYAGER_WORKSPACE_SOURCE", "class")}\nreturn { Canvas, moveFocus, inspectNotice };`;
   let ownerRevision = "7";
   let packageRevision = "0";
+  const handlers = [];
+  async function notice() {
+    const tasks = [];
+    handlers.at(-1)({
+      notify() {},
+      spawn(body) {
+        tasks.push(body({ notify() {} }));
+      },
+    });
+    await Promise.all(tasks);
+  }
   const targets = [];
   const nodes = [];
   function div() {
@@ -1110,6 +1121,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "MeasureHeight",
     "Occluding",
     "Prepared",
+    "NoticeListener",
     "PortalArea",
     "Column",
     "client_decorated",
@@ -1170,6 +1182,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     {
       new(ready) {
         prepared.push(ready);
+        return div();
+      },
+    },
+    {
+      new(handler) {
+        handlers.push(handler);
         return div();
       },
     },
@@ -1430,11 +1448,14 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   actions.length = 0;
   packageRevision = "1";
   view.render({});
-  view.render({});
+  assert.deepEqual(actions, [], "A render starts no workspace request");
+  await notice();
+  await notice();
   assert.deepEqual(actions, [{ operation: "inspect" }]);
   assert.equal(view.version, "7", "The test retains an unconfirmed refresh");
   packageRevision = "2";
   view.render({});
+  await notice();
   assert.deepEqual(actions, [
     { operation: "inspect" },
     { operation: "inspect" },
@@ -1442,6 +1463,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   ownerRevision = "10";
   view.version = "10";
   view.render({});
+  await notice();
   assert.equal(
     actions.length,
     2,
@@ -1465,6 +1487,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     false,
     "A pending workspace request is drawn as not prepared",
   );
+  await notice();
   assert.equal(view.refreshRequested, true);
   assert.equal(view.workspaceNotice.revision, "10");
   view.version = "11";

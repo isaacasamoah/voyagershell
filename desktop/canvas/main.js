@@ -19,15 +19,9 @@ import {
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
-import { Occluding, Marker, Prepared } from "voyager_native";
+import { Occluding, Marker, Prepared, NoticeListener } from "voyager_native";
 import { Chat } from "./chat.js";
-import {
-  changedBesidesRevision,
-  errorMessage,
-  outcome,
-  startingNotice,
-  statusLine,
-} from "./status.js";
+import { errorMessage, outcome, startingNotice, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { agentsShown } from "./agents.js";
@@ -40,7 +34,9 @@ import {
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
+  followDockNotice,
   inspectNotice,
+  noticeArrived,
   focusedPlacement,
   moveFocus,
   refocus,
@@ -603,6 +599,7 @@ export default class Canvas extends View {
         task.notify();
         if (!prepared) this.pendingShortcuts = [];
       } finally {
+        if (!this.busy) followDockNotice(this, task);
         if (!this.busy && this.refreshRequested) inspectNotice(this, task);
       }
       if (!this.busy) this.flushShortcuts(task, prepared);
@@ -1707,13 +1704,6 @@ export default class Canvas extends View {
         this.status = errorMessage(error);
       }
     }
-    if (
-      ownerNotice.revision !== this.workspaceNotice.revision ||
-      changedBesidesRevision(ownerNotice, this.workspaceNotice)
-    ) {
-      this.refreshRequested = true;
-      if (!this.busy) inspectNotice(this, cx);
-    }
     const colors = projection();
     const shell = div()
       .track_focus(this.focus)
@@ -1749,7 +1739,8 @@ export default class Canvas extends View {
       .text_size(13)
       .bg(colors.background)
       .text_color(colors.foreground)
-      .child(Prepared.new(!this.busy));
+      .child(Prepared.new(!this.busy))
+      .child(NoticeListener.new((cx) => noticeArrived(this, cx)));
     const layout = this.layout;
     if (!layout?.canvas || (!layout.voyages.length && !layout.home))
       return shell

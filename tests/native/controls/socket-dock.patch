@@ -1,10 +1,9 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index d5607d1b..536243bd 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -85,7 +85,7 @@ export function acceptDockResult(workspace, cx) {
-     }
-   }
+@@ -97,7 +97,7 @@ export function noticeArrived(workspace, cx) {
+ }
+ export function followDockNotice(workspace, cx) {
    if (workspace.busy) return;
 -  const dock = workspace_notice().dockRevision;
 +  const dock = JSON.stringify(workspace.layout?.context);
@@ -12,12 +11,11 @@ index d5607d1b..536243bd 100644
    if (seen === undefined) seenDocks.set(workspace, dock);
    else if (seen !== dock) followDock(workspace, seen, dock, cx);
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index f83bd51d..bad2ba0a 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -117,7 +117,7 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
-     }
-   }
+@@ -131,7 +131,7 @@ export function noticeArrived(workspace: Canvas, cx: UIContext) {
+ 
+ export function followDockNotice(workspace: Canvas, cx: UIContext) {
    if (workspace.busy) return;
 -  const dock = workspace_notice().dockRevision;
 +  const dock = JSON.stringify(workspace.layout?.context);

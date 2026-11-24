@@ -20,6 +20,7 @@ mod notes_draft;
 mod notes_input;
 mod notes_scope;
 mod notes_session;
+mod notice_listener;
 mod occluding;
 mod platform;
 mod quit;
@@ -130,6 +131,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         .run(move |cx: &mut App| {
             #[cfg(feature = "frame-profiler")]
             diagnostics::frame::start(cx);
+            let notices = notice_listener::install(cx);
             let registry = match native_registry(viewers.clone()) {
                 Ok(registry) => registry,
                 Err(error) => {
@@ -189,6 +191,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             initial_source,
                             client,
                             viewers,
+                            notices,
                             conversation,
                             notes,
                             avatar,
@@ -239,6 +242,7 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
     occluding::register(&mut registry).context("Native overlay registration")?;
     inspect::register(&mut registry).context("Inspection registration")?;
     terminal::register(&mut registry, viewers).context("Terminal registration")?;
+    notice_listener::register(&mut registry).context("Notice registration")?;
     registry.freeze().context("Native registry")
 }
 

@@ -24,6 +24,8 @@ use voyager_app::{
 };
 use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessRequest};
 use voyager_contract::operations;
+
+use crate::notice_listener::Listener;
 use voyager_contract::{Context as WorkspaceContext, Request};
 
 use crate::bridge::{Bridge, decimal};
@@ -452,6 +454,7 @@ pub struct CanvasHost {
     _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
     _workspace_task: Task<()>,
+    _notice_task: Task<()>,
     _close_saves: Task<()>,
     load_error: Option<String>,
     theme_error: Option<String>,
@@ -470,6 +473,7 @@ pub struct Setup {
     pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
     pub client: Client,
     pub viewers: Viewers,
+    pub notices: Listener,
     pub notes: crate::notes::Host,
     pub conversation: voyager_app::conversation_client::Client,
     pub avatar: crate::avatar::Binding,
@@ -491,6 +495,7 @@ impl CanvasHost {
             initial_source,
             client,
             viewers,
+            notices,
             notes,
             conversation,
             avatar,
@@ -545,6 +550,9 @@ impl CanvasHost {
         let changed_revision = workspace_binding.notice.clone();
         let changed_activity = workspace_binding.activity.clone();
         let changed_runtime = runtime.clone();
+        let changed_notices = notices.clone();
+        let notice_window = window.window_handle();
+        let notice_task = cx.spawn(async move |_, cx| notices.deliver_to(notice_window, cx).await);
         let workspace_task = cx.spawn(async move |this, cx| {
             let mut after = None;
             loop {
@@ -579,6 +587,7 @@ impl CanvasHost {
                             {
                                 canvas.watch_error = Some(format!("{error:#}"));
                             }
+                            changed_notices.raise();
                         }
                         Err(error) => canvas.watch_error = Some(error),
                     }
@@ -738,6 +747,7 @@ impl CanvasHost {
             _avatar: avatar_observe,
             _task: task,
             _workspace_task: workspace_task,
+            _notice_task: notice_task,
             _close_saves: close_saves,
             load_error,
             theme_error,
