@@ -659,6 +659,7 @@ mod tests {
                     "/tmp".into(),
                     voyager_contract::launch::Launch::Terminal,
                     None,
+                    voyager_contract::caller::Caller::Agent,
                 )
                 .unwrap();
         }
