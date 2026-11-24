@@ -1,9 +1,10 @@
 use super::layout::{avatar_bounds, avatar_on_dock};
 use super::{Case as _, Cases, Verdict, cases};
+use crate::core_relay::{Watched, watched_since};
 use crate::inspection::{Target, region};
 use crate::native::{
-    DRAG_REST, GRAB_AFTER_SWITCH, Held, LOOK, Moved, Native, PRINT_AT_REST, Seen, Stopwatch,
-    Terminal, Wheel, changed, fleets, hold, now_millis, voyages,
+    DOCK_FOLLOW_MARGIN, DRAG_REST, GRAB_AFTER_SWITCH, Held, LOOK, Moved, Native, PRINT_AT_REST,
+    Seen, Stopwatch, Terminal, Wheel, changed, fleets, hold, now_millis, voyages,
 };
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Geometry, Pixels};
@@ -28,6 +29,7 @@ cases! {
 }
 
 pub const CONTROL: Case = Case::CaughtUp;
+pub const WATCH: &str = "watch:doc.set";
 
 const SEGMENT: usize = 25;
 const LAP: usize = 150;
@@ -751,7 +753,13 @@ fn widest_vessel(
 fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Result<Verdict> {
     let native: &Native = native;
     show(native, home)?;
-    let (fresh, fresh_at) = widest_vessel(native, home, None)?;
+    let docked_now = native
+        .document()?
+        .and_then(|(_, layout)| match layout.context {
+            Scope::Vessel { id } => Some(id),
+            _ => None,
+        });
+    let (fresh, fresh_at) = widest_vessel(native, home, docked_now.as_ref())?;
     show(native, away)?;
     let (mut held, clicked) = switch_and_grab(native, home)?;
     let pressed = Stopwatch::start();
@@ -762,6 +770,7 @@ fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Res
                 .then_some(())
         })
         .is_ok();
+    let dropped = now_millis();
     held.release()?;
     let docked_new = native
         .observe("the avatar docked on the new Fleet's Vessel", |seen| {
@@ -769,7 +778,18 @@ fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Res
         })
         .is_ok();
     grabbed_in_time(clicked, pressed)?;
+    poll(PATIENCE, LOOK, true, || {
+        let saves = watched_since(&native.system.evidence, dropped)?;
+        Ok(
+            (!saves.is_empty() && saves.iter().all(|save| save.replied_at_ms.is_some()))
+                .then_some(()),
+        )
+    })?
+    .context("The first drop's saves never all had their replies from Core")?;
+    hold(DOCK_FOLLOW_MARGIN)?;
+    let settled = now_millis();
     let (stale, stale_at) = widest_vessel(native, home, Some(&fresh))?;
+    let switched = now_millis();
     let (mut held, clicked_again) = switch_and_grab(native, away)?;
     let pressed_again = Stopwatch::start();
     held.glide(&line(avatar_place(native)?, stale_at))?;
@@ -780,8 +800,19 @@ fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Res
         })
         .is_ok();
     held.release()?;
-    let settled = native.observe("the drop settled on the other Fleet", |seen| {
+    let landed = native.observe("the drop settled on the other Fleet", |seen| {
         (seen.document.selected_fleet.as_ref() == Some(away)).then(|| seen.document.context.clone())
+    });
+    let saves = watched_since(&native.system.evidence, dropped)?;
+    let late: Vec<&Watched> = saves
+        .iter()
+        .filter(|save| settled < save.asked_at_ms && save.asked_at_ms <= switched)
+        .collect();
+    let landed = landed.with_context(|| {
+        format!(
+            "The second drop never settled on the other Fleet; saves Core was asked for after the first drop: {}",
+            serde_json::to_string(&saves).unwrap_or_default()
+        )
     })?;
     native.keep_window("drag-drop-after-switch")?;
     grabbed_in_time(clicked_again, pressed_again)?;
@@ -796,8 +827,10 @@ fn drop_after_switch(native: &mut Native, away: &FleetId, home: &FleetId) -> Res
         )
         .expect(
             "a drop where a Vessel of the old Fleet was does not dock on that Vessel",
-            !matches!(&settled, Scope::Vessel { id } if *id == stale),
+            !matches!(&landed, Scope::Vessel { id } if *id == stale),
         )
+        .observed("saves after the first drop", &saves)?
+        .observed("saves asked between the wait and the second click", &late)?
         .observed(
             "click to press ms",
             [clicked.until(pressed), clicked_again.until(pressed_again)],

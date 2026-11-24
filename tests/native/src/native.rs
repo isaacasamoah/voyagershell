@@ -6,11 +6,11 @@ mod terminal;
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
 pub use settle::{
-    AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DRAG_REST, ENGINE_START,
-    Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH, LONG_REPLY_WAIT, LONG_SILENCE, Owed,
-    PAST_CORE_DEADLINE, PRINT_AT_REST, PROBE_AFTER_DOCK, PROBE_LATEST, QUIET_MIC, REPLY_WAIT,
-    ROOM_FEED, SEND_WAIT, STATUS_AFTER_CLICK, Stopwatch, VESSEL_CLOSED, after_entry, clock,
-    epoch_millis, hold, now_millis,
+    AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
+    DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH,
+    LONG_REPLY_WAIT, LONG_SILENCE, Owed, PAST_CORE_DEADLINE, PRINT_AT_REST, PROBE_AFTER_DOCK,
+    PROBE_LATEST, QUIET_MIC, REPLY_WAIT, ROOM_FEED, SEND_WAIT, STATUS_AFTER_CLICK, Stopwatch,
+    VESSEL_CLOSED, after_entry, clock, epoch_millis, hold, now_millis,
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 

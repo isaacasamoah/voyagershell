@@ -3,7 +3,7 @@ use crate::system::System;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -20,6 +20,7 @@ pub const LEDGER: &str = "core-relay.jsonl";
 pub const ARM: &str = "core-relay-arm.json";
 pub const ARMS: &str = "core-relay-arms.jsonl";
 const ARMED: &str = "arm";
+const WATCH: &str = "watch:";
 const LONGEST_DELAY_MS: u64 = 30_000;
 const LATE_MS: u64 = 1_000;
 const HEARTBEAT: Duration = Duration::from_millis(250);
@@ -29,6 +30,8 @@ pub struct CoreDelay {
     held: BTreeMap<String, u64>,
     #[serde(default)]
     armed: bool,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    watched: BTreeSet<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -50,20 +53,29 @@ impl CoreDelay {
     pub fn parse(text: &str) -> Result<Self> {
         let mut held = BTreeMap::new();
         let mut armed = false;
+        let mut watched = BTreeSet::new();
         for entry in text.split(',') {
             if entry == ARMED {
                 ensure!(!armed, "Core delay names {ARMED} twice");
                 armed = true;
                 continue;
             }
+            if let Some(method) = entry.strip_prefix(WATCH) {
+                ensure!(
+                    core_method(method),
+                    "Core delay watch {method:?} is not a Core method name"
+                );
+                ensure!(
+                    watched.insert(method.to_owned()),
+                    "Core delay watches {method} twice"
+                );
+                continue;
+            }
             let (method, milliseconds) = entry
                 .split_once('=')
                 .with_context(|| format!("Core delay {entry:?} is METHOD=MS"))?;
             ensure!(
-                !method.is_empty()
-                    && method
-                        .bytes()
-                        .all(|byte| byte.is_ascii_lowercase() || byte == b'.' || byte == b'_'),
+                core_method(method),
                 "Core delay method {method:?} is not a Core method name"
             );
             let milliseconds: u64 = milliseconds
@@ -78,11 +90,23 @@ impl CoreDelay {
                 "Core delay names {method} twice"
             );
         }
-        Ok(Self { held, armed })
+        ensure!(
+            held.keys().all(|method| !watched.contains(method)),
+            "Core delay both holds and watches one method"
+        );
+        Ok(Self {
+            held,
+            armed,
+            watched,
+        })
     }
 
     pub fn is_empty(&self) -> bool {
-        self.held.is_empty() && !self.armed
+        self.held.is_empty() && !self.armed && self.watched.is_empty()
+    }
+
+    fn watches(&self, method: &str) -> bool {
+        self.watched.contains(method)
     }
 
     pub fn armed(&self) -> bool {
@@ -93,6 +117,7 @@ impl CoreDelay {
         self.held
             .iter()
             .map(|(method, milliseconds)| format!("{method}={milliseconds}"))
+            .chain(self.watched.iter().map(|method| format!("{WATCH}{method}")))
             .chain(self.armed.then(|| ARMED.to_owned()))
             .collect::<Vec<_>>()
             .join(",")
@@ -180,6 +205,7 @@ impl CoreDelay {
         let mut applied: HashMap<u64, (Instance, u64)> = HashMap::new();
         let mut alive: HashMap<Instance, u64> = HashMap::new();
         let mut waiting: HashMap<(Instance, u64), (String, u64)> = HashMap::new();
+        let mut unanswered: HashMap<(Instance, u64), (String, u64)> = HashMap::new();
         for (number, line) in ledger.lines().enumerate() {
             let entry: Entry = serde_json::from_str(line)
                 .with_context(|| format!("Core relay ledger line {} is malformed", number + 1))?;
@@ -191,6 +217,34 @@ impl CoreDelay {
             }
             let (relay, at) = match entry {
                 Entry::Alive { relay, at_ms } => (relay, at_ms),
+                Entry::Asked {
+                    relay,
+                    method,
+                    id,
+                    at_ms,
+                } => {
+                    ensure!(
+                        self.watched.contains(&method),
+                        "The Core relay recorded a {method} request it was not asked to watch"
+                    );
+                    unanswered.insert((relay, id), (method, at_ms));
+                    (relay, at_ms)
+                }
+                Entry::Replied {
+                    relay,
+                    method,
+                    id,
+                    at_ms,
+                } => {
+                    let (asked, _) = unanswered.remove(&(relay, id)).with_context(|| {
+                        format!("The Core relay recorded a {method} reply {id} with no request")
+                    })?;
+                    ensure!(
+                        asked == method,
+                        "The Core relay matched a {method} reply to a {asked} request"
+                    );
+                    (relay, at_ms)
+                }
                 Entry::Dropped {
                     relay,
                     method,
@@ -259,6 +313,14 @@ impl CoreDelay {
             let latest = alive.entry(relay).or_default();
             *latest = (*latest).max(at);
         }
+        for ((relay, _), (method, asked)) in unanswered {
+            ensure!(
+                alive
+                    .get(&relay)
+                    .is_none_or(|latest| *latest <= asked + LATE_MS),
+                "The Core relay forwarded a {method} request and never saw its reply"
+            );
+        }
         for ((relay, _), (method, due)) in waiting {
             ensure!(
                 alive
@@ -277,7 +339,7 @@ impl CoreDelay {
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        for method in self.held.keys() {
+        for method in self.held.keys().chain(&self.watched) {
             ensure!(
                 offered.contains(&method.as_str()),
                 "Core has no method {method}, so its delay could never apply"
@@ -285,6 +347,53 @@ impl CoreDelay {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Watched {
+    pub method: String,
+    pub id: u64,
+    pub asked_at_ms: u64,
+    pub replied_at_ms: Option<u64>,
+}
+
+pub fn watched_since(evidence: &Path, since_ms: u64) -> Result<Vec<Watched>> {
+    let ledger = match fs::read_to_string(evidence.join(LEDGER)) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error).context("The Core relay's ledger could not be read"),
+    };
+    let mut seen: Vec<Watched> = Vec::new();
+    for line in ledger.lines() {
+        let Ok(entry) = serde_json::from_str::<Entry>(line) else {
+            continue;
+        };
+        match entry {
+            Entry::Asked {
+                method, id, at_ms, ..
+            } if at_ms >= since_ms => seen.push(Watched {
+                method,
+                id,
+                asked_at_ms: at_ms,
+                replied_at_ms: None,
+            }),
+            Entry::Replied { id, at_ms, .. } => {
+                if let Some(watched) = seen.iter_mut().find(|watched| watched.id == id) {
+                    watched.replied_at_ms = Some(at_ms);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(seen)
+}
+
+fn core_method(method: &str) -> bool {
+    !method.is_empty()
+        && method
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'.' || byte == b'_')
 }
 
 pub fn invoked_as_relay() -> bool {
@@ -405,12 +514,24 @@ enum Entry {
         undelivered_at_ms: u64,
         error: String,
     },
+    Asked {
+        relay: Instance,
+        method: String,
+        id: u64,
+        at_ms: u64,
+    },
+    Replied {
+        relay: Instance,
+        method: String,
+        id: u64,
+        at_ms: u64,
+    },
 }
 
 impl Entry {
     fn arm(&self) -> Option<(u64, Instance, u64)> {
         match self {
-            Self::Alive { .. } => None,
+            Self::Alive { .. } | Self::Asked { .. } | Self::Replied { .. } => None,
             Self::Dropped { relay, id, arm, .. } | Self::Stalled { relay, id, arm, .. } => {
                 Some((*arm, *relay, *id))
             }
@@ -426,6 +547,7 @@ struct Relay {
     arm: Option<PathBuf>,
     instance: Instance,
     asked: Mutex<HashMap<u64, Asked>>,
+    watching: Mutex<HashMap<u64, String>>,
     ledger: Mutex<File>,
 }
 
@@ -439,6 +561,7 @@ impl Relay {
                 started_at_ms: now(),
             },
             asked: Mutex::default(),
+            watching: Mutex::default(),
             ledger: Mutex::new(ledger),
         }
     }
@@ -447,6 +570,12 @@ impl Relay {
         self.asked
             .lock()
             .expect("the relay's request table is never held across a panic")
+    }
+
+    fn watching(&self) -> MutexGuard<'_, HashMap<u64, String>> {
+        self.watching
+            .lock()
+            .expect("the relay's watch table is never held across a panic")
     }
 
     fn hold(&self, id: u64, asked: &Asked, replied: u64) -> Hold {
@@ -579,6 +708,15 @@ fn forward_requests(mut from: impl BufRead, to: &mut impl Write, relay: &Relay) 
                 }) => Some(Duration::from_millis(*ms)),
                 None => relay.delay.hold(method),
             };
+            if hold.is_none() && relay.delay.watches(method) {
+                relay.watching().insert(id, method.to_owned());
+                relay.record(&Entry::Asked {
+                    relay: relay.instance,
+                    method: method.to_owned(),
+                    id,
+                    at_ms: now(),
+                });
+            }
             if let Some(hold) = hold {
                 relay.asked().insert(
                     id,
@@ -612,6 +750,16 @@ fn forward_replies<W: Write + Send + 'static>(
             .message()
             .filter(|message| message.get("result").is_some() || message.get("error").is_some())
             .and_then(|message| message["id"].as_u64());
+        if let Some((id, method)) = reply.and_then(|id| Some((id, relay.watching().remove(&id)?))) {
+            frame.write(&mut *locked(to))?;
+            relay.record(&Entry::Replied {
+                relay: relay.instance,
+                method,
+                id,
+                at_ms: now(),
+            });
+            continue;
+        }
         let delayed = reply.and_then(|id| Some((id, relay.asked().remove(&id)?)));
         let Some((id, asked)) = delayed else {
             frame.write(&mut *locked(to))?;
@@ -800,6 +948,74 @@ mod tests {
             !ledger.contains("doc.get"),
             "only held methods are recorded"
         );
+    }
+
+    #[test]
+    fn a_watched_method_passes_unchanged_and_pairs_each_request_with_its_reply() {
+        let started = Instant::now();
+        let (arrived, ledger) = pass(
+            "watch:doc.set",
+            &[("doc.set", 1), ("doc.get", 2), ("doc.set", 3)],
+            &[3, 2, 1],
+        );
+        let order: Vec<u64> = arrived.iter().map(|(_, id)| *id).collect();
+        assert_eq!(order, [3, 2, 1], "replies keep Core's order");
+        assert!(
+            arrived
+                .iter()
+                .all(|(at, _)| at.duration_since(started) < Duration::from_millis(150)),
+            "a watch adds no delay"
+        );
+        let lines = ledger_lines(&ledger);
+        let events: Vec<(&str, u64)> = lines
+            .iter()
+            .map(|line| {
+                (
+                    line["event"].as_str().unwrap(),
+                    line["id"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            events,
+            [("asked", 1), ("asked", 3), ("replied", 3), ("replied", 1)]
+        );
+        assert!(
+            !ledger.contains("doc.get"),
+            "only watched methods are recorded"
+        );
+        let delay = CoreDelay::parse("watch:doc.set").expect("a watch");
+        delay
+            .audit(&ledger, "")
+            .expect("paired requests pass the audit");
+    }
+
+    #[test]
+    fn a_watched_request_with_no_reply_fails_the_audit() {
+        let delay = CoreDelay::parse("watch:doc.set").expect("a watch");
+        let relay = r#"{"pid":7,"startedAtMs":1}"#;
+        let asked =
+            format!(r#"{{"event":"asked","relay":{relay},"method":"doc.set","id":4,"atMs":100}}"#);
+        let alive = format!(r#"{{"event":"alive","relay":{relay},"atMs":2000}}"#);
+        let error = delay
+            .audit(&format!("{asked}\n{alive}"), "")
+            .expect_err("a request with no reply fails");
+        assert!(
+            error.to_string().contains("never saw its reply"),
+            "{error:#}"
+        );
+        let replied = format!(
+            r#"{{"event":"replied","relay":{relay},"method":"doc.set","id":5,"atMs":100}}"#
+        );
+        assert!(
+            delay.audit(&replied, "").is_err(),
+            "a reply with no request fails"
+        );
+        let parsed = CoreDelay::parse("doc.get=50,watch:doc.set,arm").expect("a mixed delay");
+        assert_eq!(parsed.encode(), "doc.get=50,watch:doc.set,arm");
+        assert!(CoreDelay::parse("watch:doc.set,watch:doc.set").is_err());
+        assert!(CoreDelay::parse("doc.set=50,watch:doc.set").is_err());
+        assert!(CoreDelay::parse("watch:").is_err());
     }
 
     #[test]

@@ -180,6 +180,7 @@ impl Journey {
             Self::SlowList => Some(slow_list::HOLD),
             Self::HomeCreate => Some(home_create::HOLD),
             Self::SocketDock => Some(socket_dock::HOLD),
+            Self::AvatarDrag => Some(avatar_drag::WATCH),
             _ => None,
         }
     }

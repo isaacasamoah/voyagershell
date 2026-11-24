@@ -487,9 +487,19 @@ the circle's area and the avatar's resting place.
   a later grab ends the run inconclusive. Its control is a build that still
   ends a drag when the canvas reports a new layout.
 - `drop-after-switch` grabs the same way, then drops on the widest Vessel of
-  the home Fleet, which only the new layout shows, and expects a dock there.
-  It then grabs as the hidden Fleet's tab is clicked and drops where another
-  home Vessel was, and expects no dock on that Vessel. Each drop waits until
+  the home Fleet that the avatar is not already docked on, which only the new
+  layout shows, and expects a dock there. It waits until every layout save
+  sent since that drop has Core's reply, matched by id in the relay's watch,
+  and then holds `DOCK_FOLLOW_MARGIN`, 400 ms. That margin is a timing margin,
+  not a state wait. On main, the canvas drops a Fleet click made while it
+  finishes a dock's follow-up inspect (issue 38), and no observable state marks
+  the end of that follow-up: an inspect request line does not say which run it
+  belongs to. Clicks made 300 ms or more after a dock were kept in 70 of 70
+  measured trials. A state wait replaces the margin once one exists. It then
+  grabs as the hidden Fleet's tab is clicked and drops where another home
+  Vessel was, and expects no dock on that Vessel. It records the saves after
+  the first drop and any sent between the wait and the second click, because
+  the wait cannot see a save the app has not sent yet. Each drop waits until
   the new Fleet is shown under the held avatar, so the drop is judged against
   the layout current at release. The first drop's control is the build that
   ends a drag on a new layout. The second's is a build that judges the drop
@@ -817,6 +827,16 @@ still in the path, so zero measures the relay and not its absence. A run without
 `--core-delay` has no relay. The driver's own requests to Core, including its
 `doc.get` and `terminal.list` reads, go to the socket directly and are never
 held, so an observation sees the true state while the app sees the delayed one.
+
+`watch:METHOD` in the delay list records the named method without holding it.
+The relay writes an `asked` line with the request's id when the app sends it
+and a `replied` line with the same id when Core answers, and forwards both
+frames at once and unchanged. A method can be held or watched, not both. The
+audit fails a reply with no request and a request whose reply the relay never
+saw while it stayed alive. `watched_since` in `src/core_relay.rs` lists the
+watched requests from a point in time with their reply times. A watch proves
+that every request sent so far has its reply. It cannot see a request the app
+has not sent yet.
 Core accepts and answers those requests within 5 s each. When it does not, the
 error reads "Core did not accept METHOD" or "Core did not answer METHOD", then
 "within 5000 ms on the verifier's own connection", with the operating system's
@@ -924,8 +944,8 @@ A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
 on the command line replaces it. `slow-save` declares `doc.set=1500`, `outcomes` declares
-`terminal.kill=21000`, `slow-list` declares `terminal.list=2000` and
-`home-create` declares `arm`.
+`terminal.kill=21000`, `slow-list` declares `terminal.list=2000`,
+`home-create` declares `arm` and `avatar-drag` declares `watch:doc.set`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can
