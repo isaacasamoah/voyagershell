@@ -544,7 +544,9 @@ fn an_internal_word_in_the_layout_reason_is_said_as_the_workspace() {
             rename(),
             &answered_with(
                 Outcome::Refused,
-                Some("Layout changed; inspect it before making a new request")
+                Some(
+                    "Layout changed; part of what this change touches moved since version 4, and it is now 7. Inspect the layout again, check your change still fits, then resend it with version 7."
+                )
             )
         ),
         because(NAMED_SUBJECT, "the workspace changed first")
@@ -641,7 +643,7 @@ fn every_sentence_uses_a_persons_words() {
         "Fleet is closed",
         "Voyage not found",
         "Selected Voyage changed; reopen the choice",
-        "Layout changed; inspect it before making a new request",
+        "Layout changed; part of what this change touches moved since version 4, and it is now 7. Inspect the layout again, check your change still fits, then resend it with version 7.",
         "Inspect the workspace before making a change",
         "no open Fleet fleet-9",
         "A name must contain 1 to 128 bytes",

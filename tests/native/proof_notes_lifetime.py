@@ -310,8 +310,9 @@ def prove(
                 or (
                     tool["status"] == "rejected"
                     and tool["action"]["action"]["operation"] == "create-vessel"
-                    and tool["text"]
-                    == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
+                    and tool["text"].startswith(
+                        "Workspace request refused: invalid_workspace: Layout changed; part of what this change touches moved since version "
+                    )
                 )
             )
             for tool in tools
