@@ -1,19 +1,47 @@
 # Native shell host
 
-The native shell is an editable JavaScript view rendered through GPUI Shell. The host copies its default script, generated bindings and theme into the selected profile only when those files do not already exist. It exposes a read-only color projection and the typed workspace connection described in [workspace.md](workspace.md). A source reload keeps the previous view if the new source cannot load; theme errors are shown without replacing the last valid theme. The accepted earlier canvas established hosting, not the new workspace operations. Closing this checkpoint quits its own process and bridge, leaving the dedicated Core server running. The complete viewer/quit lifecycle is not yet implemented.
+The native shell is the program that draws the canvas, the whole window surface.
+The canvas is an editable JavaScript view that GPUI Shell renders. This guide
+says how to build and run the shell and how it recovers from a broken edit.
 
-Run the owned trial with an absolute dedicated profile and session:
+## What the host provides
 
-```sh
-./target/release/voyager-shell --profile /absolute/path/to/profile --session voyager-trial
-```
+The host seeds its default script, generated bindings and theme into the
+selected profile. [First-party profile files](content.md#first-party-profile-files)
+says how a later build updates those files and keeps the ones you edited. The
+host gives the script a read-only color projection and the typed workspace
+connection that [the workspace guide](workspace.md) describes.
 
-Build with a Rust toolchain and the GPUI platform's native development libraries available. Linux needs the X11/Wayland and font libraries selected by the platform crate, including the xkbcommon and xkbcommon-x11 development linker libraries. Package names differ by distribution.
+A source reload keeps the previous view if the new source cannot load. A theme
+error is shown without replacing the last valid theme.
+
+## Build and run
+
+Build with a Rust toolchain and the native development libraries that the GPUI
+platform needs. Linux needs the X11 or Wayland and font libraries that the
+platform crate selects, including the xkbcommon and xkbcommon-x11 development
+linker libraries. Package names differ by distribution.
 
 ```sh
 CARGO_BUILD_JOBS=1 cargo build --release --locked -p voyager-desktop --bin voyager-shell
 ```
 
-While an initial package load has failed, a background scan detects changes to visible JavaScript sources, including relative imports. It skips hidden entries, node_modules, target and symlinks, with depth 8 and 4,096 source-file limits. It stops after the first successful load; the maintained shell watcher handles subsequent source edits. A corrected theme can also recover an initial load that depended on it. These are live-authoring operations, separate from program or agent-session recovery.
+Run it with an absolute profile path and a session name. The session name uses
+lowercase letters, digits and hyphens.
 
-The demonstrated native target is Linux/X11 under GNOME. This checkpoint connects to Core's document API, but has no Core program or provider connection. Full workspace UX, terminal rendering, voice and increasing-load performance remain separate acceptance work.
+```sh
+./target/release/voyager-shell --profile /absolute/path/to/profile --session voyager-trial
+```
+
+## Recovering from a failed first load
+
+The first package load can fail, for example after a bad edit. While it is
+failed, a background scan watches the visible JavaScript sources, including
+relative imports, for changes. It skips hidden entries, `node_modules`, `target`
+and symlinks. It looks at most 8 folders deep and at most 4,096 source files. It
+stops after the first successful load, and the shell's own watcher handles
+later edits. A corrected theme can also recover a first load that depended on
+it. This is live authoring. It is separate from restarting programs or agent
+sessions.
+
+The verified native platform is Linux with X11.
