@@ -103,6 +103,27 @@ hyphens.
 Quit with **Ctrl+Q**. The window's close button quits the same way. Both keep
 your programs running in Herdr Core.
 
+### Daily start from an install
+
+An install keeps each build in `builds/` beside `current`, `previous` and
+`next` links and a `start.json` that names the profile and session:
+
+```json
+{"profile": "/home/you/.local/share/voyagershell-profile", "session": "voyager-daily"}
+```
+
+Run these commands with the `voyager` from the install:
+
+- `voyager start` raises the running window, or starts the current build and
+  waits until it is ready. A staged build becomes current first. If it exits
+  before it is ready, start goes back to the previous build and prints the
+  failed build's log.
+- `voyager update --from ~/voyagershell/target/release` copies a local build
+  into the install, checks it and stages it for the next start.
+- `voyager rollback` stages the previous build for the next start.
+
+None of these restarts or updates Herdr Core, and none stops a program.
+
 To learn the app by using it, follow the tutorial,
 [Learn VoyagerShell by running it](docs/README.md). It walks through every
 part of the workspace and traces one click through the code.
