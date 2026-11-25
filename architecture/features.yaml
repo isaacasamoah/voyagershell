@@ -1411,7 +1411,7 @@ features:
         says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
         owner: verification
         guards: ['type:tests/native/src/lifecycle.rs#Run']
-        checks: []
+        checks: ['test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run']
         formal: []
         journeys: []
     docs: [docs/terminal.md]
@@ -1456,7 +1456,7 @@ features:
         says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
         owner: verification
         guards: ['type:tests/native/src/lifecycle.rs#Run']
-        checks: []
+        checks: ['test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run']
         formal: []
         journeys: []
     docs: [docs/content.md, docs/terminal.md]
@@ -1668,7 +1668,7 @@ features:
         says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
         owner: verification
         guards: ['type:tests/native/src/lifecycle.rs#Run']
-        checks: []
+        checks: ['test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run']
         formal: []
         journeys: []
     docs: [docs/workspace.md]
@@ -1989,7 +1989,7 @@ features:
         says: 'A journey passes only when it was observed, finished, recorded and clean. One the battery cannot supply is reported not run, with its reason.'
         owner: verification
         guards: ['type:tests/native/src/lifecycle.rs#Run']
-        checks: []
+        checks: ['test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run']
         formal: []
         journeys: []
       - id: verification-leaves-nothing-behind

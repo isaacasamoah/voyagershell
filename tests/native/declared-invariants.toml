@@ -759,8 +759,7 @@ owner = "verification"
 source = "The verification-lifecycle skill; #169: the battery would have reported profile journeys inconclusive on every merge, observed in the #171 verdict; merges battery-gives-a-verdict per the declared invariants design, section 3e, agreed by Isaac 19 Nov 2026"
 features = ["verification-environment", "profile-theme", "profile-updates", "layout-compat"]
 guard = ["type:tests/native/src/lifecycle.rs#Run"]
-check = []
-gap = "The finite lifecycle check runs by hand and no link type names it. The unit that runs it as a cargo test (DI10) closes that half. The battery half needs a case that withholds a fixture."
+check = ["test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run"]
 confidence = "inferred"
 
 [[invariant]]
