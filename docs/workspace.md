@@ -268,7 +268,7 @@ start every reply with the reply marker `[vy]`. The launch also passes
 `--disallowedTools` with the task tools, `TaskCreate`, `TaskUpdate`, `TaskList`,
 `TaskGet` and `TodoWrite`, so Claude Code's reminder about them is never added
 to the conversation, on a fresh start or a resume. The `voyager` entry is read for
-Voyager alone and does not appear in the Create Vessel picker.
+Voyager alone and does not appear in the content chooser.
 
 At launch the app forgets what `voyager.json` held and decides again from two
 records that must agree. They are the `voyager` Vessel's saved terminal and
@@ -347,6 +347,72 @@ missing. The line holds no reply text and the miss changes nothing else.
 
 Reply text is display data. It never runs an action and is never sent to an
 agent as an instruction.
+
+### How a turn is marked spoken
+
+A prompt that voice sends starts with the marker `[spoken]`, which
+`spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
+the agent reads it. The agent's launch prompt carries the spoken guide, which tells
+the agent that a prompt starting with the marker came by voice and how to answer it
+aloud. [How Voyager talks](voice.md#how-voyager-talks) describes the guide. The launch
+that appends the rule is [Voyager's start](#voyagers-start).
+
+The same launch tells Voyager that this is the app's background Voyager session,
+that its reply marker is `[vy]` and that `[vy]` replaces any other reply marker
+its instructions name. It asks Voyager to start every reply with `[vy]`, which
+`spoken::reply_rule` words. `spoken::strip_reply_marker` keeps only the text after
+the first `[vy]` and removes every later one. The launch passes `--disallowedTools`
+with `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet` and `TodoWrite`, which keeps
+Claude Code's task reminder out of Voyager's replies on a fresh start and on a
+resume. It also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
+own instructions leave their personal reply prefix out of Voyager's replies.
+Claude cannot read its own environment, so the background-session line states the same fact in
+words. Claude Code ignores `--append-system-prompt` when it resumes a
+conversation, and the earlier replies in that conversation carry the personal prefix, so the
+focus hook output repeats the background-session line, `spoken::reply_rule` and the guide,
+which points to `voyager --skill`, at every prompt. A launch with no hook command path has no such
+repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
+the marker, and any text before it, where it stores a reply, so neither the speech filter
+nor the chat note ever sees them.
+
+The hook reads the prompt from the `UserPromptSubmit` input it receives on
+stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
+hook. A prompt that has not arrived by then is treated as typed and the dock is
+still printed. A prompt that starts
+with the marker sends `{"command":"focus","spoken":true,"prompt":"<prompt id>"}`,
+where the prompt id is the `prompt_id` that Claude puts on the same
+`UserPromptSubmit` input and on every `MessageDisplay` and `Stop` input of that
+prompt. A spoken prompt whose input has no `prompt_id` is sent as typed, and the
+hook says so on standard error, because a mark that names no prompt could be
+given to the wrong reply. Every other prompt, and an input the hook cannot read,
+sends the plain focus request, so a typed Home prompt, a Core note and `voyager
+focus` itself are never spoken. `spoken` and `prompt` are omitted when empty. An
+app older than the fields refuses a spoken request, and the hook then prints
+nothing for that prompt.
+
+The app keeps one `spoken::TurnLedger` for its Vessel sockets. A focus request
+with `spoken` true and a `prompt`, answered with the dock and sent from the
+terminal that `voyager.json` names, adds that prompt id as a pending mark for
+that Vessel. The ledger keeps at most 16 pending marks per Vessel and drops the
+oldest first. `observe` gives a turn id it has not seen for that Vessel
+`Kind::Spoken` when a pending mark names the same id, and `Kind::Typed`
+otherwise. A turn is a prompt, so each reply is spoken only if its own prompt
+was spoken, however many prompts were sent before the first reply. A typed
+prompt between two spoken ones takes no mark, and a spoken prompt that never
+produced a reply leaves a mark that no other turn can take. The verdict stays
+with the turn id, so a late event never changes it. Marks are in memory, belong
+to one Vessel and are dropped when its socket closes. Nothing is stored. A
+spoken focus request from any other terminal sets no mark, and a spoken request
+with no `prompt` sets none and is logged.
+
+The hook runs before the model starts, so the mark is pending before the turn's
+first event. The reply path calls `observe` through `Replies::accept_with` when
+a turn's first text arrives, and when a `Stop` arrives for a turn that streamed
+no text, so a spoken turn with no streamed reply still gets its verdict. Each
+`Replies` turn carries it as `spoken`. Only the terminal that `voyager.json`
+names can send replies, so a turn of any other Vessel is never spoken. A reply
+hook input with no `prompt_id` is sent as `unreadable` and logged, and no turn
+is spoken for it.
 
 ### What the caller is told
 
@@ -660,8 +726,8 @@ selector style is introduced by this contract.
 `desktop/canvas/main.ts` controls retained preparation and versioned actions.
 `panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
 renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
-visible members from the Rust projection. `canvas.ts` composes the saved outer
-tree and panel frames. Home uses the same panel factories and its retained global
+visible members from the Rust projection. `regions.ts` composes the saved outer
+tree of the canvas definition. Home uses the same panel factories and its retained global
 arrangement. These modules retain the existing
 terminal, Vessel, divider, avatar and conversation owners.
 

@@ -1,10 +1,12 @@
 # VoyagerShell
 
-VoyagerShell is a canvas for agents and humans to collaborate. It is a Linux
-desktop app for terminals and coding agents. Drag the Voyager avatar onto a
-panel, a tab or a whole space, and that is what it can see and change.
+VoyagerShell is a canvas where people and agents work together. It is a Linux
+desktop app. A panel can hold a terminal, a coding agent or content of a type
+that you declare in a JSON file. Drag the Voyager avatar onto a panel, a tab or a
+whole space, and that is what it can see and change.
 
-There are no releases yet. Build from source.
+VoyagerShell 0.1 is an early release for a small group of users. Build it from
+source.
 
 ## Docking
 
@@ -24,14 +26,28 @@ sent with, so docking somewhere else never changes a request already sent.
 
 ## What you can do
 
-- **Run terminals and coding agents in panels.** Shells, Codex and Claude Code
-  run in [Herdr Core](https://github.com/herdrdev/herdr-core), so they keep
-  running after you quit the app.
+- **Run terminals and coding agents in panels.** Shells, Codex, Claude Code and
+  other agent programs run in [Herdr Core](https://github.com/herdrdev/herdr-core),
+  so they keep running after you quit the app.
 - **Arrange your work.** Add Voyages, Fleets, Vessels and Portals. Split,
   resize and maximize any panel.
-- **Ask the Voyager avatar.** It runs on Codex. It can arrange panels, read and type
-  into terminals and create Git worktrees, only where you dock it. It does not
-  edit your code. Coding agents in panels do that.
+- **Talk to Voyager.** Click the avatar's voice control and speak. Voyager is a
+  Claude Code session that the app starts in a Portal on Home. It reads where
+  the avatar is docked with every prompt, acts through the `voyager` command
+  and its reply is read aloud. Speech is heard and spoken by a local model, so
+  no audio goes to a cloud service. Another click turns voice off.
+- **Chat with the avatar.** The chat panel is a private Codex conversation. It
+  can arrange panels, read and type into terminals and create Git worktrees,
+  only where you dock it. It does not edit your code. Coding agents in panels
+  do that.
+- **Make your own Vessel type.** Write a JSON manifest in your profile that
+  declares the type's state and actions. No build or restart is needed. The app checks it while it runs and
+  lists every problem it finds. A broken edit keeps the last version that
+  worked. [Make a Vessel type](docs/voyager-command.md#make-a-vessel-type)
+  shows how.
+- **Let agents arrange the workspace.** An agent in a Vessel runs the
+  `voyager` command to read the workspace, add Fleets and Vessels and move
+  them. `voyager --skill` prints its guide.
 - **Change the interface while it runs.** The interface is TypeScript compiled
   to JavaScript. The app copies that JavaScript into your profile. Edit a file
   there and the view reloads. A broken edit shows its error and keeps the last
@@ -49,8 +65,18 @@ You need Git, Python 3, Node.js 24, Rust, Zig 0.17, a working Vulkan driver,
 and the GPUI native libraries for X11 or Wayland. Install
 [Herdr Core](https://github.com/herdrdev/herdr-core) so that `hc` is on
 `PATH`. VoyagerShell's Core API is generated from Core 0.1.18, the oldest release
-it supports, and CI tests against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
-Claude panel. Shells need neither.
+it supports, and CI tests against Core 0.1.21.
+
+The assistant and voice need more:
+
+- Claude Code for Voyager, which the app starts on launch.
+- Codex for the chat panel.
+- For voice, the local Omni model files and `llama-server` in the user cache
+  folder, and `parec` and `paplay` from the `pulseaudio-utils` package. [Where
+  the files are found](docs/voice.md#where-the-files-are-found) lists them.
+  Without them, the voice control says that local voice is not installed.
+
+Shells need none of these.
 
 Build from the repository root:
 
@@ -75,8 +101,8 @@ holds your interface scripts, theme and settings. `--session` names your Herdr
 Core session. It starts with `voyager-` and uses lowercase letters, digits and
 hyphens.
 
-Quit with **Ctrl+Q**. Closing the window leaves the Voyager avatar floating on the
-desktop.
+Quit with **Ctrl+Q**. The window's close button quits the same way. Both keep
+your programs running in Herdr Core.
 
 To learn the app by using it, follow the tutorial,
 [Learn VoyagerShell by running it](docs/README.md). It walks through every
@@ -87,7 +113,8 @@ part of the workspace and traces one click through the code.
 ```mermaid
 flowchart LR
 	UI["Interface scripts<br/>TypeScript"] -->|"typed operations"| App["VoyagerShell<br/>Rust"]
-	Agent["Voyager avatar<br/>Codex"] -->|"docked tool calls"| App
+	Agent["Chat<br/>Codex"] -->|"docked tool calls"| App
+	Voyager["Voyager<br/>Claude Code in a Vessel"] -->|"voyager command"| App
 	App -->|"workspace document and programs"| Core["Herdr Core"]
 	App -->|"layout and terminal output"| View["Native views<br/>GPUI and libghostty"]
 	UI --> View
@@ -95,8 +122,9 @@ flowchart LR
 
 Herdr Core owns programs, terminals and the saved workspace document.
 VoyagerShell's Rust application owns placement, content and the dock. Your
-clicks and the Voyager avatar's tool calls run the same Rust operations. The
-app also checks each of its tool calls against where it is docked. One contract,
+clicks, the chat's tool calls and the `voyager` command run the same Rust
+operations. The app also checks each chat tool call against where the avatar
+is docked. One contract,
 written in Rust, generates the TypeScript types and validators that the
 interface uses.
 
@@ -111,6 +139,10 @@ interface uses.
 ## Documentation
 
 - [Learn VoyagerShell by running it](docs/README.md) is the hands-on tutorial.
+- [The voyager command](docs/voyager-command.md) is the guide for agents in
+  Vessels, including how to make a Vessel type. `voyager --skill` prints it.
+- [Glossary](docs/glossary.md) defines Voyage, Fleet, Vessel, Portal and the
+  other words the app uses.
 
 Design notes for contributors:
 
@@ -120,11 +152,13 @@ Design notes for contributors:
 - [Agent launch](docs/agent-launch.md) covers `launches.json`, which adds
   agents beyond Codex and Claude Code.
 - [Vessel types and content](docs/content.md) covers Vessel types and their data.
-- [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
-  tools.
+- [Local voice](docs/voice.md) covers hearing, speaking and the local model.
+- [Private conversation](docs/conversation.md) covers the chat and its tools.
 - [Avatar](docs/avatar.md) covers docking and motion.
 - [Inspection](docs/inspection.md) covers the `--inspect` report of where
   controls are on screen.
+- [Feature map](docs/features.md) lists each feature and the checks that
+  prove it.
 
 ## Contributing
 

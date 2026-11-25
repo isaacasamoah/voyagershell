@@ -310,6 +310,8 @@ procedure.
   types and content](content.md).
 - **An assistant tool.** Start at the tool catalog in
   `app/src/administrator.rs`. See [Private conversation](conversation.md).
+- **A spoken turn.** Start at `app/src/spoken.rs`. See [How a turn is marked
+  spoken](workspace.md#how-a-turn-is-marked-spoken).
 - **A Core call.** Start at `app/src/core.rs` and `app/core-schema.cjs`. See
   [Workspace](workspace.md).
 
