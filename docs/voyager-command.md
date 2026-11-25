@@ -133,7 +133,7 @@ start](workspace.md#voyagers-start) describes the launch.
   these rules at every prompt, because Claude Code ignores
   `--append-system-prompt` when it resumes a conversation.
 
-[How a turn is marked spoken](voice.md#how-a-turn-is-marked-spoken) describes
+[How a turn is marked spoken](workspace.md#how-a-turn-is-marked-spoken) describes
 how the app decides which replies to read aloud.
 
 ## Change the workspace
