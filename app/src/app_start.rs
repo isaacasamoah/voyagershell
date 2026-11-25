@@ -164,18 +164,19 @@ fn start_within(install: &Install, limit: Duration) -> Result<Started, NotStarte
             profile: start.profile,
         });
     }
-    let switched = install
+    let switch = install
         .apply_next()
-        .map_err(|error| NotStarted::Refused(error.to_string()))?
-        .is_some();
+        .map_err(|error| NotStarted::Refused(error.to_string()))?;
     let _ = install.prune(&running_executables());
     let (build, mut child, log) = launch(install, &start)?;
     match wait_ready(&start.session, &mut child) {
         Outcome::Ready => Ok(Started::Ready { build, log }),
         Outcome::Uncertain(pid) => Err(NotStarted::Uncertain { build, pid, log }),
-        Outcome::Exited(status) if !switched => Err(NotStarted::Failed { build, log, status }),
         Outcome::Exited(status) => {
-            let previous = install.fall_back().map_err(|_| NotStarted::Failed {
+            let Some(switch) = switch else {
+                return Err(NotStarted::Failed { build, log, status });
+            };
+            let previous = install.fall_back(&switch).map_err(|_| NotStarted::Failed {
                 build: build.clone(),
                 log: log.clone(),
                 status: status.clone(),

@@ -1349,7 +1349,9 @@ window. When none answers, it applies `next`, so `previous` becomes the old
 the caller's environment minus `HC_SOCKET`, `HC_TERMINAL_ID`, `HC_SCOPE` and
 `HC_TERMINAL_SOCKET` (`app/src/app_start.rs`). It waits for the app to answer
 on its socket or to exit. A build that exits before it is ready makes start
-point `current` back at `previous`, clear `next` and launch that build. A build
+point `current` back at the build it replaced, put `previous` back where it was
+before the switch, clear `next` and launch the build it returned to. A later
+`voyager rollback` therefore still reaches the build before that one. A build
 that does neither within the wait limit is reported with its pid and log, and
 start launches nothing else, because two apps on one profile is a known fault.
 The 60 second wait limit is a target to measure against time to first frame.

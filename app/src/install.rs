@@ -45,6 +45,13 @@ pub struct Start {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub struct Switch {
+    pub to: String,
+    from: Option<String>,
+    before: Option<String>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Staged {
     Next(String),
     AlreadyCurrent(String),
@@ -190,28 +197,45 @@ impl Install {
         self.stage(&previous)
     }
 
-    pub fn apply_next(&self) -> io::Result<Option<String>> {
+    pub fn apply_next(&self) -> io::Result<Option<Switch>> {
         let Some(next) = self.linked(Link::Next)? else {
             return Ok(None);
         };
         let current = self.linked(Link::Current)?;
-        if current.as_deref() != Some(next.as_str()) {
+        let previous = self.linked(Link::Previous)?;
+        let switch = if current.as_deref() == Some(next.as_str()) {
+            Switch {
+                to: next,
+                from: previous.clone(),
+                before: previous,
+            }
+        } else {
             if let Some(current) = &current {
                 self.point(Link::Previous, current)?;
             }
             self.point(Link::Current, &next)?;
-        }
+            Switch {
+                to: next,
+                from: current,
+                before: previous,
+            }
+        };
         self.clear(Link::Next)?;
-        Ok(Some(next))
+        Ok(Some(switch))
     }
 
-    pub fn fall_back(&self) -> io::Result<String> {
-        let previous = self
-            .linked(Link::Previous)?
+    pub fn fall_back(&self, switch: &Switch) -> io::Result<String> {
+        let from = switch
+            .from
+            .clone()
             .ok_or_else(|| io::Error::other("There is no previous build to return to"))?;
-        self.point(Link::Current, &previous)?;
+        self.point(Link::Current, &from)?;
+        match &switch.before {
+            Some(before) => self.point(Link::Previous, before)?,
+            None => self.clear(Link::Previous)?,
+        }
         self.clear(Link::Next)?;
-        Ok(previous)
+        Ok(from)
     }
 
     pub fn add_from(&self, source: &Path) -> Result<String, String> {

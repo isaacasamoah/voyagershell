@@ -123,13 +123,19 @@ fn applying_next_twice_converges_and_keeps_the_old_build_as_previous() {
     let scratch = Scratch::new("apply");
     let install = installed(&scratch, &["a", "b"]);
     install.stage("a").unwrap();
-    assert_eq!(install.apply_next().unwrap(), Some("a".into()));
+    assert_eq!(
+        install.apply_next().unwrap().map(|switch| switch.to),
+        Some("a".into())
+    );
     assert_eq!(install.apply_next().unwrap(), None);
     assert_eq!(links(&install), [Some("a".into()), None, None]);
     install.stage("b").unwrap();
     install.point(Link::Previous, "a").unwrap();
     install.point(Link::Current, "b").unwrap();
-    assert_eq!(install.apply_next().unwrap(), Some("b".into()));
+    assert_eq!(
+        install.apply_next().unwrap().map(|switch| switch.to),
+        Some("b".into())
+    );
     assert_eq!(
         links(&install),
         [Some("b".into()), Some("a".into()), None],
@@ -174,7 +180,7 @@ fn staging_the_current_build_clears_next() {
 }
 
 #[test]
-fn falling_back_twice_returns_to_previous_and_clears_next() {
+fn a_failed_switch_falls_back_twice_and_keeps_the_build_before_for_rollback() {
     let scratch = Scratch::new("fall-back");
     let install = installed(&scratch, &["a", "b", "c"]);
     install.stage("a").unwrap();
@@ -182,10 +188,13 @@ fn falling_back_twice_returns_to_previous_and_clears_next() {
     install.stage("b").unwrap();
     install.apply_next().unwrap();
     install.stage("c").unwrap();
+    let switch = install.apply_next().unwrap().unwrap();
+    assert_eq!(links(&install), [Some("c".into()), Some("b".into()), None]);
     for _ in 0..2 {
-        assert_eq!(install.fall_back().unwrap(), "a");
-        assert_eq!(links(&install), [Some("a".into()), Some("a".into()), None]);
+        assert_eq!(install.fall_back(&switch).unwrap(), "b");
+        assert_eq!(links(&install), [Some("b".into()), Some("a".into()), None]);
     }
+    assert_eq!(install.rollback().unwrap(), Staged::Next("a".into()));
 }
 
 #[test]
