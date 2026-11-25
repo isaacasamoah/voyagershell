@@ -9,7 +9,7 @@ changing presentation. Rust owns placement, content, context and persistence.
 `navigation-view.ts` renders the sidebar, Fleet tabs and bottom context.
 `panels.ts` selects the current groups and visible members from the owner's
 projection. It does not own another layout or repeat Rust placement policy.
-`canvas.ts` composes the saved outer regions and shared panel frames. The
+`regions.ts` composes the saved outer regions of the canvas definition. The
 controller binds each group's split tree to the native divider. `creation.ts`
 retains the content menu's captured destination and workspace version.
 

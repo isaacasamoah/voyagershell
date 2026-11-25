@@ -1,21 +1,24 @@
 # Create a worker Vessel
 
-The source candidate adds a compact Create Vessel picker to the existing pane
-creation area and the collapsed sidebar rail. It offers installed Terminal,
-Codex and configured program entries, including Claude when installed. The
-Agents view and each ready manifest Vessel type use the same creation flow when
-the content catalogue describes them. There is no separate agent section. The
-ordinary Fleet plus and terminal shortcuts still create terminals. Native
-picker/input evidence on this candidate is pending.
+A worker Vessel is a terminal or a coding agent that you add to a Fleet. The
+content chooser opens when you split a panel or choose content for an empty
+Fleet. It lists Terminal,
+each entry of your profile's `launches.json`, such as Codex and Claude, the
+Agents view and each ready Vessel type. An entry whose program is not installed
+shows its error. The Fleet plus and the terminal shortcuts create terminals.
+
+The chooser has no native journey yet. The Agent Vessels row of the [feature
+map](features.md) lists the Python journeys that cover it.
 
 ## Personal defaults
 
-The application seeds `launches.json` once inside the selected personal profile.
-It never overwrites an existing copy or changes global CLI configuration. Edit
-that file to configure entries, models, effort and permissions, then reopen the
-picker to read it again. The picker displays the current values, settings path
-and unavailable executable errors. Broken settings report their error; no default
-shell is silently substituted for a worker.
+The app writes `launches.json` into your profile once, the first time it
+starts with that profile. It never overwrites the file and never changes an
+agent's own configuration. Edit the file to set entries, models, effort and
+permissions, then reopen the chooser to read it again. The chooser shows the
+current values, the file's path and any program that is not installed. A file
+with an error shows that error. The app never starts a shell in place of a
+worker you chose.
 
 For example, a Codex entry can contain:
 
@@ -32,16 +35,26 @@ For example, a Codex entry can contain:
 }
 ```
 
-The outer object has `default` and `entries`. The default entry appears first in
-the picker; it does not make inspection, Fleet creation or reopening start an
-agent. Codex permissions are `yolo`, `workspace-write` or `read-only`. The latter
-two use on-request approval. Settings are limited to 8 KiB and require unique
-entry IDs and a real default entry. Each program launch uses an explicit argv
-array. Claude's seeded entry is `{"kind":"program","argv":["claude"]}`.
-Users can explicitly add its installed model/effort/permission flags to that
-array. Codex permission names are not translated into Claude permission names.
-Settings affect future deliberate creations, not existing programs or the
-private administrator's permission profile.
+The outer object has `default` and `entries`. The default entry is listed first
+in the chooser. It never makes inspecting, creating a Fleet or reopening start an
+agent. A new profile's default is `terminal`. Permissions are `yolo`,
+`workspace-write` or `read-only`. The last two ask for approval on request. The
+file is limited to 8 KiB. Entry ids must be unique, and `default` must name one
+of them.
+
+An entry's `launch` has one of three kinds:
+
+- `{"kind":"terminal"}` starts a shell.
+- `{"kind":"program","argv":[...]}` runs that exact argument list.
+- The `id` of a row of the agent table, such as `codex` or `claude`, builds the
+  argument list from that row's template, as [Agent program
+  table](#agent-program-table) describes.
+
+A new profile's Claude entry is `{"kind":"claude"}`. Its row has no model,
+effort or permission settings, so add any flags you want with a `program`
+launch instead. Codex permission names are not translated into Claude's.
+Settings apply to Vessels you create later. They never change a running program
+or the permissions of the private conversation.
 
 ## Voyager's entry
 
@@ -50,20 +63,20 @@ starts with, for example `{"kind":"program","argv":["claude","--model","claude-s
 Without one, the app uses that command. The app adds `--session-id` or
 `--resume`, `-n voyager`, its identity prompt, its focus hook and its reply hooks after the
 entry's arguments. A `voyager` entry that is not a program launch refuses
-Voyager's start and says so in the status line. The Create Vessel picker never
+Voyager's start and says so in the status line. The content chooser never
 lists it. [Voyager's start](workspace.md#voyagers-start) describes the rest.
 
 ## One application and process owner
 
-The picker captures its destination and workspace revision when it opens.
+The chooser records its destination and workspace revision when it opens.
 The Rust workspace owner validates the request and saves the concrete launch
 only on the newly created terminal content. An unrelated pending Vessel ID
-cannot acquire a later picker selection. Any type other than `terminal` and
+cannot acquire a later choice in the chooser. Any type other than `terminal` and
 `agent` rejects a program launch.
 The existing pending creation record retains that ID's accepted effective launch.
 An absent launch means Terminal. Fresh inspection advertises eligibility only
-while the stored choice matches. Starting checks that same record before the
-legacy shell path, so changing Codex to Terminal cannot substitute a shell.
+while the stored choice matches. Starting checks that same record before it starts a
+shell, so changing Codex to Terminal cannot put a shell in its place.
 Native canvas creation and authorized scoped creation both record their exact
 confirmed new terminal. Inspect and reopening do not create permission.
 
@@ -81,31 +94,16 @@ An unconfirmed start is not repeated. A saved launch description does not grant
 new permission to run it. Reopening a Client without the original new-creation
 eligibility refuses an unbound worker. Existing bound backends reattach, and
 loading a saved layout never grants another launch. Core's `keep` replacement
-option remains disabled. Reported idle/done, process exit and verified task
-completion remain separate. This change does not import the old OSC status stack.
+option stays off. Reported idle or done, a process exit and verified task
+completion stay separate.
 
-## Checks and limits
+## Checks
 
-Installed metadata inspected on 3 November identifies Codex 0.166.0 and Claude
-Code 2.1.261. Codex help supports the selected model/config/YOLO/no-daemon flags.
-Claude help supports its own model, effort and permission-mode options. These
-reads do not verify account access or successful work. There are no credential,
-login, update, restore-session or account mutations.
-
-Pure checks cover argv/defaults, profile reload, unavailable programs and exact
-new-content binding. One isolated real-Core test covers missing-executable
-refusal, changed-launch receipt refusal and no restart after reopening. A copied
-UI mutation substituting a later revision fails the captured-target test. The
-actual registered QuickJS picker root loads without a Window; that is constructor
-evidence, not native menu delivery or focus.
-
-The earlier launch continuation used two of its three corrective product builds.
-Its corrective-1 native journey and corrective-2 incomplete answer remain
-separate evidence. This source port grants no new allowance and does not replay
-that request. A new integrated native creation/answer, matched appearance,
-cleanup, remaining status requirements and complete proof accounting are still
-required before acceptance. Linux source checks establish no other platform.
-
+Unit tests cover the argument lists and defaults, rereading the profile,
+programs that are not installed and binding a launch to the exact new Vessel.
+One test against a real Core covers the refusal for a missing program, the
+refusal of a changed launch and that reopening never restarts a program. These
+checks run on Linux only.
 
 ## Agent program table
 
@@ -143,7 +141,7 @@ type `agent` takes only an agent entry, and an agent entry takes only the type
 `agent`.
 
 A profile's `launches.json` is seeded once and never rewritten, so a new table
-row appears in the picker only when the person adds an entry for it. The canvas
+row appears in the chooser only when the person adds an entry for it. The canvas
 files follow the first-party update rules in `docs/content.md`. A canvas file the
 person edited stays, and its update is written as a diff. An edited
 `process-icons.js` next to an updated `agents.js` lacks the lookup the new view
@@ -152,4 +150,4 @@ starts inside interactive Bash and returns to a Bash prompt when it exits.
 
 ## Returning from an agent
 
-The feedback candidate launches recognized agents inside an ordinary interactive Bash session. Recognition uses the selected command name before resolving installed symlinks, so a Claude launcher that points to `claude.exe` or another entry script still returns to Bash after exit. Resolved executable and model/effort/permission arguments are passed literally as separate positional arguments. Generic non-agent programs retain their direct launch path. This does not resume any previous agent conversation.
+The app launches a recognized agent inside an ordinary interactive Bash session, so you return to a Bash prompt when the agent exits. Recognition uses the selected command name before resolving installed symlinks, so a Claude launcher that points to `claude.exe` or another entry script still returns to Bash after exit. Resolved executable and model/effort/permission arguments are passed literally as separate positional arguments. Generic non-agent programs retain their direct launch path. This does not resume any previous agent conversation.

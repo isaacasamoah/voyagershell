@@ -1,9 +1,11 @@
 # Arrange your VoyagerShell workspace with voyager
 
-`voyager` is the agent command for VoyagerShell. Run it inside a Vessel, which
-is a terminal that VoyagerShell shows. It covers workspace actions only:
-inspect, create a Fleet, rename, move, remove a placement, select and, for
-Voyager, dock and create a Fleet with a Vessel. Herdr Core owns programs and
+`voyager` is the agent command for VoyagerShell. Run it inside a terminal or
+agent Vessel, which is a terminal that VoyagerShell shows on its canvas. It
+covers workspace actions only. It can inspect, create a Fleet, rename, move,
+remove a placement, select and add a Vessel beside a placement. Voyager, the app's own
+assistant, can also dock, maximize, resize and create Vessels and Fleets with a
+Vessel. Herdr Core owns programs and
 terminals, so start, read, send to and stop programs with `hc` (`hc --skill`).
 You can also add a Vessel type while the app runs ([Make a Vessel type](#make-a-vessel-type)).
 
@@ -113,71 +115,26 @@ other Vessel. An input from a subagent is ignored. [Voyager's
 replies](workspace.md#voyagers-replies) describes how the app orders and closes
 a turn.
 
-## Spoken turns
+## If you are Voyager
 
-A prompt that voice sends starts with the marker `[spoken]`, which
-`spoken::prompt` adds and nothing else does. The marker stays in the prompt, so
-the agent reads it. The agent's launch prompt carries the spoken guide, which tells
-the agent that a prompt starting with the marker came by voice and how to answer it
-aloud. [How Voyager talks](voice.md#how-voyager-talks) describes the guide. The launch
-that appends the rule is the Voyager start, which this guide does not describe.
+Voyager is the assistant that the app starts in a Portal on Home. Its launch
+gives it rules that no other Vessel has. [Voyager's
+start](workspace.md#voyagers-start) describes the launch.
 
-The same launch tells Voyager that this is the app's background Voyager session,
-that its reply marker is `[vy]` and that `[vy]` replaces any other reply marker
-its instructions name. It asks Voyager to start every reply with `[vy]`, which
-`spoken::reply_rule` words. `spoken::strip_reply_marker` keeps only the text after
-the first `[vy]` and removes every later one. The launch passes `--disallowedTools`
-with `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet` and `TodoWrite`, which keeps
-Claude Code's task reminder out of Voyager's replies on a fresh start and on a
-resume. It also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so the user's
-own instructions leave their personal reply prefix out of Voyager's replies.
-Claude cannot read its own environment, so the background-session line states the same fact in
-words. Claude Code ignores `--append-system-prompt` when it resumes a
-conversation, and the earlier replies in that conversation carry the personal prefix, so the
-focus hook output repeats the background-session line, `spoken::reply_rule` and the guide,
-which points to `voyager --skill`, at every prompt. A launch with no hook command path has no such
-repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
-the marker, and any text before it, where it stores a reply, so neither the speech filter
-nor the chat note ever sees them.
+- A prompt that starts with the marker `[spoken]` came by voice. The marker
+  stays in the prompt. Answer it to be heard, as the spoken guide in your launch
+  prompt says. [How Voyager talks](voice.md#how-voyager-talks) describes that
+  guide.
+- Start every reply with the reply marker `[vy]`. The app keeps only the text
+  after the first `[vy]` and removes every later one, so nothing before the
+  marker is shown or spoken. `[vy]` replaces any other reply marker that your
+  instructions name.
+- When the app knows the `voyager` command's path, the focus hook repeats
+  these rules at every prompt, because Claude Code ignores
+  `--append-system-prompt` when it resumes a conversation.
 
-The hook reads the prompt from the `UserPromptSubmit` input it receives on
-stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
-hook. A prompt that has not arrived by then is treated as typed and the dock is
-still printed. A prompt that starts
-with the marker sends `{"command":"focus","spoken":true,"prompt":"<prompt id>"}`,
-where the prompt id is the `prompt_id` that Claude puts on the same
-`UserPromptSubmit` input and on every `MessageDisplay` and `Stop` input of that
-prompt. A spoken prompt whose input has no `prompt_id` is sent as typed, and the
-hook says so on standard error, because a mark that names no prompt could be
-given to the wrong reply. Every other prompt, and an input the hook cannot read,
-sends the plain focus request, so a typed Home prompt, a Core note and `voyager
-focus` itself are never spoken. `spoken` and `prompt` are omitted when empty. An
-app older than the fields refuses a spoken request, and the hook then prints
-nothing for that prompt.
-
-The app keeps one `spoken::TurnLedger` for its Vessel sockets. A focus request
-with `spoken` true and a `prompt`, answered with the dock and sent from the
-terminal that `voyager.json` names, adds that prompt id as a pending mark for
-that Vessel. The ledger keeps at most 16 pending marks per Vessel and drops the
-oldest first. `observe` gives a turn id it has not seen for that Vessel
-`Kind::Spoken` when a pending mark names the same id, and `Kind::Typed`
-otherwise. A turn is a prompt, so each reply is spoken only if its own prompt
-was spoken, however many prompts were sent before the first reply. A typed
-prompt between two spoken ones takes no mark, and a spoken prompt that never
-produced a reply leaves a mark that no other turn can take. The verdict stays
-with the turn id, so a late event never changes it. Marks are in memory, belong
-to one Vessel and are dropped when its socket closes. Nothing is stored. A
-spoken focus request from any other terminal sets no mark, and a spoken request
-with no `prompt` sets none and is logged.
-
-The hook runs before the model starts, so the mark is pending before the turn's
-first event. The reply path calls `observe` through `Replies::accept_with` when
-a turn's first text arrives, and when a `Stop` arrives for a turn that streamed
-no text, so a spoken turn with no streamed reply still gets its verdict. Each
-`Replies` turn carries it as `spoken`. Only the terminal that `voyager.json`
-names can send replies, so a turn of any other Vessel is never spoken. A reply
-hook input with no `prompt_id` is sent as `unreadable` and logged, and no turn
-is spoken for it.
+[How a turn is marked spoken](voice.md#how-a-turn-is-marked-spoken) describes
+how the app decides which replies to read aloud.
 
 ## Change the workspace
 
@@ -261,7 +218,7 @@ socket.
 - Give each change a new `requestId`. Repeating the same request returns its
   first result instead of acting twice.
 - Each change prints one plain sentence on standard error, before the
-  JSON, such as `Renamed the Fleet to Notes.`. It names things as the person does and
+  JSON, such as `Renamed the Fleet to Review.`. It names things as the person does and
   carries no id or revision. Say it to the person as it is. A refused or
   uncertain change says so and never claims the change happened. A refused
   change gives the app's reason after "because" when that reason is in plain

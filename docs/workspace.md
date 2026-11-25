@@ -268,7 +268,7 @@ start every reply with the reply marker `[vy]`. The launch also passes
 `--disallowedTools` with the task tools, `TaskCreate`, `TaskUpdate`, `TaskList`,
 `TaskGet` and `TodoWrite`, so Claude Code's reminder about them is never added
 to the conversation, on a fresh start or a resume. The `voyager` entry is read for
-Voyager alone and does not appear in the Create Vessel picker.
+Voyager alone and does not appear in the content chooser.
 
 At launch the app forgets what `voyager.json` held and decides again from two
 records that must agree. They are the `voyager` Vessel's saved terminal and
@@ -660,8 +660,8 @@ selector style is introduced by this contract.
 `desktop/canvas/main.ts` controls retained preparation and versioned actions.
 `panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
 renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
-visible members from the Rust projection. `canvas.ts` composes the saved outer
-tree and panel frames. Home uses the same panel factories and its retained global
+visible members from the Rust projection. `regions.ts` composes the saved outer
+tree of the canvas definition. Home uses the same panel factories and its retained global
 arrangement. These modules retain the existing
 terminal, Vessel, divider, avatar and conversation owners.
 
