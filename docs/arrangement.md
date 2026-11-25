@@ -42,9 +42,11 @@ The keyboard gives the same actions:
 - Ctrl+Shift+Z maximizes or restores the focused Vessel.
 
 The platform modifier may replace Ctrl. With the platform modifier, maximize is
-Shift+Enter instead of Shift+Z. A shortcut pressed while another workspace
-request is pending waits for the owner to confirm that request. It is discarded
-after a refusal or an uncertain result. Terminal focus moves only when the
+Shift+Enter instead of Shift+Z. A split or new-Fleet shortcut pressed while
+another workspace request is pending waits for the owner to confirm that
+request. It is discarded after a refusal or an uncertain result. The maximize
+shortcut isn't queued. While a request is pending it is refused, and the status
+line says that maximize was not changed. Terminal focus moves only when the
 previous focus has not changed and the window is still active.
 
 ## How it is checked
