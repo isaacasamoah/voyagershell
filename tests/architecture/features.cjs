@@ -317,7 +317,9 @@ function pageText(model) {
 
 Generated from \`${REGISTRY}\`, \`${GROUPS}\`, the declared invariants in \`${INVARIANTS}\` and the context owners in \`${VOCABULARY}\` by \`npm run features:generate\`. Edit those inputs, then regenerate. The complete map with code paths and state is \`${MAP}\`. For each feature it lists the declared invariants that name the feature, and for each invariant its guards, checks, formal properties and the journeys its checks run.
 
-\`proof\` is \`native\` when a native journey covers the feature, \`python-only\` when only a retained Python journey does, and \`tests\` when it has no journey and a CI step named in \`${GROUPS}\` is its proof, shown as proven by its tests. Only a feature with no journey may take such a step.
+The feature map ties each feature of the app to its source files, its declared invariants and the journeys that prove it. A journey is a test that drives the real app.
+
+The \`proof\` column says how a feature is proven. It is \`native\` when a native journey covers the feature, and \`python-only\` when only a retained Python journey does. It is \`tests\` when the feature has no journey and a CI step named in \`${GROUPS}\` is its proof. Such a feature is shown as proven by its tests. Only a feature with no journey may take such a step.
 
 ## The change gate
 
