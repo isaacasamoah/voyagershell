@@ -447,7 +447,7 @@ struct Build {
     side: Side,
     binary: PathBuf,
     sha256: String,
-    assets: PathBuf,
+    assets: system::Assets,
 }
 
 struct Options {
@@ -484,8 +484,10 @@ fn journey_inputs(
             args.push(other.binary.clone().into());
             args.push("--second-sha256".into());
             args.push(other.sha256.clone().into());
-            args.push("--second-assets".into());
-            args.push(other.assets.clone().into());
+            if let Some(folder) = other.assets.folder() {
+                args.push("--second-assets".into());
+                args.push(folder.into());
+            }
             Ok(args)
         }
         Journey::ProfileUpdates => {
@@ -581,10 +583,13 @@ fn parse(args: &[String]) -> Result<Options> {
             .copied()
             .with_context(|| format!("Missing {name}"))
     };
-    let build = |side: Side, binary: &str, assets: &str| -> Result<Build> {
+    let build = |side: Side, binary: &str, assets: Option<&str>| -> Result<Build> {
         let binary = fs::canonicalize(binary).with_context(|| format!("The {side:?} binary"))?;
-        let assets = fs::canonicalize(assets).with_context(|| format!("The {side:?} assets"))?;
-        system::check_assets(&binary, &assets)
+        let folder = assets
+            .map(fs::canonicalize)
+            .transpose()
+            .with_context(|| format!("The {side:?} assets"))?;
+        let assets = system::candidate_assets(&binary, folder.as_deref())
             .with_context(|| format!("The {side:?} candidate assets"))?;
         Ok(Build {
             side,
@@ -612,17 +617,22 @@ fn parse(args: &[String]) -> Result<Options> {
     ensure!(!journeys.is_empty(), "--journeys named no journey");
     let hc_path = system::core_binary()?;
     let hc = Pinned::check(&hc_path, &system::digest(&hc_path)?).context("Core")?;
-    let head_assets = need("--head-assets")?;
-    let fixtures = match given.get("--fixtures") {
-        Some(path) => PathBuf::from(path),
-        None => fs::canonicalize(head_assets)?
+    let head_assets = given.get("--head-assets").copied();
+    let fixtures = match (given.get("--fixtures"), head_assets) {
+        (Some(path), _) => PathBuf::from(path),
+        (None, Some(head_assets)) => fs::canonicalize(head_assets)?
             .ancestors()
             .nth(2)
             .map_or_else(PathBuf::new, |root| root.join("tests/native/fixtures")),
+        (None, None) => bail!("Give --fixtures when the head build has no --head-assets"),
     };
     Ok(Options {
-        base: build(Side::Base, need("--base")?, need("--base-assets")?)?,
-        head: build(Side::Head, need("--head")?, need("--head-assets")?)?,
+        base: build(
+            Side::Base,
+            need("--base")?,
+            given.get("--base-assets").copied(),
+        )?,
+        head: build(Side::Head, need("--head")?, head_assets)?,
         hc,
         evidence: PathBuf::from(need("--evidence")?),
         runs,
@@ -738,8 +748,14 @@ fn attempt(
         .args(["run", "--journey", journey.name(), "--binary"])
         .arg(&build.binary)
         .args(["--sha256", &build.sha256, "--hc-sha256", &options.hc.sha256])
-        .arg("--assets")
-        .arg(&build.assets)
+        .args(
+            build
+                .assets
+                .folder()
+                .map(|folder| [OsString::from("--assets"), folder.into()])
+                .into_iter()
+                .flatten(),
+        )
         .arg("--evidence")
         .arg(&evidence)
         .args(&inputs)
@@ -768,7 +784,7 @@ fn attempt(
 }
 
 fn describe(build: &Build) -> Value {
-    json!({"binary":build.binary,"sha256":build.sha256,"assets":build.assets})
+    json!({"binary":build.binary,"sha256":build.sha256,"assets":build.assets.evidence()})
 }
 
 fn markdown(summary: &Summary) -> String {
@@ -976,7 +992,7 @@ mod tests {
             side,
             binary: PathBuf::from(format!("/builds/{name}/app")),
             sha256: format!("hash-{name}"),
-            assets: PathBuf::from(format!("/builds/{name}/assets")),
+            assets: system::Assets::Folder(PathBuf::from(format!("/builds/{name}/assets"))),
         }
     }
 

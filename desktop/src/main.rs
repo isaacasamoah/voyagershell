@@ -21,8 +21,14 @@ fn arguments(mut args: impl Iterator<Item = String>) -> Result<Arguments> {
                     args.next().context("--inspect requires a path")?,
                 ))
             }
+            "--version" => {
+                print!("{}", voyager_desktop::version());
+                std::process::exit(0);
+            }
             "--help" => {
-                println!("voyager-shell --profile ABS_DIR --session NAME [--inspect ABS_FILE]");
+                println!(
+                    "voyager-shell --profile ABS_DIR --session NAME [--inspect ABS_FILE]\nvoyager-shell --version"
+                );
                 std::process::exit(0);
             }
             _ => bail!("Unknown argument: {arg}"),
@@ -70,6 +76,17 @@ mod tests {
         let required = ["--profile", "/profile", "--session", "voyager-test"];
         arguments(required.iter().chain(extra).map(|part| (*part).to_owned()))
             .map(|arguments| arguments.inspect)
+    }
+
+    #[test]
+    fn version_names_the_package_the_oldest_core_and_carried_assets() {
+        assert_eq!(
+            voyager_desktop::version(),
+            format!(
+                "voyager-shell {}\ncore: 0.1.18\nassets: embedded\n",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
     }
 
     #[test]

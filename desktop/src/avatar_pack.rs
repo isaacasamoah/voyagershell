@@ -6,7 +6,7 @@ use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Write},
+    io::{BufRead, BufReader, Cursor, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -70,12 +70,6 @@ pub struct TimedPose {
     pub end_ms: u64,
 }
 
-pub fn asset(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("assets")
-        .join(name)
-}
-
 fn basename(name: &str, extension: &str) -> Result<()> {
     let suffix = format!(".{extension}");
     let stem = name
@@ -103,8 +97,8 @@ fn document<T: DeserializeOwned>(path: &Path) -> Result<T> {
     serde_json::from_slice(&bytes).with_context(|| format!("Reading {}", path.display()))
 }
 
-fn image(path: &Path, remaining: &mut u64) -> Result<Arc<RenderImage>> {
-    let mut reader = ImageReader::with_format(BufReader::new(File::open(path)?), ImageFormat::Png);
+fn image(source: impl BufRead + Seek, remaining: &mut u64) -> Result<Arc<RenderImage>> {
+    let mut reader = ImageReader::with_format(source, ImageFormat::Png);
     let mut limits = Limits::default();
     limits.max_image_width = Some(4096);
     limits.max_image_height = Some(4096);
@@ -126,7 +120,7 @@ fn image(path: &Path, remaining: &mut u64) -> Result<Arc<RenderImage>> {
 fn compile(
     configuration: &Configuration,
     pack: Pack,
-    path: impl Fn(&str) -> PathBuf,
+    decode: impl Fn(&str, &mut u64) -> Result<Arc<RenderImage>>,
 ) -> Result<Compiled> {
     if configuration.version != 1 || pack.version != 1 || pack.id.is_empty() {
         bail!("Animation format must be version 1 with a nonempty pack id");
@@ -154,7 +148,7 @@ fn compile(
     for (id, filename) in &pack.images {
         basename(filename, "png")?;
         if !files.contains_key(filename) {
-            let decoded = image(&path(filename), &mut remaining)
+            let decoded = decode(filename, &mut remaining)
                 .with_context(|| format!("Loading animation image {filename}"))?;
             files.insert(filename.clone(), decoded);
         }
@@ -292,9 +286,11 @@ pub fn load(directory: &Path) -> Result<Arc<Compiled>> {
     let configuration: Configuration = document(&directory.join("configuration.json"))?;
     basename(&configuration.pack, "json")?;
     let pack = document(&directory.join(&configuration.pack))?;
-    Ok(Arc::new(compile(&configuration, pack, |name| {
-        directory.join(name)
-    })?))
+    Ok(Arc::new(compile(
+        &configuration,
+        pack,
+        |name, remaining| image(BufReader::new(File::open(directory.join(name))?), remaining),
+    )?))
 }
 
 fn seed(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -306,12 +302,16 @@ fn seed(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn shipped(name: &str, remaining: &mut u64) -> Result<Arc<RenderImage>> {
+    image(Cursor::new(defaults::source(name)?), remaining)
+}
+
 pub fn prepare(directory: &Path) -> Result<Prepared> {
     let (configuration, pack) = defaults::pack();
     let attempt = || -> Result<Arc<Compiled>> {
         fs::create_dir_all(directory)?;
         for name in pack.images.values() {
-            seed(&directory.join(name), &fs::read(defaults::source(name))?)?;
+            seed(&directory.join(name), defaults::source(name)?)?;
         }
         seed(
             &directory.join("pack.json"),
@@ -336,7 +336,7 @@ pub fn prepare(directory: &Path) -> Result<Prepared> {
     let (pack, error) = match attempt() {
         Ok(pack) => (pack, None),
         Err(error) => (
-            Arc::new(compile(&configuration, pack, defaults::source)?),
+            Arc::new(compile(&configuration, pack, shipped)?),
             Some(format!("Avatar animations: {error:#}")),
         ),
     };
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn default_pack_is_finite_shared_and_validated() {
         let (configuration, pack) = defaults::pack();
-        let loaded = compile(&configuration, pack.clone(), defaults::source).unwrap();
+        let loaded = compile(&configuration, pack.clone(), shipped).unwrap();
         let float = &loaded.clips[loaded.bindings[2].unwrap()];
         assert_eq!(float.duration_ms, 2000);
         assert_eq!(loaded.clips[loaded.bindings[0].unwrap()].duration_ms, 3632);
@@ -369,22 +369,22 @@ mod tests {
         );
         let mut bad = pack.clone();
         bad.poses.get_mut("rest").unwrap().rect[2] = 513;
-        assert!(compile(&configuration, bad, defaults::source).is_err());
+        assert!(compile(&configuration, bad, shipped).is_err());
         let mut bad = configuration.clone();
         bad.triggers.dock = Some("missing".into());
-        assert!(compile(&bad, pack.clone(), defaults::source).is_err());
+        assert!(compile(&bad, pack.clone(), shipped).is_err());
         let mut bad = pack.clone();
         let pose = bad.poses.get_mut("rest").unwrap();
         pose.rect = [0, 0, 1, 1];
         pose.anchor = [0., 0.];
         pose.scale = 1e38;
-        assert!(compile(&configuration, bad, defaults::source).is_err());
+        assert!(compile(&configuration, bad, shipped).is_err());
         let mut bad = pack.clone();
         bad.clips.get_mut("float").unwrap().effects.push(());
-        assert!(compile(&configuration, bad, defaults::source).is_err());
+        assert!(compile(&configuration, bad, shipped).is_err());
         let mut bad = pack;
         bad.images.insert("bad".into(), "../idle.png".into());
-        assert!(compile(&configuration, bad, defaults::source).is_err());
+        assert!(compile(&configuration, bad, shipped).is_err());
     }
     #[test]
     fn rgba_budget_is_checked_for_rgb_images_and_corrupt_png_is_refused() {
@@ -394,10 +394,11 @@ mod tests {
         ));
         image::RgbImage::new(8, 8).save(&path).unwrap();
         let mut budget = 255;
-        let refusal = image(&path, &mut budget).unwrap_err().to_string();
+        let open = || BufReader::new(File::open(&path).unwrap());
+        let refusal = image(open(), &mut budget).unwrap_err().to_string();
         assert!(refusal.contains("decoded RGBA"), "{refusal}");
         fs::write(&path, b"not PNG").unwrap();
-        assert!(image(&path, &mut budget).is_err());
+        assert!(image(open(), &mut budget).is_err());
         fs::remove_file(path).unwrap();
     }
 }

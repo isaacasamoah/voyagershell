@@ -698,6 +698,78 @@ pub fn check_assets(candidate: &Path, assets: &Path) -> Result<()> {
     Ok(())
 }
 
+const EMBEDDED: &str = "assets: embedded";
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Assets {
+    Folder(PathBuf),
+    Embedded {
+        version: String,
+        sha256: String,
+        ignored_folder: Option<PathBuf>,
+    },
+}
+
+impl Assets {
+    pub fn folder(&self) -> Option<&Path> {
+        match self {
+            Assets::Folder(folder) => Some(folder),
+            Assets::Embedded { .. } => None,
+        }
+    }
+
+    pub fn evidence(&self) -> Value {
+        match self {
+            Assets::Folder(folder) => json!(folder),
+            Assets::Embedded {
+                version,
+                sha256,
+                ignored_folder,
+            } => {
+                let mut evidence = json!({"embedded": sha256, "version": version});
+                if let Some(folder) = ignored_folder {
+                    evidence["ignored_folder"] = json!(folder);
+                }
+                evidence
+            }
+        }
+    }
+}
+
+fn embedded(version: &str) -> bool {
+    version.lines().any(|line| line.trim_end() == EMBEDDED)
+}
+
+pub fn reported_version(candidate: &Path) -> Result<Option<String>> {
+    let output = Command::new(candidate)
+        .arg("--version")
+        .env_clear()
+        .stdin(Stdio::null())
+        .output()
+        .with_context(|| format!("Running {} --version", candidate.display()))?;
+    Ok(output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned()))
+}
+
+pub fn candidate_assets(candidate: &Path, folder: Option<&Path>) -> Result<Assets> {
+    match reported_version(candidate)?.filter(|version| embedded(version)) {
+        Some(version) => Ok(Assets::Embedded {
+            version,
+            sha256: digest(candidate)?,
+            ignored_folder: folder.map(Path::to_path_buf),
+        }),
+        None => {
+            let folder = folder.context(
+                "Candidate does not report 'assets: embedded' in --version; pass --assets",
+            )?;
+            check_assets(candidate, folder)?;
+            Ok(Assets::Folder(folder.to_path_buf()))
+        }
+    }
+}
+
 pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
     let mut tools = BTreeMap::new();
     for name in [
@@ -942,6 +1014,100 @@ pub(crate) mod tests {
             fs::write(right.join(file), b"")?;
         }
         check_assets(&candidate, &right)
+    }
+
+    #[test]
+    fn only_the_exact_embedded_field_counts_as_carried_images() {
+        assert!(embedded(
+            "voyager-shell 0.1.0\ncore: 0.1.18\nassets: embedded\n"
+        ));
+        for refused in [
+            "voyager-shell 0.1.0\ncore: 0.1.18\n",
+            "voyager-shell 0.1.0\nasset: embedded\n",
+            "voyager-shell 0.1.0\nassets: folder\n",
+            "voyager-shell 0.1.0\nassets: embedded-later\n",
+            "voyager-shell 0.1.0 assets: embedded\n",
+        ] {
+            assert!(!embedded(refused), "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn a_candidate_without_an_assets_folder_must_report_embedded_images() -> Result<()> {
+        let scratch = Scratch::new("embedded")?;
+        let root = scratch.path();
+        let script = |name: &str, body: &str| -> Result<PathBuf> {
+            let path = root.join(name);
+            fs::write(
+                &path,
+                format!("#!/bin/sh\n{body}\n# {}\n", root.join("desktop").display()),
+            )?;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
+            Ok(path)
+        };
+        let older = script("older", "echo \"Unknown argument: $1\" >&2; exit 1")?;
+        let refusal = candidate_assets(&older, None)
+            .err()
+            .context("A candidate with no --version ran without --assets")?;
+        ensure!(
+            format!("{refusal:#}").contains("pass --assets"),
+            "Refusal names the fix: {refusal:#}"
+        );
+        let other = script("other", "printf 'voyager-shell 0.1.0\\nassets: folder\\n'")?;
+        ensure!(
+            candidate_assets(&other, None).is_err(),
+            "A candidate reporting another mode ran without --assets"
+        );
+        let folder = root.join("desktop/assets");
+        fs::create_dir_all(folder.join("stretch-frames"))?;
+        for file in ASSET_FILES {
+            fs::write(folder.join(file), b"")?;
+        }
+        ensure!(
+            candidate_assets(&older, Some(&folder))? == Assets::Folder(folder.clone()),
+            "A given folder is checked and kept"
+        );
+        let carries = script(
+            "carries",
+            "printf 'voyager-shell 0.1.0\\ncore: 0.1.18\\nassets: embedded\\n'",
+        )?;
+        let report = "voyager-shell 0.1.0\ncore: 0.1.18\nassets: embedded\n";
+        let assets = candidate_assets(&carries, None)?;
+        ensure!(
+            assets.evidence() == json!({"embedded": digest(&carries)?, "version": report}),
+            "Evidence names the binary and its report: {:?}",
+            assets.evidence()
+        );
+        ensure!(assets.folder().is_none(), "No folder is exposed");
+        let given = candidate_assets(&carries, Some(&folder))?;
+        ensure!(
+            given.folder().is_none()
+                && given.evidence()
+                    == json!({
+                        "embedded": digest(&carries)?,
+                        "version": report,
+                        "ignored_folder": folder
+                    }),
+            "A folder given to an embedded build is recorded as ignored: {:?}",
+            given.evidence()
+        );
+        let bound = sandbox::Sandbox {
+            verifier: &carries,
+            candidate: Some(&carries),
+            core: None,
+            second: None,
+            assets: given.folder(),
+            second_assets: None,
+            voice: None,
+            evidence: None,
+            command: false,
+        }
+        .command(&["true"])?;
+        ensure!(
+            !bound.iter().any(|arg| Path::new(arg).starts_with(&folder)),
+            "The ignored folder is not bound into the run: {bound:?}"
+        );
+        Ok(())
     }
 
     #[test]
