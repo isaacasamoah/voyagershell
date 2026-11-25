@@ -10,6 +10,71 @@ unrelated rigs would not meet that requirement. Unsupported capabilities remain
 explicit gaps until implemented and independently verified. The Python drivers
 are retained for explicit historical reproduction and migration comparison only.
 
+## How a change is verified
+
+VoyagerShell checks a change through one chain of six links. Each link names
+the one before it, so a reviewer can follow a user promise down to the code
+that keeps it and the runs that prove it. This section says what each link is,
+where it lives, what checks it and what you do with it. The sections after it
+hold the full mechanism.
+
+1. **Declared invariants.** A declared invariant is one promise the app keeps,
+   written in plain words, such as "Ctrl+Q, the window's close button and a
+   window-manager close all quit and keep." They live in
+   `tests/native/declared-invariants.toml`, one `[[invariant]]` entry each.
+   Each entry links the guards that make the promise hold and the checks that
+   prove it. `voyager-verification features` and the `committed_model_passes`
+   unit test resolve every link and fail on a broken one. A plan item or a
+   review finding names the entry it serves or breaks. When your change adds a
+   promise, add an entry. Never reword an existing entry's `says` to make a
+   change pass. [Declared invariants](#declared-invariants) has the fields and
+   the rules.
+2. **Types.** The strongest guard is a type that cannot hold the bad state. An
+   entry links it as `guard = ["type:<path>#<item>"]`, and the link fails when
+   the file does not define that item. When no type rules the bad state out
+   yet, the entry says so in `type_gap`. It names the state that the types
+   still allow, or starts `Not state-shaped:` and gives the reason. `cargo build` and `cargo clippy` check
+   the types themselves. When you change state, prefer a type that makes the
+   bad state impossible, then link it.
+3. **Unit tests.** A unit test checks one owner's behavior without the app on
+   screen. Rust tests run with `cargo test --workspace --locked`, and the
+   script tests run with `npm test`. An entry links a test as
+   `check = ["test:<path>#<fn>"]`. A unit test never stands in for a native
+   journey, because it does not see what the person sees.
+4. **Native journeys.** A native journey drives the real app on an owned X11
+   display, with real pointer and keyboard input, and records what it
+   observed. The journeys live in `tests/native/src/journey/`, listed once in
+   `journeys!` in `tests/native/src/journey.rs`. Run them with
+   `voyager-verification`, which [Build and inspect](#build-and-inspect) shows
+   how to build. `voyager-verification journeys` lists every journey and its
+   cases, and `voyager-verification run --journey <name>` runs one. Each
+   journey has a negative control, a patch that breaks the app and must make a
+   named case fail. An entry links a case as `check = ["journey:<journey>/<case>"]`.
+   A user-visible change needs a run of the journeys that cover it.
+5. **The feature map.** The feature map lists each user feature, the source
+   paths it owns, the journeys that cover it and the declared invariants that
+   name it. You edit `tests/native/features.toml` and
+   `architecture/atlas-features.yaml`. `npm run features:generate` writes
+   `architecture/features.yaml` and the table in
+   [docs/features.md](../../docs/features.md). On a pull request,
+   `npm run features:check -- --base <base>` fails when the change touches a
+   feature's sources with no recorded run. Record the run with a line
+   `Journeys run: <journey>, <journey>` in the pull request description, then
+   push a new commit. [Feature registry](#feature-registry) and
+   [docs/features.md](../../docs/features.md) describe the gate.
+6. **Architecture checks.** The architecture checks keep the code's shape.
+   `npm run architecture:check` reads `tests/architecture/rules.yaml` and
+   fails on a broken rule, a file with no single owner or an import between
+   owners that `tests/architecture/intended.yaml` does not list.
+   `npm run vocabulary:check` fails on a retired word. An entry links a rule
+   as `guard = ["gate:<rule id>"]`. [The architecture
+   gate](../../docs/architecture-gate.md) explains how to read the result and
+   record a known violation.
+
+`npm run ci:local` runs every CI step after the feature map gate on your
+machine, so one run shows every fault. Run it before you call a change ready.
+It starts cargo builds, so wrap it in your own load control.
+
 ## Environment scope and maintenance
 
 The environment is a maintained development product. Its intended coverage includes

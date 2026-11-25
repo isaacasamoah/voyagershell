@@ -2,7 +2,7 @@
 
 This repository is the standalone successor to the core-workspace prototype in voyagershellapp. The native candidate uses Rust application code and GPUI views. The Electron workspace and its local Vessel packages remain under experiments/electron-reference/. Herdr Core is an external dependency, not copied implementation code.
 
-Use Node 24 and the hc command on PATH. The generated Core input is pinned to 0.1.18, the oldest supported release; see [the Core adapter](docs/terminal.md#core-adapter) for its evidence. Newer releases are tested additive upgrades, not a guarantee for every future release. Codex is needed only for real companion chat or voice. Ordinary tests do not call a model.
+Use Node 24 and the hc command on PATH. The generated Core input is pinned to 0.1.18, the oldest supported release; see [the Core adapter](docs/terminal.md#core-adapter) for its evidence. Newer releases are tested additive upgrades, not a guarantee for every future release. Claude Code is needed only to run Voyager and Codex only for the chat panel. Voice runs on a local model. Ordinary tests use stand-ins and do not call a model.
 
 From the repository root, for the retained Electron reference:
 
@@ -88,7 +88,22 @@ terminal ownership and avatar timing remain in their existing owners. Installed
 registry sources are preserved. Record the selected patches with the measured
 release artifact; preparing a dependency does not establish a performance gain.
 
-The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The terminal-grid candidate demonstrated native colored Unicode, alternate screen and dynamic sizing, as described in [docs/terminal.md](docs/terminal.md). Its continuation adds selection, clipboard and native composition source. The native `terminal-input` journey covers terminal typing, selection and copy and paste, and native composition remains Python-only. Full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The terminal-grid candidate demonstrated native colored Unicode, alternate screen and dynamic sizing, as described in [docs/terminal.md](docs/terminal.md). Its continuation adds selection, clipboard and native composition source. The native `terminal-input` journey covers terminal typing, selection and copy and paste, and native composition remains Python-only. Full terminal behavior and integrated avatar/chat remain unfinished. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+
+## How a change is verified
+
+Every change passes one verification chain. Declared invariants in
+`tests/native/declared-invariants.toml` state what the app promises. Types
+guard each promise where they can, and a `type_gap` says where they cannot
+yet. Unit tests check one owner at a time. Native journeys in `tests/native`
+drive the real app with `voyager-verification`. The feature map in
+`tests/native/features.toml` and `architecture/features.yaml` ties each feature
+to its sources and journeys, and `npm run features:check` asks for a recorded
+run when a feature's sources change. The architecture checks in
+`tests/architecture` keep each file with one owner, as
+[the architecture gate](docs/architecture-gate.md) describes.
+[How a change is verified](tests/native/README.md#how-a-change-is-verified)
+says what each link is, where it lives, what checks it and how you use it.
 
 ## Retained journey reproduction
 
