@@ -111,8 +111,12 @@ part of the workspace and traces one click through the code.
 
 Voice runs on LiquidAI's LFM3 Omni model through llama.cpp's `llama-server`, on
 your own computer. In 0.1 you install both by hand. Codex voice isn't available
-in 0.1. LiquidAI's licence for the model applies to your use of it, so read it
-on the model's Hugging Face page before you download.
+in 0.1. The model is under the LFM Open License v1.0, which is on the model's
+Hugging Face page. Read it before you download. Its commercial use rights depend
+on revenue. The licence sets a threshold of "annual revenue of 10 million United
+States dollars ($10,000,000) or more". It says that commercial use by a company
+or other legal entity that exceeds the threshold "is not licensed under this
+Agreement".
 
 The app looks for voice files in `~/.cache/voyager/voice/omni/`, the voice
 folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
@@ -124,8 +128,11 @@ folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
 	model on the processor, and the graphics card setting in step 3 does
 	nothing with it. To use a graphics card, get a GPU build.
 	- For an NVIDIA graphics card, get a CUDA build, from the llama.cpp release
-		page or built from source. The release page's CUDA builds may also need
-		its matching CUDA runtime bundle. To build from source, run:
+		page or built from source. A CUDA build from the release page also needs
+		the page's matching CUDA runtime bundle, unless the CUDA runtime is already
+		installed. Without it, `llama-server` can't find the CUDA libraries it
+		needs. Use the same CUDA version for the build and the bundle. For example,
+		CUDA 12.8 worked with NVIDIA driver 580. To build from source, run:
 
 		```sh
 		cmake -B build -DGGML_CUDA=ON
