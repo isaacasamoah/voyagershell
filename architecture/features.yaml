@@ -1281,6 +1281,14 @@ features:
         checks: ['test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends', 'journey:daily-start/second-start-focuses']
         formal: []
         journeys: [daily-start]
+      - id: rollback-runs-the-previous-build
+        kind: user
+        says: 'voyager rollback chooses the build that ran before the current one. The next voyager start runs it, and the person''s programs keep running.'
+        owner: application-queue
+        guards: ['type:app/src/install.rs#Install']
+        checks: ['journey:daily-start/rollback-runs-the-previous-build']
+        formal: []
+        journeys: [daily-start]
       - id: stop-is-explicit
         kind: user
         says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'

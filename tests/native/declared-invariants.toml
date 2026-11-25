@@ -37,6 +37,17 @@ check = ["test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends", "
 confidence = "stated"
 
 [[invariant]]
+id = "rollback-runs-the-previous-build"
+says = "voyager rollback chooses the build that ran before the current one. The next voyager start runs it, and the person's programs keep running."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 26 Nov"
+features = ["close-quit-restore"]
+guard = ["type:app/src/install.rs#Install"]
+check = ["journey:daily-start/rollback-runs-the-previous-build"]
+confidence = "stated"
+
+[[invariant]]
 id = "views-never-start-or-stop-programs"
 says = "Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program."
 kind = "user"
