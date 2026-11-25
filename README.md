@@ -119,15 +119,20 @@ folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
 `$XDG_CACHE_HOME/voyager/voice/omni/` instead. Voice also needs `parec` and
 `paplay` from the `pulseaudio-utils` package.
 
-1. Get `llama-server` from llama.cpp, build b12242 or newer.
-	- If you have an NVIDIA graphics card, build llama.cpp from source with CUDA:
+1. Get `llama-server` from llama.cpp, build b12242 or newer. Pick the kind of
+	build by where you want the model to run. A CPU-only build always runs the
+	model on the processor, and the graphics card setting in step 3 does
+	nothing with it. To use a graphics card, get a GPU build.
+	- For an NVIDIA graphics card, build llama.cpp from source with CUDA:
 
 		```sh
 		cmake -B build -DGGML_CUDA=ON
 		cmake --build build --config Release
 		```
 
-	- Otherwise, download a llama.cpp release build for Linux.
+	- For another graphics card, download a llama.cpp release build for Linux
+		that uses Vulkan.
+	- Without a graphics card, download a llama.cpp CPU release build for Linux.
 
 	Copy `llama-server` and the libraries that come with it into the voice
 	folder. To leave a build where it is, set `VOYAGER_OMNI_SERVER` to the full
@@ -137,9 +142,9 @@ folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
 	on Hugging Face. Put both files in the voice folder. The app also finds them
 	in the Hugging Face cache, so files that the Hugging Face command-line tool
 	downloaded can stay where they are.
-3. To run the model on your graphics card, start the app with
-	`VOYAGER_OMNI_GPU_LAYERS=999` set. The default, 0, runs the model on the
-	processor.
+3. To run the model on your graphics card with a GPU build from step 1, start
+	the app with `VOYAGER_OMNI_GPU_LAYERS=999` set. The default, 0, runs the
+	model on the processor.
 
 	```sh
 	VOYAGER_OMNI_GPU_LAYERS=999 /path/to/voyagershell/target/release/voyager-shell \
