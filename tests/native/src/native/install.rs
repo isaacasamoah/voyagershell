@@ -19,6 +19,7 @@ const BUILDS: &str = "builds";
 const START_PATIENCE: Duration = Duration::from_secs(150);
 const UPDATE_PATIENCE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(50);
+const COUNTER: &str = "if [ -z \"$BASH_EXECUTION_STRING\" ] && mkdir ~/.counting 2>/dev/null; then\n  i=0\n  while :; do echo \"count $i\"; i=$((i+1)); sleep 0.5; done\nfi\n";
 pub const STAND_IN_LINE: &str = "stand-in: exiting before it is ready";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -256,6 +257,10 @@ impl Native {
         }
         fs::create_dir_all(self.profile())?;
         let evidence = &self.system.evidence;
+        let home = evidence.join("home");
+        fs::create_dir_all(&home)?;
+        fs::write(home.join(".bashrc"), COUNTER)?;
+        fs::write(home.join(".bash_profile"), ". ~/.bashrc\n")?;
         fs::create_dir_all(evidence.join("install"))?;
         let install = Install {
             root: fs::canonicalize(evidence.join("install"))?,
@@ -472,6 +477,7 @@ impl Native {
             .parent()
             .and_then(Path::file_name)
             .map(|name| name.to_string_lossy().into_owned());
+        self.system.record(json!({"event":"adopt","identity":viewer.identity,"executable":executable,"build":build,"sha256":sha256}))?;
         self.candidate = pinned;
         self.record_build()?;
         self.attach(viewer);

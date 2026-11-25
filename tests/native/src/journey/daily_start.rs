@@ -39,6 +39,21 @@ fn selected(native: &Native) -> Result<Option<String>> {
         .map(|voyage| voyage.0))
 }
 
+fn count(terminal: &Terminal, native: &Native) -> Result<Option<u64>> {
+    Ok(terminal
+        .screen(native)?
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("count ")?.parse().ok())
+        .max())
+}
+
+fn climbed(terminal: &Terminal, native: &Native, from: Option<u64>) -> Result<Option<u64>> {
+    let Some(from) = from else {
+        return Ok(None);
+    };
+    native.watch(|native| Ok(count(terminal, native)?.filter(|now| *now >= from + 2)))
+}
+
 fn quiet(native: &Native) -> Result<Quiet> {
     let listed = native.system.watch("terminal.list", json!({"all":true}))?;
     let mut terminals: Vec<Value> = listed["terminals"]
@@ -74,6 +89,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .as_ref()
             .map(|terminal| terminal.program(native))
             .transpose()?;
+        let counting = match &terminal {
+            Some(terminal) => climbed(terminal, native, Some(0))?,
+            None => None,
+        };
         let verdict = Verdict::new()
             .expect("voyager start exited 0", ran.code == Some(0))
             .expect(
@@ -92,15 +111,21 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     program.same && program.state.as_deref() == Some("live")
                 }),
             )
+            .expect(
+                "the counter that the first Vessel's shell starts is printing",
+                counting.is_some(),
+            )
             .observed("start", &ran)?
             .observed("links", &links)?
-            .observed("program", &program)?;
+            .observed("program", &program)?
+            .observed("counter", counting)?;
         Ok((verdict, terminal))
     })?;
     let Some(terminal) = terminal else {
         return Ok(());
     };
     cases.check(native, Case::UpdateAndRestart, |native| {
+        let counted = count(&terminal, native)?;
         let voyage = selected(native)?;
         let roster = native.live_terminals()?;
         let program = terminal.program(native)?;
@@ -113,7 +138,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let voyage_after = selected(native)?;
         let program_after = terminal.program(native)?;
         let roster_after = native.live_terminals()?;
+        let climbing = climbed(&terminal, native, counted)?;
         Verdict::new()
+            .expect(
+                "the counter in the first Vessel kept climbing across the switch",
+                climbing.is_some(),
+            )
             .expect(
                 "voyager update --from exited 0 and staged the second build as next",
                 update.code == Some(0) && holds(&staged.next, &second),
@@ -140,6 +170,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && program_after.state.as_deref() == Some("live"),
             )
             .expect("Core lists the same live terminals", roster_after == roster)
+            .observed("counter", json!({"before":counted,"after":climbing}))?
             .observed("update", &update)?
             .observed("start", &ran)?
             .observed("links", json!({"staged":staged,"after":links}))?
@@ -148,10 +179,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("roster", json!({"before":roster,"after":roster_after}))
     })?;
     cases.check(native, Case::SecondStartFocuses, |native| {
+        let counted = count(&terminal, native)?;
         let viewer = native.candidate()?.clone();
         let (ran, activations) = native.activated_by(|native| native.install_start())?;
         let same = native.candidate().ok() == Some(&viewer) && native.verify().is_ok();
+        let climbing = climbed(&terminal, native, counted)?;
         Verdict::new()
+            .expect(
+                "the counter in the first Vessel kept climbing across the second start",
+                climbing.is_some(),
+            )
             .expect("the second voyager start exited 0", ran.code == Some(0))
             .expect("it launched no build", ran.launched.is_empty())
             .expect(
@@ -166,10 +203,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the running app asked to activate its window",
                 !activations.is_empty(),
             )
+            .observed("counter", json!({"before":counted,"after":climbing}))?
             .observed("start", &ran)?
             .observed("activations", &activations)
     })?;
     cases.check(native, Case::FailedBuildReturns, |native| {
+        let counted = count(&terminal, native)?;
         native.close()?;
         let update = native.install_update(Build::StandIn)?;
         let stand_in = native.install_sha256(Build::StandIn)?;
@@ -192,7 +231,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             ran.stdout.contains(&log.display().to_string())
                 && fs::read_to_string(log).is_ok_and(|text| text.contains(STAND_IN_LINE))
         });
+        let climbing = climbed(&terminal, native, counted)?;
         Verdict::new()
+            .expect(
+                "the counter in the first Vessel kept climbing across the switch",
+                climbing.is_some(),
+            )
             .expect(
                 "voyager update --from exited 0 and staged the stand-in as next",
                 update.code == Some(0) && holds(&staged.next, &stand_in),
@@ -217,6 +261,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "Core's terminals and the layout document did not change before the previous build was ready",
                 changed.is_empty(),
             )
+            .observed("counter", json!({"before":counted,"after":climbing}))?
             .observed("update", &update)?
             .observed("start", &ran)?
             .observed("links", json!({"staged":staged,"after":links}))?
@@ -225,6 +270,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("changed", &changed)
     })?;
     cases.check(native, Case::Rollback, |native| {
+        let counted = count(&terminal, native)?;
         let voyage = selected(native)?;
         let roster = native.live_terminals()?;
         let program = terminal.program(native)?;
@@ -236,7 +282,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let voyage_after = selected(native)?;
         let program_after = terminal.program(native)?;
         let roster_after = native.live_terminals()?;
+        let climbing = climbed(&terminal, native, counted)?;
         Verdict::new()
+            .expect(
+                "the counter in the first Vessel kept climbing across the switch",
+                climbing.is_some(),
+            )
             .expect(
                 "voyager rollback exited 0 and staged the first build as next",
                 rollback.code == Some(0) && holds(&staged.next, &first),
@@ -263,6 +314,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && program_after.state.as_deref() == Some("live"),
             )
             .expect("Core lists the same live terminals", roster_after == roster)
+            .observed("counter", json!({"before":counted,"after":climbing}))?
             .observed("rollback", &rollback)?
             .observed("start", &ran)?
             .observed("links", json!({"staged":staged,"after":links}))?

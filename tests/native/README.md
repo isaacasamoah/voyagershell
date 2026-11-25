@@ -1573,7 +1573,20 @@ evidence folder. `builds/local-<hash>` holds the candidate and its `voyager` com
 `current` points at it and `start.json` names the run's profile and session. It runs
 `current/voyager` inside the sandbox, as a child subreaper, so the app that `voyager
 start` leaves behind is handed to the verifier, which adopts it as the viewer.
-`src/native/install.rs` owns the layout, the runs and the adoption.
+`src/native/install.rs` owns the layout, the runs and the adoption. Each adoption is
+recorded as an `adopt` event with the app's identity, executable, build and sha256, so
+the evidence keeps every launch and not only the last `launch.json`.
+
+The run plants a `.bashrc` in its own home whose loop prints `count N` every half
+second, so the first Vessel's shell starts counting when it starts. The fixture's Core
+client has no input operation, and an app started by `voyager start` writes no
+inspection for the fixture to aim a click with, so the loop comes from the shell itself.
+The loop runs only in a shell started without a command, and only in the first such
+shell, the one that creates `~/.counting`. Every other interactive bash in the run,
+including a `bash -i -c` wrapper, starts normally.
+Every later case reads the highest count from Core before
+it acts and requires a count at least two higher afterwards, so the program has kept
+running and printing across the switch, not only kept its pid.
 
 The candidate is build A and carries every app-behaviour expectation. The second
 binary is build B. It is a distinct binary for the switch mechanics only, which are
@@ -1595,6 +1608,9 @@ exit before ready as a failure, so `failed-build-returns` fails.
 lacks. `daily-start-update.patch` clears `next` without moving `current`.
 `daily-start-focus.patch` answers a raise without activating the window.
 `daily-start-rollback.patch` leaves `previous` alone when a failed start falls back.
+`daily-start-counter.patch` kills every Core terminal when the app quits and keeps the
+session, so the first Vessel's counter stops at the update restart and
+`update-and-restart-keeps-programs` fails on the counter and the same pid.
 
 `--video on` records the owned display with `ffmpeg` into `recording.webm` in the
 evidence, from the moment the display answers until cleanup. The recording is a demo,
