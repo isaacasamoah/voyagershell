@@ -56,3 +56,12 @@ pub fn check() -> Result<usize> {
     }
     Ok(seen.len())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_lifecycle_gate_holds_over_every_reachable_run() {
+        let states = super::check().expect("the lifecycle gate rejected a reachable run");
+        assert!(states > 1, "the gate explored {states} states");
+    }
+}
