@@ -1,8 +1,9 @@
 # Native shell host
 
-The native shell is the program that draws the canvas, the whole window surface.
-The canvas is an editable JavaScript view that GPUI Shell renders. This guide
-says how to build and run the shell and how it recovers from a broken edit.
+The native shell is the program that draws the canvas, the whole window surface,
+in the native candidate. The canvas is an editable JavaScript view that GPUI
+Shell renders. This guide says how to build and run the shell and how it
+recovers from a broken edit.
 
 ## What the host provides
 
@@ -45,4 +46,13 @@ later edits. A corrected theme can also recover a first load that depended on
 it. This is live authoring. It is separate from restarting programs or agent
 sessions.
 
-The verified native platform is Linux with X11.
+## Status
+
+The native shell is part of the native candidate. It is not an accepted
+replacement for the retained Electron reference. Full workspace UX, terminal
+rendering, voice and increasing-load performance remain separate acceptance
+work. The shell connects to Core's document API, runs Core programs in terminal
+Vessels and connects to the conversation provider. Quitting closes the shell's
+own viewers and leaves Core programs running, as
+[the terminal guide](terminal.md#lifecycle) describes. The demonstrated native
+target is Linux with X11 under GNOME.

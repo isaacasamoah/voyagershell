@@ -1,6 +1,8 @@
 # Native workspace boundary
 
-This guide explains how the native app's workspace works under the canvas. It
+This guide explains how the workspace of the native candidate works under the
+canvas. The native candidate is the Rust and GPUI app. It is not yet an accepted
+replacement for the retained Electron reference. It
 covers who owns each change, how programs and agents reach the app, how the app
 reports and settles the result of a request, and how it stores the layout. Read
 [Learn VoyagerShell by running it](README.md) first. The [glossary](glossary.md)
@@ -1108,8 +1110,9 @@ UX acceptance.
 
 ## Worktrees and Home
 
-The Voyage context menu offers Rename, Close, New worktree, Open worktree and,
-for a linked checkout, Remove worktree. Fleet creation remains at its own plus
+In the native candidate, the Voyage context menu offers Rename, Close, New
+worktree, Open worktree and, for a linked checkout, Remove worktree. Fleet
+creation remains at its own plus
 control. A native centered dialog owns filtering and keyboard selection. Its
 list uses the SDK's retained virtual-list scroll handle so keyboard selection
 stays visible. Worktree Voyages appear beneath an open parent with an indent and
@@ -1129,7 +1132,8 @@ without a separate arrow. A successful complete Core process snapshot excludes
 ended or absent bindings from the running-work list; failed retrieval remains
 unavailable. Content without processes, such as the Agents view, remains
 present. The current reported-activity contract has task progress, not reliable
-context-window usage, so Home does not show a context percentage.
+context-window usage, so the candidate's Home does not show a context
+percentage.
 
 This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/mods/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. The native `worktrees` journey covers New worktree with Escape and with Enter, a removal refused while the worktree's shell runs and a removal after that shell exits. It does not drive Open worktree.
 

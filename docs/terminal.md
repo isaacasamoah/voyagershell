@@ -1,6 +1,8 @@
 # Native terminal candidate
 
-This guide explains how a terminal Vessel works in the native app. It covers
+This guide explains how a terminal Vessel works in the native candidate, the
+Rust and GPUI app that is not yet an accepted replacement for the retained
+Electron reference. It covers
 input, focus, sizing, what happens when a program starts and ends, how the app
 talks to Core, and how terminal behaviour is checked.
 
@@ -693,7 +695,14 @@ and its original correction history are unchanged by this cold-attachment path.
 
 ## Exit and reopen
 
-Recognized agent launches run as children of an interactive Bash process. The executable and its arguments remain separate positional arguments; the command does not interpolate user text. Agent exit returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's `finished` state and `exited` reason before the application removes its placement from the panel tree. Losing a viewer or Core connection does not establish shell exit. The application owner publishes the resulting layout change.
+In the native candidate, recognized agent launches run as children of an
+interactive Bash process. The executable and its arguments remain separate
+positional arguments; the command does not interpolate user text. Agent exit
+returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's
+`finished` state and `exited` reason before the application removes its
+placement from the panel tree. Losing a viewer or Core connection does not
+establish shell exit. The application owner publishes the resulting layout
+change.
 
 At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared, except that an adopted one whose program ended is deleted. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
 
