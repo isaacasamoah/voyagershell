@@ -2,10 +2,16 @@
 
 The inspection endpoint tells a verifier where controls are. Start the app
 with `--inspect ABS_FILE`, and the app writes one JSON frame to that file each
-time the drawn workspace window changes. A verifier reads the file to aim a
-click at a control, to see that a control is gone, to read the text that a
-name shows, to learn when the workspace is prepared, and to read the avatar's
-dock context. Without the flag the endpoint does not exist.
+time the drawn workspace window changes. A verifier, a test program that drives
+the real app, reads the file to:
+
+- aim a click at a control;
+- see that a control is gone;
+- read the text that a name shows;
+- learn when the workspace is prepared;
+- read the avatar's dock context.
+
+Without the flag the endpoint does not exist.
 
 The endpoint only reports. It accepts no command, opens no socket, reads no
 file and changes no workspace state. A marker is a statement that a script
