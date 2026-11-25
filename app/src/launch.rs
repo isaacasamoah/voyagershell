@@ -103,13 +103,34 @@ const COMMAND_NAME: &str = if cfg!(windows) {
 };
 
 pub fn command_path() -> Option<std::path::PathBuf> {
-    let path = std::env::current_exe().ok()?.with_file_name(COMMAND_NAME);
+    command_path_for(&std::env::current_exe().ok()?)
+}
+
+fn command_path_for(executable: &Path) -> Option<std::path::PathBuf> {
+    let path =
+        installed_command(executable).unwrap_or_else(|| executable.with_file_name(COMMAND_NAME));
     path.is_file().then_some(path)
 }
 
+#[cfg(unix)]
+fn installed_command(executable: &Path) -> Option<std::path::PathBuf> {
+    crate::install::Install::locate(executable).map(|install| install.command())
+}
+
+#[cfg(not(unix))]
+fn installed_command(_: &Path) -> Option<std::path::PathBuf> {
+    None
+}
+
 pub fn path_with_command() -> Option<String> {
-    let directory = command_path()?.parent()?.to_path_buf();
-    let rest = std::env::var_os("PATH").unwrap_or_default();
+    path_with_command_for(
+        &std::env::current_exe().ok()?,
+        std::env::var_os("PATH").unwrap_or_default(),
+    )
+}
+
+fn path_with_command_for(executable: &Path, rest: std::ffi::OsString) -> Option<String> {
+    let directory = command_path_for(executable)?.parent()?.to_path_buf();
     let joined = std::env::join_paths(
         std::iter::once(directory)
             .chain(std::env::split_paths(&rest).filter(|part| !part.as_os_str().is_empty())),
@@ -180,6 +201,44 @@ pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn an_installed_build_names_the_current_link_so_a_switch_keeps_every_path_alive() {
+        use crate::install::Install;
+        use std::fs;
+        let root = std::env::temp_dir().join(format!("voyager-stale-paths-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let install = Install::at(root.clone());
+        for build in ["a", "b"] {
+            let folder = install.build(build);
+            fs::create_dir_all(&folder).unwrap();
+            fs::write(folder.join("voyager-shell"), "").unwrap();
+            fs::write(folder.join("voyager"), format!("build {build}")).unwrap();
+        }
+        install.stage("a").unwrap();
+        install.apply_next().unwrap();
+        let executable = install.build("a").join("voyager-shell");
+        let link = root.join("current/voyager");
+        let command = command_path_for(&executable).unwrap();
+        assert_eq!(command, link);
+        let path = path_with_command_for(&executable, "/usr/bin".into()).unwrap();
+        assert_eq!(path, format!("{}:/usr/bin", root.join("current").display()));
+        let hook = crate::focus_hook::voyager_arguments("voyager-test", false, Some(&command));
+        let settings = &hook[hook.iter().position(|arg| arg == "--settings").unwrap() + 1];
+        assert!(settings.contains(&*link.to_string_lossy()), "{settings}");
+        assert!(!settings.contains("builds/a"), "{settings}");
+        install.stage("b").unwrap();
+        install.apply_next().unwrap();
+        fs::remove_dir_all(install.build("a")).unwrap();
+        assert_eq!(fs::read_to_string(&command).unwrap(), "build b");
+        let entry = path.split(':').next().unwrap();
+        assert_eq!(
+            fs::read_to_string(Path::new(entry).join("voyager")).unwrap(),
+            "build b"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn agent_command_keeps_arguments_literal_and_returns_to_bash() {

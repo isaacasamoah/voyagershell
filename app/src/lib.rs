@@ -16,6 +16,8 @@ pub mod diagnostics;
 mod families;
 pub mod focus_hook;
 mod front_door;
+#[cfg(unix)]
+pub mod install;
 pub mod launch;
 mod layout_parts;
 mod layout_store;
