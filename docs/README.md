@@ -291,6 +291,64 @@ rm -rf /var/tmp/voyager-try ~/.local/state/herdr-core/voyager-try
 If you set `XDG_STATE_HOME`, Core's state is in
 `$XDG_STATE_HOME/herdr-core/voyager-try` instead.
 
+## Who owns what
+
+This section is the architecture in one page. Read it before you change a
+boundary. The project's design notes go further, and they are private.
+
+Each part of the system owns one thing and leaves the rest to another part.
+
+| Owner | Owns | Leaves to others |
+| --- | --- | --- |
+| Herdr Core | Programs, terminals, screens, reported status and the saved workspace document | Voyages, layout and what content means |
+| The application, in `app/` | Placement, the dock and explicit context, content data and revisions, and the one list of operations with their checks | Supervising processes and recovering agent sessions, which stay with Core and the agents |
+| The desktop, in `desktop/` | Native views, the terminal view, the avatar and the canvas scripts | Placement rules, which it reads from the application |
+| A Vessel type | Its state schema, its declared actions and its view | Authority, and any process it did not declare |
+| A placement | Where one Vessel appears, in a Fleet or as a Portal | The Vessel's data and its program |
+
+Four identities stay separate. A placement points to a Vessel. A Vessel has a
+Vessel type, its own data and a revision, and may point to a Core terminal.
+Moving, hiding or removing a placement never changes the Vessel or stops its
+program. Keyboard focus, the avatar's dock and selection are also separate from
+each other.
+
+Requests pass through three layers:
+
+1. A caller is a canvas script, the chat's tool calls or the `voyager` command
+   in a Vessel.
+2. The contract in `contract/src/` defines every request, identity and result
+   once, in Rust. `npm run contract:generate` writes the TypeScript types and
+   validators that the scripts use, and `npm run contract:check` fails when
+   they drift.
+3. One owner in `app/` applies each request in order, checks the caller's
+   context and the expected version, and answers `Applied`, `Refused` or
+   `Uncertain`. Only that owner calls Core.
+
+An agent uses content through the same owners as a person:
+
+- **Discover.** The content catalogue, the `contentCatalog` contract, lists
+  each Vessel type with its state schema and actions.
+- **Create.** `create-vessel` adds a Vessel of a named type to a Fleet.
+- **Inspect and act.** The chat's `voyager_vessel` tool describes a Vessel,
+  reads its state and revision, and invokes a declared action with that
+  revision.
+- **Edit live.** A Vessel type's manifest is checked while the app runs. A
+  broken edit keeps the last version that passed.
+- **Remove and restore.** Removing a Vessel package keeps its data, and
+  restoring it brings the type back.
+
+These parts are planned and not yet built:
+
+- A Vessel type that draws its own view. The app checks `view.source` and
+  does not draw it yet.
+- Running a Vessel's actions from the `voyager` command.
+- Ranks that limit what a delegated agent may do. The socket identity is
+  advisory today, as [the voyager command](voyager-command.md#authority) says.
+
+[Context map](context-map.md) lists which context owns each file and word, and
+[the architecture gate](architecture-gate.md) checks that the code keeps these
+boundaries.
+
 ## Next steps
 
 Each kind of change starts in one place. The linked guides give the full
