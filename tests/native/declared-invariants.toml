@@ -15,6 +15,30 @@ check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-re
 confidence = "stated"
 
 [[invariant]]
+id = "failed-start-touches-nothing"
+says = "When a build started by voyager start exits before it is ready, start returns to the previous build. The failed build started, stopped and closed no program, and the person's Voyages reopen as they were."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 26 Nov 05:00"
+features = ["close-quit-restore"]
+guard = ["type:app/src/client_ready.rs#Readiness"]
+check = ["test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today"]
+gap = "The journey case daily-start/failed-build-returns is not built yet. S23a adds it with the verification environment's second binary."
+confidence = "stated"
+
+[[invariant]]
+id = "one-app-per-profile"
+says = "One VoyagerShell runs per profile. A second voyager start brings the running window forward and starts nothing."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 26 Nov 05:00"
+features = ["close-quit-restore"]
+guard = ["type:app/src/profile_lock.rs#ProfileLock"]
+check = ["test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends"]
+gap = "The journey case daily-start/second-start-focuses is not built yet. S23a adds it with the daily-start journey."
+confidence = "stated"
+
+[[invariant]]
 id = "views-never-start-or-stop-programs"
 says = "Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program."
 kind = "user"
