@@ -11,7 +11,11 @@ const USAGE: &str = "Usage: voyager status
        voyager reply --hook <agent>
        voyager do workspace '<request json>'
        voyager --skill
-Run it inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.";
+       voyager start
+       voyager update --from <build folder>
+       voyager rollback
+Run status, focus, reply and do inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.
+start, update and rollback run from an installed build and need no Vessel.";
 
 fn parse(arguments: &[String]) -> Result<SocketRequest, String> {
     match arguments {
@@ -106,8 +110,104 @@ fn code(reply: &SocketReply) -> ExitCode {
     }
 }
 
+#[cfg(unix)]
+fn install() -> Result<voyager_app::install::Install, String> {
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    voyager_app::install::Install::locate(&executable).ok_or_else(|| {
+        format!(
+            "{} is not an installed build; run the voyager in an install's builds folder",
+            executable.display()
+        )
+    })
+}
+
+#[cfg(unix)]
+fn staged(staged: voyager_app::install::Staged) -> String {
+    match staged {
+        voyager_app::install::Staged::Next(name) => {
+            format!("Build {name} is staged. Restart VoyagerShell or run voyager start to use it.")
+        }
+        voyager_app::install::Staged::AlreadyCurrent(name) => {
+            format!("Build {name} is already current; nothing is staged.")
+        }
+    }
+}
+
+#[cfg(unix)]
+fn manage(arguments: &[String]) -> Option<Result<String, (ExitCode, String)>> {
+    use voyager_app::app_start::{NotStarted, Started};
+    let refused = |message: String| (ExitCode::from(1), message);
+    let verb = match arguments {
+        [verb] if verb == "start" || verb == "rollback" => verb.as_str(),
+        [verb, flag, _] if verb == "update" && flag == "--from" => verb.as_str(),
+        _ => return None,
+    };
+    Some(install().map_err(refused).and_then(|install| match verb {
+        "start" => match voyager_app::app_start::start(&install) {
+            Ok(Started::Raised) => Ok("VoyagerShell is already running; its window was raised.".into()),
+            Ok(Started::Ready { build, log }) => {
+                Ok(format!("VoyagerShell build {build} is running. Its log is {}.", log.display()))
+            }
+            Ok(Started::ReturnedToPrevious { failed, failed_log, build, log }) => Ok(format!(
+                "Build {failed} exited before it was ready; its log is {}. Returned to build {build}, which is running. Its log is {}.",
+                failed_log.display(),
+                log.display()
+            )),
+            Err(NotStarted::Refused(message)) => Err(refused(message)),
+            Err(NotStarted::Held { profile }) => Err((
+                ExitCode::from(2),
+                format!(
+                    "Another VoyagerShell holds the profile {} but did not answer within the wait; no build was switched.",
+                    profile.display()
+                ),
+            )),
+            Err(NotStarted::Failed { build, log, status }) => Err(refused(format!(
+                "Build {build} exited before it was ready ({status}). Its log is {}.",
+                log.display()
+            ))),
+            Err(NotStarted::Uncertain { build, pid, log }) => Err((
+                ExitCode::from(2),
+                format!(
+                    "Build {build} (pid {pid}) is neither ready nor ended. Its log is {}. Quit it, or run voyager rollback, before starting again.",
+                    log.display()
+                ),
+            )),
+        },
+        "rollback" => install
+            .rollback()
+            .map(staged)
+            .map_err(|error| refused(error.to_string())),
+        _ => {
+            let source = std::path::Path::new(&arguments[2]);
+            let name = install.add_from(source).map_err(refused)?;
+            let message = install
+                .stage(&name)
+                .map(staged)
+                .map_err(|error| refused(error.to_string()))?;
+            let _ = install.prune(&voyager_app::install::running_executables());
+            Ok(message)
+        }
+    }))
+}
+
+#[cfg(not(unix))]
+fn manage(_: &[String]) -> Option<Result<String, (ExitCode, String)>> {
+    None
+}
+
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    match manage(&arguments) {
+        Some(Ok(message)) => {
+            println!("{message}");
+            return ExitCode::SUCCESS;
+        }
+        Some(Err((code, message))) => {
+            eprintln!("{message}");
+            return code;
+        }
+        None => (),
+    }
     if matches!(arguments.as_slice(), [flag] if flag == "--skill") {
         match voyager_app::launch::command_path() {
             Some(path) => print!(
