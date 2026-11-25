@@ -1,5 +1,11 @@
 # Vessel types and content
 
+A Vessel is one piece of content on the canvas, such as a terminal, a coding
+agent or a view of the workspace's running work. This guide explains Vessel
+types, how the app describes them to people and agents, where content data is
+stored and checked, and how a manifest package declares a new type. To make a
+type step by step, read [Make a Vessel type](voyager-command.md#make-a-vessel-type).
+
 A Vessel type is the kind of a Vessel, keyed by its type ID. The built-in types
 are `terminal`, `agent` and `agents`. `terminal` and `agent` have a Core
 terminal backend. `agent` is one type for every coding agent; the program is the
@@ -33,10 +39,11 @@ no backend.
 
 Each entry reports ready, removed or unavailable with a reason. A broken or
 removed manifest package leaves the built-in types discoverable. Unavailable
-entries omit state defaults and action details. If the complete catalogue would
-exceed the content envelope, `bound` marks each entry that carries state as
-unavailable and omits its state and action details, instead of hiding Terminal
-behind a failed catalogue response. Ready metadata is not native rendering
+entries omit state defaults and action details. The complete catalogue may
+exceed the content envelope, the size limit on one content response. Then
+`bound` marks each entry that carries state as unavailable and omits its state
+and action details. A failed catalogue response would hide Terminal too, so this
+keeps the built-in types listed. Ready metadata is not native rendering
 evidence.
 
 The canvas-only `voyager_content_view.descriptions()` binding returns the
@@ -161,9 +168,9 @@ A saved placement of type `notes` stays in the layout. The `Vessel` component
 draws it, and `Registry::installed` finds no manifest for it, because the old
 package has no `manifest.json`. `ManifestView` then draws its unavailable-type
 view in the placement's frame. The view says "This Vessel type isn't installed.
-Anything it saved is still there." and uses the type's display name in place of
-"This Vessel type" only when the registry keeps a manifest for it, which is the
-case for a removed manifest package and never for the old Notes package. The
+Anything it saved is still there." It uses the type's display name in place of
+"This Vessel type" only when the registry keeps a manifest for it. A removed
+manifest package keeps one. The old Notes package never has one. The
 panel's close control removes the placement and leaves the Vessel's data in
 place.
 
@@ -182,9 +189,9 @@ Invariants for a host that applies the limits:
 - Every load creates a new engine and calls `set_limits` before its first load.
   The candidate holds that engine, so closing the Vessel or publishing a newer
   candidate drops it. An engine never outlives the version it loaded.
-- A refused call is one strike. A call is refused when it runs past its render,
-  event or load budget, when the engine's calls together pass their share of
-  one second, or when the JavaScript heap reaches its limit. At the strike limit
+- A refused call is one strike. A call is refused in three cases. It runs past
+  its render, event or load budget. The engine's calls together pass their share
+  of one second. Or the JavaScript heap reaches its limit. At the strike limit
   the engine retires. A retired engine refuses every later render, event, task
   and promise continuation at its entry, without running script.
 - Budgets and the share stop a call only when QuickJS polls its interrupt

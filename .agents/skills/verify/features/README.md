@@ -43,17 +43,16 @@ The recipes are [terminal-scrolling.md](terminal-scrolling.md),
 [workspace.md](workspace.md), [quit-restore.md](quit-restore.md) and
 [terminal-input.md](terminal-input.md).
 
-The table claims native coverage for six features. `terminal-scrolling`
+The table says which features a native journey covers. `terminal-scrolling`
 proves Terminal scroll. `workspace` proves Voyages, Fleets and Vessels, and
-only the actions that its recipe lists. Those are create, switch and rename a Voyage or
-a Fleet, and split and rename a terminal Vessel. `terminal-input` proves
-Terminal I/O and Selection, and only the checks that its recipe lists. It
-also drives copy and paste in a terminal, but the Clipboard feature stays
-`python-only` because copy and paste in the canvas and in Notes have no
-native journey. Fleet arrangement, agent
-Vessels, Notes, conversation, voice, actual Codex, the real compositor and
-performance journeys remain in the existing Python fixture and are not
-migrated or re-proved here. Preserve them. Add a mapped feature only with
+only the actions that its recipe lists. Those are create, switch and rename a
+Voyage or a Fleet, and split and rename a terminal Vessel. `terminal-input`
+proves Terminal I/O and Selection, and only the checks that its recipe lists.
+It also drives copy and paste in a terminal, but the Clipboard feature stays
+`python-only` because copy and paste in the chat composer has no native
+journey. A feature whose tier the table marks `python-only`, such as agent
+Vessels or chat, stays in the retained Python fixture and is not re-proved
+here. Preserve those Python journeys. Add a mapped feature only with
 source entry points, prerequisites, actual actions and observable success. No
 fixture-private design or hidden pass criterion belongs in another feature's
 script.

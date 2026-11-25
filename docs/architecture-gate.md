@@ -1,5 +1,9 @@
 # The architecture gate
 
+The architecture gate keeps each file with one owner and stops modules from
+depending on each other in ways the rules forbid. It is the last link of the
+[verification chain](../tests/native/README.md#how-a-change-is-verified).
+
 `npm run architecture:check` reads the working tree and fails when a rule in `tests/architecture/rules.yaml` is broken and not recorded. It needs the packages from `npm ci` and Node.js 24. It takes a few seconds.
 
 ## Read the result
@@ -36,7 +40,7 @@ By default a Rust module counts as its top module, which is its crate and the fi
 
 Set `children: true` on a `uses` rule to check that case. The rule fails for a module `P` and a direct child `C` when `P` uses `C` or a module inside `C`, and `C` or a module inside it uses `P`. The report line is `<rule id>: P <-> C`. A child that only uses its parent passes, and so does a parent that only uses its child. A crate root is never a `P`. Sibling loops belong to the default rule. The `children` option is refused for kind `imports`, which has no parents.
 
-The pull request "Adapt the Core connection behind one typed seam" (#151) had this loop at its head. `client` declared `core_calls` and used it, and `core_calls` used items of `client`.
+The change that put the Core connection behind one typed seam once had this loop at its head. `client` declared `core_calls` and used it, and `core_calls` used items of `client`.
 
 ## One home for a literal
 
@@ -95,7 +99,7 @@ Both revisions are read with the extractor and configuration of the working tree
 The table has these parts. A part with no change is left out.
 
 - `Edges` lists each added (`+`) and removed (`-`) edge as `from -> to (kind)`. An edge changes only when its endpoints or kind change, not when its evidence moves.
-- `Fan-in and fan-out` gives each touched module its added and removed users, which are the modules with an edge to it, and its added and removed dependencies, which are the modules it has an edge to. The JSON `modules` list names them.
+- `Fan-in and fan-out` gives each touched module its added and removed users and dependencies. A user is a module with an edge to it. A dependency is a module it has an edge to. The JSON `modules` list names them.
 - `Host functions` lists each function added to or removed from a script host module, as `module.function`. A new host module adds all its functions.
 - `Agent tools` lists added and removed agent tools.
 - `Offered operations` lists added and removed `offers` and `exposes` edges, which are the places where code offers a tool or a host module to a caller. Operations in the typed application contract are not observed, so "offered operations" means only those two edge kinds.

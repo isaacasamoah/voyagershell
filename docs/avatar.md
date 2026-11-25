@@ -1,7 +1,13 @@
 # Native avatar ownership
 
+The avatar is the astronaut figure that stands for Voyager on the canvas. You
+dock it on a Vessel, a Portal, a Fleet, a Voyage or Overwatch, the whole
+workspace, to choose what Voyager works
+on. This guide explains how the native app draws, moves and docks it, and how a
+pose pack changes its look.
+
 The workspace chrome places the original Voyager avatar through the bound
-`voyager_avatar` module. `Layer` supplies placement/context and `Target`
+`voyager_avatar` module. `Layer` supplies placement and context, and `Target`
 describes a visible scope and measures its real layout bounds. The original
 astronaut frames and brand live in `desktop/assets/`. The tagline image is the
 retained native experiment's export of the original interface text.
@@ -140,7 +146,12 @@ Hover starts one stretch on entry. Staying over the hit area does not repeat it.
 An applied dock replaces any active clip with a pronounced two-second float.
 Hover is ignored while a clip runs and is never queued. Clicking the floating avatar restores the workspace. While the
 avatar is home, a click sends the existing Home request and the window stays up. While the avatar is docked anywhere
-else, a click changes nothing, so that click stays free for a later docking menu. A dock on the home dock leaves the view, the Voyage and the Fleet where they were, and only a click on the avatar at home opens the home Voyage. A dock on a Vessel or a Voyage inside Home still shows Home. A click made while a request is still waiting for its reply is kept, one deep with the latest winning, and acts when the reply returns, by where the avatar is docked then.
+else, a click changes nothing, so that click stays free for a later docking
+menu. A dock on the home dock leaves the view, the Voyage and the Fleet where
+they were, and only a click on the avatar at home opens the home Voyage. A dock
+on a Vessel or a Voyage inside Home still shows Home. A click made while a
+request is still waiting for its reply is kept, and only the latest such click
+is kept. It acts when the reply returns, by where the avatar is docked then.
 Dragging keeps its placement behavior and sound.
 Shift-click and focused S also play the hover binding. Focused F5 reloads the
 profile's animation files. S and F5 use local press/release latches because the
@@ -161,12 +172,12 @@ motion generation on replacement. Settled or hidden views request neither.
 
 ## Sharp drawing
 
-The decoded PNG is the source and stays unchanged on disk and in memory. A source
-is 512 pixels square and is drawn at 66.24 or 25.92 logical pixels, which is a
-reduction of 4.6 to 19.8 times on the laptop display at 1.667 times scale and on
-external displays at 1. GPUI uploads one mip level
-and samples it with bilinear filtering, which reads two by two texels per device
-pixel and skips the rest of a source that is reduced by more than two times. Thin
+The decoded PNG is the source and stays unchanged on disk and in memory. A
+source is 512 pixels square and is drawn at 66.24 or 25.92 logical pixels. That
+is a reduction of 4.6 to 19.8 times, on the laptop display at 1.667 times scale
+and on external displays at 1. GPUI uploads one mip level and samples it with
+bilinear filtering. That reads two by two texels per device pixel, and skips the
+rest of a source that is reduced by more than two times. Thin
 lines then alias and shimmer under the idle float.
 
 `desktop/src/avatar_sharp.rs` derives a copy of each source for each device size
@@ -216,9 +227,9 @@ RGBA storage to 64 MiB across distinct images. The loader checks RGBA size befor
 decoding/conversion. Derived full-image geometry must remain finite with a 256-fold
 transform margin covering the current native avatar size. Asset names are flat
 basenames. Missing references, invalid rectangles, unsupported versions and
-nonempty effects are refused. Version 1 currently supports PNG poses and finite
-steps with easing/crossfades; native plasma effects and automatic authoring-guide
-injection from PR #42 remain outside this implementation.
+nonempty effects are refused. Version 1 supports PNG poses and finite steps with
+easing and crossfades. It does not support native plasma effects or adding an
+authoring guide automatically.
 
 Application responses still refresh context through the existing owner path.
 Navigation and terminal output do not themselves start avatar animation. Only a
@@ -253,7 +264,29 @@ supplies actual Voyage-owned Portals and the shared content renderer. Portal
 targets and Go there now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
-An avatar reply is accepted in render, as the canvas always did, so the layout, the dock receipt and the avatar's projection change together with the reply. A layout change does not end a press on the avatar, so a grab made just before a Fleet switch lands keeps following the pointer, and its drop is judged against the layout shown at release. The one focus call that accepting can make, for a focused Vessel the new layout no longer shows, may not run while the canvas draws. It runs in a spawned task after one await, and only if the focus is still where the accept left it and no chat, rename or dialog has opened since. The avatar is the person, and the owner raises a change notice only for requests that carry an agent or program scope, so an avatar reply raises none. The accept therefore has to be followed by the notice inspect, because nothing else will ask the canvas to open the terminals of what the reply shows. A reply that opens Home is prepared by that inspect. The inspect runs in a spawned task after its first await, through one function, `inspectOutsideRender`, because the request it starts ends with a redraw request that the toolkit refuses while the canvas draws. The follow that a dock starts, `followDock`, starts its inspect the same way, from a task after one await, and puts the seen dock back if a request has started by then so the next draw follows it. The other callers that still start a request while the canvas draws are left to the general fix, which moves them onto `inspectOutsideRender`. That inspect skips only when its revision is already accepted and every shown terminal Vessel has an opening. When the canvas is busy the reply leaves the refresh wanted, and the one place busy ends reads it, so a click during launch work prepares once when that work ends.
+An avatar reply is accepted in render, as the canvas always did, so the layout,
+the dock receipt and the avatar's projection change together with the reply. A
+layout change does not end a press on the avatar. A grab made right before a
+Fleet switch lands keeps following the pointer, and its drop is judged against
+the layout shown at release. The one focus call that accepting can make, for a
+focused Vessel the new layout no longer shows, may not run while the canvas
+draws. It runs in a spawned task after one await, and only if the focus is still
+where the accept left it and no chat, rename or dialog has opened since. The
+avatar is the person, and the owner raises a change notice only for requests
+that carry an agent or program scope, so an avatar reply raises none. The accept
+therefore has to be followed by the notice inspect, because nothing else will
+ask the canvas to open the terminals of what the reply shows. A reply that opens
+Home is prepared by that inspect. The inspect runs in a spawned task after its
+first await, through one function, `inspectOutsideRender`, because the request
+it starts ends with a redraw request that the toolkit refuses while the canvas
+draws. The follow that a dock starts, `followDock`, starts its inspect the same
+way, from a task after one await. If a request has started by then, it puts the
+seen dock back so the next draw follows it. The other callers that still start
+a request while the canvas draws are left to the general fix, which moves them
+onto `inspectOutsideRender`. That inspect skips only when its revision is
+already accepted and every shown terminal Vessel has an opening. When the canvas
+is busy the reply leaves the refresh wanted, and the one place busy ends reads
+it, so a click during launch work prepares once when that work ends.
 
 ## Working-core integration
 

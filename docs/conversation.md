@@ -1,5 +1,10 @@
 # Native private text
 
+The chat panel holds a private conversation between you and the administrator,
+Voyager's own agent. This guide explains how that conversation runs on Codex,
+how its provider is configured, and how it stays separate from terminal agents
+and Vessels.
+
 The private conversation belongs to the Rust application. Opening chat reads its
 current projection without starting Codex. The first human Send starts a separate
 installed Codex app-server over stdio and creates an ephemeral private thread.
@@ -29,7 +34,7 @@ and effort strings; no turn was submitted" and keeps the typed message. An older
 build therefore never runs a provider or prompt it does not support. Removing the
 newer fields restores it.
 
-C2 restores the supported native shell tool
+The administrator keeps the supported native shell tool
 for file and search inspection while retaining the read-only sandbox,
 never-approval policy and disabled internal agents. Instructions keep project
 and extension-source changes with working Vessels. These instructions are
@@ -108,18 +113,15 @@ experimental schema. The official reference is the
 Linux native evidence does not establish macOS or Windows behavior. Full-duplex
 voice remains a separate integration requirement.
 
-The native account trial also observed the installed Codex stop hook continuing
-the same turn. Its additional visible message reached chat through the native
-stream; Voyager did not submit another request. The installed stop hook checks
-for the owner's required `oru:` response prefix. C1's private instructions omitted
-that convention. C2 added it to the private administrator instructions, leaving
-the global hooks and configuration unchanged. S18a moved it out of the built-in
-policy and into the owner's configured prompt, because it is one person's
-convention, not application policy. The first native C2 journey read
-an undisclosed local marker and created a Fleet through the real owner. Its one
-completed assistant answer used the prefix without the earlier extra continuation.
-This is evidence for the tested installed account and Linux runtime, not a claim
-about every user's hook configuration.
+An installed Codex stop hook can continue the same turn. Its extra visible
+message reaches chat through the native stream, and Voyager does not submit
+another request. A personal reply prefix that such a hook checks for belongs in
+the owner's configured prompt, not in the built-in policy, because it is one
+person's convention and not application policy. A native run on Linux with an
+installed account read a hidden local marker and created a Fleet through the
+real owner, and its one answer used the prefix with no extra continuation. That
+is evidence for that account and runtime, not a claim about every user's hook
+configuration.
 
 One workspace effect may run at a time, off the conversation loop. Interrupt
 remains available. A new human Send waits until an accepted application effect
@@ -159,8 +161,8 @@ ceiling remains 64 KiB and does not enlarge that callback budget. Read adds at
 most 160 history lines; the UI projection may shorten its text and marks that
 limit. Core's complete/how/why fields remain distinct from the application
 limit. The owner bounds serialized process output to 24 KiB before the callback
-envelope. A large read/list reports its limit; a confirmed submission is not falsely
-reported as refused just because its details exceed the display budget.
+envelope. A large read or list reports its limit. A confirmed submission is
+never reported as refused because its details exceed the display budget.
 
 Send uses Core's actual paste-and-submit operation and returns its observed
 status, turn and optional started result. It establishes submission, not task

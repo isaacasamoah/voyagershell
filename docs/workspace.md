@@ -1,11 +1,21 @@
 # Native workspace boundary
 
+This guide explains how the workspace of the native candidate works under the
+canvas. The native candidate is the Rust and GPUI app. It is not yet an accepted
+replacement for the retained Electron reference. It
+covers who owns each change, how programs and agents reach the app, how the app
+reports and settles the result of a request, and how it stores the layout. Read
+[Learn VoyagerShell by running it](README.md) first. The [glossary](glossary.md)
+defines Voyage, Fleet, Vessel, Portal and the other terms used here.
+
 ## Libraries and entry points
 
 `contract/` defines shared identities, commands and results. `app/src/lib.rs`
-exposes the Rust application independently of GPUI. The application owns
+exposes the Rust application independently of GPUI, the Rust interface toolkit
+that the desktop draws with. The application owns
 workspace changes, content state, captured context and effect policy. Its Core
-adapter owns protocol translation, while Herdr Core owns terminals and programs.
+adapter translates the protocol. Herdr Core, the separate program that runs
+terminals and processes, owns terminals and programs.
 
 `desktop/src/lib.rs` owns native composition, asset seeding and view modules.
 `desktop/src/main.rs` parses command-line arguments and invokes that library.
@@ -99,9 +109,9 @@ running.
 Adoption leaves the Fleet's or Portal column's maximized placement alone, so the
 person's view does not change. The new placement still joins the split, and it
 shows when the person restores the view. Every labelled terminal counts as a
-working agent's. Core records a `parent` for each terminal, but a program can
-name any parent with `hc run --parent`, and Core parentage grants no rights, so
-the app does not read it to decide who started a terminal. If the parent decided,
+working agent's. Core records a `parent` for each terminal. A program can name
+any parent with `hc run --parent`, and Core parentage grants no rights. So the
+app does not read it to decide who started a terminal. If the parent decided,
 an agent could name Voyager and clear the person's maximize. Voyager clears a
 maximize through `create-vessel`, where the bound-terminal record identifies it.
 `Adoptions::settle` in `app/src/adoption.rs` passes the `Caller::Agent` of
@@ -201,8 +211,8 @@ owner opens none there and the command refuses.
 of Voyager's terminal. `app/src/voyager_binding.rs` is its only writer, and it
 writes by temporary file and rename. The app writes it when it starts Voyager.
 It is not a Core label or a Core document, because a Vessel program can write
-both, and it is not part of the layout, so the layout and its wire do not
-change.
+both. It is not part of the layout either, so the layout and its wire format do
+not change.
 
 A Vessel socket offers `dock`, `create-fleet-with-vessel`,
 `set-placement-maximized` and `resize-placement-split` only when its own terminal equals that field. Any
@@ -265,9 +275,10 @@ Voyager's replies when the app knows the path of the `voyager` command. The
 environment value stays out of argv, so the terminal still matches the test
 below. The identity prompt sends Voyager to `voyager --skill` and asks it to
 start every reply with the reply marker `[vy]`. The launch also passes
-`--disallowedTools` with the task tools, `TaskCreate`, `TaskUpdate`, `TaskList`,
-`TaskGet` and `TodoWrite`, so Claude Code's reminder about them is never added
-to the conversation, on a fresh start or a resume. The `voyager` entry is read for
+`--disallowedTools` with the task tools `TaskCreate`, `TaskUpdate`, `TaskList`,
+`TaskGet` and `TodoWrite`. Claude Code then never adds its reminder about them
+to the conversation, on a fresh start or on a resume. The `voyager` entry is
+read for
 Voyager alone and does not appear in the content chooser.
 
 At launch the app forgets what `voyager.json` held and decides again from two
@@ -340,10 +351,11 @@ first marker is dropped and every later marker is removed, so the chat and the
 speech never carry the marker or anything ahead of it. A reply without the
 marker reads unchanged, and the strip happens once,
 upstream of the speech filter and the chat note. The match test above compares
-the texts after the strip. When a turn's `Stop` text carries text and neither it
-nor any message of the turn holds the marker, `Replies` writes one line to
-standard error, once per turn, that gives the unix time and says the marker was
-missing. The line holds no reply text and the miss changes nothing else.
+the texts after the strip. Sometimes a turn's `Stop` text carries text, but
+neither it nor any message of the turn holds the marker. `Replies` then writes
+one line to standard error, once per turn. The line gives the unix time and says
+the marker was missing. The line holds no reply text and the miss changes
+nothing else.
 
 Reply text is display data. It never runs an action and is never sent to an
 agent as an instruction.
@@ -368,9 +380,10 @@ resume. It also sets `VOYAGER_BACKGROUND=1` in the `--settings` environment, so 
 own instructions leave their personal reply prefix out of Voyager's replies.
 Claude cannot read its own environment, so the background-session line states the same fact in
 words. Claude Code ignores `--append-system-prompt` when it resumes a
-conversation, and the earlier replies in that conversation carry the personal prefix, so the
-focus hook output repeats the background-session line, `spoken::reply_rule` and the guide,
-which points to `voyager --skill`, at every prompt. A launch with no hook command path has no such
+conversation, and the earlier replies in that conversation carry the personal
+prefix. So at every prompt the focus hook output repeats the background-session
+line, `spoken::reply_rule` and the guide, which points to `voyager --skill`. A
+launch with no hook command path has no such
 repeat, so a resumed Voyager conversation there keeps the personal prefix. The app strips
 the marker, and any text before it, where it stores a reply, so neither the speech filter
 nor the chat note ever sees them.
@@ -380,9 +393,9 @@ stdin and waits at most 50 ms for it, inside the 200 ms deadline of the whole
 hook. A prompt that has not arrived by then is treated as typed and the dock is
 still printed. A prompt that starts
 with the marker sends `{"command":"focus","spoken":true,"prompt":"<prompt id>"}`,
-where the prompt id is the `prompt_id` that Claude puts on the same
-`UserPromptSubmit` input and on every `MessageDisplay` and `Stop` input of that
-prompt. A spoken prompt whose input has no `prompt_id` is sent as typed, and the
+The prompt id is the `prompt_id` that Claude puts on the same `UserPromptSubmit`
+input and on every `MessageDisplay` and `Stop` input of that prompt. A spoken
+prompt whose input has no `prompt_id` is sent as typed, and the
 hook says so on standard error, because a mark that names no prompt could be
 given to the wrong reply. Every other prompt, and an input the hook cannot read,
 sends the plain focus request, so a typed Home prompt, a Core note and `voyager
@@ -407,8 +420,9 @@ with no `prompt` sets none and is logged.
 
 The hook runs before the model starts, so the mark is pending before the turn's
 first event. The reply path calls `observe` through `Replies::accept_with` when
-a turn's first text arrives, and when a `Stop` arrives for a turn that streamed
-no text, so a spoken turn with no streamed reply still gets its verdict. Each
+a turn's first text arrives. It also calls it when a `Stop` arrives for a turn
+that streamed no text, so a spoken turn with no streamed reply still gets its
+verdict. Each
 `Replies` turn carries it as `spoken`. Only the terminal that `voyager.json`
 names can send replies, so a turn of any other Vessel is never spoken. A reply
 hook input with no `prompt_id` is sent as `unreadable` and logged, and no turn
@@ -433,8 +447,9 @@ status and the message, and no layout. It is `refused` when the queue was full,
 so nothing was queued, or when the request was still queued when the caller's
 wait ended. The caller then cancels it, and the owner skips a cancelled
 request, so nothing was sent. It is `uncertain` when the owner took the request
-and gave no answer within 22 seconds, or within 120 seconds for a confirmed
-Voyage close, and the caller's ask below got no answer either. That wait is longer than Core's 20-second deadline, so the owner's
+and gave no answer in time, and the caller's ask below got no answer either. The
+time is 22 seconds, or 120 seconds for a confirmed Voyage close. That wait is
+longer than Core's 20-second deadline, so the owner's
 answer to a Core timeout reaches the caller before the caller gives up. It is
 shorter than the conversation's 25-second wait, so a chat message that needs an
 inspect still gets the conversation owner's answer. The build fails if either
@@ -459,9 +474,9 @@ status with `From<Outcome> for Status`.
 An edited canvas script from an earlier build keeps running beside the updated
 `workspace.js` and `validate.js`. It treats `refused` like any reply that is not
 `applied` and shows the message without the word. For a reply the owner never
-answered it shows a type error in place of the reason and marks its layout
-stale, and its close dialog leaves Confirm enabled after an uncertain
-confirmation. It sends nothing by itself in either case.
+answered, it shows a type error in place of the reason and marks its layout
+stale. Its close dialog leaves Confirm enabled after an uncertain confirmation.
+It sends nothing by itself in either case.
 
 ### Settling an uncertain result
 
@@ -871,10 +886,11 @@ content and optional Core terminal identities are distinct types.
 and component that a script can import from a host module, with typed arguments
 and a typed result. The TypeScript declarations that `export-script-types`
 prints, and `contract/generated/operations.json`, come from it.
-`desktop/src/bridge.rs` registers each host module against its catalogue entry. It
-checks argument count, type and size from the entry before the handler runs, and
-refuses the load when a registered name is not in the catalogue, an entry has no
-registration, or the sync and async kinds differ. A unit test also reads the
+`desktop/src/bridge.rs` registers each host module against its catalogue entry.
+It checks argument count, type and size from the entry before the handler runs.
+It refuses the load when a registered name is not in the catalogue, when an
+entry has no registration, or when the sync and async kinds differ. A unit test
+also reads the
 registering files and fails when their names and the catalogue differ.
 `contract/build.cjs` refuses a generated wrapper that imports a name the
 catalogue lacks. The workspace `Action` type stays the one list of workspace
@@ -945,9 +961,10 @@ Vessel when the create's layout save departs. An inspect answered while that
 save is in flight can already load the new layout from Core, so its reply lists
 the new Vessel as created. A reply lists it only when its own layout holds it.
 When the save lands applied, the owner records it again, in case an inspect that
-loaded the older layout during the flight dropped the record. When it is refused, or stays uncertain after the owner reads Core, the owner
-forgets the Vessels that the save created, so the canvas is never told to open
-a Vessel that the outcome does not show.
+loaded the older layout during the flight dropped the record. The save may be
+refused, or stay uncertain after the owner reads Core. In both cases the owner
+forgets the Vessels that the save created, so the canvas is never told to open a
+Vessel that the outcome does not show.
 [Package removal and restore](content.md#package-removal-and-restore) describes the package filesystem and availability source.
 
 Canvas keeps application requests and terminal preparation serialized. While
@@ -1091,9 +1108,16 @@ visible seam. These feedback changes require the combined native journey before
 UX acceptance.
 
 
-## Worktree and Home feedback candidate
+## Worktrees and Home
 
-The 5 November candidate uses the Voyage context menu for Rename, Close, New worktree, Open worktree and, for a linked checkout, Remove worktree. Fleet creation remains at its own plus control. A native centered dialog owns filtering and keyboard selection. Its list uses the SDK's retained virtual-list scroll handle so keyboard selection stays visible. Worktree Voyages appear beneath an open parent with an indent and branch icon. They remain independent open Voyages, without indentation, when that parent closes.
+In the native candidate, the Voyage context menu offers Rename, Close, New
+worktree, Open worktree and, for a linked checkout, Remove worktree. Fleet
+creation remains at its own plus
+control. A native centered dialog owns filtering and keyboard selection. Its
+list uses the SDK's retained virtual-list scroll handle so keyboard selection
+stays visible. Worktree Voyages appear beneath an open parent with an indent and
+branch icon. They remain independent open Voyages, without indentation, when
+that parent closes.
 
 New worktrees use the main checkout's `.worktrees/` folder, with a local Git exclude entry. Git creates and checks out the chosen branch. The removal dialog reports uncommitted changes and retains the branch. The Rust owner rechecks live program directories and uses ordinary Git removal without force. After deletion, it reads the remaining checkouts from the primary directory and closes matching target Voyages, not the request's source Voyage. Successful checkout observations suppress removed project-local worktrees from Recent voyages without deleting retained application data. The worktree family in `app/src/families/worktree.rs` holds these checks, runs Git through its private `git` module on a worker thread and plans the Voyage changes a completed operation makes. `app/src/client_worktree.rs` keeps the workspace reads and saves, the front door and the removal's Core terminal list.
 
@@ -1101,7 +1125,15 @@ The layout and Git operation owners remain distinct. The script cannot grant del
 
 Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates canvas, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task. Closing a dialog cancels that view's continuations and can strand the workspace busy flag.
 
-Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Content without processes, such as the Agents view, remains present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
+Home groups existing content by Voyage using the same colour function as the
+sidebar. Agent status groups start collapsed. Closed Voyages are absent from
+Home. Voyage headings start expanded and collapse their contents when clicked,
+without a separate arrow. A successful complete Core process snapshot excludes
+ended or absent bindings from the running-work list; failed retrieval remains
+unavailable. Content without processes, such as the Agents view, remains
+present. The current reported-activity contract has task progress, not reliable
+context-window usage, so the candidate's Home does not show a context
+percentage.
 
 This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/mods/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. The native `worktrees` journey covers New worktree with Escape and with Enter, a removal refused while the worktree's shell runs and a removal after that shell exits. It does not drive Open worktree.
 
@@ -1186,10 +1218,11 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most eighteen pending RPCs, which are at most eight admitted process effects, at most
-three process reads at two calls each, the one shared terminal list that observations
-wait on, the one workspace save or list in flight, the activity subscription
-and one ordinary owner call. Process admissions remain counted
+most eighteen pending RPCs. They are at most eight admitted process effects and
+at most three process reads at two calls each. The rest are the one shared
+terminal list that observations wait on, the one workspace save or list in
+flight, the activity subscription and one ordinary owner call. Process
+admissions remain counted
 until the owner reconciles completion. The [front door](#the-front-door) ledger
 keeps every pending request and evicts settled entries only. Replies received after a caller has gone away
 are ignored without disconnecting unrelated viewers. Disconnects release all
@@ -1232,11 +1265,12 @@ tab, a button or a Vessel never does, because a drag area on an ancestor of the
 tabs would also fire during a tab drag and hijack its reordering.
 
 The press must begin on a filler. The reviewed `gpui-shell-window-drag.patch`
-makes a press on a drag area arm the move, a move with the left button held
-while armed start it, and a release, a press anywhere else, a double-click or
-the move itself disarm it. Without it the SDK started a move on any held mouse
-move over a drag area, so a Fleet tab, Voyage or Vessel drag, or a terminal
-selection, carried across a filler moved the window. The same arming serves
+changes when a window move starts. A press on a drag area arms the move. A move
+with the left button held while armed starts it. A release, a press anywhere
+else, a double-click or the move itself disarms it. Without the patch, the SDK
+started a move on any held mouse move over a drag area. A Fleet tab, Voyage or
+Vessel drag, or a terminal selection, that crossed a filler then moved the
+window. The same arming serves
 every press origin, because the SDK handler is the only place that sees the
 pointer over the filler.
 
@@ -1301,9 +1335,10 @@ clicked a Fleet still applies, and every check that compares a caller's version
 with the owner's ignores navigation. The next section narrows each check to the
 parts that a request changes.
 
-Change notices carry the structure revision, and a navigation revision that
-moves only when a scoped caller, such as an agent through the administrator, or
-a Vessel program through its socket, changes navigation alone. The canvas
+Change notices carry the structure revision and a navigation revision. The
+navigation revision moves only when a scoped caller changes navigation alone. A
+scoped caller is, for example, an agent through the administrator or a Vessel
+program through its socket. The canvas
 inspects again when either moves past what it holds. Its own navigation,
 including `focus-vessel`, and the native avatar's dock reach it through their
 replies, so they move no navigation revision. A dock that changes the selection
@@ -1348,8 +1383,8 @@ as it was. A hidden Vessel or Portal, and a Portal column that is not shown, is
 not revealed. The dock lands on the Fleet and records nothing. A dock runs no
 Vessel type actions and starts no model turn, because the Vessel types declare
 no dock behaviour yet. The canvas follows a dock with one inspect that also
-prepares the newly shown terminals, then moves its focused placement to the
-remembered one and gives that terminal keyboard focus unless a chat, a rename or
+prepares the newly shown terminals. It then moves its focused placement to the
+remembered one. It gives that terminal keyboard focus unless a chat, a rename or
 a dialog is open. `followDock` in `desktop/canvas/panel-view.ts` is that one
 step. It records the dock, runs the inspect and gives the keyboard from that
 request's completion, because a focus asked for while the canvas renders does

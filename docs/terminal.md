@@ -1,9 +1,15 @@
 # Native terminal candidate
 
+This guide explains how a terminal Vessel works in the native candidate, the
+Rust and GPUI app that is not yet an accepted replacement for the retained
+Electron reference. It covers
+input, focus, sizing, what happens when a program starts and ends, how the app
+talks to Core, and how terminal behaviour is checked.
+
 Herdr Core owns the shell process and canonical terminal state. Voyager stores a
 Core terminal address on a Vessel, separate from its placement. Its
 single framed Core connection carries RPC, viewer data, input, focus and credit.
-Closing a viewer sends CLOSE; it does not stop the terminal. Quitting closes
+Closing a viewer sends CLOSE. It does not stop the terminal. Quitting closes
 viewers and private assistant resources while Core programs remain running.
 Only an explicit stop-session stops the Core session. Confirmed Close Voyage is
 the separate operation that stops that Voyage's verified programs. See
@@ -66,7 +72,7 @@ produces a clean Bash prompt. Native comparison owns that remaining observation.
 
 ## Lifecycle
 
-The workspace owner in `app/src/client_owner.rs` has two named lifecycle
+`app/src/families/terminal/lifecycle.rs` defines two named lifecycle
 operations, `Lifecycle::QuitAndKeep` and `Lifecycle::StopSession`. Both arrive
 as one owner message and end the owner's session hold. Only stop-session calls
 Core's `server.stop`.
@@ -87,10 +93,11 @@ These definitions describe what each user action does.
 - **Closing a Vessel or Portal.** The panel's close button hides the placement
   and keeps its backend program running in Core. It never stops a program.
   This is unchanged.
-- **A Vessel's or Portal's program exiting.** When a terminal program that this
-  owner saw live finishes with reason `exited`, the owner deletes its placement,
-  its Vessel and its leaf in saved layouts (`families::terminal::close_exited`),
-  so a typed exit leaves no record. A program stopped from outside, with reason
+- **A Vessel's or Portal's program exiting.** A terminal program that this owner
+  saw live may finish with reason `exited`. The owner then deletes its
+  placement, its Vessel and its leaf in saved layouts
+  (`families::terminal::close_exited`), so a typed exit leaves no record. A
+  program stopped from outside, with reason
   `killed`, is not closed at runtime, and its placement and Vessel stay. Closing
   the panel by hand is different. It hides the placement and keeps the Vessel
   for reopening. A program that ended
@@ -297,8 +304,9 @@ check also bounds the reply. Output beyond either byte limit is a Core protocol
 violation and still ends the connection.
 
 When the connection ends, its reader or writer names the reason, such as
-`read failed: UnexpectedEof` or `Core attached an invalid channel`, and prints
-it once to standard error as `Core bridge disconnected: <reason>`. Voyager's own
+`read failed: UnexpectedEof` or `Core attached an invalid channel`. It prints the
+reason once to standard error as `Core bridge disconnected: <reason>`. Voyager's
+own
 close or quit records its reason and prints nothing. Every later viewer frame
 and Core request returns the known refusal `disconnected` with that reason, and
 nothing is queued. A viewer checks the connection before it queues a frame, so
@@ -339,7 +347,7 @@ boundary. No application contract, process owner or terminal parser was added.
 Selection uses Ghostty's tracked grid references and gesture operations. A
 selection change updates the selected column ranges separately from the retained
 cell arrays. The native background uses the reference selection color
-#53506a88. Copy formats the selected terminal text with wrapping removed; paste
+`#53506a88`. Copy formats the selected terminal text with wrapping removed; paste
 uses Ghostty's current bracketed-paste mode and sanitization. Linux uses
 Ctrl+Shift+C and Ctrl+Shift+V, while macOS uses its Command key. Clipboard text
 whose encoded form exceeds the existing 64 KiB terminal input limit is refused
@@ -437,17 +445,21 @@ reach the pane's scrollback. A pane that stopped taking output during a drag
 would meet that drop after about 4.25 MiB of output. A pane that keeps parsing
 meets it only when its program outpaces parsing, as it would without a drag.
 
-The native `terminal-input` journey in `tests/native` covers typed commands,
-keys as bytes, keys under application cursor mode, output drawn without input,
-drag selection, the copy on release to CLIPBOARD and PRIMARY, copy with
-Ctrl+Shift+C, paste with and without bracketed paste, a middle click that pastes
-PRIMARY, the refusal of 70 KiB in PRIMARY, a click that moves the cursor of a
-shell's input line and of a line-reading program, the clicks that send nothing
-(another row, mouse tracking, the alternate screen), and input to one split while another
-floods. Its recipe,
-`.agents/skills/verify/features/terminal-input.md`, lists what it does not
-cover.
-The retained Python terminal-grid journey still covers shell grid resize, split
+The native `terminal-input` journey in `tests/native` covers:
+
+- typed commands, keys as bytes and keys under application cursor mode;
+- output drawn without input;
+- drag selection and the copy on release to CLIPBOARD and PRIMARY;
+- copy with Ctrl+Shift+C, and paste with and without bracketed paste;
+- a middle click that pastes PRIMARY, and the refusal of 70 KiB in PRIMARY;
+- a click that moves the cursor of a shell's input line and of a line-reading
+  program;
+- the clicks that send nothing, on another row, under mouse tracking and on the
+  alternate screen;
+- input to one split while another floods.
+
+Its recipe, `.agents/skills/verify/features/terminal-input.md`, lists what it
+does not cover. The retained Python terminal-grid journey still covers shell grid resize, split
 sizing, IBus/XIM composition and input during a hidden Fleet's output.
 Performance, native agent behavior, additional terminal styles, complete
 lifecycle and platform acceptance remain open.
@@ -656,7 +668,10 @@ intent. Attaching to a live terminal changes nothing that a retry could double.
 Otherwise the Vessel shows the refusal. A Vessel with no bound terminal is never
 retried, because its open can start a program.
 
-The canvas opens a terminal for every shown Vessel that has none, and repeats the pass when a refresh during it showed a Vessel the pass had not visited, such as one the app adopted after the canvas's first inspect. A Vessel that appeared that way otherwise stayed on "Connecting terminal" with no open sent.
+The canvas opens a terminal for every shown Vessel that has none. It repeats the
+pass when a refresh during it showed a Vessel the pass had not visited, such as
+one the app adopted after the canvas's first inspect. A Vessel that appeared
+that way otherwise stayed on "Connecting terminal" with no open sent.
 
 The updated canvas treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
@@ -678,9 +693,16 @@ both Vessel and Portal after Quit/reopen still requires the maintained session
 Quit journey on the matched release. Already-attached terminal end presentation
 and its original correction history are unchanged by this cold-attachment path.
 
-## Exit and reopen feedback candidate
+## Exit and reopen
 
-The 5 November feedback changes the earlier manual-restart presentation. Recognized agent launches run as children of an interactive Bash process. The executable and its arguments remain separate positional arguments; the command does not interpolate user text. Agent exit returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's `finished` state and `exited` reason before the application removes its placement from the panel tree. Losing a viewer or Core connection does not establish shell exit. The application owner publishes the resulting layout change.
+In the native candidate, recognized agent launches run as children of an
+interactive Bash process. The executable and its arguments remain separate
+positional arguments; the command does not interpolate user text. Agent exit
+returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's
+`finished` state and `exited` reason before the application removes its
+placement from the panel tree. Losing a viewer or Core connection does not
+establish shell exit. The application owner publishes the resulting layout
+change.
 
 At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared, except that an adopted one whose program ended is deleted. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
 
@@ -740,7 +762,14 @@ Each probe keeps its switches and records. The redraw probe is enabled by any va
 
 The nondefault desktop feature frame-profiler enables the pinned GPUI foreground journal. The collector requires VOYAGER_FRAME_PROFILE=1, a voyager-typing- scratch session and an absolute, absent VOYAGER_FRAME_PROFILE_STOP path. A background thread creates a new JSONL file at that stop path with a jsonl extension. Creating the stop file ends collection; 120 seconds and 20,000 records remain independent limits. The end record states the requested stop, truncation, expiry, journal loss and observed-prefix boundary. It does not establish complete process-lifetime coverage.
 
-Draw phase durations separate request/layout, prepaint and scene paint. View self-durations attribute that work without adding nested spans twice. Task polls can include drawing; their totals are another view, not an additive category. GPUI folds polls below 100 microseconds and retains view self-time only above 500 microseconds. SmallPolls records total/count, not just elapsed span. The normal completed-platform-submission record comes from the journal's Presented boundary and retains its associated draw identity and WindowId. Platform submission is not GPU completion or physical display.
+Draw phase durations separate request/layout, prepaint and scene paint. View
+self-durations attribute that work without adding nested spans twice. Task polls
+can include drawing; their totals are another view, not an additive category.
+GPUI folds polls below 100 microseconds and retains view self-time only above
+500 microseconds. SmallPolls records total and count, not only the elapsed span.
+The normal completed-platform-submission record comes from the journal's
+Presented boundary and retains its associated draw identity and WindowId.
+Platform submission is not GPU completion or physical display.
 
 All event ages are sampled within explicit wall-clock brackets before JSON formatting or file output. Original durations remain independent of collector delay. Analysis must retain scheduling overlaps, loss and unavailable intervals. The feature itself instruments GPUI even when the collector flag is absent. It is a diagnostic artifact; ordinary candidate comparisons exclude the feature. The collector does not enable unused legacy timing buffers or change application work, authority or Core behavior.
 
