@@ -138,8 +138,10 @@ function contextMap(table) {
     "",
     `Generated from \`${SOURCE}\` by \`${GENERATE}\`. Edit the table, then regenerate.`,
     "",
-    "Each bounded context owns the files and the words listed here. A context",
-    "defines its own words and may use the words of another context that it lists.",
+    "The app is split into bounded contexts. A bounded context is one area of the",
+    "app with its own files and its own words. Each context below owns the files",
+    "and the words listed with it. A context defines its own words and may use the",
+    "words of another context that it lists.",
     "The [glossary](glossary.md) defines every word.",
   ];
   for (const context of contexts) {
