@@ -301,8 +301,8 @@ Attachments are sequential and every other stream change frees slots, so the
 check also bounds the reply. Output beyond either byte limit is a Core protocol
 violation and still ends the connection.
 
-When the connection ends, its reader or writer names the reason, such as `read
-failed: UnexpectedEof` or `Core attached an invalid channel`. It prints the
+When the connection ends, its reader or writer names the reason, such as
+`read failed: UnexpectedEof` or `Core attached an invalid channel`. It prints the
 reason once to standard error as `Core bridge disconnected: <reason>`. Voyager's
 own
 close or quit records its reason and prints nothing. Every later viewer frame
