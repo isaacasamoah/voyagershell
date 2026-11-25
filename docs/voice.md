@@ -272,8 +272,8 @@ first marker. That text alone is spoken and shown, and the marker never is.
 
 A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
 candidate when its final `Stop` is recorded and Core answers that Voyager is not
-working. Only an answered "idle", "done" or "error" counts. Three answers count
-as unknown: a failed read of Core, an answer for a live program that carries no
+working. Only an answered "idle", "done" or "error" counts. A failed read of
+Core counts as unknown. So does an answer for a live program that carries no
 state word, and a state word the app cannot read. The rule waits on an unknown
 standing and never speaks. Then the speech filter takes the final message. It
 drops code, tables, paths, hex runs of seven or more characters with a digit,

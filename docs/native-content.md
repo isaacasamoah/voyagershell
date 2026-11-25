@@ -38,7 +38,8 @@ lowercase letters, digits and hyphens.
 The first package load can fail, for example after a bad edit. While it is
 failed, a background scan watches the visible JavaScript sources, including
 relative imports, for changes. It skips hidden entries, `node_modules`, `target`
-and symlinks. It looks at most 8 folders deep and at most 4,096 source files. It
+and symlinks. The scan fails on a tree more than 8 folders deep or with more
+than 4,096 source files. It
 stops after the first successful load, and the shell's own watcher handles
 later edits. A corrected theme can also recover a first load that depended on
 it. This is live authoring. It is separate from restarting programs or agent
