@@ -1329,6 +1329,8 @@ beside it and renaming it over the old one, so a crash leaves the old link or
 the new one, and a rerun of any verb converges. `voyager start` is the only
 step that moves `current`. Pruning keeps the three linked builds and any build
 folder a running process was started from, and removes every `.part` folder.
+`voyager start` prunes only once an app is ready, so a build that a failed
+start puts back as `previous` is still on disk for a later rollback.
 
 When the running executable sits in `<install>/builds/<name>/`, the command
 path is `<install>/current/voyager` (`app/src/launch.rs`). A program's `PATH`

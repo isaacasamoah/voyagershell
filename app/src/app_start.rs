@@ -167,9 +167,8 @@ fn start_within(install: &Install, limit: Duration) -> Result<Started, NotStarte
     let switch = install
         .apply_next()
         .map_err(|error| NotStarted::Refused(error.to_string()))?;
-    let _ = install.prune(&running_executables());
     let (build, mut child, log) = launch(install, &start)?;
-    match wait_ready(&start.session, &mut child) {
+    let started = match wait_ready(&start.session, &mut child) {
         Outcome::Ready => Ok(Started::Ready { build, log }),
         Outcome::Uncertain(pid) => Err(NotStarted::Uncertain { build, pid, log }),
         Outcome::Exited(status) => {
@@ -202,12 +201,17 @@ fn start_within(install: &Install, limit: Duration) -> Result<Started, NotStarte
                 }),
             }
         }
+    };
+    if started.is_ok() {
+        let _ = install.prune(&running_executables());
     }
+    started
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::install::{SHELL, Staged};
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
@@ -290,6 +294,74 @@ mod tests {
             "No build was launched"
         );
         drop(held);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn stand_in_app_answers_until_its_marker_goes() {
+        let (Some(session), Some(marker)) = (
+            std::env::var_os("VOYAGER_STAND_IN_APP"),
+            std::env::var_os("VOYAGER_STAND_IN_MARKER"),
+        ) else {
+            return;
+        };
+        let session = session.into_string().unwrap();
+        let _listener = app_socket::Listener::bind(&session, || ()).unwrap();
+        let marker = PathBuf::from(marker);
+        let began = Instant::now();
+        while marker.exists() && began.elapsed() < Duration::from_secs(60) {
+            thread::sleep(POLL);
+        }
+    }
+
+    #[test]
+    fn a_failed_start_keeps_the_build_before_on_disk_for_rollback() {
+        let root =
+            std::env::temp_dir().join(format!("voyager-fallback-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let session = format!("voyager-fallback-prune-{}", std::process::id());
+        let marker = root.join("running");
+        let install = Install::at(root.join("install"));
+        let app = format!(
+            "#!/bin/sh\nVOYAGER_STAND_IN_APP='{session}' VOYAGER_STAND_IN_MARKER='{}' exec '{}' --exact app_start::tests::stand_in_app_answers_until_its_marker_goes\n",
+            marker.display(),
+            std::env::current_exe().unwrap().display()
+        );
+        for (build, script) in [
+            ("a", app.as_str()),
+            ("b", app.as_str()),
+            ("c", "#!/bin/sh\nexit 1\n"),
+        ] {
+            fs::create_dir_all(install.build(build)).unwrap();
+            let shell = install.build(build).join(SHELL);
+            fs::write(&shell, script).unwrap();
+            fs::set_permissions(&shell, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fs::write(&marker, "").unwrap();
+        for build in ["a", "b"] {
+            install.stage(build).unwrap();
+            install.apply_next().unwrap();
+        }
+        install.stage("c").unwrap();
+        fs::write(
+            install.root().join("start.json"),
+            serde_json::json!({"profile": root.join("profile"), "session": session}).to_string(),
+        )
+        .unwrap();
+        let outcome = start_within(&install, Duration::from_secs(1));
+        fs::remove_file(&marker).unwrap();
+        assert!(
+            matches!(&outcome, Ok(Started::ReturnedToPrevious { failed, build, .. }) if failed == "c" && build == "b"),
+            "{outcome:?}"
+        );
+        assert!(
+            install.build("a").is_dir(),
+            "The build before the switch was pruned during the fallback"
+        );
+        assert_eq!(install.rollback().unwrap(), Staged::Next("a".into()));
+        let began = Instant::now();
+        while app_socket::listening(&session) && began.elapsed() < Duration::from_secs(10) {
+            thread::sleep(POLL);
+        }
         fs::remove_dir_all(root).unwrap();
     }
 }
