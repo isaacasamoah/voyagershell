@@ -57,7 +57,7 @@ const CLEARED: &str = "Voyager's split saved with the maximize cleared and both 
 const BYPASS: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CODEX: &str = "codex";
 const UNNAMED_CODEX: &[u8] = br#"{"default":"terminal","entries":[{"id":"terminal","name":"Terminal","launch":{"kind":"terminal"}},{"id":"codex","name":"Codex","launch":{"kind":"codex"}}]}"#;
-const TABLE_DEFAULT: [&str; 7] = [
+pub(super) const TABLE_DEFAULT: [&str; 7] = [
     "codex",
     "--no-daemon",
     "--model",
@@ -89,12 +89,12 @@ struct Landed {
 }
 
 #[derive(Clone, PartialEq, Serialize)]
-struct Created {
-    placement: PlacementId,
+pub(super) struct Created {
+    pub(super) placement: PlacementId,
     held: Option<Split>,
-    cwd: String,
-    terminal: String,
-    launch: Option<Launch>,
+    pub(super) cwd: String,
+    pub(super) terminal: String,
+    pub(super) launch: Option<Launch>,
 }
 
 #[derive(Clone, PartialEq, Serialize)]
@@ -130,11 +130,11 @@ impl View {
 }
 
 #[derive(Serialize)]
-struct Started {
-    created: Option<Created>,
+pub(super) struct Started {
+    pub(super) created: Option<Created>,
     code: String,
     foreground: Value,
-    printed: bool,
+    pub(super) printed: bool,
 }
 
 fn is_leaf(split: &Split, placement: &PlacementId) -> bool {
@@ -346,7 +346,11 @@ fn start_agent(
     })
 }
 
-fn create_codex(native: &mut Native, fleet: &FleetId, left: &PlacementId) -> Result<Started> {
+pub(super) fn create_codex(
+    native: &mut Native,
+    fleet: &FleetId,
+    left: &PlacementId,
+) -> Result<Started> {
     let (_, layout) = native.document()?.context("Missing saved layout")?;
     let before = members(&layout, fleet);
     Terminal::bind(native, left)?.focus(native)?;
@@ -432,7 +436,7 @@ fn arguments(argv: &Value) -> Vec<String> {
         .collect()
 }
 
-fn terminal_of(layout: &Layout, placement: &PlacementId) -> Option<String> {
+pub(super) fn terminal_of(layout: &Layout, placement: &PlacementId) -> Option<String> {
     content_of(layout, placement)
         .and_then(|content| content.backend.as_ref())
         .map(|backend| backend.0.clone())

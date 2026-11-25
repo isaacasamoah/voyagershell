@@ -9,7 +9,7 @@ import sys
 root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(root / "tests/native"))
 from proof_process import observe_core_exit
-from proof_terminal_agent import process_record
+from proof_process import process_record
 from proof_workspace import core_rpc, stop_existing_core
 
 binary, out = map(Path, sys.argv[1:3])

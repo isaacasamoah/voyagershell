@@ -334,12 +334,12 @@ features:
     group: agents
     owner: desktop-presentation
     shared_with: [application-queue]
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    proof: native
+    state: {behavior: covered, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
     checks: []
-    native_journeys: []
-    python_journeys: [arrangement, terminal-agent]
+    native_journeys: [terminal-agent]
+    python_journeys: [arrangement]
     invariants:
       - id: restart-reopens-plain-shells
         kind: user
@@ -412,9 +412,17 @@ features:
         says: 'When the person creates an agent from the app, such as Create Codex, it starts with the agent table''s default, with its model, effort and permission flags, as before. Only a Vessel other than Voyager that names no permissions gets the plain mode.'
         owner: application-queue
         guards: ['type:contract/src/launch.rs#Defaults']
-        checks: ['journey:agent-split/person-keeps-table-default']
+        checks: ['journey:agent-split/person-keeps-table-default', 'journey:terminal-agent/created-agent-sits-beside-the-retained-shell']
         formal: []
-        journeys: [agent-split]
+        journeys: [agent-split, terminal-agent]
+      - id: agents-run-under-their-own-program
+        kind: user
+        says: 'An agent the person starts by typing in a Vessel''s shell runs as a child of that shell, and the Vessel keeps the same Program. Create Codex starts the agent under its own new Program in a new Vessel beside the first, and the first Vessel''s Program is not touched.'
+        owner: application-queue
+        guards: ['type:contract/src/launch.rs#Launch']
+        checks: ['journey:terminal-agent/typed-agent-runs-under-the-retained-shell', 'journey:terminal-agent/created-agent-sits-beside-the-retained-shell']
+        formal: []
+        journeys: [terminal-agent]
       - id: agent-splits-keep-the-maximize
         kind: user
         says: 'A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet''s maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent''s, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel.'
@@ -1900,9 +1908,17 @@ features:
         says: 'When the person creates an agent from the app, such as Create Codex, it starts with the agent table''s default, with its model, effort and permission flags, as before. Only a Vessel other than Voyager that names no permissions gets the plain mode.'
         owner: application-queue
         guards: ['type:contract/src/launch.rs#Defaults']
-        checks: ['journey:agent-split/person-keeps-table-default']
+        checks: ['journey:agent-split/person-keeps-table-default', 'journey:terminal-agent/created-agent-sits-beside-the-retained-shell']
         formal: []
-        journeys: [agent-split]
+        journeys: [agent-split, terminal-agent]
+      - id: agents-run-under-their-own-program
+        kind: user
+        says: 'An agent the person starts by typing in a Vessel''s shell runs as a child of that shell, and the Vessel keeps the same Program. Create Codex starts the agent under its own new Program in a new Vessel beside the first, and the first Vessel''s Program is not touched.'
+        owner: application-queue
+        guards: ['type:contract/src/launch.rs#Launch']
+        checks: ['journey:terminal-agent/typed-agent-runs-under-the-retained-shell', 'journey:terminal-agent/created-agent-sits-beside-the-retained-shell']
+        formal: []
+        journeys: [terminal-agent]
       - id: agent-splits-keep-the-maximize
         kind: user
         says: 'A placement that a working agent makes, by the voyager.place label or by create-vessel, leaves the Fleet''s maximize as it was, and the new Vessel is drawn when the person un-maximizes. A placement that the person or Voyager makes clears the maximize. Every placement made through the label counts as a working agent''s, whatever Core records as its parent. Voyager is the Vessel on the bound terminal, which clears the maximize through create-vessel.'
@@ -2050,6 +2066,7 @@ features:
       - tests/native/src/journey/slow_list.rs
       - tests/native/src/journey/slow_save.rs
       - tests/native/src/journey/socket_dock.rs
+      - tests/native/src/journey/terminal_agent.rs
       - tests/native/src/journey/voice.rs
       - tests/native/src/journey/voice_talk_over.rs
       - tests/native/src/journey/voyage_close.rs

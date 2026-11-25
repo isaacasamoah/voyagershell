@@ -14,7 +14,7 @@ from PIL import Image, ImageChops
 
 root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(root / "tests/native"))
-from proof_terminal_agent import process_record
+from proof_process import process_record
 from proof_workspace import core_rpc
 from proof_native_control import stable_geometry
 
