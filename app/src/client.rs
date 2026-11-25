@@ -205,6 +205,10 @@ impl Receipt {
 }
 
 impl Message {
+    fn inspects_workspace(&self) -> bool {
+        matches!(self, Self::Workspace { request, .. } if matches!(request.action, Action::Inspect))
+    }
+
     fn waits(&self, held: usize) -> bool {
         let effect = match self {
             Self::Workspace { request, scope, .. } => {

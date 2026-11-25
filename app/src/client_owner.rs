@@ -30,6 +30,8 @@ use voyager_contract::{
     Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest, VesselId,
 };
 
+const UNREADY: usize = 1;
+
 #[path = "client_structure.rs"]
 mod structure_calls;
 #[path = "client_voyager.rs"]
@@ -83,6 +85,7 @@ struct Owner {
     start: Start,
     door: FrontDoor<Receipt>,
     held: VecDeque<Message>,
+    unready: VecDeque<Message>,
     flight: Option<Flight>,
     unconfirmed: HashMap<String, String>,
     created_vessels: Vec<CreatedTerminal>,
@@ -217,6 +220,7 @@ impl Owner {
             start: Start::Waiting(None),
             door: FrontDoor::default(),
             held: VecDeque::new(),
+            unready: VecDeque::new(),
             flight: None,
             unconfirmed: HashMap::new(),
             created_vessels: Vec::new(),
@@ -230,12 +234,22 @@ impl Owner {
     fn run(mut self, receiver: &async_channel::Receiver<Message>) {
         loop {
             self.observe();
+            let ready = self.client.readiness.is_ready();
+            if ready {
+                while let Some(message) = self.unready.pop_back() {
+                    self.held.push_front(message);
+                }
+            }
             let waiting = (!self.door.flying())
                 .then(|| self.held.pop_front())
                 .flatten();
             let Ok(message) = waiting.map_or_else(|| receiver.recv_blocking(), Ok) else {
                 break;
             };
+            if !ready && message.inspects_workspace() && self.unready.len() < UNREADY {
+                self.unready.push_back(message);
+                continue;
+            }
             if self.door.flying() && message.waits(self.held.len()) {
                 self.held.push_back(message);
                 continue;

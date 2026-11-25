@@ -169,15 +169,44 @@ mod linux {
                 profile.clone(),
             );
             assert_eq!(held.first_connect(), FirstConnect::Usable);
+            let early = {
+                let held = held.clone();
+                std::thread::spawn(move || inspect(&held))
+            };
             std::thread::sleep(Duration::from_millis(500));
-            let refused = inspect(&held);
-            assert_ne!(refused.status, Outcome::Applied, "{refused:?}");
+            assert!(
+                !early.is_finished(),
+                "An inspect sent before ready was answered before ready"
+            );
+            let second = inspect(&held);
+            assert_ne!(
+                second.status,
+                Outcome::Applied,
+                "A second inspect before ready was not refused at once: {second:?}"
+            );
+            assert!(
+                !early.is_finished(),
+                "The held inspect was answered when the second was refused"
+            );
+            let write = held
+                .call(Request {
+                    request_id: held.request_id(),
+                    expected_version: 0,
+                    action: Action::CreateVoyage {
+                        name: "before-ready".into(),
+                        cwd: "/tmp".into(),
+                    },
+                })
+                .unwrap();
+            assert_ne!(write.status, Outcome::Applied, "{write:?}");
             assert_eq!(
                 snapshot(core),
                 ended,
                 "A client that is not ready changed the layout or started a program"
             );
             held.ready();
+            let answered = early.join().unwrap();
+            assert_eq!(answered.status, Outcome::Applied, "{answered:?}");
             let reconciled = applied(&held);
             assert!(
                 !reconciled

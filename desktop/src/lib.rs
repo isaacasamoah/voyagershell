@@ -66,13 +66,14 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 
 fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &mut App) {
     cx.spawn(async move |cx: &mut AsyncApp| {
-        let connected = cx
-            .background_executor()
-            .spawn({
-                let client = client.clone();
-                async move { client.first_connect() }
-            })
-            .await;
+        let (sent, received) = async_channel::bounded(1);
+        std::thread::spawn({
+            let client = client.clone();
+            move || sent.send_blocking(client.first_connect())
+        });
+        let Ok(connected) = received.recv().await else {
+            return;
+        };
         if let FirstConnect::UnsupportedCore(message) = connected {
             eprintln!("{message}");
             std::process::exit(1);
