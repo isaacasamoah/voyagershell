@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "lastVerifiedCommit": "7355c298a7719f9af916125e9e5a51eae052bf28",
+  "lastVerifiedCommit": "7fe1d33d312fb654fb45a65b3312e0b46c13f875",
   "covered": [
     {
       "path": "tests/native/src/lifecycle.rs",
@@ -25,7 +25,7 @@
       ]
     }
   ],
-  "sourceFingerprint": "d25fed3069fbe8c7aea36c305d0dd4bea20e4e5e8356a9c01bc1c99ae6b246be",
+  "sourceFingerprint": "b47c42c8dd592bf7b545f640afb71760a81bf25c74582f634467403412bacccb",
   "domain": {
     "representableStatesMaximum": 1280,
     "reachableStates": 212,
