@@ -32,8 +32,8 @@ mod window_frame;
 
 use anyhow::{Context as _, Result, bail};
 use gpui::{
-    App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowDecorations,
-    WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext, AsyncApp, Bounds, KeyBinding, TitlebarOptions, WindowBounds,
+    WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_shell::{AppAssets, ShellRoot, ShellRuntime};
 use std::{
@@ -42,7 +42,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use voyager_app::client::Client;
+use voyager_app::client::{Client, FirstConnect};
 
 gpui::actions!(voyager, [Quit]);
 
@@ -64,7 +64,38 @@ fn seed(path: &Path, data: &str) -> Result<()> {
     Ok(())
 }
 
+fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &mut App) {
+    cx.spawn(async move |cx: &mut AsyncApp| {
+        let connected = cx
+            .background_executor()
+            .spawn({
+                let client = client.clone();
+                async move { client.first_connect() }
+            })
+            .await;
+        if let FirstConnect::UnsupportedCore(message) = connected {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+        client.ready();
+        let (raise, raised) = async_channel::unbounded::<()>();
+        let _listener = voyager_app::app_socket::Listener::bind(&session, move || {
+            let _ = raise.try_send(());
+        })
+        .inspect_err(|error| eprintln!("The app socket is unavailable: {error}"));
+        while raised.recv().await.is_ok() {
+            cx.update(|cx| {
+                cx.activate(true);
+                let _ = window.update(cx, |_, window, _| window.activate_window());
+            });
+        }
+    })
+    .detach();
+}
+
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
+    let _lock =
+        voyager_app::profile_lock::ProfileLock::hold(&profile).map_err(anyhow::Error::msg)?;
     let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
     let profile_updates = voyager_app::content::install::install(&profile, &shipped::files())?;
@@ -96,6 +127,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         content_owner,
         profile.clone(),
     );
+    let ready_client = client.clone();
     let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();
     let conversation = voyager_app::conversation_client::Client::with_audio(
@@ -163,7 +195,8 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 window_decorations: cfg!(target_os = "linux").then_some(WindowDecorations::Client),
                 ..Default::default()
             };
-            if let Err(error) = cx.open_window(options, |window, cx| {
+            let ready_session = session.clone();
+            let opened = cx.open_window(options, |window, cx| {
                 inspect::install(inspect, window, cx);
                 #[cfg(feature = "frame-profiler")]
                 if let Ok(id) = usize::try_from(window.window_handle().window_id().as_u64()) {
@@ -211,9 +244,13 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 cx.new(|cx| {
                     ShellRoot::new(canvas.into(), window, cx).with_native_overlay(avatar_view)
                 })
-            }) {
-                eprintln!("Native window failed: {error}");
-                cx.quit();
+            });
+            match opened {
+                Ok(window) => become_ready(ready_client, ready_session, window.into(), cx),
+                Err(error) => {
+                    eprintln!("Native window failed: {error}");
+                    cx.quit();
+                }
             }
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {

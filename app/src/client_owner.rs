@@ -104,6 +104,22 @@ impl Client {
         content: Option<crate::content::Owner>,
         profile: Option<PathBuf>,
     ) -> Self {
+        Self::start_held(
+            session,
+            cwd,
+            content,
+            profile,
+            super::ready::Readiness::open(),
+        )
+    }
+
+    pub(super) fn start_held(
+        session: String,
+        cwd: String,
+        content: Option<crate::content::Owner>,
+        profile: Option<PathBuf>,
+        readiness: super::ready::Readiness,
+    ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         let package_revision = Arc::new(AtomicU64::new(0));
         let client = Self {
@@ -115,6 +131,7 @@ impl Client {
             placement_notice: Arc::default(),
             workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
+            readiness: Arc::new(readiness),
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -158,6 +175,9 @@ impl Owner {
             }));
         }
         let mut core = connect(&session, client.activity.clone());
+        client
+            .readiness
+            .connected(core.as_ref().map(drop).map_err(Clone::clone));
         let mut subscription = Subscription::default();
         subscription.begin(&mut core, false, &sender);
         let caller = client.clone();
@@ -230,6 +250,9 @@ impl Owner {
     }
 
     fn observe(&mut self) {
+        if !self.client.readiness.is_ready() {
+            return;
+        }
         self.seen.note(self.version, &self.layout);
         let door = &self.door;
         let reported = reports(

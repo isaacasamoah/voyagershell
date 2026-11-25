@@ -16,6 +16,7 @@ pub(super) fn detached(sender: async_channel::Sender<Message>, identity: &str) -
         workspace_words: Arc::default(),
         replies: crate::replies::Replies::default(),
         package_revision: Arc::new(AtomicU64::new(0)),
+        readiness: Arc::new(super::ready::Readiness::open()),
     }
 }
 

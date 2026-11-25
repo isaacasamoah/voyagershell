@@ -16,6 +16,9 @@ use voyager_contract::{Action, Context, Layout, Request, Response, VesselId};
 mod core_calls;
 #[path = "client_owner.rs"]
 mod owner;
+#[path = "client_ready.rs"]
+mod ready;
+pub use ready::FirstConnect;
 #[path = "client_reply.rs"]
 mod reply;
 #[path = "client_service.rs"]
@@ -272,9 +275,23 @@ pub struct Client {
     placement_notice: Arc<Mutex<Option<String>>>,
     workspace_words: Arc<Mutex<Vec<String>>>,
     replies: crate::replies::Replies,
+    readiness: Arc<ready::Readiness>,
 }
 
 impl Client {
+    pub fn first_connect(&self) -> FirstConnect {
+        self.readiness.first_connect()
+    }
+
+    pub fn ready(&self) {
+        self.readiness.ready();
+        let _ = self.sender.try_send(Message::CoreReported);
+    }
+
+    pub(crate) fn wait_ready(&self, within: std::time::Duration) -> bool {
+        self.readiness.wait_ready(within)
+    }
+
     pub(crate) fn conversation_focus(
         &self,
         layout: &Layout,
@@ -334,7 +351,13 @@ impl Client {
         owner: crate::content::Owner,
         profile: std::path::PathBuf,
     ) -> Self {
-        Self::start_with_profile(session, cwd, Some(owner), Some(profile))
+        Self::start_held(
+            session,
+            cwd,
+            Some(owner),
+            Some(profile),
+            ready::Readiness::held(),
+        )
     }
 
     fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {
