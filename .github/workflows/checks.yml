@@ -116,3 +116,5 @@ jobs:
       - name: Journey deadlines
         run: cargo run --locked --manifest-path tests/native/Cargo.toml -- lint
       - run: cargo test --locked --manifest-path tests/native/Cargo.toml
+      - name: Core viewers model
+        run: sh tests/formal/core-viewers/check.sh

@@ -35,6 +35,7 @@ test("the workflow plan holds every step after the gate and npm test", () => {
     "cargo clippy --all-targets --locked --manifest-path tests/native/Cargo.toml -- -D warnings",
     "cargo run --locked --manifest-path tests/native/Cargo.toml -- lint",
     "cargo test --locked --manifest-path tests/native/Cargo.toml",
+    "sh tests/formal/core-viewers/check.sh",
     "npm test",
   ]);
 });

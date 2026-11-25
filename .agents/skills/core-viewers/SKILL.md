@@ -74,11 +74,12 @@ path back fails the check.
 | `app/src/core_reader.rs` | `Reader::receive`, `Reader::reply`, `Reader::output`, `Reader::ended` | `Read`, `ReadReply`, `ReadData`, `ReadEnd` |
 | `app/src/core_pending.rs` | `Pending::wait` timeout and its recheck under the replies lock, `Drop for Pending` | `TimeOut`, the `waiting` check in `ReadReply` |
 | `app/src/client.rs` | `Receipt::Terminal`, the terminal answer of `WeakViewer` that the front door ledger keeps | `InstallFails` frees the slot because no other strong `Viewer` exists |
+| `app/src/client_owner.rs` | `Owner::terminal`, which records `Receipt::Terminal` and replies with the `Viewer` | `InstallFails` frees the slot because no other strong `Viewer` exists |
 | `app/src/client_terminal.rs` | `open_terminal`, which calls `Core::terminal_attach` and then `Core::viewer` | `Attach`, `Install` |
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
-Sync commit is `aec064b9190875ea2bb5c32ce673b33856e1995e`.
+Sync commit is `dfc8f603d574d87b5c2f38a3f8be4a05525880a5`.
 
 `check.sh` reads the file column and the sync commit from this file. Move the sync
 commit forward only after you have read every diff in those files since the
