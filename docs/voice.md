@@ -24,10 +24,9 @@ silent room, the end of a turn, a reply and a fault all leave it on.
    opens, a fan, typing or a door is never a turn. It ends after 1.5 s of frames
    below 0.15. A turn also ends at 30 s of speech, and voice stays on. A silent room
    is never a turn and never turns voice off. The utterance keeps the 1 s before
-   speech started, so its first word is not cut. The plain level of the whole
-   band only tells a waiting reply whether the room has been quiet. It is
-   compared against three times the quietest frame of the last 2 s, and never
-   against less than 200. The detector is
+   speech started, so its first word is not cut. The plain level of the whole band,
+   against three times the quietest frame of the last 2 s and never less than 200,
+   only tells a waiting reply whether the room has been quiet. The detector is
    described in [The speech detector](#the-speech-detector).
 3. The 1.5 s comes from 94 synthetic requests with a pause of 0.4 to 1.5 s
    mid-sentence. A silence of 0.6 s ended 71 of them early, 1.0 s ended 32, 1.2 s
@@ -104,10 +103,10 @@ nothing plays and the words are sent.
 Voyager's replies reach the app through hooks that run the `voyager` command
 beside the app's executable. When that command is missing, the app does not
 start the background Voyager and binds none. The owner holds that reason, and
-the canvas reads it through `voyager_unbound` on every render. Whenever no
-outcome line is showing, the canvas status line says that Voyager cannot reply
-because the command is missing. A later change to the layout does not remove
-that line. The line stays for the whole run of the app, because the
+the canvas reads it through `voyager_unbound` on every render. The canvas status
+line shows one line that says Voyager cannot reply because the command is
+missing, whenever no outcome line is showing, so a later change to the layout
+does not remove it. The line stays for the whole run of the app, because the
 app looks for the command only when it starts. Starting the app again with the
 command beside it clears the line and starts Voyager. The app does not search
 for the command elsewhere, retry or start Voyager without hooks, because a
@@ -128,10 +127,9 @@ held to one of two JSON shapes, `{"kind":"work","ack":"none"}` with `ack` one of
 `ack`, so the model writes the kind first, and the body is written by hand because
 `serde_json` sorts the keys of a `Value`. A work answer has no room for words, so the
 voice never writes an acknowledgement for work and cannot promise to do it. It only
-chooses one. The routing rule asks for `none` for a plain command whose effect
-the person will see, and for never mind or cancel. It asks for `look` for a
-question, a lookup, a status check or a summary. It asks for `sure` for a
-message to the crew or a start or stop of work. Every way the
+chooses one. The routing rule asks for none for a plain command whose effect the person
+will see and for never mind or cancel, look for a question, a lookup, a status check or
+a summary, and sure for a message to the crew or a start or stop of work. Every way the
 route can go wrong gives none. The call has 3 s, a target to measure.
 
 The prompt is the routing rule, then the spoken guide, then one closing rule for chat,
@@ -141,15 +139,14 @@ or say what Voyager will do, so the closing rule comes last and says it wins for
 The model's kind and its confidence decide. The answer is `Chat` only when the model
 says chat and the probability of chat at the kind token is at least 0.99, the gate from
 the voice experiment's round 7. Three word lists stand behind the gate as belts. None
-decides on its own, and each can only move a turn to Voyager. A chat reply that
-offers to do something goes to Voyager. Such offers include "want me to", "shall
-I", "I can help", "I can show", "can I get", "what can I do", "I'm here to
-help", "what would you like", "I'll" and "let me". A chat reply that holds an
-action word, such as "on it", "done",
+decides on its own, and each can only move a turn to Voyager. A chat reply that offers
+to do something, such as "want me to", "shall I", "I can help", "I can show", "can I
+get", "what can I do", "I'm here to help", "what would you like", "I'll" or "let me",
+goes to Voyager. A chat reply that holds an action word, such as "on it", "done",
 "opening" or "ask", or a workspace word such as "Fleet" or "build", goes to Voyager too.
 A bare "I can" is not an offer, so "Yes, I can hear you." stays small talk. Heard words that hold
-"help", "can you do", "never mind" or "cancel" go to Voyager, whatever the model
-said.
+"help", "can you do", "never mind" or "cancel" go to Voyager, whatever the model said,
+because Isaac chose that these go to Voyager.
 
 A `Chat` turn is spoken through the speech endpoint, one sentence piece at a time as Voyager's replies are, and sends nothing to Voyager, and
 the reply is added to the chat. It is answered whatever Voyager's standing. If the
@@ -203,7 +200,7 @@ onnxruntime 1.32 on the same samples. Over 717 chunks the worst difference was
 2.0e-6, and the test allows 1e-4. The reference values are in
 `app/models/silero_vad_v6_reference.tsv`. An independent verifier ran onnxruntime
 1.24.2 itself and found a worst difference of 5.5e-6 over 120 feeds of the hearing
-set and 4.8e-6 over 47 recordings of a real voice.
+set and 4.8e-6 over Isaac's 47 recordings.
 
 The committed coverage is the 40 requests in `tests/native/fixtures/hearing/`,
 20 in `en-GB-SoniaNeural` and 20 in `en-US-AriaNeural`, both female Edge voices.
@@ -241,8 +238,7 @@ nothing else. Ending the turn on the plain level held turns open after speech
 while the room fixture's keys and door sounded, so the end follows the detector
 instead.
 
-The real-voice proof is 47 recordings of a real voice, used under their owner's
-terms. They
+The real-voice proof is Isaac's 47 real recordings, used under his terms. They
 were made on a laptop microphone and are not in the repository. They were checked
 once in place on the development machine. A harness outside the repository ran the
 app's own `audio_io.rs` and `silero.rs` over them and kept only scores and timings. Each was fed with 1 s of silence before and 3 s
@@ -272,13 +268,12 @@ first marker. That text alone is spoken and shown, and the marker never is.
 
 A spoken turn is read aloud once. The rule is `voice_reply::Watcher`. A turn is a
 candidate when its final `Stop` is recorded and Core answers that Voyager is not
-working. Only an answered "idle", "done" or "error" counts. A failed read of
-Core counts as unknown. So does an answer for a live program that carries no
-state word, and a state word the app cannot read. The rule waits on an unknown
-standing and never speaks. Then the speech filter takes the final message. It
-drops code, tables, paths, hex runs of seven or more characters with a digit,
-and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25` and
-`terminal-34`. It gives each list item, heading and paragraph a sentence end. It
+working. Only an answered "idle", "done" or "error" counts. A failed read of Core, an
+answer for a live program that carries no state word and a state word the app cannot
+read are all unknown, and the rule waits on an unknown standing and never speaks. Then the speech filter takes the
+final message, drops code, tables, paths, hex runs of seven or more
+characters with a digit and letter-digit identifiers such as `t8s`, `w1:t3`, `fleet-25`
+and `terminal-34`, and gives each list item, heading and paragraph a sentence end. It
 says plain numbers as words, and the engine reads what is left one piece at a time, as
 [One piece at a time](#one-piece-at-a-time) describes.
 The turn is marked done, so a repeated `Stop`, a late chunk of the same message and a
@@ -408,10 +403,9 @@ listening thread through `voice_parts::Floor`, as a `Reply` that holds the spoke
 the first rendered clip and the stream of the clips still rendering. The listening
 thread takes the offer at the moment it would have stepped aside, which is the same
 quiet moment a reply waits for with talk over off. It then plays the reply and keeps
-reading the microphone, so one thread owns both. No listener may hold the floor,
-because voice was clicked off or the microphone is out. Then the reply thread
-takes its offer back, and plays or notes the reply as it does with talk over
-off. Only a reply is
+reading the microphone, so one thread owns both. If no listener holds the floor,
+because voice was clicked off or the microphone is out, the reply thread takes its
+offer back and plays or notes the reply as it does with talk over off. Only a reply is
 offered. A fixed clip still takes the floor, and so does a reply while talk over is
 off.
 
@@ -489,10 +483,9 @@ guide says who Voyager is and how it talks. It is stored once, as two files:
 sections from "How you talk" to "Examples". `spoken::guide` joins them, and a test
 holds the joined text to the approved text byte for byte.
 
-The guide asks for the answer first, in the words a person would use. It asks
-for no ids, revision numbers, paths, commands or words from inside the app, such
-as placement, pane, viewer or request. It never says what the app calls
-something. It gives the
+The guide asks for the answer first, in the words a person would use, with no ids,
+revision numbers, paths, commands or words from inside the app, such as placement,
+pane, viewer or request, and it never says what the app calls something. It gives the
 gist of what is happening, what is stuck and what needs the person, not an inventory,
 and names individual things only when asked or when one needs them. Most answers are
 one or two sentences, and Voyager does not offer more, because the person asks when
@@ -558,10 +551,9 @@ paths and long ids, says plain numbers as words, and stops only at the safety ce
 the canvas thread. One listening thread converges on it, so two utterances never
 overlap. It reaches Voyager through the `Voyager`
 trait, which reports its standing and takes the words. `app/src/voice_voyager.rs`
-implements it over the application queue. It reads the terminal that the app
-wrote in its own binding file and asks Core for that terminal's reported status.
-It sends the words with Core's own send, which refuses a blocked program and
-never forces. With no
+implements it over the application queue. It reads the terminal that the app wrote
+in its own binding file, asks Core for that terminal's reported status, and sends the
+words with Core's own send, which refuses a blocked program and never forces. With no
 binding, or a program that Core reports ended or gone, Voyager counts as not running and
 nothing is sent. A failed read of Core, or a live program that has not reported a state
 yet, is unknown. The words are sent anyway, and Core's send refuses honestly if it must.
@@ -687,12 +679,10 @@ engine streams speech while it renders. The first audio arrived 0.12 s after the
 and about 0.08 s of audio followed every 20 ms in 30 renders. A render stops reading as
 soon as its audio passes the limit, about 0.7 s into a run-on "Mm-hm.", and the clip is
 rendered again, at most five times. Five comes from the run-on rate. 20 of 66 renders ran
-on, and 0.30 to the fifth power is about 0.24%. The trace marks `clips-kept`
-once every phrase has been read or rendered. When no render fits, nothing is
-kept for that phrase. The app logs "The voice clip one-sec ran past the length
-its words allow in 5 renders, so it is not kept." with the clip's key. Voice
-runs without that clip, and the next launch tries again. Spoken replies are not
-held to the rule.
+on, and 0.30 to the fifth power is about 0.24%. The trace marks `clips-kept` once every phrase has been read or rendered. When no render fits, nothing is kept for
+that phrase, the app logs "The voice clip one-sec ran past the length its words allow in 5
+renders, so it is not kept." with the clip's key, voice runs without it, and the next
+launch tries again. Spoken replies are not held to the rule.
 
 ## Host requirements
 
@@ -723,21 +713,14 @@ The native `voice` journey in [the verification guide](../tests/native/README.md
 clicks the real control, feeds committed synthetic speech to the microphone and records the
 speaker. It checks that nothing records the microphone without a click, that the words come
 back exactly as spoken, that only the line the routing choice names reaches the speaker and that no audio payload
-appears in any log. It also checks the turn rule:
-
-- A thump as the microphone opens is not a turn.
-- A quiet request at 0.15 and 0.06 of its level is one turn that is sent.
-- A request with a 1.35 s pause is one turn that ends after it.
-- A long silence leaves voice on.
-- Five minutes of room sound with no speech in it is never a turn.
-- A request spoken among that sound is sent word for word.
-- Two turns in a row each get a spoken reply, with the speaker echoed into the
-  microphone.
-- A click turns voice off.
-
-A long reply of 117 words is heard back by the engine with at most a tenth of its
-words wrong. Its long sentences are split at a comma or at the limit, and its
-numbers are spoken as words. With Auto on the fixture's speakers, speech fed while a reply plays neither
+appears in any log. It also checks the turn rule. A thump as the microphone opens is not a
+turn, a quiet request at 0.15 and 0.06 of its level is one turn that is sent, a request with a 1.35 s pause is one turn that ends after it, a long silence leaves
+voice on, five minutes of room sound with no speech in it is never a turn, a request
+spoken among that sound is sent word for word, two turns in a row each get a spoken
+reply with the speaker echoed into the microphone, and a click turns voice off. A long
+reply of 117 words is heard back by the engine with at most a tenth of its words wrong,
+its long sentences split at a comma or at the limit, and its numbers are spoken as
+words. With Auto on the fixture's speakers, speech fed while a reply plays neither
 cuts it nor becomes a turn.
 
 The `voice-talk-over` journey in [the verification guide](../tests/native/README.md#talking-over-a-reply)
