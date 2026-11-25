@@ -245,9 +245,9 @@ test("waiting presentation admission refuses stale competing and width-drag requ
   assert.equal(actions.includes("set-portal-presentation"), false);
 });
 
-test("Notes placements never open a terminal, including owner-created content", async () => {
+test("Content placements never open a terminal, including owner-created content", async () => {
   const { view, task, layout, count } = fixture("applied");
-  layout.vessels[0].typeId = "notes";
+  layout.vessels[0].typeId = "dashboard";
   await view.prepare(task, false, new Set(), new Set(["content"]));
   assert.equal(count(), 0);
   assert.equal(view.openings.size, 0);

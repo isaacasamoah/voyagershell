@@ -62,7 +62,6 @@ pub(crate) fn respond(
             vessel_id: id.clone(),
             schema_declared: true,
             state_schema: Some(manifest.state.schema.clone()),
-            configuration: None,
         }),
         Request::Inspect { .. } => Ok(Response::State {
             version: Version::V1,
@@ -90,7 +89,6 @@ pub(crate) fn respond(
                 snapshot,
             })
         }
-        _ => Err("This Vessel type does not support that operation".into()),
     }
 }
 

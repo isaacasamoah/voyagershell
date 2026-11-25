@@ -37,7 +37,7 @@ fn all_four_insertions_keep_the_captured_owner_and_chosen_type() {
                 id: anchor.clone(),
                 side,
             },
-            "notes",
+            "agents",
         );
         let fleet = &model.layout.voyages[0].fleets[0];
         let Some(Split::Branch { first, second, .. }) = &fleet.root else {
@@ -49,9 +49,9 @@ fn all_four_insertions_keep_the_captured_owner_and_chosen_type() {
             &Split::Leaf { placement: anchor }
         );
         assert_eq!(model.layout.vessels[0], terminal);
-        assert_eq!(model.layout.vessels.last().unwrap().type_id, "notes");
+        assert_eq!(model.layout.vessels.last().unwrap().type_id, "agents");
         assert_eq!(fleet.placements[0].name, "Terminal 1");
-        assert_eq!(fleet.placements[1].name, "Notes 1");
+        assert_eq!(fleet.placements[1].name, "Agents 1");
     }
 }
 
@@ -94,7 +94,7 @@ fn home_portals_hide_remove_reveal_and_presentation_retain_the_instance() {
         &mut model,
         owner.clone(),
         PlacementInsertion::Empty,
-        "notes",
+        "agents",
     );
     let id = model.layout.home.as_ref().unwrap().portals[0].id.clone();
     let content = model.layout.vessels.last().unwrap().clone();
@@ -182,7 +182,7 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
             id: first.clone(),
             side: Side::Right,
         },
-        "notes",
+        "agents",
     );
     let second = model.layout.voyages[0].fleets[0].placements[1].id.clone();
     create(
@@ -192,7 +192,7 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
             id: second,
             side: Side::Bottom,
         },
-        "notes",
+        "agents",
     );
     model
         .apply(Action::SetPlacementHidden {
@@ -222,9 +222,9 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
             .apply(Action::SetPlacementHidden { id, hidden: true })
             .unwrap();
     }
-    create(&mut model, owner, PlacementInsertion::Empty, "notes");
+    create(&mut model, owner, PlacementInsertion::Empty, "agents");
     let fleet = &model.layout.voyages[0].fleets[0];
-    assert_eq!(fleet.placements[3].name, "Notes 3");
+    assert_eq!(fleet.placements[3].name, "Agents 3");
     let Some(Split::Branch {
         first: retained, ..
     }) = &fleet.root
@@ -236,7 +236,7 @@ fn hidden_paths_empty_insertion_and_cross_column_moves_preserve_owner_state() {
     let portals = PlacementOwner::Portals {
         voyage: model.layout.voyages[0].id.clone(),
     };
-    create(&mut model, portals, PlacementInsertion::Empty, "notes");
+    create(&mut model, portals, PlacementInsertion::Empty, "agents");
     let portal = model.layout.voyages[0].portals[0].id.clone();
     let before = model.layout.clone();
     assert!(

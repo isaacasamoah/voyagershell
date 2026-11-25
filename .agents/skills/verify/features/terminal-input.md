@@ -202,8 +202,9 @@ journey claims it.
   split.
 - Input during output in a hidden Fleet, a terminal Portal, a refused or
   stale layout, and a shell that ends.
-- Copy and paste in the canvas and in Notes. The Clipboard feature stays
-  `python-only` in the registry for that reason.
+- Copy in the chat composer and any copy or paste in the canvas. Only the
+  Python `conversation-ux` journey copies from the composer, so the Clipboard
+  feature stays `python-only` in the registry for that reason.
 - Where a lost key was lost. A failure shows the keys that were sent, in
   `actions.jsonl`, beside the bytes that arrived. It does not show whether X,
   the app or Core dropped one.

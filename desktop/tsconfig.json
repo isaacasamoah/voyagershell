@@ -10,12 +10,7 @@
     "useDefineForClassFields": false,
     "rootDir": "..",
     "outDir": "../target/script-types/emitted",
-    "rootDirs": [
-      "canvas",
-      "../content/notes",
-      "../content",
-      "../contract/generated"
-    ],
+    "rootDirs": ["canvas", "../content", "../contract/generated"],
     "types": []
   },
   "files": [

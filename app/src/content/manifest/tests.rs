@@ -74,7 +74,7 @@ pub(super) fn checklist() -> Value {
 fn environment<T>(run: impl FnOnce(&Environment) -> T) -> T {
     run(&Environment {
         exists: &|_| true,
-        reserved: &|id| matches!(id, "terminal" | "notes" | "agents"),
+        reserved: &|id| matches!(id, "terminal" | "agent" | "agents"),
     })
 }
 

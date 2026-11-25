@@ -6,8 +6,8 @@ single framed Core connection carries RPC, viewer data, input, focus and credit.
 Closing a viewer sends CLOSE; it does not stop the terminal. Quitting closes
 viewers and private assistant resources while Core programs remain running.
 Only an explicit stop-session stops the Core session. Confirmed Close Voyage is
-the separate operation that saves Notes and stops that Voyage's verified
-programs. See [lifecycle](#lifecycle).
+the separate operation that stops that Voyage's verified programs. See
+[lifecycle](#lifecycle).
 
 ## Wheel input
 
@@ -463,7 +463,7 @@ Cargo generates the Rust types from that checked schema. Named Core adapter
 methods own the wire conversions; document values remain arbitrary JSON.
 
 The minimum is 0.1.18 because it is the oldest release with native evidence.
-The 7 November restore and Notes/shutdown journeys ran against Core 0.1.18, and
+The 7 November restore and Voyage-shutdown journeys ran against Core 0.1.18, and
 CI and the native journeys run against 0.1.21. Every method, feature and field
 Voyager uses exists in 0.1.18. The 0.1.18 schema also requires
 `resize_notifications` and `automatic_input` in an attach result, so an older

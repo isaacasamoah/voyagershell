@@ -11,8 +11,7 @@ adapter owns protocol translation, while Herdr Core owns terminals and programs.
 `desktop/src/main.rs` parses command-line arguments and invokes that library.
 The declaration exporter calls the same library and component registry as the
 running app. A component registration therefore has one owner for both runtime
-presentation and generated script definitions. The Notes registry remains its
-own supported component set.
+presentation and generated script definitions.
 
 `desktop/canvas/` and `content/` provide configurable presentation through those
 native components and the generated application contract. Moving a placement
@@ -456,8 +455,8 @@ trait. The family never saves.
 
 `Owner` in `app/src/client_owner.rs` holds the queue's state and runs one loop
 that hands each message to a method. `app/src/client_structure.rs` holds the
-workspace methods, which admit a request, track the save in flight, run the
-Notes rename and build the response. `app/src/client_worktree.rs` holds the worktree methods. Both are
+workspace methods, which admit a request, track the save in flight and build
+the response. `app/src/client_worktree.rs` holds the worktree methods. Both are
 children of the owner module and add methods to `Owner`, so `client` and the
 owner module never name each other's children. `app/src/client.rs` holds the
 messages, the receipts, the front door glue and the public `Client` calls.
@@ -511,8 +510,8 @@ before a worktree removal, the plan of a Voyage close, and a Voyage or Fleet
 created from a live directory. When the list lands, the request is decided
 again from the start with the list in hand.
 
-The other saves still block the owner. They are opening a terminal, selecting or
-configuring a Note, the last step of a Voyage close or a worktree change, the
+The other saves still block the owner. They are opening a terminal, the last
+step of a Voyage close or a worktree change, the
 closure of an ended Vessel, and the repairs at owner start. A slow Core delays
 every request behind those.
 
@@ -568,7 +567,7 @@ Legacy Portal lists, nonempty Fleet roots, saved Fleet arrangements and missing
 names are decoded at the same owner boundary. This does not rewrite personal
 package source or save a migration merely because the workspace is inspected.
 
-New names are stored once as Terminal 1, Notes 1, Agents 1 and the next available
+New names are stored once as Terminal 1, Agents 1 and the next available
 suffix in that owner. Hidden and unplaced names remain reserved. Legacy missing names are
 resolved deterministically before projection. UI, context facts and conversation
 tools receive the same required name; rendering and reordering do not renumber
@@ -592,7 +591,7 @@ targets are rejected before publication; a narrow projection omits other IDs.
 
 Maximize renders the existing content through a temporary leaf. The accepted
 split tree, saved layouts, backend bindings and explicit context remain intact.
-Preparation retains all accepted-tree terminal and Notes entities. A split by the
+Preparation retains all accepted-tree terminal and Vessel view entities. A split by the
 person or by Voyager clears maximize, and a split by a working agent keeps it
 (see [Labelled terminals become Vessels](#labelled-terminals-become-vessels)); loading an arrangement clears an omitted or redundant
 target. Go there to an occluded sibling restores the tree. A same-Fleet move
@@ -651,7 +650,7 @@ that includes Portals must also include their active Fleet, preserving the
 native column's shared geometry. The default canvas has no Stack.
 
 The script visits only the selected alternative and keeps the parent sizing
-axis. Terminal and Notes view owners remain keyed by content identity, rather
+axis. Terminal and Vessel view owners remain keyed by content identity, rather
 than by an alternative's position. Selection changes neither content, process
 identity nor avatar context. The existing versioned `update-canvas` operation
 persists selection and arrangement together. Legacy Portal width migration
@@ -664,7 +663,7 @@ renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
 visible members from the Rust projection. `canvas.ts` composes the saved outer
 tree and panel frames. Home uses the same panel factories and its retained global
 arrangement. These modules retain the existing
-terminal, Notes, divider, avatar and conversation owners.
+terminal, Vessel, divider, avatar and conversation owners.
 
 Collapsing the sidebar keeps a 48-pixel rail and sends only `set-sidebar`, without
 Dock. Expanded and compact speech/chat controls share their retained owners.
@@ -882,8 +881,8 @@ the new Vessel as created. A reply lists it only when its own layout holds it.
 When the save lands applied, the owner records it again, in case an inspect that
 loaded the older layout during the flight dropped the record. When it is refused, or stays uncertain after the owner reads Core, the owner
 forgets the Vessels that the save created, so the canvas is never told to open
-a Vessel that the outcome does not show. The package filesystem/availability source
-and its remaining native-lifetime requirements are described in [content.md](content.md).
+a Vessel that the outcome does not show.
+[Package removal and restore](content.md#package-removal-and-restore) describes the package filesystem and availability source.
 
 Canvas keeps application requests and terminal preparation serialized. While
 preparing, it can retain one unsent Close or discrete Portal visibility/mode
@@ -979,13 +978,6 @@ but rejects it at runtime. This exact-form adjustment changes no runtime method.
 The Shell's separate profile editor hints still contain the upstream declaration;
 they do not provide the repository's corrected strict authoring check.
 
-The shipped Notes package is also authored in TypeScript and emitted by this
-same gate. Its compilation uses the actual `export-script-types --notes` private
-input/host declarations in a separate scope, so canvas/Terminal imports remain
-unavailable. The profile's seeded JavaScript stays editable and is preserved;
-repository checks do not automatically validate later personal edits. See
-[native Notes](content.md) for remaining owner, signature and lifecycle limits.
-
 Go there sends `reveal-placement` with a retained Vessel or Portal placement ID. The
 owner selects its original arrangement, clears hidden state and reinserts its
 leaf only when absent. A Portal reveal also opens its own Voyage's column. This
@@ -1043,7 +1035,7 @@ The layout and Git operation owners remain distinct. The script cannot grant del
 
 Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates canvas, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task. Closing a dialog cancels that view's continuations and can strand the workspace busy flag.
 
-Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Notes and other content without processes remain present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
+Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Content without processes, such as the Agents view, remains present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
 
 This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/mods/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. The native `worktrees` journey covers New worktree with Escape and with Enter, a removal refused while the worktree's shell runs and a removal after that shell exits. It does not drive Open worktree.
 
@@ -1063,32 +1055,24 @@ Cancel remains available after unrelated revisions or an uncertain observation.
 A lost invocation offers Inspect, which reads state and never repeats shutdown.
 Dialog tasks do not call Workspace.run or own the application continuation.
 
-After confirmation, the native Notes host resolves the target content IDs to
-retained Sessions. It makes their inputs read-only, joins ordinary revision-based
-saves and releases them after completion or refusal. A dirty inactive draft,
-file change or unconfirmed current save blocks all program stops. The private
-native-save path does not grant Update access to scripts or agents. Draft body
-text never enters the public close plan. Client keeps processing messages while
-the host acknowledges saves.
-
 Core owns shutdown signals. Voyager submits its existing Stop action for each
 captured terminal address/PID and requires an observed finished state. A request
-receipt does not establish exit. Notes failure stops nothing; a later partial
-failure reports the actual result and never restarts work or repeats an uncertain
+receipt does not establish exit. A partial failure reports the actual result
+and never restarts work or repeats an uncertain
 stop. A close is refused only while no program has stopped. Once one has, a
 later refusal ends the close as uncertain and says how many programs had
 stopped, because a refusal means that nothing changed. The application saves closed state only after successful acknowledgements.
 Uncertain storage marks the projection non-fresh until inspection.
 
-The Voyage close family in `app/src/families/voyage_close.rs` holds the close plan, its identity check and the stop sequence. It reaches the workspace only through the `Calls` trait that `app/src/client_reply.rs` implements for the client, takes the Notes type id and the worktree change count from the client as arguments, and owns the Notes save messages that `client` re-exports to the desktop. It never names `client`. `app/src/client.rs` keeps the queue, and `app/src/client_structure.rs` keeps the close plan's projection and the final save of the closed Voyage.
+The Voyage close family in `app/src/families/voyage_close.rs` holds the close plan, its identity check and the stop sequence. It reaches the workspace only through the `Calls` trait that `app/src/client_reply.rs` implements for the client, and takes the worktree change count from the client as an argument. It never names `client`. `app/src/client.rs` keeps the queue, and `app/src/client_structure.rs` keeps the close plan's projection and the final save of the closed Voyage.
 
 A private snapshot checks the target Voyage and its content identities. Target
 mutations and terminal opening are refused during shutdown. Unrelated Voyages
 and navigation remain available. Membership comes from the selected Voyage's
 Fleets and Portals, including retained placements, rather than directories or
 worktree parentage. Recent reopening prepares only that Voyage's confirmed-ended
-retained terminals as ordinary shells. It preserves Notes file selection and
-never resumes an agent command or its instructions.
+retained terminals as ordinary shells. It never resumes an agent command or its
+instructions.
 
 Source and dedicated Core tests cover this policy. The native shutdown journey
 and complete foundation acceptance remain separately recorded in the walkthrough.
@@ -1112,8 +1096,8 @@ New directory-derived Voyages record their original primary Vessel and an
 automatic name origin. Observed directory changes from that Vessel may update
 the Voyage's displayed name. Reordering does not choose another primary Vessel.
 Deliberate names, including legacy records without automatic-name metadata,
-remain fixed. Display-name changes do not move Notes or change the stored Voyage
-directory. Worktree close confirmations include the current uncommitted-change
+remain fixed. Display-name changes do not change the stored Voyage directory.
+Worktree close confirmations include the current uncommitted-change
 count when its registered checkout can be identified. Closing preserves the
 worktree directory and branch.
 
@@ -1218,7 +1202,7 @@ This is a Linux/X11 repair, not evidence for macOS, Windows or Wayland.
 ## Tested Core upgrade
 
 The 7 November release uses generated Core types from the pinned 0.1.16 input.
-Its real native restore/reattach and Notes/Voyage-shutdown journeys ran against
+Its real native restore/reattach and Voyage-shutdown journeys ran against
 Core 0.1.18. The owner handoff also retained an existing 0.1.18 Core. This
 establishes that these consumed operations work across that additive upgrade.
 It does not establish a general compatibility matrix. Generation, capability
@@ -1243,8 +1227,8 @@ The version every caller sees is the structure revision. `LayoutRevision` in
 owner uses only for its `doc.set` compare. A save or a read that leaves the
 structure unchanged keeps the structure revision. A save or read that changes it
 takes the new document version. The workspace queue compares the layouts before
-and after its save. The owner's other saves (a terminal binding, a Notes
-selection, a closed program, a Voyage close) change structure, so they always
+and after its save. The owner's other saves (a terminal binding, a
+closed program, a Voyage close) change structure, so they always
 take the new document version. An external write is detected on the next read,
 by comparing structure. So a plan an agent built before the user
 clicked a Fleet still applies, and every check that compares a caller's version
@@ -1362,7 +1346,7 @@ the action to a copy of the current layout and compares the two. An action that
 the copy cannot apply, such as a Voyage shutdown confirmation or a Vessel
 package change, has no parts, so it needs the current revision. A process
 request names the Vessel that it reads or writes, and a process list names the
-whole set of Vessels, because its answer depends on every Vessel. A terminal, Notes or content
+whole set of Vessels, because its answer depends on every Vessel. A terminal or content
 request names its Vessel. A worktree request names its source Voyage.
 
 `Seen` in `app/src/layout_store.rs` keeps the layout at each of the last 32

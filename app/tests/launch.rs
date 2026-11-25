@@ -115,7 +115,7 @@ fn explicit_worker_creation_binds_only_its_new_content() {
     assert!(worker["backend"].is_null());
     let before = model.layout.clone();
     for (type_id, launch) in [
-        ("notes", request["launch"].clone()),
+        ("dashboard", request["launch"].clone()),
         ("terminal", request["launch"].clone()),
         (
             "agent",

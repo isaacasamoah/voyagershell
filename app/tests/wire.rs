@@ -77,34 +77,6 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
         let latest = ready(client.workspace_changes(Some(observed))).unwrap();
         assert!(quiet.is_closed());
         assert_eq!(latest.recv_blocking().unwrap(), applied_notice);
-        let committed = ready(client.workspace_changes(Some(applied_notice))).unwrap();
-        let partial = client
-            .call(Request {
-                request_id: client.request_id(),
-                expected_version: applied.version,
-                action: Action::CreateVessel {
-                    launch: None,
-                    type_id: "notes".into(),
-                    destination: voyager_contract::ContentDestination::Placement {
-                        owner: voyager_contract::PlacementOwner::Portals {
-                            voyage: initial.layout.selected_voyage.clone().unwrap(),
-                        },
-                        insertion: voyager_contract::PlacementInsertion::Empty,
-                    },
-                },
-            })
-            .unwrap();
-        assert_eq!(partial.status, Outcome::Refused);
-        assert_eq!(
-            partial.message.as_deref(),
-            Some("invalid_workspace: Content owner unavailable; Notes was not created")
-        );
-        assert_eq!(partial.version, applied.version);
-        assert_eq!(partial.layout, applied.layout);
-        assert!(matches!(
-            committed.try_recv(),
-            Err(async_channel::TryRecvError::Empty)
-        ));
     });
     let mut cleanup = Core::connect(&session).unwrap();
     let stopped = cleanup.server_stop();
@@ -118,34 +90,27 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
 #[test]
 fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
     use std::fs;
-    use voyager_app::{
-        client::Client,
-        content::{
-            Owner,
-            install::{Absent, Shipped, install},
-        },
-        core::Core,
-    };
+    use voyager_app::{client::Client, content::Owner, core::Core};
     use voyager_contract::{Action, Context, Outcome, Request};
     let session = format!("voyager-package-effects-{}", std::process::id());
     let profile = std::env::temp_dir().join(&session);
-    let package = profile.join("vessels/notes");
-    install(
-        &profile,
-        &[
-            Shipped {
-                path: "vessels/notes/main.js",
-                bytes: b"personal source",
-                absent: Absent::Write,
-            },
-            Shipped {
-                path: "vessels/notes/vessel.json",
-                bytes: include_bytes!("../../content/notes/vessel.json"),
-                absent: Absent::Write,
-            },
-        ],
+    let package = profile.join("vessels/tally");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("manifest.json"),
+        r#"{
+  "contract": 1, "id": "tally", "name": "Tally", "version": 1,
+  "state": {
+    "schema": {"type": "object", "additionalProperties": false, "required": ["count"],
+      "properties": {"count": {"type": "number"}}},
+    "initial": {"count": 0}
+  },
+  "actions": {"copy": {"rebase": "always", "effect": [{"op": "set", "path": "count", "value": "count"}]}},
+  "view": {"source": "view.vx"}
+}"#,
     )
     .unwrap();
+    fs::write(package.join("view.vx"), "personal source").unwrap();
     let client = Client::with_content(
         session.clone(),
         "/tmp".into(),
@@ -175,14 +140,14 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                     id: initial.layout.selected_fleet.clone().unwrap(),
                 },
                 request(Action::RemoveVesselPackage {
-                    type_id: "notes".into(),
+                    type_id: "tally".into(),
                 }),
             )
             .unwrap();
         assert_eq!(refused.status, Outcome::Refused);
         assert!(package.exists());
         let remove = request(Action::RemoveVesselPackage {
-            type_id: "notes".into(),
+            type_id: "tally".into(),
         });
         let removed = client
             .scoped_call(Context::Workspace, remove.clone())
@@ -194,7 +159,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
             .scoped_call(
                 Context::Workspace,
                 request(Action::CreateVessel {
-                    type_id: "notes".into(),
+                    type_id: "tally".into(),
                     launch: None,
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals {
@@ -211,14 +176,14 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
             .scoped_call(
                 Context::Workspace,
                 request(Action::RestoreVesselPackage {
-                    type_id: "notes".into(),
+                    type_id: "tally".into(),
                 }),
             )
             .unwrap();
         assert_eq!(restored.status, Outcome::Applied);
         assert_eq!(restored.version, initial.version);
         assert_eq!(
-            fs::read(package.join("main.js")).unwrap(),
+            fs::read(package.join("view.vx")).unwrap(),
             b"personal source"
         );
         let first = observed.try_recv().unwrap();
@@ -257,7 +222,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
             .scoped_call(
                 Context::Workspace,
                 request(Action::RemoveVesselPackage {
-                    type_id: "notes".into(),
+                    type_id: "tally".into(),
                 }),
             )
             .unwrap();

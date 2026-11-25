@@ -368,7 +368,7 @@ impl Tools {
                     }
                 }
                 Dispatch::Content(action) => {
-                    let request = action.into_request(effect_id, expected_version);
+                    let request = action.into_request(effect_id);
                     match client.content(
                         crate::content::Access::Agent {
                             scope,
@@ -483,7 +483,6 @@ fn reads(action: &Dispatch) -> bool {
             | Dispatch::Content(
                 voyager_contract::content::Action::Describe { .. }
                     | voyager_contract::content::Action::Inspect { .. }
-                    | voyager_contract::content::Action::ListNotes { .. }
             )
     )
 }
@@ -491,9 +490,7 @@ fn reads(action: &Dispatch) -> bool {
 fn content_result(response: &voyager_contract::content::Response) -> EffectResult {
     use voyager_contract::content::Response;
     let (status, id, revision, warning) = match response {
-        Response::Described { vessel_id, .. } | Response::NotesList { vessel_id, .. } => {
-            (Status::Applied, vessel_id, None, None)
-        }
+        Response::Described { vessel_id, .. } => (Status::Applied, vessel_id, None, None),
         Response::State {
             vessel_id,
             snapshot,
@@ -508,36 +505,6 @@ fn content_result(response: &voyager_contract::content::Response) -> EffectResul
             vessel_id,
             Some(snapshot.revision.clone()),
             None,
-        ),
-        Response::Configured {
-            vessel_id,
-            workspace_version,
-            ..
-        } => (
-            Status::Applied,
-            vessel_id,
-            Some(workspace_version.to_string()),
-            None,
-        ),
-        Response::NoteOpened {
-            vessel_id,
-            snapshot,
-            ..
-        }
-        | Response::Snapshot {
-            vessel_id,
-            snapshot,
-            ..
-        }
-        | Response::Applied {
-            vessel_id,
-            snapshot,
-            ..
-        } => (
-            Status::Applied,
-            vessel_id,
-            Some(snapshot.revision.clone()),
-            snapshot.warning.as_deref(),
         ),
         Response::Rejected {
             vessel_id, message, ..
@@ -562,7 +529,7 @@ fn content_result(response: &voyager_contract::content::Response) -> EffectResul
         if message.len() <= 2048 { message.to_owned() } else { "Warning details exceed the conversation display limit; the result explicitly reports when complete details are unavailable.".into() }
     });
     let text = format!(
-        "Notes {}: {:?}; revision {}{}",
+        "Vessel {}: {:?}; revision {}{}",
         id.0,
         status,
         revision.as_deref().unwrap_or("unavailable"),
@@ -692,26 +659,22 @@ mod tests {
 
     #[test]
     fn content_results_are_bounded_and_never_claim_a_partial_read_is_complete() {
-        use voyager_contract::content::{Notes, Response as ContentResponse, Snapshot, Version};
-        let response = ContentResponse::Snapshot {
+        use voyager_contract::content::{Response as ContentResponse, StateSnapshot, Version};
+        let id = voyager_contract::VesselId("vessel".into());
+        let response = ContentResponse::State {
             version: Version::V1,
             request_id: "read".into(),
-            vessel_id: voyager_contract::VesselId("notes".into()),
-            configuration: None,
-            snapshot: Snapshot {
-                vessel_id: voyager_contract::VesselId("notes".into()),
+            vessel_id: id.clone(),
+            snapshot: StateSnapshot {
+                vessel_id: id.clone(),
                 revision: "revision".into(),
-                data: Notes {
-                    title: "Title".into(),
-                    text: "x".repeat(crate::content::LIMIT),
-                },
-                warning: Some("warning".repeat(4096)),
+                state: json!({"text": "x".repeat(crate::content::ENVELOPE_LIMIT)}),
             },
         };
         let request = voyager_contract::content::Request::Inspect {
             version: Version::V1,
             request_id: "read".into(),
-            vessel_id: voyager_contract::VesselId("notes".into()),
+            vessel_id: id,
         };
         let response = crate::content::requests::bounded_response(&request, response);
         let result = content_result(&response);
@@ -720,7 +683,6 @@ mod tests {
         assert_eq!(limited["requestId"], "read");
         assert_eq!(limited["revision"], "revision");
         assert_eq!(limited["status"], "limited");
-        assert_eq!(limited["warningPresent"], true);
         assert!(result.text.len() < 4096);
     }
 
@@ -731,21 +693,28 @@ mod tests {
             core::Core,
         };
         use voyager_contract::content::{
-            Notes, Request as ContentRequest, Response as ContentResponse, Version,
+            Request as ContentRequest, Response as ContentResponse, Version,
         };
         let directory =
             std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
-        std::fs::create_dir_all(directory.join("vessels/notes")).unwrap();
+        let package = directory.join("vessels/tally");
+        std::fs::create_dir_all(&package).unwrap();
         std::fs::write(
-            directory.join("vessels/notes/main.js"),
-            include_str!("../../content/notes/main.js"),
+            package.join("manifest.json"),
+            r#"{
+  "contract": 1, "id": "tally", "name": "Tally", "version": 1,
+  "state": {
+    "schema": {"type": "object", "additionalProperties": false, "required": ["label"],
+      "properties": {"label": {"type": "string"}}},
+    "initial": {"label": ""}
+  },
+  "actions": {"rename": {"params": {"label": "string"}, "rebase": "always",
+    "effect": [{"op": "set", "path": "label", "value": "$label"}]}},
+  "view": {"source": "view.vx"}
+}"#,
         )
         .unwrap();
-        std::fs::write(
-            directory.join("vessels/notes/vessel.json"),
-            include_str!("../../content/notes/vessel.json"),
-        )
-        .unwrap();
+        std::fs::write(package.join("view.vx"), "<column/>").unwrap();
         let mut guard = crate::core_session::SessionGuard::new("voyager-n3-owner");
         let session = guard.session().to_owned();
         let workspace = guard.start(|session| {
@@ -771,7 +740,7 @@ mod tests {
             let created = call(
                 Action::CreateVessel {
                     launch: None,
-                    type_id: crate::vessel_type::NOTES_TYPE.into(),
+                    type_id: "tally".into(),
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PlacementInsertion::Beside {
@@ -782,7 +751,7 @@ mod tests {
                 },
                 initial.version,
             );
-            assert_eq!(created.status, Outcome::Applied);
+            assert_eq!(created.status, Outcome::Applied, "{:?}", created.message);
             let a = created.layout.vessels.last().unwrap().id.clone();
             let placement = created.layout.voyages[0].fleets[0]
                 .placements
@@ -793,7 +762,7 @@ mod tests {
             let created = call(
                 Action::CreateVessel {
                     launch: None,
-                    type_id: crate::vessel_type::NOTES_TYPE.into(),
+                    type_id: "tally".into(),
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals { voyage },
                         insertion: voyager_contract::PlacementInsertion::Empty,
@@ -801,28 +770,11 @@ mod tests {
                 },
                 created.version,
             );
+            assert_eq!(created.status, Outcome::Applied, "{:?}", created.message);
             let b = created.layout.vessels.last().unwrap().id.clone();
-            let note_path = |id: &voyager_contract::VesselId| {
-                let content = created
-                    .layout
-                    .vessels
-                    .iter()
-                    .find(|content| content.id == *id)
-                    .unwrap();
-                let configuration: voyager_contract::content::NotesConfiguration =
-                    serde_json::from_value(serde_json::Value::Object(
-                        content.configuration.clone().unwrap(),
-                    ))
-                    .unwrap();
-                let file = configuration.notes_file.unwrap();
-                std::path::Path::new(&file.directory).join(file.filename)
+            let data = |id: &voyager_contract::VesselId| {
+                directory.join("data").join(format!("{}.json", id.0))
             };
-            let a_path = note_path(&a);
-            let b_path = note_path(&b);
-            assert_ne!(a_path, b_path);
-            assert!(a_path.starts_with(directory.join("notes")));
-            assert!(b_path.starts_with(directory.join("notes")));
-            let b_before = std::fs::read(&b_path).unwrap();
             let mut binding = Box::pin(workspace.bind_content(a.clone()));
             let deadline = Instant::now() + Duration::from_secs(5);
             let binding = loop {
@@ -845,7 +797,7 @@ mod tests {
                 .content(Access::View(binding.clone()), read.clone())
                 .unwrap();
             let duplicate_read = workspace
-                .content(Access::View(binding.clone()), read.clone())
+                .content(Access::View(binding), read.clone())
                 .unwrap();
             assert!(std::sync::Arc::ptr_eq(&snapshot, &duplicate_read));
             assert!(matches!(
@@ -863,18 +815,20 @@ mod tests {
                 ContentResponse::Rejected { .. }
             ));
             let revision = match &*snapshot {
-                ContentResponse::Snapshot { snapshot, .. } => snapshot.revision.clone(),
+                ContentResponse::State { snapshot, .. } => snapshot.revision.clone(),
                 other => panic!("{other:?}"),
             };
+            assert!(!data(&a).exists());
             let focus = voyager_contract::context::Focus {
                 scope: Context::Vessel { id: placement },
-                path: vec!["Notes A".into()],
+                path: vec!["Tally A".into()],
                 cwd: None,
                 revision: created.version,
                 preview: None,
             };
+            let label = "x".repeat(9000);
             let mut tools = Tools::default();
-            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_vessel","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","vesselId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
+            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_vessel","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"invoke","vesselId":a,"action":"rename","args":{"label":label},"expectedRevision":revision}}}});
             assert!(
                 tools
                     .callback(
@@ -910,12 +864,16 @@ mod tests {
                 )
                 .unwrap();
             let applied_revision = match applied_content {
-                ContentResponse::Applied { snapshot, .. } => snapshot.revision,
+                ContentResponse::Invoked { snapshot, .. } => {
+                    assert_eq!(snapshot.state["label"], json!(label));
+                    snapshot.revision
+                }
                 other => panic!("{other:?}"),
             };
+            assert!(data(&a).exists());
             let mut changed_data = callback.clone();
             changed_data["id"] = "changed-data".into();
-            changed_data["params"]["arguments"]["action"]["data"]["title"] = "Changed".into();
+            changed_data["params"]["arguments"]["action"]["args"]["label"] = "Changed".into();
             assert_eq!(
                 tools
                     .callback(
@@ -932,7 +890,7 @@ mod tests {
             assert!(
                 !serde_json::to_string(&applied.outcome)
                     .unwrap()
-                    .contains(&"x".repeat(9000))
+                    .contains(&label)
             );
             let duplicate = tools
                 .callback(
@@ -999,12 +957,7 @@ mod tests {
                     .is_none()
             );
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
-            assert_eq!(std::fs::read(&b_path).unwrap(), b_before);
-            std::fs::write(
-                directory.join("vessels/notes/vessel.json"),
-                br#"{"name":"Notes"}"#,
-            )
-            .unwrap();
+            assert!(!data(&b).exists());
             let current = workspace
                 .content(
                     Access::Agent {
@@ -1015,16 +968,9 @@ mod tests {
                 )
                 .unwrap();
             assert!(
-                matches!(&*current, ContentResponse::Snapshot { snapshot, .. } if snapshot.warning.as_deref() == Some("No state schema declared") && snapshot.data.title == "Agent")
+                matches!(&*current, ContentResponse::State { snapshot, .. } if snapshot.revision == applied_revision && snapshot.state["label"] == json!(label)),
+                "{current:?}"
             );
-            std::fs::remove_file(&a_path).unwrap();
-            assert!(matches!(
-                &*workspace
-                    .content(Access::View(binding), inspect(&a))
-                    .unwrap(),
-                ContentResponse::Rejected { .. }
-            ));
-            assert!(!a_path.exists());
             external.close().unwrap();
         }));
         drop(workspace);

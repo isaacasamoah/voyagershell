@@ -45,8 +45,8 @@ The private provider cannot supply a different owner, scope or request identity.
 The current process-integration candidate adds voyager_process alongside the
 accepted workspace catalogue. Its source and owned-Core checks are under review;
 the combined native/account journey is not yet accepted. The N3 source candidate adds the generated voyager_vessel tool through the same
-callback/receipt path and one Client-owned Notes writer. It admits only fresh
-captured Notes membership, preserves revisions/warnings and does not recreate
+callback/receipt path and the one Client-owned content owner. It admits only
+Vessels in the fresh captured scope, preserves revisions and does not recreate
 missing data. Content bodies stay out of public tool-history summaries. Its larger
 content-only envelope and retention bounds are recorded in docs/content.md.
 Actual provider/native N3 acceptance remains pending.
@@ -241,7 +241,7 @@ not establish account readiness or audible speech. Unavailable voice refuses
 audio start while valid text and tools remain usable. Only Codex is implemented.
 
 Ordinary outbound frames remain limited to 64 KiB. Content-only framing retains
-2 * (1 MiB + 16 KiB) + 4096 bytes to allow escaped serialized Notes results.
+2 * (1 MiB + 16 KiB) + 4096 bytes to allow escaped serialized content results.
 Non-content inbound frames remain limited to 1 MiB. Tool argument admission
 remains 8 KiB for workspace/process and 1 MiB + 16 KiB for content. The adapter
 accepts only a response matching the outstanding numeric request ID; the owner
@@ -356,8 +356,8 @@ or workspace revision makes that read ineligible. It retains one observation,
 limited to three visible panels and 4 KiB of text, with no polling or model turn.
 Matching text and voice captures may include that observation in the generated
 Focus.preview field. Its age and untrusted status are explicit. Terminal reads
-use Core's screen without scrollback; Notes contributes saved Markdown and
-explicitly excludes unsaved editor drafts. Tools remain available for fresh or
+use Core's screen without scrollback; another Vessel contributes only its type.
+Tools remain available for fresh or
 more detailed inspection. Accepted requests retain their original focus and
 preview after later docking. This is bounded context preparation, not transcript
 discovery or positional navigation.

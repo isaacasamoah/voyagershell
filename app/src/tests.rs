@@ -216,11 +216,11 @@ fn maximize_is_per_fleet_and_saved_layout_hiding_clears_it() {
 }
 
 #[test]
-fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
+fn a_type_without_a_terminal_uses_the_same_vessel_and_portal_placement_rules() {
     let mut model = Model::default();
     model
         .apply(Action::CreateVoyage {
-            name: "Notes".into(),
+            name: "Work".into(),
             cwd: "/tmp".into(),
         })
         .unwrap();
@@ -230,7 +230,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
     let terminal = model.layout.vessels[0].clone();
     let create = |destination| {
         serde_json::from_value::<Action>(serde_json::json!({
-            "operation":"create-vessel", "typeId":"notes", "destination":destination
+            "operation":"create-vessel", "typeId":"dashboard", "destination":destination
         }))
         .unwrap()
     };
@@ -246,9 +246,9 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
         .is_ok()
     );
     model.apply(vessel).unwrap();
-    let notes = model.layout.vessels.last().unwrap().clone();
-    assert_eq!(notes.type_id, crate::vessel_type::NOTES_TYPE);
-    assert!(notes.backend.is_none());
+    let dashboard = model.layout.vessels.last().unwrap().clone();
+    assert_eq!(dashboard.type_id, "dashboard");
+    assert!(dashboard.backend.is_none());
     model
         .apply(create(serde_json::json!({"kind":"placement","owner":{"kind":"portals","voyage":voyage},"insertion":{"kind":"empty"}})))
         .unwrap();
@@ -278,14 +278,14 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
             .is_err()
     );
     assert_eq!(model.layout, before_invalid);
-    assert_ne!(portal.vessel, notes.id);
+    assert_ne!(portal.vessel, dashboard.id);
     assert_eq!(model.layout.vessels[0], terminal);
     assert_eq!(
         model
             .layout
             .vessels
             .iter()
-            .filter(|content| content.type_id == crate::vessel_type::NOTES_TYPE)
+            .filter(|content| content.type_id == "dashboard")
             .count(),
         2
     );

@@ -255,7 +255,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
     !buttons.has("create-worker-codex"),
     "New-content choices wait for the complete local metadata set so rows cannot move under the pointer",
   );
-  rejectDescription(Error("Notes metadata unavailable"));
+  rejectDescription(Error("Content metadata unavailable"));
   await new Promise(setImmediate);
   const choicesReady = Boolean(picker.catalog);
   buttons.clear();
@@ -271,7 +271,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
     choicesReady,
     "Ready choices appear without waiting for hidden programs",
   );
-  assert.equal(picker.error, "Notes metadata unavailable");
+  assert.equal(picker.error, "Content metadata unavailable");
   picker.render(
     "original",
     {
@@ -321,14 +321,10 @@ test("worker creation keeps its opening target and revision across a delayed cat
   assert.deepEqual(dismissed, [[destination, cx]]);
   Object.assign(picker, {
     current: { id: "original", version: "7", destination },
-    notes: true,
     agents: true,
   });
   buttons.clear();
   picker.render("original", destination, "7", create);
-  assert.deepEqual(markers(buttons.get("create-notes-vessel")), [
-    ["create-notes", ""],
-  ]);
   assert.deepEqual(markers(buttons.get("create-agents-vessel")), [
     ["create-agents", ""],
   ]);
@@ -1444,7 +1440,7 @@ test("hidden choices retain process-free data and require matching live backends
     id: "first",
     placements: [
       panel("visible", "shown"),
-      panel("notes", "note"),
+      panel("agent", "note"),
       panel("shell", "live"),
       panel("ended", "dead"),
     ],
@@ -1484,7 +1480,7 @@ test("hidden choices retain process-free data and require matching live backends
       })),
       ...["note", "other-note", "portal-note", "foreign-note"].map((id) => ({
         id,
-        typeId: "notes",
+        typeId: "agents",
       })),
     ],
   };
@@ -1497,22 +1493,22 @@ test("hidden choices retain process-free data and require matching live backends
     exports
       .hiddenPanels(layout, destination, processes)
       .map((panel) => panel.id);
-  assert.deepEqual(choices([]), ["notes", "other"]);
+  assert.deepEqual(choices([]), ["agent", "other"]);
   assert.deepEqual(
     choices([
       { vesselId: "live", terminalId: "wrong", state: "live", pid: 42 },
     ]),
-    ["notes", "other"],
+    ["agent", "other"],
   );
   assert.deepEqual(
     choices([
       { vesselId: "live", terminalId: "live", state: "live", pid: 42 },
       { vesselId: "dead", terminalId: "dead", state: "finished", pid: 43 },
     ]),
-    ["notes", "shell", "other"],
+    ["agent", "shell", "other"],
   );
   first.maximizedPlacement = "visible";
-  assert.deepEqual(choices([]), ["notes", "other"]);
+  assert.deepEqual(choices([]), ["agent", "other"]);
 });
 
 test("Activity scopes live work, orders status rows and preserves navigation", async () => {
@@ -1597,7 +1593,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       backend: "shell-terminal",
       launch: { kind: "codex" },
     },
-    { id: "notes", typeId: "notes" },
+    { id: "dashboard", typeId: "dashboard" },
     {
       id: "unknown",
       typeId: "terminal",
@@ -1633,8 +1629,8 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
             ],
           },
         ],
-        portals: [{ id: "notes", vessel: "notes", name: "Notes" }],
-        portalLayout: { root: { kind: "leaf", placement: "notes" } },
+        portals: [{ id: "dashboard", vessel: "dashboard", name: "Dashboard" }],
+        portalLayout: { root: { kind: "leaf", placement: "dashboard" } },
       },
     ],
   };
@@ -1675,9 +1671,9 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   render();
   assert.ok(![...buttons.keys()].some((key) => key.includes("group-status")));
   assert.ok(buttons.has("vessels-group-type-voyage-Bash"));
-  assert.ok(buttons.has("vessels-group-type-voyage-Notes"));
+  assert.ok(buttons.has("vessels-group-type-voyage-dashboard"));
   assert.ok(buttons.has("vessels-group-type-voyage-python"));
-  assert.deepEqual(icons, ["Codex", "Bash", "Notes", "python"]);
+  assert.deepEqual(icons, ["Codex", "Bash", "dashboard", "python"]);
   const row = buttons.get("vessel-home-agent");
   const label = row.calls.find(([name]) => name === "accessibility_label")[1];
   assert.match(label, /folder, Codex, Idle/);
@@ -1685,11 +1681,11 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   const cx = {};
   row.calls.find(([name]) => name === "on_click")[1]({}, cx);
   buttons
-    .get("vessel-notes")
+    .get("vessel-dashboard")
     .calls.find(([name]) => name === "on_click")[1]({}, cx);
   assert.deepEqual(navigated, [
     ["home-agent", cx],
-    ["notes", cx],
+    ["dashboard", cx],
   ]);
   buttons.clear();
   render({
@@ -1743,7 +1739,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   render();
   assert.ok(buttons.has("vessels-voyage-voyage"));
   assert.ok(
-    !buttons.has("vessel-notes"),
+    !buttons.has("vessel-dashboard"),
     "A collapsed Voyage hides its contents",
   );
   buttons
@@ -1754,36 +1750,43 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   buttons.clear();
   render();
   assert.ok(
-    buttons.has("vessel-notes"),
+    buttons.has("vessel-dashboard"),
     "Reopening the Voyage restores its contents",
   );
   buttons.clear();
   render({}, undefined, { kind: "portals", voyage: "voyage" });
-  assert.ok(buttons.has("vessel-bash") && buttons.has("vessel-notes"));
+  assert.ok(buttons.has("vessel-bash") && buttons.has("vessel-dashboard"));
   assert.ok(!buttons.has("vessel-home-agent"));
   assert.ok(!buttons.has("vessels-voyage-home"));
   buttons.clear();
   render({}, undefined, { kind: "fleet", id: "fleet" });
   assert.ok(buttons.has("vessel-bash"));
-  assert.ok(!buttons.has("vessel-notes") && !buttons.has("vessel-home-agent"));
+  assert.ok(
+    !buttons.has("vessel-dashboard") && !buttons.has("vessel-home-agent"),
+  );
   buttons.clear();
   collapsed.add("expanded-agents-home");
   render({}, undefined, { kind: "fleet", id: "home-fleet" });
-  assert.ok(buttons.has("vessel-home-agent") && buttons.has("vessel-notes"));
+  assert.ok(
+    buttons.has("vessel-home-agent") && buttons.has("vessel-dashboard"),
+  );
   layout.voyages[0].portalLayout.root = null;
   buttons.clear();
   render();
   assert.ok(
-    !buttons.has("vessel-notes"),
+    !buttons.has("vessel-dashboard"),
     "Closed documents are not active work",
   );
-  layout.voyages[0].portalLayout.root = { kind: "leaf", placement: "notes" };
+  layout.voyages[0].portalLayout.root = {
+    kind: "leaf",
+    placement: "dashboard",
+  };
   processes[1].state = "finished";
   buttons.clear();
   render();
   assert.ok(!buttons.has("vessel-bash"), "Ended shells are not running work");
   assert.ok(
-    buttons.has("vessel-notes"),
+    buttons.has("vessel-dashboard"),
     "Documents are independent of processes",
   );
   layout.voyages[0].closed = true;
@@ -1793,7 +1796,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     !buttons.has("vessels-voyage-voyage"),
     "Closed Voyages are not open work",
   );
-  assert.ok(!buttons.has("vessel-notes"));
+  assert.ok(!buttons.has("vessel-dashboard"));
   processes.splice(2, 1);
   buttons.clear();
   render();
@@ -2012,7 +2015,7 @@ test("chat marks its toggle, messages, composer, send control, status and error 
       omitted: "0",
       error: null,
       messages: [
-        { id: "m1", role: "user", text: "Open the notes" },
+        { id: "m1", role: "user", text: "Open the dashboard" },
         { id: "m2", role: "assistant", text: "Done" },
       ],
     },
@@ -2021,7 +2024,7 @@ test("chat marks its toggle, messages, composer, send control, status and error 
   assert.deepEqual(deepMarkers(chat.toggleView(colors)), [["chat-toggle", ""]]);
   chat.error = "Request refused";
   assert.deepEqual(deepMarkers(chat.render(colors, { kind: "workspace" })), [
-    ["chat-message", "m1", "Open the notes"],
+    ["chat-message", "m1", "Open the dashboard"],
     ["chat-message", "m2", "Done"],
     ["chat-status", "", "Thinking…"],
     ["chat-error", "", "Request refused"],
@@ -2032,7 +2035,7 @@ test("chat marks its toggle, messages, composer, send control, status and error 
   chat.error = "";
   chat.state.phase = "idle";
   assert.deepEqual(deepMarkers(chat.render(colors, { kind: "workspace" })), [
-    ["chat-message", "m1", "Open the notes"],
+    ["chat-message", "m1", "Open the dashboard"],
     ["chat-message", "m2", "Done"],
     ["chat-messages", ""],
     ["chat-composer", "", input],
@@ -2459,100 +2462,6 @@ test("worktree controller groups identified checkouts and preserves request iden
     1,
     "Background discovery does not fill the owner queue with a Voyage burst",
   );
-});
-
-test("Notes keeps file actions together and preview leaves its draft unchanged", () => {
-  const buttons = new Map();
-  const calls = [];
-  const session = {
-    filename: () => "Existing.md",
-    filenames: () => ["Existing.md"],
-    status: () => "",
-    new_note: () => calls.push("new"),
-    list_notes: () => calls.push("list"),
-    open_note: (name) => calls.push(name),
-  };
-  const exports = {};
-  const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/../content/notes/main.ts`, "utf8"),
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-      },
-    },
-  ).outputText;
-  new Function("exports", "require", source)(exports, (name) => {
-    if (name === "./ui.js")
-      return uiModule(element, {
-        new: (id) => {
-          const node = element();
-          buttons.set(id, node);
-          return node;
-        },
-      });
-    if (name === "gpui-kit") return { View: class {}, div: element };
-    if (name === "gpui-base")
-      return {
-        Button: {
-          new: (id) => {
-            const node = element();
-            buttons.set(id, node);
-            return node;
-          },
-        },
-        Popover: { new: element },
-        Switch: {
-          new: (id) => {
-            const node = element();
-            buttons.set(id, node);
-            return node;
-          },
-        },
-        TextView: { markdown: element },
-      };
-    if (name === "voyager_vessel")
-      return {
-        theme: () => ({
-          foreground: "#ffffff",
-          muted: "#999999",
-          background: "#000000",
-        }),
-      };
-    return {
-      SessionState: { new: () => session },
-      RetainedTitleState: { new: () => ({}) },
-      RetainedBodyState: { new: () => ({ value: () => "Unchanged draft" }) },
-      RetainedTitle: { new: element },
-      RetainedBody: { new: element },
-    };
-  });
-  const note = new exports.default();
-  note.init();
-  note.render();
-  const preview = buttons.get("notes-preview");
-  assert.ok(
-    ["w", "h"].every((method) =>
-      preview.calls.some(([name, value]) => name === method && value > 0),
-    ) && preview.calls.some(([name]) => name === "child"),
-    "The unstyled native switch needs a visible track and thumb",
-  );
-  const click = (id) =>
-    buttons
-      .get(id)
-      .calls.find(([name]) => name === "on_click")[1]({}, { notify() {} });
-  click("notes-open");
-  note.render();
-  click("notes-file-Existing.md");
-  assert.deepEqual(calls, ["list", "Existing.md"]);
-  buttons
-    .get("notes-preview")
-    .calls.find(([name]) => name === "on_change")[1](true, { notify() {} });
-  assert.equal(note.preview, true);
-  assert.equal(note.text.value(), "Unchanged draft");
-  click("notes-new");
-  assert.equal(note.preview, false);
-  assert.equal(calls.at(-1), "new");
 });
 
 function statusModule() {

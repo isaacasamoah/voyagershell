@@ -2424,7 +2424,7 @@ Select one route explicitly:
 
 - `--foundation` reproduces retained native product journeys with this launcher and these helpers.
 - `--reference` runs the retained Electron fixture.
-- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained canvas/Notes journeys.
+- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained canvas journeys.
 - `--native-avatar` runs the original avatar experiment's own historical driver.
 
 Root help lists the choices. Route help lists that driver's options:
@@ -2463,11 +2463,6 @@ Use `--legacy-reproduction --foundation --review --launch --compositor` with the
 session, evidence and desktop environment to leave a review app open. This mode
 captures the window and closes its input helper. It retains the app and its
 processes, records no passed journey, and marks `reviewOnly` in its receipt.
-
-The `notes-configuration` native journey still checks the former heading and
-cold-Quit behavior. Its runtime acceptance is pending an update for the current
-Notes and detach requirements. Passing route checks only confirms routing and
-fixture source checks; it does not accept that journey.
 
 The `terminal-scrolling` journey covers primary-screen history, alternate-screen
 arrow fallback, program mouse reporting and same-program reattachment. It uses

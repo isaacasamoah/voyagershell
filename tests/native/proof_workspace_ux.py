@@ -2,10 +2,9 @@ import json
 import os
 from pathlib import Path
 
-from proof_foundation_notes import wait
 from proof_process import observe_core_exit, process_identity
 from proof_split_resize import splitter_point
-from proof_workspace import core_rpc, named_button
+from proof_workspace import core_rpc, named_button, wait
 
 
 def prove(
@@ -240,11 +239,11 @@ def prove(
             "pid": terminal["pid"],
         }
         button("Split Vessel right")
-        one("Create Notes Vessel")
+        one("Create Agents Vessel")
         capture("ux-picker-before-cancel")
         button(fleet(initial["value"])["placements"][0]["name"])
         wait(
-            lambda: fields("Create Notes Vessel"),
+            lambda: fields("Create Agents Vessel"),
             lambda items: not items,
             "picker cancellation",
         )
@@ -253,7 +252,7 @@ def prove(
             item["address"] for item in rpc("terminal.list", {"all": True})["terminals"]
         ] == backends
         button("Split Vessel right")
-        button("Create Notes Vessel")
+        button("Create Agents Vessel")
         split = ready(lambda value: len(fleet(value)["placements"]) == 2)
         vessel = fleet(split["value"])["placements"][1]
         assert (
@@ -262,35 +261,21 @@ def prove(
                 for item in split["value"]["vessels"]
                 if item["id"] == vessel["vessel"]
             )["typeId"]
-            == "notes"
+            == "agents"
         )
         menu(vessel["name"], "Rename")
-        text(one("Name"), "UX Notes")
+        text(one("Name"), "UX Agents")
         tap(65293)
-        ready(lambda value: fleet(value)["placements"][1]["name"] == "UX Notes")
-        one("UX Notes")
+        ready(lambda value: fleet(value)["placements"][1]["name"] == "UX Agents")
+        one("UX Agents")
         before_max = document()
-        button("Maximize Vessel", "UX Notes")
+        button("Maximize Vessel", "UX Agents")
         maximized = ready(
             lambda value: fleet(value).get("maximizedPlacement") == vessel["id"]
         )
         assert fleet(maximized["value"])["root"] == fleet(before_max["value"])["root"]
         one("Vessel dock")
-        body = one("Note text")
-        assert body["height"] > 800, body
-        text(body, "# Viewer proof")
-        button("Preview note")
-        vessel_data = evidence / "profile/data" / (vessel["vessel"] + ".json")
-        notes_saved = wait(
-            lambda: vessel_data.read_bytes() if vessel_data.exists() else None,
-            lambda data: json.loads(data)["text"] == "# Viewer proof",
-            "fixed-slot Notes body save",
-        )
-        capture("ux-maximized-markdown-preview")
-        button("Edit note")
-        one("Note text")
-        assert vessel_data.read_bytes() == notes_saved
-        capture("ux-maximized-notes-fixed-slot")
+        capture("ux-maximized-vessel")
         button("Restore Vessel")
         restored = ready(lambda value: not fleet(value).get("maximizedPlacement"))
         assert fleet(restored["value"])["root"] == fleet(before_max["value"])["root"]
@@ -298,59 +283,28 @@ def prove(
         button("Show Portals")
         capture("ux-empty-portal-before-choice")
         capture("ux-empty-portal-after-choice")
-        button("Create Notes Portal")
+        button("Create Agents Portal")
         created = ready(lambda value: len(value["voyages"][0]["portals"]) == 1)
         portal = created["value"]["voyages"][0]["portals"][0]
 
-        def portal_titles():
-            snapshot = native("fields", pid, ["Portal dock", "Note title"], "window")[
+        def dock_bounds():
+            snapshot = native("fields", pid, ["Portal dock", "Vessel dock"], "window")[
                 "fields"
             ]
-            boxes = [
-                item
-                for item in snapshot
-                if item["name"] == "Portal dock"
-                and item["width"] > 0
-                and item["height"] > 0
-            ]
-            if len(boxes) != 1:
-                return []
-            box = boxes[0]
             return [
-                item
-                for item in snapshot
-                if item["name"] == "Note title"
-                and item["width"] > 0
-                and item["height"] > 0
-                and all(
-                    box[axis] <= item[axis]
-                    and item[axis] + item[extent] <= box[axis] + box[extent]
-                    for axis, extent in (("x", "width"), ("y", "height"))
-                )
+                item for item in snapshot if item["width"] > 0 and item["height"] > 0
             ]
 
-        title = wait(
-            portal_titles,
-            lambda items: len(items) == 1,
-            "settled Portal title in one native snapshot",
-        )[0]
-        bounds = native("fields", pid, ["Portal dock", "Vessel dock"], "window")[
-            "fields"
-        ]
-        portals = [
-            item
-            for item in bounds
-            if item["name"] == "Portal dock"
-            and item["width"] > 0
-            and item["height"] > 0
-        ]
-        vessels = [
-            item
-            for item in bounds
-            if item["name"] == "Vessel dock"
-            and item["width"] > 0
-            and item["height"] > 0
-        ]
+        bounds = wait(
+            dock_bounds,
+            lambda items: (
+                len([item for item in items if item["name"] == "Portal dock"]) == 1
+                and len([item for item in items if item["name"] == "Vessel dock"]) == 2
+            ),
+            "settled Portal and Vessel docks in one native snapshot",
+        )
+        portals = [item for item in bounds if item["name"] == "Portal dock"]
+        vessels = [item for item in bounds if item["name"] == "Vessel dock"]
         observations["singlePortalBounds"] = bounds
         capture("ux-single-portal-full-panel-bounds")
         assert len(portals) == 1 and len(vessels) == 2, bounds
@@ -359,14 +313,7 @@ def prove(
             and abs(portals[0]["height"] - item["height"]) <= 2
             for item in vessels
         ), bounds
-        text(title, "Portal retained")
         button("Embed Portals")
-        data_path = evidence / "profile/data" / (portal["vessel"] + ".json")
-        saved = wait(
-            lambda: data_path.read_bytes() if data_path.exists() else None,
-            lambda data: json.loads(data)["title"] == "Portal retained",
-            "Portal Notes save",
-        )
         embedded = ready(
             lambda value: value["voyages"][0]["portalLayout"]["mode"] == "make-room"
         )
@@ -396,21 +343,19 @@ def prove(
             changed["value"]["voyages"][0]["portalLayout"]
             == resized["value"]["voyages"][0]["portalLayout"]
         )
-        assert data_path.read_bytes() == saved
         button(fleet(changed["value"])["name"])
         ready(lambda value: value["selectedFleet"] == fleet(value)["id"])
         button("Overlay Portals")
         ready(lambda value: value["voyages"][0]["portalLayout"]["mode"] == "overlay")
         button("Hide Portals")
         ready(lambda value: not value["voyages"][0]["portalLayout"]["visible"])
-        button("Close Vessel UX Notes")
+        button("Close Vessel UX Agents")
         hidden = ready(lambda value: fleet(value)["root"]["kind"] == "leaf")
-        restore_hidden("UX Notes", "Split Vessel right")
+        restore_hidden("UX Agents", "Split Vessel right")
         shown = ready(lambda value: fleet(value)["root"]["kind"] == "branch")
         assert fleet(shown["value"])["placements"][1]["id"] == vessel["id"]
         assert fleet(shown["value"])["placements"][1]["vessel"] == vessel["vessel"]
-        assert vessel_data.read_bytes() == notes_saved
-        observations["closedNotes"] = hidden
+        observations["closedVessel"] = hidden
         button("Show Portals")
         ready(lambda value: value["voyages"][0]["portalLayout"]["visible"])
         menu(fleet(shown["value"])["name"], "Save layout")
@@ -429,7 +374,6 @@ def prove(
             final["value"]["voyages"][0]["portalLayout"]["width"]
             == resized["value"]["voyages"][0]["portalLayout"]["width"]
         )
-        assert data_path.read_bytes() == saved
         observations.update(
             initial=initial,
             split=split,
@@ -448,10 +392,10 @@ def prove(
         )
         assert one("Portal dock")["width"] > box["width"]
         button("Split Portal bottom")
-        button("Create Notes Portal")
+        button("Create Agents Portal")
         divided = ready(lambda value: len(value["voyages"][0]["portals"]) == 2)
         second = divided["value"]["voyages"][0]["portals"][1]
-        assert second["name"] == "Notes 2" and second["name"] != portal["name"]
+        assert second["name"] != portal["name"]
         assert second["id"] != portal["id"] and second["vessel"] != portal["vessel"]
         button("Close Portal " + second["name"])
         ready(
@@ -576,7 +520,7 @@ def prove(
         button("Close Vessel " + agents["name"])
         ready(lambda value: value["home"]["fleets"][0]["root"] is None)
         button("Choose Vessel content")
-        button("Create Notes Vessel")
+        button("Create Terminal Vessel")
         created_home = ready(
             lambda value: len(value["home"]["fleets"][0]["placements"]) == 2
         )
@@ -594,14 +538,12 @@ def prove(
             == overlay["value"]["voyages"][0]["portalLayout"]["width"]
         )
         assert before_cold["value"]["context"] == initial["value"]["context"]
-        assert data_path.read_bytes() == saved
         roster = rpc("terminal.list", {"all": True})["terminals"]
         observations.update(
             overlay=overlay, divided=divided, home=shown_home, beforeCold=before_cold
         )
         capture("ux-portals-and-home-before-quit")
         observations["cold"] = reopen(before_cold)
-        assert vessel_data.read_bytes() == notes_saved
         observations["warmExits"] = observations["cold"]["exits"]
         assert (
             len(
@@ -615,7 +557,6 @@ def prove(
         )
         one("Hide Portals")
         one("Embed Portals")
-        assert data_path.read_bytes() == saved
         capture("ux-cold-retained-column-and-no-agents")
         button("Hide Portals")
         hidden_column = ready(
@@ -632,7 +573,6 @@ def prove(
             lambda items: len(items) == 2,
             "revealed retained Portal pair",
         )
-        assert data_path.read_bytes() == saved
         capture("ux-hidden-cold-column-revealed")
     except BaseException as error:
         failure = repr(error)
@@ -660,10 +600,10 @@ def prove(
             assert not errors, observations
     return [
         "native-chosen-content-and-cancellation",
-        "retained-portal-data-width-and-mode",
+        "retained-portal-width-and-mode",
         "viewer-close-keeps-pid-and-hidden-chooser-reopens-same-instance",
         "shared-corner-controls-portal-split-close-reopen-maximize",
-        "default-home-agents-live-status-navigation-and-retained-notes",
+        "default-home-agents-live-status-navigation-and-retained-home-vessel",
         "overlay-and-embedded-width-through-cold-reopen-without-program-restart",
         "same-owner-portal-reorder-and-hidden-column-cold-reopen",
         "native-quit-owned-exits",

@@ -2,20 +2,14 @@ use super::super::core_calls::{post, relist, worktree_changes};
 use super::super::terminal_start::{CreatedTerminal, require_finished};
 use super::super::{Message, Receipt, Settled};
 use super::{Departure, Flight, Owner, Start, Step};
-use crate::content::ViewBinding;
-use crate::content::rename::Plan;
-use crate::content::requests;
-use crate::core::{CallError, Core, Error};
+use crate::core::{Core, Error};
 use crate::core_shapes::Terminal;
 use crate::families::structure::{self, Route};
-use crate::families::voyage_close::{
-    Closing, Observed, RenameRelease, RenamedNotes, SaveRequest, SaveTicket,
-};
+use crate::families::voyage_close::Closing;
 use crate::front_door::{Admission, Envelope, Outcome};
 use crate::layout_store::{
     LayoutRevision, begin_save, carry_notice, load, rejected, save, settle_save,
 };
-use crate::vessel_type::NOTES_TYPE;
 use std::sync::{Arc, mpsc::SyncSender};
 use std::thread;
 use voyager_contract::{
@@ -26,16 +20,12 @@ use voyager_contract::{
 struct Resume {
     landed: Option<Result<Step, Error>>,
     listed: Option<Result<Vec<Terminal>, Error>>,
-    note_exit: Option<(ViewBinding, String)>,
-    rename_ready: Option<(SaveTicket, Plan, Result<Option<String>, CallError>)>,
-    rename_release: Option<RenameRelease>,
     program: Option<VesselId>,
 }
 
 struct Effects<'a> {
     core: &'a mut Core,
     closing: &'a Closing,
-    content: Option<&'a mut crate::content::Owner>,
 }
 
 impl structure::Calls for Effects<'_> {
@@ -61,31 +51,6 @@ impl structure::Calls for Effects<'_> {
 
     fn terminal(&mut self, backend: &CoreTerminalId) -> Result<Terminal, Error> {
         self.core.terminal_get(&backend.0)
-    }
-
-    fn created(&mut self, before: &Layout, candidate: &mut Layout) -> Result<bool, Error> {
-        if let Some(owner) = self.content.as_deref_mut() {
-            return requests::initialize_created(owner, before, candidate)
-                .map_err(Error::Uncertain);
-        }
-        if candidate.vessels.iter().any(|item| {
-            item.type_id == NOTES_TYPE && !before.vessels.iter().any(|old| old.id == item.id)
-        }) {
-            return Err(rejected(
-                "Content owner unavailable; Notes was not created".into(),
-            ));
-        }
-        Ok(false)
-    }
-}
-
-fn unbound(created_notes: bool, error: Error) -> Error {
-    if created_notes {
-        Error::Uncertain(format!(
-            "A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}"
-        ))
-    } else {
-        error
     }
 }
 
@@ -195,48 +160,6 @@ impl Owner {
         self.decide(request, scope, reply, resume, before);
     }
 
-    pub(super) fn note_exit(
-        &mut self,
-        view: ViewBinding,
-        revision: String,
-        request: Request,
-        reply: SyncSender<Response>,
-    ) {
-        let before = (self.version, self.closing.revision);
-        let resume = Resume {
-            note_exit: Some((view, revision)),
-            ..Resume::default()
-        };
-        self.decide(request, None, reply, resume, before);
-    }
-
-    pub(super) fn rename_ready(
-        &mut self,
-        request: Request,
-        scope: Option<Context>,
-        program: Option<VesselId>,
-        reply: SyncSender<Response>,
-        result: Result<Option<String>, CallError>,
-    ) {
-        let before = (self.version, self.closing.revision);
-        let mut resume = Resume {
-            program,
-            ..Resume::default()
-        };
-        if self
-            .renaming
-            .as_ref()
-            .is_some_and(|(ticket, _, _)| *ticket == SaveTicket::new(&request.request_id))
-        {
-            resume.rename_ready = self.renaming.take().map(|(ticket, plan, release)| {
-                resume.rename_release = Some(release);
-                (ticket, plan, result)
-            });
-            self.door.forget(&request.request_id);
-        }
-        self.decide(request, scope, reply, resume, before);
-    }
-
     pub(super) fn relisted(
         &mut self,
         request: Request,
@@ -272,7 +195,6 @@ impl Owner {
             candidate,
             expected,
             reopening,
-            created_notes,
         } = *departure;
         let result = match (result, self.core.as_mut()) {
             (Err(Error::Uncertain(message)), Ok(connected)) => {
@@ -283,42 +205,40 @@ impl Owner {
         if records_created(scope.as_ref(), &request.action) {
             settle_created_terminals(&mut self.created_vessels, &held, &candidate, &result);
         }
-        let landed = result
-            .map_err(|error| unbound(created_notes, error))
-            .map(|revision| {
-                self.created_vessels
-                    .extend(reopening.into_iter().map(|id| CreatedTerminal {
-                        id,
-                        launch: voyager_contract::launch::Launch::Terminal,
-                        backend: None,
-                        shell_intent: None,
-                    }));
-                if let Action::StartNewShell {
+        let landed = result.map(|revision| {
+            self.created_vessels
+                .extend(reopening.into_iter().map(|id| CreatedTerminal {
+                    id,
+                    launch: voyager_contract::launch::Launch::Terminal,
+                    backend: None,
+                    shell_intent: None,
+                }));
+            if let Action::StartNewShell {
+                vessel_id,
+                expected_backend,
+            } = &request.action
+            {
+                let launch = candidate
+                    .vessels
+                    .iter()
+                    .find(|item| &item.id == vessel_id)
+                    .and_then(|item| item.launch.clone())
+                    .unwrap_or_default();
+                grant_new_shell(
+                    &mut self.created_vessels,
                     vessel_id,
                     expected_backend,
-                } = &request.action
-                {
-                    let launch = candidate
-                        .vessels
-                        .iter()
-                        .find(|item| &item.id == vessel_id)
-                        .and_then(|item| item.launch.clone())
-                        .unwrap_or_default();
-                    grant_new_shell(
-                        &mut self.created_vessels,
-                        vessel_id,
-                        expected_backend,
-                        &request.request_id,
-                        launch,
-                    );
-                    self.unconfirmed.remove(&vessel_id.0);
-                }
-                if revision > self.version.document {
-                    self.version = self.version.after(revision, &held, &candidate);
-                    self.layout = Arc::new(candidate);
-                }
-                Step::Done
-            });
+                    &request.request_id,
+                    launch,
+                );
+                self.unconfirmed.remove(&vessel_id.0);
+            }
+            if revision > self.version.document {
+                self.version = self.version.after(revision, &held, &candidate);
+                self.layout = Arc::new(candidate);
+            }
+            Step::Done
+        });
         let resume = Resume {
             landed: Some(landed),
             program,
@@ -356,9 +276,6 @@ impl Owner {
                 .retain(|address| !closing.owns_terminal(address));
             self.layout = Arc::new(candidate.layout);
             self.version = saved;
-            if let Some(owner) = self.content.as_mut() {
-                owner.refresh_views();
-            }
             Ok(())
         });
         let status = Outcome::from(result.clone()).status();
@@ -516,9 +433,6 @@ impl Owner {
             eligible_contents(&self.layout, scope.as_ref(), &self.created_vessels);
         response.fresh = self.fresh;
         response.close_plan = self.closing.projected(&self.layout, scope.as_ref());
-        if let Some(mut release) = resume.rename_release {
-            release.rebind = effect.rebind;
-        }
         let docked = matches!(request.action, Action::Dock { .. })
             && response.status == voyager_contract::Outcome::Applied;
         self.publish(
@@ -566,9 +480,6 @@ impl Owner {
         if let Err(error) = &self.core {
             return Err(error.clone());
         }
-        if let Some((view, revision)) = &resume.note_exit {
-            self.check_note_exit(request, view, revision)?;
-        }
         if matches!(request.action, Action::Inspect) {
             return self.inspect(scope, response);
         }
@@ -598,10 +509,7 @@ impl Owner {
                     self.version.structure,
                     id,
                     &request.request_id,
-                    Observed {
-                        terminals: &terminals?,
-                        notes_type: NOTES_TYPE,
-                    },
+                    &terminals?,
                     worktree_changes,
                 )?;
                 response.message = Some("Confirm the Voyage shutdown; no work has stopped".into());
@@ -612,9 +520,7 @@ impl Owner {
                 return Ok(Step::Done);
             }
             Route::ConfirmClose { id, plan } => {
-                let confirmed =
-                    self.closing
-                        .confirm(id, plan, self.version.structure, &request.request_id)?;
+                let confirmed = self.closing.confirm(id, plan, self.version.structure)?;
                 let worker = self.client.clone();
                 let sender = self.sender.clone();
                 let (request, scope, reply) = (request.clone(), scope.cloned(), reply.clone());
@@ -630,13 +536,6 @@ impl Owner {
                 return Ok(Step::Deferred);
             }
             Route::Package { .. } | Route::Edit => (),
-        }
-        if let Some((_, plan, prepared)) = &resume.rename_ready {
-            effect.rebind = Some(self.finish_rename(request, scope, plan, prepared)?);
-            return Ok(Step::Done);
-        }
-        if let Some(plan) = Plan::capture(&self.layout, scope, &request.action).map_err(rejected)? {
-            return self.begin_rename(plan, request, scope, resume.program.as_ref(), reply);
         }
         if let Route::Package { type_id } = route {
             self.package(request, scope, type_id)?;
@@ -678,7 +577,6 @@ impl Owner {
             &mut Effects {
                 core,
                 closing: &self.closing,
-                content: self.content.as_mut(),
             },
             &self.layout,
             resume.program.as_ref(),
@@ -688,8 +586,7 @@ impl Owner {
             request,
             &self.unconfirmed,
         )?;
-        let pending = begin_save(core, &edit.candidate, self.version)
-            .map_err(|error| unbound(edit.created_notes, error))?;
+        let pending = begin_save(core, &edit.candidate, self.version)?;
         if records_created(scope, &request.action) {
             record_created_terminals(&mut self.created_vessels, &self.layout, &edit.candidate);
         }
@@ -701,150 +598,7 @@ impl Owner {
             candidate: edit.candidate,
             expected: self.version,
             reopening: edit.reopening,
-            created_notes: edit.created_notes,
         })))
-    }
-
-    fn check_note_exit(
-        &mut self,
-        request: &Request,
-        view: &ViewBinding,
-        revision: &str,
-    ) -> Result<(), Error> {
-        if !view.is_active()
-            || !matches!(&request.action, Action::RemovePlacement { id }
-                if super::super::note_exit_target(&self.layout, view.binding.id()).as_ref() == Ok(id))
-        {
-            return Err(rejected(
-                "The Notes view or placement changed; nothing was closed".into(),
-            ));
-        }
-        let owner = self
-            .content
-            .as_mut()
-            .ok_or_else(|| rejected("Notes data is unavailable".into()))?;
-        let observed = owner.call(
-            &view.binding,
-            voyager_contract::content::Request::Inspect {
-                version: voyager_contract::content::Version::V1,
-                request_id: format!("{}-read", request.request_id),
-                vessel_id: view.binding.id().clone(),
-            },
-        );
-        if !matches!(observed, voyager_contract::content::Response::Snapshot { snapshot, .. } if snapshot.revision == revision)
-        {
-            return Err(rejected(
-                "Notes changed after saving; the view remains open".into(),
-            ));
-        }
-        Ok(())
-    }
-
-    fn finish_rename(
-        &mut self,
-        request: &Request,
-        scope: Option<&Context>,
-        plan: &Plan,
-        prepared: &Result<Option<String>, CallError>,
-    ) -> Result<RenamedNotes, Error> {
-        let expected = prepared
-            .as_ref()
-            .map_err(|error| match error {
-                CallError::Rejected(message) => rejected(message.clone()),
-                CallError::Unconfirmed(message) => Error::Uncertain(message.clone()),
-            })?
-            .as_deref()
-            .unwrap_or(&plan.revision);
-        let observed = Plan::capture(&self.layout, scope, &request.action)
-            .map_err(rejected)?
-            .ok_or_else(|| rejected("The Notes rename target changed".into()))?;
-        if observed.file != plan.file || observed.files != plan.files {
-            return Err(rejected(
-                "The Notes file bindings changed; nothing was renamed".into(),
-            ));
-        }
-        let candidate = plan.layout(&self.layout).map_err(rejected)?;
-        self.closing.check_layout(&candidate)?;
-        crate::content::rename::move_file(&plan.file, &plan.filename, expected)
-            .map_err(rejected)?;
-        let moved = plan.moved_file();
-        let snapshot = plan.snapshot(plan.vessels[0].clone()).map_err(|error| {
-            Error::Uncertain(format!(
-                "The file moved to {}/{} but reading it failed: {error}. Inspect before another rename.",
-                moved.directory, moved.filename
-            ))
-        })?;
-        if snapshot.revision != expected {
-            return Err(Error::Uncertain(format!(
-                "The file moved to {}/{} but its bytes changed during rename. Inspect both paths; do not repeat the rename.",
-                moved.directory, moved.filename
-            )));
-        }
-        let core = self.core.as_mut().map_err(|error| error.clone())?;
-        let saved = save(core, &candidate, self.version).map_err(|error| {
-            Error::Uncertain(format!(
-                "The file moved to {}/{} but workspace confirmation is unknown: {error:?}. Do not repeat the rename.",
-                moved.directory, moved.filename
-            ))
-        })?;
-        self.layout = Arc::new(candidate);
-        self.version = saved;
-        if let Some(owner) = self.content.as_mut() {
-            for id in &plan.vessels {
-                requests::register_content(owner, &self.layout, id).map_err(Error::Uncertain)?;
-            }
-        }
-        Ok(RenamedNotes {
-            files: plan.moved_files(),
-            workspace_version: self.version.structure,
-            snapshot,
-        })
-    }
-
-    fn begin_rename(
-        &mut self,
-        plan: Plan,
-        request: &Request,
-        scope: Option<&Context>,
-        program: Option<&VesselId>,
-        reply: &SyncSender<Response>,
-    ) -> Result<Step, Error> {
-        if self.renaming.is_some() {
-            return Err(rejected("Finish the current Notes rename first".into()));
-        }
-        let saves = self.closing.saves.as_ref().ok_or_else(|| {
-            rejected("The native Notes save service is unavailable; nothing was renamed".into())
-        })?;
-        let ticket = SaveTicket::new(&request.request_id);
-        let (ready, waiting) = async_channel::bounded(1);
-        saves
-            .try_send(SaveRequest::PrepareRename {
-                ticket: ticket.clone(),
-                vessels: plan.vessels.clone(),
-                files: plan.files.clone(),
-                reply: ready,
-            })
-            .map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
-        let release = RenameRelease::new(saves.clone(), ticket.clone(), plan.vessels.clone());
-        self.renaming = Some((ticket, plan, release));
-        let sender = self.sender.clone();
-        let (request, scope) = (request.clone(), scope.cloned());
-        let (program, reply) = (program.cloned(), reply.clone());
-        thread::spawn(move || {
-            let result = waiting.recv_blocking().unwrap_or_else(|_| {
-                Err(CallError::Unconfirmed(
-                    "Notes save acknowledgement was lost; inspect before another rename".into(),
-                ))
-            });
-            let _ = sender.send_blocking(Message::NoteRenameReady {
-                request,
-                scope,
-                program,
-                reply,
-                result,
-            });
-        });
-        Ok(Step::Deferred)
     }
 
     fn package(
@@ -863,14 +617,11 @@ impl Owner {
         self.layout = Arc::new(current);
         self.version = revision;
         self.fresh = true;
-        let closing = &self.closing;
         structure::check_package(
             &self.layout,
             scope,
             &request.action,
             missing || request.expected_version != self.version.structure,
-            (type_id, NOTES_TYPE),
-            |id| closing.blocks_terminal(id),
         )?;
         let owner = self
             .content
@@ -886,7 +637,6 @@ impl Owner {
 
 #[derive(Default)]
 struct Effect {
-    rebind: Option<RenamedNotes>,
     packages: bool,
 }
 

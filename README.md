@@ -1,11 +1,8 @@
 # VoyagerShell
 
 VoyagerShell is a canvas for agents and humans to collaborate. It is a Linux
-desktop app for terminals, coding agents and Markdown notes. Drag the Voyager
-avatar onto a panel, a tab or a whole space, and that is what it can see and
-change.
-
-![A VoyagerShell workspace with a terminal, a Notes Portal and the Voyager avatar docked to the note](docs/images/workspace.png)
+desktop app for terminals and coding agents. Drag the Voyager avatar onto a
+panel, a tab or a whole space, and that is what it can see and change.
 
 There are no releases yet. Build from source.
 
@@ -13,11 +10,11 @@ There are no releases yet. Build from source.
 
 The workspace has four kinds of place. A **Voyage** is a space for one project.
 A **Fleet** is a tab in a Voyage. A **Vessel** is one piece of content, such as a
-terminal or a note, of a Vessel type. A Vessel sits in a Fleet. A **Portal** is a
-Vessel that stays on screen across every Fleet in its Voyage.
+terminal or a coding agent, of a Vessel type. A Vessel sits in a Fleet. A
+**Portal** is a Vessel that stays on screen across every Fleet in its Voyage.
 
 The **Voyager avatar** is the assistant you dock. Drag it onto any of those
-places to dock it there. The status bar shows the dock, such as **Voyager / Design notes.md** for
+places to dock it there. The status bar shows the dock, such as **Voyager / Terminal 1** for
 a Portal in the Voyage named Voyager. **Overwatch** means the whole workspace.
 For example, dock on the terminal where a test failed and ask why it failed.
 
@@ -32,18 +29,16 @@ sent with, so docking somewhere else never changes a request already sent.
   running after you quit the app.
 - **Arrange your work.** Add Voyages, Fleets, Vessels and Portals. Split,
   resize and maximize any panel.
-- **Keep notes beside the work.** Notes edits and previews Markdown and saves
-  each note as a file in the project's `notes/` folder.
 - **Ask the Voyager avatar.** It runs on Codex. It can arrange panels, read and type
-  into terminals, read and write notes, and create Git worktrees, only where you
-  dock it. It does not edit your code. Coding agents in panels do that.
+  into terminals and create Git worktrees, only where you dock it. It does not
+  edit your code. Coding agents in panels do that.
 - **Change the interface while it runs.** The interface is TypeScript compiled
   to JavaScript. The app copies that JavaScript into your profile. Edit a file
   there and the view reloads. A broken edit shows its error and keeps the last
   working view.
 - **Quit and pick up where you left off.** Your programs keep running in Herdr
-  Core after **Ctrl+Q**. Reopen the app and your layout, notes and live
-  terminals come back. After a reboot, terminals reopen as new shells.
+  Core after **Ctrl+Q**. Reopen the app and your layout and live terminals come
+  back. After a reboot, terminals reopen as new shells.
 
 ## Build and run
 
@@ -55,7 +50,7 @@ and the GPUI native libraries for X11 or Wayland. Install
 [Herdr Core](https://github.com/herdrdev/herdr-core) so that `hc` is on
 `PATH`. VoyagerShell's Core API is generated from Core 0.1.18, the oldest release
 it supports, and CI tests against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
-Claude panel. Shells and Notes need neither.
+Claude panel. Shells need neither.
 
 Build from the repository root:
 
@@ -65,8 +60,8 @@ npm ci --ignore-scripts
 cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
 ```
 
-Start the app from the project you want to work in. The first Voyage opens in
-that directory, and Notes saves files there:
+Start the app from the project you want to work in. The first Voyage and its
+terminals open in that directory:
 
 ```sh
 cd ~/your-project
@@ -110,7 +105,7 @@ interface uses.
 | [contract/](contract/) | Shared operations, identities and results, with generated types.          |
 | [app/](app/)           | Workspace, content and dock owners, plus the Core and Codex connectors.   |
 | [desktop/](desktop/)   | Native views, the terminal, the Voyager avatar and the interface scripts. |
-| [content/](content/)   | Vessel packages that ship with the app, such as Notes.                    |
+| [content/](content/)   | Built-in Vessel type manifests, agent programs and shared controls.       |
 | [tests/](tests/)       | The native verification environment and the architecture checks.          |
 
 ## Documentation
@@ -124,7 +119,7 @@ Design notes for contributors:
 - [Terminal](docs/terminal.md) covers input, scrolling and program lifetime.
 - [Agent launch](docs/agent-launch.md) covers `launches.json`, which adds
   agents beyond Codex and Claude Code.
-- [Notes and content](docs/content.md) covers Vessel types and their data.
+- [Vessel types and content](docs/content.md) covers Vessel types and their data.
 - [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
   tools.
 - [Avatar](docs/avatar.md) covers docking and motion.

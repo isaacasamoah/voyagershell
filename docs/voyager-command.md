@@ -44,7 +44,7 @@ Start it with `hc run` and label it with the place it belongs:
 
 ```sh
 hc run --bg --name fix --label voyager.place=fleet:<fleet id> claude "Fix the failing test in x.rs. Report with hc send $HC_TERMINAL_ID when done."
-hc run --bg --name notes --label voyager.place=portal:<voyage id> bash
+hc run --bg --name shell --label voyager.place=portal:<voyage id> bash
 hc run --bg --name review --label voyager.place=fleet:<fleet id>:right:<placement id> claude "Review x.rs."
 ```
 
@@ -389,8 +389,8 @@ The check enforces these rules.
 - The required fields are `contract` (always 1), `id`, `name`, `version`,
   `state`, `actions` (may be `{}`) and `view`. Unknown fields are refused.
 - `id` starts with a lowercase letter or digit, then letters, digits, `.`, `-`
-  or `_`, at most 64 characters. It must not be `terminal`, `agent`, `agents`
-  or `notes`, and no other package may declare it.
+  or `_`, at most 64 characters. It must not name a built-in type (`terminal`,
+  `agent` or `agents`), and no other package may declare it.
 - `state.schema` is JSON Schema for an object. `state.initial` must fit it.
 - An action has `rebase` (`by-key`, `always` or `refuse`) and `effect`, a list
   of steps. A step is `set`, `push`, `remove` or `move` with a `path` that

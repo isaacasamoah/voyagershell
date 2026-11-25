@@ -99,12 +99,6 @@ class Routes(unittest.TestCase):
             namespace["close"]()
         self.assertEqual(len(events), 4)
 
-    def test_feedback_import_does_not_require_the_legacy_notes_fixture(self):
-        with patch.dict(sys.modules):
-            sys.modules.pop("proof_demo_feedback", None)
-            sys.modules["proof_foundation_notes"] = None
-            importlib.import_module("proof_demo_feedback")
-
     def test_terminal_target_requires_accessibility_or_a_measured_visible_point(self):
         from proof_workspace import click_control
         with tempfile.TemporaryDirectory() as directory:
@@ -188,8 +182,6 @@ class Routes(unittest.TestCase):
     def test_uncertain_quit_is_not_submitted_again_by_cleanup(self):
         for name, flag, initial in (
             ("proof_terminal.py", "quit_attempted", False),
-            ("proof_foundation_notes.py", "opened", True),
-            ("proof_notes_lifetime.py", "opened", True),
             ("proof_workspace_ux.py", "opened", True),
         ):
             tree = ast.parse((Path(__file__).parent / name).read_text())
@@ -324,11 +316,8 @@ class Routes(unittest.TestCase):
                 os.environ, {"XDG_RUNTIME_DIR": directory, "HC_SOCKET": ""}
             ):
                 for journey in (
-                    "notes-lifetime",
-                    "notes-configuration",
                     "workspace-ux",
                     "conversation-voice",
-                    "conversation-content",
                     "terminal-agent-create",
                     "terminal-reported-status",
                     "arrangement",
@@ -409,12 +398,9 @@ class Routes(unittest.TestCase):
             ("--foundation", "conversation-ux"),
             ("--foundation", "avatar"),
             ("--foundation", "portal-avatar"),
-            ("--foundation", "notes"),
-            ("--foundation", "notes-lifetime"),
-            ("--foundation", "notes-configuration"),
             ("--foundation", "workspace-ux"),
             ("--foundation", "terminal-reported-status"),
-            ("--native-mod-host", "--notes-case"),
+            ("--native-mod-host", "--journey"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
         ]:
@@ -427,9 +413,6 @@ class Routes(unittest.TestCase):
         for route in (
             "avatar",
             "portal-avatar",
-            "notes",
-            "notes-lifetime",
-            "notes-configuration",
             "workspace-ux",
             "terminal-reported-status",
         ):
@@ -448,9 +431,6 @@ class Routes(unittest.TestCase):
                 "requires compositor capture"
                 if route
                 in (
-                    "notes",
-                    "notes-lifetime",
-                    "notes-configuration",
                     "workspace-ux",
                     "terminal-reported-status",
                 )
@@ -464,9 +444,6 @@ class Routes(unittest.TestCase):
                 "avatar",
                 "portal-avatar",
                 "conversation-ux",
-                "notes",
-                "notes-lifetime",
-                "notes-configuration",
                 "workspace-ux",
                 "terminal-reported-status",
             ):
@@ -505,7 +482,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(driver.candidate_directory(True), ROOT)
         legacy = driver.candidate_directory(False)
         self.assertEqual(legacy, ROOT / "experiments/native-content")
-        self.assertTrue((legacy / "proof_native_notes.py").is_file())
+        self.assertTrue(legacy.is_dir())
         directory = Path(driver.__file__).parent
         self.assertEqual(directory, ROOT / "tests/native")
         self.assertTrue((directory / "proof_native_input.py").is_file())
@@ -515,8 +492,6 @@ class Routes(unittest.TestCase):
             "proof_terminal_agent",
             "proof_selected_stop",
             "proof_avatar",
-            "proof_foundation_notes",
-            "proof_notes_lifetime",
             "proof_split_resize",
             "proof_workspace_ux",
             "proof_conversation",
@@ -559,125 +534,6 @@ class Routes(unittest.TestCase):
                 os.waitpid(child.pid, os.WNOHANG)
         finally:
             child.wait(timeout=5)
-
-    def test_notes_setup_and_source_controls_match_actual_packages(self):
-        from contextlib import contextmanager
-
-        proof = importlib.import_module("proof_foundation_notes")
-        canvas = (ROOT / "desktop/canvas/main.js").read_text()
-        setup = proof.setup_source(canvas)
-        self.assertEqual(setup.count('operation: "create-vessel"'), 2)
-        with self.assertRaises(AssertionError):
-            proof.setup_source(canvas + canvas)
-        source = (ROOT / "desktop/notes-legacy-fixture.js").read_text()
-
-        @contextmanager
-        def inspect(_profile, _close, _start, name, transform):
-            controlled = transform(source)
-            if name == "uncertain":
-                self.assertIn("this.proofUpdates", controlled)
-                self.assertIn("request.requestId", controlled)
-            else:
-                self.assertIn('"content-5"', controlled)
-            with tempfile.TemporaryDirectory() as directory:
-                for entry, text in (("setup", setup), (name, controlled)):
-                    path = Path(directory) / f"{entry}.mjs"
-                    path.write_text(text)
-                    subprocess.run(
-                        ["node", "--check", str(path)], check=True, timeout=5
-                    )
-            raise RuntimeError("checked")
-            yield
-
-        original = proof.notes.source_control
-        proof.notes.source_control = inspect
-        try:
-            with tempfile.TemporaryDirectory() as directory:
-                profile = Path(directory)
-                (profile / "data").mkdir()
-                for content in ("content-5", "content-6"):
-                    (profile / "data" / f"{content}.json").write_text(
-                        '{"title":"a","text":"b"}'
-                    )
-                for case in (
-                    proof.notes.delayed_initial_read,
-                    proof.notes.uncertain_confirmation,
-                    proof.notes.resize_and_refresh,
-                ):
-                    with self.assertRaisesRegex(RuntimeError, "checked"):
-                        case(
-                            profile=profile,
-                            evidence=profile,
-                            native=None,
-                            pid=None,
-                            capture=None,
-                            close=None,
-                            start_frame=None,
-                            geometry=None,
-                            ids={"a": "content-5", "b": "content-6"},
-                        )
-        finally:
-            proof.notes.source_control = original
-
-    def test_notes_lifetime_source_variants_preserve_real_editor_composition(self):
-        proof = importlib.import_module("proof_notes_lifetime")
-        source = (ROOT / "content/notes/main.js").read_text()
-        for case in ("valid", "parse", "render", "component"):
-            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
-                variant = proof.source_variant(source, case, "LIFETIME_MARKER")
-                self.assertIn("RetainedTitleState", variant)
-                self.assertIn("RetainedBodyState", variant)
-                self.assertIn("SessionState.new()", variant)
-                self.assertIn('.child("LIFETIME_MARKER")', variant)
-                path = Path(directory) / "variant.mjs"
-                path.write_text(variant)
-                result = subprocess.run(
-                    ["node", "--check", str(path)], capture_output=True, timeout=5
-                )
-                self.assertEqual(result.returncode == 0, case != "parse")
-        with self.assertRaises(AssertionError):
-            proof.source_variant(source + source, "valid", "duplicate")
-
-    def test_configuration_gate_refuses_absent_or_wrong_token_and_accepts_exact_token(
-        self,
-    ):
-        proof = importlib.import_module("proof_notes_configuration")
-        with tempfile.TemporaryDirectory() as directory:
-            script, gate = Path(directory) / "wait.py", Path(directory) / "gate"
-            script.write_text(proof.GATE_WAIT)
-            for value in (None, "wrong", "expected"):
-                if value is not None:
-                    gate.write_text(value)
-                result = subprocess.run(
-                    [sys.executable, str(script), str(gate), "expected", "0.02"],
-                    text=True,
-                    capture_output=True,
-                    timeout=5,
-                )
-                self.assertEqual(result.returncode == 0, value == "expected")
-                self.assertIn("WAITING expected", result.stdout)
-                self.assertEqual("READY expected" in result.stdout, value == "expected")
-                if value != "expected":
-                    self.assertIn(
-                        "GATE TIMED OUT; DO NOT CONFIGURE OR UPDATE", result.stderr
-                    )
-
-    def test_notes_sibling_region_covers_both_editors_and_status(self):
-        from PIL import Image
-
-        proof = importlib.import_module("proof_foundation_notes")
-        title = {"x": 2256, "y": 369, "width": 580, "height": 64}
-        body = {"x": 2256, "y": 481, "width": 580, "height": 296}
-        image = Image.new("RGB", (1450, 940))
-        bounds = {"WIDTH": "2900", "HEIGHT": "1880"}
-        self.assertEqual(
-            proof.notes.sibling_region(title, body, image, bounds),
-            (1128, 184, 1418, 429),
-        )
-        with self.assertRaises(AssertionError):
-            proof.notes.sibling_region({**title, "x": 2900}, body, image, bounds)
-        with self.assertRaises(AssertionError):
-            proof.notes.sibling_region({**title, "width": 0}, body, image, bounds)
 
 
 if __name__ == "__main__":

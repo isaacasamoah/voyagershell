@@ -74,7 +74,7 @@ def prove(
         click("Close Portal " + portal["name"])
         wait(document, lambda value: not next(v for v in value["voyages"] if v["id"] == voyage_id)["portalLayout"]["visible"], "empty Portal collapse")
         click("Show Portals")
-        click("Note text")
+        click("Terminal input")
         wait(document, lambda value: not next(v for v in value["voyages"] if v["id"] == voyage_id)["portalLayout"]["visible"], "empty chooser click-away collapse")
         click("Show Portals")
         click("Hidden Portals")
@@ -119,17 +119,17 @@ def prove(
         click("demo-repo")
         focus_terminal()
         chord(native, "o" if resize_window else "e")
-        click("Create Notes Vessel")
-        wait(document, lambda value: any(c["typeId"] == "notes" and c.get("configuration", {}).get("notesFile") for c in value["vessels"]), "Notes file binding")
-        note = next(c for c in document()["vessels"] if c["typeId"] == "notes")
-        filename = note["configuration"]["notesFile"]["filename"]
+        before_agents = {c["id"] for c in document()["vessels"] if c["typeId"] == "agents"}
+        click("Create Agents Vessel")
+        wait(document, lambda value: any(c["typeId"] == "agents" and c["id"] not in before_agents for c in value["vessels"]), "new Agents Vessel")
+        second = next(c for c in document()["vessels"] if c["typeId"] == "agents" and c["id"] not in before_agents)
         if resize_window:
             layout = document()
             fleet = next(
                 f
                 for v in layout["voyages"]
                 for f in v["fleets"]
-                if any(p["vessel"] == note["id"] for p in f["placements"])
+                if any(p["vessel"] == second["id"] for p in f["placements"])
             )
             terminals = [
                 c
@@ -163,82 +163,19 @@ def prove(
                 ),
                 "restored measured viewport before further input",
             )
-        click("Note text")
-        type_text("A demo note\n\n**Voyager**")
-        click("Preview note")
-        capture("notes-markdown-preview")
-        path = Path(note["configuration"]["notesFile"]["directory"]) / filename
-        assert path.parent == repo / "notes"
-        wait(lambda: path.read_text() if path.exists() else None, lambda value: "**Voyager**" in value, "saved Markdown")
-        click("Edit note")
-        click("Note files")
-        click("New note")
-        wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] != filename, "new blank note")
-        click("Note files")
-        click("Open note")
-        capture("notes-file-picker")
-        click("Open " + filename)
-        wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == note["id"])["configuration"]["notesFile"]["filename"] == filename, "opened saved note")
-        capture("notes-reopened-file")
-        record("notes-new-open-edit-preview-real-file")
         click("Home")
         capture("home-voyage-groups")
         record("home-voyage-groups-captured")
         if journey == "activity-refinement":
-            selected = next(v for v in document()["voyages"] if v.get("cwd") == str(repo))
-            placement = next(p for f in selected["fleets"] for p in f["placements"] if p["vessel"] == note["id"])
             click("demo-repo")
-            clean = path.read_bytes()
-            click("Note text")
-            type_text(" Exit draft")
-            path.write_bytes(clean + b"\nOutside edit\n")
-            click("Note files")
-            click("Exit note")
-            review_frame("Notes Exit save refusal", "notes-exit-save-refusal")
-            assert next(v for v in document()["voyages"] if v["id"] == selected["id"])["fleets"][0]["root"] is not None
-            path.write_bytes(clean)
-            click("Note files")
-            click("Exit note")
-            wait(document, lambda value: not any(placement["id"] == leaf for leaf in leaf_ids(next(v for v in value["voyages"] if v["id"] == selected["id"])["fleets"][0]["root"])), "Notes placement exits")
-            assert "Exit draft" in path.read_text()
-            capture("notes-exited")
-            record("notes-save-exit-and-conflict-refusal")
-            before_notes = {c["id"] for c in document()["vessels"] if c["typeId"] == "notes"}
-            chord(native, "e")
-            click("Create Notes Vessel")
-            created = wait(document, lambda value: any(c["typeId"] == "notes" and c["id"] not in before_notes for c in value["vessels"]), "new Notes instance after Exit")
-            reopened = next(c for c in created["vessels"] if c["typeId"] == "notes" and c["id"] not in before_notes)
-            assert any(p["vessel"] == reopened["id"] and p["id"] in leaf_ids(f["root"]) for v in created["voyages"] if v["id"] == selected["id"] for f in v["fleets"] for p in f["placements"])
-            click("Note files")
-            click("Open note")
-            click("Open " + filename)
-            wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == filename, "saved file selected after Exit")
-            review_frame("Reopened Notes must display Exit draft and **Voyager**", "notes-reopen-after-exit")
-            record("notes-open-saved-file-after-exit")
-            click(filename, 273)
-            click("Rename")
-            type_text("Review")
-            key(65293)
-            renamed = wait(document, lambda value: next(c for c in value["vessels"] if c["id"] == reopened["id"])["configuration"]["notesFile"]["filename"] == "Review.md", "Notes file rename")
-            assert not path.exists()
-            path = path.with_name("Review.md")
-            assert "Exit draft" in path.read_text() and "**Voyager**" in path.read_text()
-            assert all(p["name"] == "Review.md" for v in renamed["voyages"] for f in v["fleets"] for p in f["placements"] if p["vessel"] == reopened["id"])
-            click("Note text")
-            type_text(" After rename")
-            click("Preview note")
-            wait(lambda: path.read_text(), lambda value: "After rename" in value, "editing renamed Note")
-            review_frame("Renamed Note preview must retain the saved draft and After rename", "notes-renamed-and-edited")
-            click("Edit note")
-            record("notes-rename-keeps-draft-and-editing-on-the-new-file")
             voyage, portal = portal_lifetime()
-            note_placement = next(
+            second_placement = next(
                 p["id"] for f in voyage["fleets"] for p in f["placements"]
-                if p["vessel"] == reopened["id"]
+                if p["vessel"] == second["id"]
             )
             for label, target in [
                 ("portal", {"kind": "portal", "id": portal["id"]}),
-                ("notes", {"kind": "vessel", "id": note_placement}),
+                ("vessel", {"kind": "vessel", "id": second_placement}),
             ]:
                 before_count = (evidence / "native.log").read_text().count("operation=dock-preview")
                 measured = review_frame(
@@ -273,7 +210,7 @@ def prove(
                     lambda value: value.count("operation=dock-preview") > before_count,
                     "bounded native dock preparation",
                 )
-            record("explicit-portal-and-notes-docks-prepare-context")
+            record("explicit-portal-and-vessel-docks-prepare-context")
             click("Close Portal " + portal["name"])
             click("Show Portals")
             click("Create Agents Portal")
@@ -325,9 +262,3 @@ def prove(
         (evidence / "demo-feedback.json").write_text(json.dumps(observed, indent=2))
         if observed["cleanupErrors"] and "failure" not in observed:
             raise AssertionError(observed["cleanupErrors"])
-
-
-def leaf_ids(root):
-    if not root:
-        return []
-    return [root["placement"]] if root["kind"] == "leaf" else leaf_ids(root["first"]) + leaf_ids(root["second"])

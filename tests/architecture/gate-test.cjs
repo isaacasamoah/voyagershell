@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /30 violations, 30 known\n.*PASS\n$/s);
+  assert.match(result.out, /20 violations, 20 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -264,8 +264,8 @@ test("a new module cycle fails", () => {
 
 test("an existing cycle that is not recorded fails", () => {
   expectFailure(
-    run(scratch(), ["--known", without(/notes_input/)]),
-    "NEW no-module-cycles: rs:voyager_desktop::notes_input <-> rs:voyager_desktop::notes_scope <-> rs:voyager_desktop::notes_session",
+    run(scratch(), ["--known", without(/navigation-view/)]),
+    "NEW no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts",
   );
 });
 
@@ -314,11 +314,11 @@ function lines(directory, file) {
 
 test("growing a known large file by one line fails", () => {
   const directory = scratch();
-  const before = lines(directory, "app/src/client.rs");
-  edit(directory, "app/src/client.rs", (text) => `${text}\n`);
+  const before = lines(directory, "app/src/administrator.rs");
+  edit(directory, "app/src/administrator.rs", (text) => `${text}\n`);
   expectFailure(
     run(directory),
-    `NEW file-size: app/src/client.rs has ${before + 1} lines, over its recorded limit of ${before}`,
+    `NEW file-size: app/src/administrator.rs has ${before + 1} lines, over its recorded limit of ${before}`,
   );
 });
 
@@ -358,20 +358,23 @@ test("a file at the limit passes", () => {
 
 test("shrinking a known large file tells you to lower its recorded limit", () => {
   const directory = scratch();
-  const before = lines(directory, "app/src/client.rs");
-  edit(directory, "app/src/client.rs", (text) =>
+  const before = lines(directory, "app/src/administrator.rs");
+  edit(directory, "app/src/administrator.rs", (text) =>
     text.replace(/\n[^\n]*\n$/, "\n"),
   );
   expectFailure(
     run(directory),
-    `STALE file-size: app/src/client.rs has ${before - 1} lines, lower its recorded limit from ${before} to ${before - 1} in known-violations.yaml`,
+    `STALE file-size: app/src/administrator.rs has ${before - 1} lines, lower its recorded limit from ${before} to ${before - 1} in known-violations.yaml`,
   );
 });
 
 test("a large file that is not recorded fails", () => {
   expectFailure(
-    run(scratch(), ["--known", without(/file-size: app\/src\/client\.rs/)]),
-    "NEW file-size: app/src/client.rs has",
+    run(scratch(), [
+      "--known",
+      without(/file-size: app\/src\/administrator\.rs/),
+    ]),
+    "NEW file-size: app/src/administrator.rs has",
   );
 });
 
@@ -457,92 +460,119 @@ test("child mode on an edge kind without parents is refused", () => {
   assert.match(result.err, /No parent and child modules for edge kind imports/);
 });
 
-const NOTES = 'NEW notes-type-has-one-home: "notes" in';
+const PLANTED = "planted-literal-has-one-home";
+const MARKER = "planted_marker";
+const FAILING = `NEW ${PLANTED}: "${MARKER}" in`;
+const PLANTED_FUNCTION = `\nfn planted_type() -> &'static str {\n    "${MARKER}"\n}\n`;
 
-test("the Notes type literal scattered across files fails, as at the base of #149", () => {
+function plantedRule(tests) {
+  return `  - id: ${PLANTED}
+    check: forbid_literal
+    literals: [${MARKER}]
+    owner: app/src/lib.rs
+    roots: ['app/src/**']
+${tests}`;
+}
+
+function withPlantedRule(directory, tests = "    tests: skip\n") {
+  return ruled(directory, (text) => `${text.trimEnd()}\n${plantedRule(tests)}`);
+}
+
+test("a literal scattered across files fails", () => {
   const directory = scratch();
   for (const file of ["app/src/panels.rs", "app/src/context.rs"])
-    edit(
-      directory,
-      file,
-      (text) =>
-        `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
-    );
+    edit(directory, file, (text) => `${text}${PLANTED_FUNCTION}`);
   expectFailure(
-    run(directory),
-    `${NOTES} app/src/panels.rs has 1 literals, over the limit of 0`,
-    `${NOTES} app/src/context.rs has 1 literals, over the limit of 0`,
+    run(directory, ["--rules", withPlantedRule(directory)]),
+    `${FAILING} app/src/panels.rs has 1 literals, over the limit of 0`,
+    `${FAILING} app/src/context.rs has 1 literals, over the limit of 0`,
   );
 });
 
-test("a recorded file that gains another Notes literal fails", () => {
+test("a recorded file that gains another literal fails", () => {
   const directory = scratch();
-  edit(
-    directory,
-    "app/src/content.rs",
-    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
-  );
-  expectFailure(
-    run(directory),
-    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 3 literals, over its recorded limit of 2',
-  );
-});
-
-test("the Notes literal in its owner, in comments and inside longer strings passes", () => {
-  const directory = scratch();
-  edit(
-    directory,
-    "app/src/vessel_type.rs",
-    (text) => `${text}\npub const PLANTED: &str = "notes";\n`,
+  const rules = withPlantedRule(directory);
+  const known = path.join(folder("architecture-known-"), "known.yaml");
+  fs.writeFileSync(
+    known,
+    `${fs.readFileSync(KNOWN, "utf8")}  - id: '${PLANTED}: "${MARKER}" in app/src/panels.rs'\n    limit: 2\n    owner: isaac\n    reason: planted\n`,
   );
   edit(
     directory,
     "app/src/panels.rs",
     (text) =>
-      `${text}\n// "notes"\nfn planted_text() -> &'static str {\n    "notes.md"\n}\n`,
+      `${text}${PLANTED_FUNCTION}${PLANTED_FUNCTION.replace("planted_type", "planted_again")}`,
   );
-  const result = run(directory);
+  assert.strictEqual(
+    run(directory, ["--rules", rules, "--known", known]).status,
+    0,
+    "two literals pass while two are recorded",
+  );
+  edit(
+    directory,
+    "app/src/panels.rs",
+    (text) =>
+      `${text}${PLANTED_FUNCTION.replace("planted_type", "planted_third")}`,
+  );
+  expectFailure(
+    run(directory, ["--rules", rules, "--known", known]),
+    `${FAILING} app/src/panels.rs has 3 literals, over its recorded limit of 2`,
+  );
+});
+
+test("the literal in its owner, in comments and inside longer strings passes", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/lib.rs",
+    (text) => `${text}\npub const PLANTED: &str = "${MARKER}";\n`,
+  );
+  edit(
+    directory,
+    "app/src/panels.rs",
+    (text) =>
+      `${text}\n// "${MARKER}"\nfn planted_text() -> &'static str {\n    "${MARKER}.md"\n}\n`,
+  );
+  const result = run(directory, ["--rules", withPlantedRule(directory)]);
   assert.strictEqual(result.status, 0, result.out + result.err);
 });
 
-test("rule scope skips the Notes literal in test files and test modules", () => {
+test("rule scope skips the literal in test files and test modules", () => {
   const directory = scratch();
   edit(
     directory,
     "app/src/core_slot_tests.rs",
-    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+    (text) => `${text}${PLANTED_FUNCTION}`,
   );
   edit(
     directory,
     "app/src/panels.rs",
     (text) =>
-      `${text}\n#[cfg(test)]\nmod planted {\n    fn planted_type() -> &'static str {\n        "notes"\n    }\n}\n`,
+      `${text}\n#[cfg(test)]\nmod planted {\n    fn planted_type() -> &'static str {\n        "${MARKER}"\n    }\n}\n`,
   );
-  const result = run(directory);
+  const result = run(directory, ["--rules", withPlantedRule(directory)]);
   assert.strictEqual(result.status, 0, result.out + result.err);
 });
 
-test("rule scope that scans tests fails on the Notes literal in a test file", () => {
+test("rule scope that scans tests fails on the literal in a test file", () => {
   const directory = scratch();
-  const rules = ruled(directory, (text) =>
-    text.replace("tests: skip", "tests: scan"),
-  );
+  edit(directory, "app/src/tests.rs", (text) => `${text}${PLANTED_FUNCTION}`);
   expectFailure(
-    run(directory, ["--rules", rules]),
-    `${NOTES} app/src/tests.rs has`,
+    run(directory, [
+      "--rules",
+      withPlantedRule(directory, "    tests: scan\n"),
+    ]),
+    `${FAILING} app/src/tests.rs has`,
   );
 });
 
 test("a literal rule without a stated test scope is refused", () => {
   const directory = scratch();
-  const rules = ruled(directory, (text) =>
-    text.replace("    tests: skip\n", ""),
-  );
-  const result = run(directory, ["--rules", rules]);
+  const result = run(directory, ["--rules", withPlantedRule(directory, "")]);
   assert.notStrictEqual(result.status, 0);
   assert.match(
     result.err,
-    /notes-type-has-one-home: forbid_literal needs tests set to skip or scan/,
+    new RegExp(`${PLANTED}: forbid_literal needs tests set to skip or scan`),
   );
 });
 
@@ -606,15 +636,15 @@ test("an agent name inside its adapter passes", () => {
   assert.strictEqual(run(directory).status, 0);
 });
 
-test("the Notes literal in a nested module of a root fails", () => {
+test("the literal in a nested module of a root fails", () => {
   const directory = scratch();
   edit(
     directory,
-    "app/src/content/package.rs",
-    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+    "app/src/content/requests.rs",
+    (text) => `${text}${PLANTED_FUNCTION}`,
   );
   expectFailure(
-    run(directory),
-    `${NOTES} app/src/content/package.rs has 1 literals, over the limit of 0`,
+    run(directory, ["--rules", withPlantedRule(directory)]),
+    `${FAILING} app/src/content/requests.rs has 1 literals, over the limit of 0`,
   );
 });

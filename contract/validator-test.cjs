@@ -35,15 +35,16 @@ test("new-shell intent names its current content and backend without a saved lau
   assert.equal(terminalResponse({ ...outcome, reason: "lost" }), false);
 });
 
-test("content tools contain data and revision but no actor authority", async () => {
+test("content tools contain an action and revision but no actor authority", async () => {
   const { contentTool } = await import("./generated/validate.js");
   const input = {
     expectedVersion: "7",
     action: {
-      operation: "update",
-      vesselId: "notes-a",
+      operation: "invoke",
+      vesselId: "dashboard-a",
       expectedRevision: "base",
-      data: { title: "Title", text: "Body" },
+      action: "refresh",
+      args: {},
     },
   };
   assert.equal(contentTool(input), true);
@@ -58,16 +59,6 @@ test("content tools contain data and revision but no actor authority", async () 
     assert.equal(contentTool({ ...input, [key]: "forged" }), false);
   assert.equal(
     contentTool({ ...input, action: { ...input.action, vesselId: 4 } }),
-    false,
-  );
-  assert.equal(
-    contentTool({
-      ...input,
-      action: {
-        ...input.action,
-        data: { title: "Title", text: "Body", role: "owner" },
-      },
-    }),
     false,
   );
 });
@@ -138,7 +129,7 @@ test("generated wire validator rejects a forged caller and malformed split", asy
   );
   const creation = {
     operation: "create-vessel",
-    typeId: "notes",
+    typeId: "dashboard",
     destination: {
       kind: "placement",
       owner: { kind: "fleet", id: "fleet-1" },

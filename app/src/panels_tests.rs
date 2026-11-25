@@ -15,7 +15,7 @@ fn reopen_transfers_only_the_retained_panel_inside_its_voyage() {
     let first = model.layout.voyages[0].fleets[0].placements[0].clone();
     model
         .apply(Action::CreateVessel {
-            type_id: crate::vessel_type::NOTES_TYPE.into(),
+            type_id: "dashboard".into(),
             destination: ContentDestination::Placement {
                 owner: PlacementOwner::Fleet {
                     id: model.layout.voyages[0].fleets[0].id.clone(),

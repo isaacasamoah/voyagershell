@@ -1605,23 +1605,6 @@
           "additionalProperties": false,
           "properties": {
             "operation": {
-              "const": "configure",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
               "const": "describe",
               "type": "string"
             },
@@ -1649,103 +1632,6 @@
           "required": [
             "operation",
             "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "const": "migrate-note",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "const": "list-notes",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "const": "new-note",
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "title"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "filename": {
-              "type": "string"
-            },
-            "operation": {
-              "const": "open-note",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "filename"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "expectedRevision": {
-              "type": "string"
-            },
-            "operation": {
-              "const": "update",
-              "type": "string"
-            },
-            "vesselId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "operation",
-            "vesselId",
-            "expectedRevision"
           ],
           "type": "object"
         },

@@ -134,7 +134,7 @@ fn projection(value: &Theme) -> HostValue {
 struct WorkspaceBinding {
     client: Client,
     viewers: Viewers,
-    notes: crate::notes::Host,
+    content_host: crate::content_host::Host,
     avatar: crate::avatar::Binding,
     notice: Rc<Cell<WorkspaceNotice>>,
     activity: Rc<RefCell<voyager_contract::activity::Projection>>,
@@ -441,15 +441,7 @@ fn load(
         .with_capabilities(Capabilities::new().window(true))
         .with_host_module(module)?
         .with_host_module(workspace)?;
-    let note_colors = current.clone();
-    let policy =
-        policy.with_host_module(workspace_binding.notes.module(Rc::new(move || {
-            let current = note_colors.borrow();
-            current
-                .as_ref()
-                .map(projection)
-                .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))
-        }))?)?;
+    let policy = policy.with_host_module(workspace_binding.content_host.module()?)?;
     let policy = policy.with_host_module(crate::conversation::module(conversation.clone())?)?;
     let _guard = LoadGuard::enter(policy.with_host_module(workspace_binding.avatar.module()?)?)?;
     runtime.try_load(package, window, cx)
@@ -462,7 +454,6 @@ pub struct CanvasHost {
     _task: Task<()>,
     _workspace_task: Task<()>,
     _notice_task: Task<()>,
-    _close_saves: Task<()>,
     load_error: Option<String>,
     theme_error: Option<String>,
     watch_error: Option<String>,
@@ -481,7 +472,7 @@ pub struct Setup {
     pub client: Client,
     pub viewers: Viewers,
     pub notices: Listener,
-    pub notes: crate::notes::Host,
+    pub content_host: crate::content_host::Host,
     pub conversation: voyager_app::conversation_client::Client,
     pub avatar: crate::avatar::Binding,
     pub lifecycle: crate::lifecycle::Requests,
@@ -503,7 +494,7 @@ impl CanvasHost {
             client,
             viewers,
             notices,
-            notes,
+            content_host,
             conversation,
             avatar,
             lifecycle,
@@ -512,7 +503,7 @@ impl CanvasHost {
         let workspace_binding = WorkspaceBinding {
             client,
             viewers,
-            notes,
+            content_host,
             avatar,
             notice: Rc::new(Cell::new(WorkspaceNotice::default())),
             activity: Rc::new(RefCell::new(
@@ -522,7 +513,6 @@ impl CanvasHost {
             decorated: crate::window_frame::Decorated::new(window),
         };
         let decorated = workspace_binding.decorated.clone();
-        let close_saves = workspace_binding.notes.watch_close_saves(window, cx);
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
         base.appearance = ThemeAppearance::Dark;
@@ -607,7 +597,6 @@ impl CanvasHost {
         });
         let mut retrying = root.is_none();
         let handle = window.window_handle();
-        let invalidate_notes = workspace_binding.notes.clone();
         let task = cx.spawn(async move |this, cx| {
             let mut prior_theme = Some(initial_theme);
             let mut prior_source = initial_source;
@@ -647,9 +636,6 @@ impl CanvasHost {
                         if !changed_theme && !changed_source && !changed_accessibility {
                             return canvas.root.is_some();
                         }
-                        if changed_accessibility {
-                            workspace_binding.notes.invalidate(cx);
-                        }
                         let mut valid_theme_change = false;
                         if changed_theme {
                             let parsed = theme_bytes
@@ -666,9 +652,6 @@ impl CanvasHost {
                                     if let Some(root) = &canvas.root
                                         && let Err(error) = runtime.refresh(root, cx)
                                     {
-                                        canvas.theme_error = Some(format!("{error:#}"));
-                                    }
-                                    if let Err(error) = workspace_binding.notes.refresh(cx) {
                                         canvas.theme_error = Some(format!("{error:#}"));
                                     }
                                 }
@@ -723,31 +706,6 @@ impl CanvasHost {
                 }
             }
         });
-        cx.defer_in(window, move |canvas, window, cx| {
-            if let Some(root) = window.root::<ShellRoot>().flatten() {
-                let notes = invalidate_notes.clone();
-                canvas
-                    ._observers
-                    .push(cx.observe_in(&root, window, move |_, _, window, cx| {
-                        if window.is_a11y_active() {
-                            notes.invalidate(cx);
-                            cx.notify();
-                        }
-                    }));
-                if let Some(tooltip) = ShellRoot::tooltip_overlay(window, cx) {
-                    canvas._observers.push(cx.observe_in(
-                        &tooltip,
-                        window,
-                        move |_, _, window, cx| {
-                            if window.is_a11y_active() {
-                                invalidate_notes.invalidate(cx);
-                                cx.notify();
-                            }
-                        },
-                    ));
-                }
-            }
-        });
         Self {
             root,
             _watch: watch,
@@ -755,7 +713,6 @@ impl CanvasHost {
             _task: task,
             _workspace_task: workspace_task,
             _notice_task: notice_task,
-            _close_saves: close_saves,
             load_error,
             theme_error,
             watch_error,
@@ -825,12 +782,12 @@ mod tests {
     fn content_load_scope_restores_deny_after_normal_error_and_unwind() {
         let bound = || {
             Policy::new()
-                .with_application("notes-a")
+                .with_application("first")
                 .with_capabilities(Capabilities::new().network_hosts(["example.test".to_owned()]))
         };
         let guard = LoadGuard::enter(bound()).unwrap();
         assert!(policy::default().capabilities().may_reach("example.test"));
-        assert!(LoadGuard::enter(Policy::new().with_application("notes-b")).is_err());
+        assert!(LoadGuard::enter(Policy::new().with_application("second")).is_err());
         drop(guard);
         assert!(!policy::default().capabilities().may_reach("example.test"));
         let fail = || -> anyhow::Result<()> {

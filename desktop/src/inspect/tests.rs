@@ -48,7 +48,7 @@ export default class extends View {
         .child(control(div().w(22).h(22), 'split-right', 'placement-1')))
       .child(Popover.new('chooser').open(menu()).on_open_change(() => {})
         .trigger(div().w(40).h(10))
-        .content(div().w(170).child(control(div().h(27), 'create-notes', ''))))
+        .content(div().w(170).child(control(div().h(27), 'create-agents', ''))))
       .child(div().w(100).h(20).overflow_hidden()
         .child(control(div().w(300).h(20).flex_shrink_0(), 'create-worker', 'clipped')))
       .child(div().w(0).h(20).overflow_hidden()
@@ -401,7 +401,7 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
     run(Some(path), true, async move |scene, cx| {
         let open = scene
             .frame(&report, cx, |frame| {
-                bounds(frame, Role::CreateNotes, "").is_some()
+                bounds(frame, Role::CreateAgents, "").is_some()
             })
             .await;
         assert_eq!(
@@ -449,7 +449,7 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
             (Role::FleetName, "fleet-name", "fleet-1"),
             (Role::VesselName, "vessel-name", "placement-2"),
             (Role::SplitRight, "split-right", "placement-1"),
-            (Role::CreateNotes, "create-notes", ""),
+            (Role::CreateAgents, "create-agents", ""),
         ] {
             assert_eq!(
                 bounds(&open, role, key),
@@ -497,7 +497,7 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
             }
         );
         assert_eq!(bounds(&changed, Role::VoyageName, "voyage-1"), None);
-        assert_eq!(bounds(&changed, Role::CreateNotes, ""), None);
+        assert_eq!(bounds(&changed, Role::CreateAgents, ""), None);
         assert_eq!(
             bounds(&changed, Role::FleetName, "fleet-1"),
             at(0., 0., 120., 45.)

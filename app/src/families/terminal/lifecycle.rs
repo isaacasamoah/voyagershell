@@ -427,7 +427,7 @@ mod tests {
             .iter_mut()
             .find(|content| content.backend == Some(CoreTerminalId("t2".into())))
             .unwrap()
-            .type_id = "notes".into();
+            .type_id = "dashboard".into();
         let before = model.layout.clone();
         let (ready, closed) = prepare_reopen(
             &mut model.layout,
@@ -582,7 +582,7 @@ mod tests {
             &mut model,
             (0, 0),
             serial,
-            vessel(serial, "notes", "t-missing", true),
+            vessel(serial, "dashboard", "t-missing", true),
         );
         serial += 1;
         let mut pending = vessel(serial, "agent", "t-pending", true);
@@ -651,7 +651,7 @@ mod tests {
         };
         assert_eq!(kept("agent", true), 25 + 1 + 1);
         assert_eq!(kept("terminal", false), 3);
-        assert_eq!(kept("notes", true), 1);
+        assert_eq!(kept("dashboard", true), 1);
         assert_eq!(ready, vec![own.clone()]);
         let restarted = model
             .layout

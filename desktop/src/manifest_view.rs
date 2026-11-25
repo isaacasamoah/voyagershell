@@ -13,9 +13,15 @@ use voyager_contract::{
 
 static SENT: AtomicU64 = AtomicU64::new(0);
 
+fn unavailable_words(name: Option<&str>) -> String {
+    match name {
+        Some(name) => format!("{name} isn't installed. Anything it saved is still there."),
+        None => "This Vessel type isn't installed. Anything it saved is still there.".into(),
+    }
+}
 pub(crate) struct ManifestView {
     id: VesselId,
-    manifest: Option<Manifest>,
+    manifest: Result<Manifest, Option<String>>,
     client: Client,
     loaded: Option<(String, Value)>,
     error: Option<String>,
@@ -25,7 +31,7 @@ pub(crate) struct ManifestView {
 impl ManifestView {
     pub(crate) fn new(
         id: VesselId,
-        manifest: Option<Manifest>,
+        manifest: Result<Manifest, Option<String>>,
         client: Client,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -110,8 +116,9 @@ impl Render for ManifestView {
             .gap(px(8.))
             .p(px(12.))
             .text_color(rgb(0xe6e6e6));
-        let Some(manifest) = self.manifest.clone() else {
-            return root.child("This Vessel type is unavailable");
+        let manifest = match self.manifest.clone() {
+            Ok(manifest) => manifest,
+            Err(name) => return root.child(unavailable_words(name.as_deref())),
         };
         root = root.child(manifest.name.clone());
         if let Some((revision, state)) = &self.loaded {
@@ -150,5 +157,26 @@ impl Render for ManifestView {
             root = root.child(div().text_color(rgb(0xffcad3)).child(error.clone()));
         }
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unavailable_words;
+
+    #[test]
+    fn a_missing_type_with_a_kept_name_is_named() {
+        assert_eq!(
+            unavailable_words(Some("Dashboard")),
+            "Dashboard isn't installed. Anything it saved is still there."
+        );
+    }
+
+    #[test]
+    fn a_missing_type_with_no_kept_name_shows_no_name() {
+        assert_eq!(
+            unavailable_words(None),
+            "This Vessel type isn't installed. Anything it saved is still there."
+        );
     }
 }
