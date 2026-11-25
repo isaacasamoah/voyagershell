@@ -71,10 +71,9 @@ The assistant and voice need more:
 
 - Claude Code for Voyager, which the app starts on launch.
 - Codex for the chat panel.
-- For voice, the local Omni model files and `llama-server` in the user cache
-  folder, and `parec` and `paplay` from the `pulseaudio-utils` package. [Where
-  the files are found](docs/voice.md#where-the-files-are-found) lists them.
-  Without them, the voice control says that local voice is not installed.
+- For voice, `llama-server`, the local Omni model files, and `parec` and
+  `paplay` from the `pulseaudio-utils` package. [Set up voice](#set-up-voice)
+  shows how to install them.
 
 Shells need none of these.
 
@@ -107,6 +106,62 @@ your programs running in Herdr Core.
 To learn the app by using it, follow the tutorial,
 [Learn VoyagerShell by running it](docs/README.md). It walks through every
 part of the workspace and traces one click through the code.
+
+## Set up voice
+
+Voice runs on LiquidAI's LFM3 Omni model through llama.cpp's `llama-server`, on
+your own computer. In 0.1 you install both by hand. Codex voice isn't available
+in 0.1. LiquidAI's licence for the model applies to your use of it, so read it
+on the model's Hugging Face page before you download.
+
+The app looks for voice files in `~/.cache/voyager/voice/omni/`, the voice
+folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
+`$XDG_CACHE_HOME/voyager/voice/omni/` instead. Voice also needs `parec` and
+`paplay` from the `pulseaudio-utils` package.
+
+1. Get `llama-server` from llama.cpp, build b12242 or newer. Pick the kind of
+	build by where you want the model to run. A CPU-only build always runs the
+	model on the processor, and the graphics card setting in step 3 does
+	nothing with it. To use a graphics card, get a GPU build.
+	- For an NVIDIA graphics card, get a CUDA build, from the llama.cpp release
+		page or built from source. The release page's CUDA builds may also need
+		its matching CUDA runtime bundle. To build from source, run:
+
+		```sh
+		cmake -B build -DGGML_CUDA=ON
+		cmake --build build --config Release
+		```
+
+	- For another graphics card, download a llama.cpp release build for Linux
+		that uses Vulkan.
+	- Without a graphics card, download a llama.cpp CPU release build for Linux.
+
+	Copy `llama-server` and the libraries that come with it into the voice
+	folder. To leave a build where it is, set `VOYAGER_OMNI_SERVER` to the full
+	path of its `llama-server` instead.
+2. Download `LFM3-Omni-2B-Q4_K_M.gguf` and `mmproj-LFM3-Omni-2B-Q4_K_M.gguf`
+	from [LiquidAI/LFM3-Omni-2B-GGUF](https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF)
+	on Hugging Face. Put both files in the voice folder. The app also finds them
+	in the Hugging Face cache, so files that the Hugging Face command-line tool
+	downloaded can stay where they are.
+3. To run the model on your graphics card with a GPU build from step 1, start
+	the app with `VOYAGER_OMNI_GPU_LAYERS=999` set. The default, 0, runs the
+	model on the processor.
+
+	```sh
+	VOYAGER_OMNI_GPU_LAYERS=999 /path/to/voyagershell/target/release/voyager-shell \
+		--profile "$HOME/.local/share/voyagershell" \
+		--session voyager-main
+	```
+
+4. Start the app and click the avatar's voice control. The app looks for the
+	voice files once, when it starts. If a file is missing, the voice control
+	stays off. Hold the pointer over it to see "Local voice is not installed"
+	and the missing parts. Add the missing files, then restart the app.
+
+[Local voice](docs/voice.md) explains how hearing and speaking work. [Where the
+files are found](docs/voice.md#where-the-files-are-found) lists every voice
+setting.
 
 ## How it works
 
