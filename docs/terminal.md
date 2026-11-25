@@ -72,7 +72,7 @@ produces a clean Bash prompt. Native comparison owns that remaining observation.
 
 ## Lifecycle
 
-The workspace owner in `app/src/client_owner.rs` has two named lifecycle
+`app/src/families/terminal/lifecycle.rs` defines two named lifecycle
 operations, `Lifecycle::QuitAndKeep` and `Lifecycle::StopSession`. Both arrive
 as one owner message and end the owner's session hold. Only stop-session calls
 Core's `server.stop`.
