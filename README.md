@@ -124,9 +124,8 @@ folder. If `XDG_CACHE_HOME` is set to an absolute path, the voice folder is
 	model on the processor, and the graphics card setting in step 3 does
 	nothing with it. To use a graphics card, get a GPU build.
 	- For an NVIDIA graphics card, get a CUDA build, from the llama.cpp release
-		page or built from source. The release page has prebuilt Linux CUDA
-		builds. A prebuilt build may also need the matching CUDA runtime bundle
-		from the same release. To build from source, run:
+		page or built from source. The release page's CUDA builds may also need
+		its matching CUDA runtime bundle. To build from source, run:
 
 		```sh
 		cmake -B build -DGGML_CUDA=ON
