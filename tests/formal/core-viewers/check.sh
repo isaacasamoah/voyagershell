@@ -21,6 +21,9 @@ if [ -z "$sync" ]; then
     echo "$skill has no line like: Sync commit is \`<40 hex digits>\`."
     exit 1
 fi
+if ! git -C "$root" cat-file -e "$sync^{commit}" 2>/dev/null; then
+    git -C "$root" fetch --no-tags --depth=1 origin "$sync"
+fi
 covered=$(sed -n 's/^| `\([^`]*\)` |.*/\1/p' "$skill" | sort -u)
 drift=0
 if ! git -C "$root" diff --quiet "$sync" -- $covered; then
