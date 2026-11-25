@@ -760,6 +760,7 @@ source = "The verification-lifecycle skill; #169: the battery would have reporte
 features = ["verification-environment", "profile-theme", "profile-updates", "layout-compat"]
 guard = ["type:tests/native/src/lifecycle.rs#Run"]
 check = ["test:tests/native/src/proof.rs#the_lifecycle_gate_holds_over_every_reachable_run"]
+gap = "The battery half needs a case that withholds a fixture."
 confidence = "inferred"
 
 [[invariant]]
