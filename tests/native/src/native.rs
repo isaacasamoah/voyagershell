@@ -1,10 +1,12 @@
 mod avatar;
 mod input;
+mod install;
 mod settle;
 mod terminal;
 
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
+pub use install::{Build, Linked, STAND_IN_LINE};
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
     DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH,
@@ -25,7 +27,7 @@ use crate::system::{
     settle, stamp, until, until_cleanup,
 };
 use crate::x11::{
-    Clipboard, Compositor, Display, Geometry, Key, Observed, Pixels, Requests, Window,
+    Clipboard, Compositor, Display, Geometry, Key, Observed, Pixels, Request, Requests, Window,
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -234,6 +236,8 @@ impl Folder {
     }
 }
 
+const RECORDING: &str = "recording.webm";
+
 pub struct Native {
     pub system: System,
     pub candidate: Pinned,
@@ -248,9 +252,13 @@ pub struct Native {
     pub probe_frames: bool,
     pub trace_tools: bool,
     pub audio_requested: bool,
+    pub video: bool,
+    recorder: Option<Owned>,
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
     pub talk_over: Option<TalkOver>,
+    pub installs: bool,
+    install: Option<install::Install>,
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
@@ -306,9 +314,13 @@ impl Native {
             probe_frames: false,
             trace_tools: false,
             audio_requested: false,
+            video: false,
+            recorder: None,
             audio: None,
             voice_engine: None,
             talk_over: None,
+            installs: false,
+            install: None,
             surface,
             display: None,
             x11: None,
@@ -364,12 +376,56 @@ impl Native {
         })?);
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
+        if self.video {
+            self.record_video()?;
+        }
         self.decorate()?;
         self.arrived()?;
         self.seed_core()?;
+        if self.installs {
+            return self.lay_out_install();
+        }
         self.start()?;
         self.bind_core()?;
         self.present()
+    }
+
+    fn record_video(&mut self) -> Result<()> {
+        let file = self.system.evidence.join(RECORDING);
+        let file = file.to_str().context("Invalid recording path")?.to_owned();
+        let recorder = self.system.spawn(
+            Path::new("ffmpeg"),
+            &[
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-f",
+                "x11grab",
+                "-framerate",
+                "10",
+                "-video_size",
+                "3000x2000",
+                "-i",
+                sandbox::DISPLAY,
+                "-vf",
+                "scale=1500:-2",
+                "-c:v",
+                "libvpx-vp9",
+                "-deadline",
+                "realtime",
+                "-cpu-used",
+                "8",
+                "-b:v",
+                "1M",
+                file.as_str(),
+            ],
+            &[],
+            "recording.log",
+        )?;
+        self.system
+            .record(json!({"event":"recording","display":sandbox::DISPLAY,"file":file,"note":"recording, not evidence"}))?;
+        self.recorder = Some(recorder);
+        Ok(())
     }
 
     pub fn seed_documents(&mut self, documents: Vec<(String, Value)>) {
@@ -619,22 +675,13 @@ impl Native {
         Ok(live)
     }
 
-    fn start(&mut self) -> Result<()> {
+    fn ready_to_launch(&mut self) -> Result<()> {
         ensure!(
             self.viewer.is_none(),
             "Existing viewer must close before reattachment"
         );
-        self.candidate.verify()?;
         self.hc.verify()?;
         self.launches += 1;
-        if self
-            .builds
-            .last()
-            .is_none_or(|last| last.path != self.candidate.path)
-        {
-            self.builds.push(self.candidate.clone());
-            self.identify()?;
-        }
         let profile = self.profile();
         if let Some(left) = self.quit_folder.take() {
             ensure!(
@@ -643,36 +690,75 @@ impl Native {
             );
         }
         fs::create_dir_all(&profile)?;
-        let inspection = self.inspection();
-        let stop = self.system.evidence.join(frames::STOP);
-        let mut extra_env = vec![("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")];
+        Ok(())
+    }
+
+    fn record_build(&mut self) -> Result<()> {
+        self.candidate.verify()?;
+        if self
+            .builds
+            .last()
+            .is_none_or(|last| last.path != self.candidate.path)
+        {
+            self.builds.push(self.candidate.clone());
+            self.identify()?;
+        }
+        Ok(())
+    }
+
+    fn launch_env(&self) -> Result<Vec<(String, String)>> {
+        let mut env = vec![
+            ("RUST_LOG".to_owned(), "debug".to_owned()),
+            ("RUST_BACKTRACE".to_owned(), "full".to_owned()),
+        ];
         if self.trace_tools {
-            extra_env.push(("VOYAGER_TRACE_TOOLS", "1"));
+            env.push(("VOYAGER_TRACE_TOOLS".into(), "1".into()));
         }
         if self.probe_frames {
-            extra_env.push(("VOYAGER_FRAME_PROFILE", "1"));
-            extra_env.push(("VOYAGER_WORKSPACE_SESSION", &self.system.session));
-            extra_env.push((
-                "VOYAGER_FRAME_PROFILE_STOP",
-                stop.to_str().context("Invalid frame stop path")?,
+            let stop = self.system.evidence.join(frames::STOP);
+            env.push(("VOYAGER_FRAME_PROFILE".into(), "1".into()));
+            env.push((
+                "VOYAGER_WORKSPACE_SESSION".into(),
+                self.system.session.clone(),
+            ));
+            env.push((
+                "VOYAGER_FRAME_PROFILE_STOP".into(),
+                stop.to_str().context("Invalid frame stop path")?.into(),
             ));
         }
-        let engine = self
-            .voice_engine
-            .as_ref()
-            .map(|folder| folder.to_string_lossy().into_owned());
-        let trace = self.voice_trace();
-        let trace = trace.to_string_lossy().into_owned();
+        if let Some(folder) = &self.voice_engine {
+            env.push((
+                "VOYAGER_OMNI_DIR".into(),
+                folder.to_string_lossy().into_owned(),
+            ));
+            env.push((
+                "VOYAGER_VOICE_TRACE".into(),
+                self.voice_trace().to_string_lossy().into_owned(),
+            ));
+        }
+        if let Some(talk_over) = self.talk_over {
+            env.push((TalkOver::VARIABLE.into(), talk_over.value().into()));
+        }
+        Ok(env)
+    }
+
+    fn start(&mut self) -> Result<()> {
+        ensure!(
+            self.install.is_none(),
+            "This run starts the app through its install, with voyager start"
+        );
+        self.ready_to_launch()?;
+        self.record_build()?;
         if let (Some(folder), 1) = (&self.voice_engine, self.launches) {
             crate::audio::voice::plant_run_on_clip(&self.system.evidence.join("home"), folder)?;
         }
-        if let Some(engine) = &engine {
-            extra_env.push(("VOYAGER_OMNI_DIR", engine));
-            extra_env.push(("VOYAGER_VOICE_TRACE", &trace));
-        }
-        if let Some(talk_over) = self.talk_over {
-            extra_env.push((TalkOver::VARIABLE, talk_over.value()));
-        }
+        let profile = self.profile();
+        let inspection = self.inspection();
+        let env = self.launch_env()?;
+        let pairs: Vec<(&str, &str)> = env
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
         let viewer = self.system.spawn(
             &self.candidate.path,
             &[
@@ -683,10 +769,14 @@ impl Native {
                 "--inspect",
                 inspection.to_str().context("Invalid inspection path")?,
             ],
-            &extra_env,
+            &pairs,
             "native.log",
         )?;
         self.attach(viewer);
+        self.show(Some(inspection), Value::Null)
+    }
+
+    fn show(&mut self, inspection: Option<PathBuf>, installed: Value) -> Result<()> {
         let title = self.title();
         self.window = until("unique candidate window", || {
             let viewer = self.viewer.as_ref().context("Missing viewer")?;
@@ -696,10 +786,11 @@ impl Native {
             Ok(windows.pop())
         })?;
         self.verify()?;
-        save(
-            self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"coreSeededAt":self.seeded_at,"talkOver":self.talk_over,"startedAt":stamp(),"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
-        )
+        let mut launch = json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"coreSeededAt":self.seeded_at,"talkOver":self.talk_over,"startedAt":stamp(),"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface});
+        if !installed.is_null() {
+            launch["installed"] = installed;
+        }
+        save(self.system.evidence.join("launch.json"), &launch)
     }
 
     fn attach(&mut self, viewer: Owned) {
@@ -742,19 +833,27 @@ impl Native {
         if self.surface.decorations != Decorations::Client {
             return Ok(());
         }
-        let display = self
-            .system
-            .env
-            .get("DISPLAY")
-            .context("Missing owned display")?
-            .clone();
+        let display = self.display_name()?;
         let compositor = &mut self.compositor;
         self.system
             .act(json!({"display":"client-decorations"}), || {
                 *compositor = Some(Compositor::start(&display)?);
                 Ok(())
             })?;
-        let requests = Requests::connect(&display)?;
+        self.watch_requests()
+    }
+
+    fn display_name(&self) -> Result<String> {
+        Ok(self
+            .system
+            .env
+            .get("DISPLAY")
+            .context("Missing owned display")?
+            .clone())
+    }
+
+    fn watch_requests(&mut self) -> Result<()> {
+        let requests = Requests::connect(&self.display_name()?)?;
         let confirmed = requests.confirm();
         self.requests = Some(requests);
         confirmed?;
@@ -797,7 +896,7 @@ impl Native {
         self.launch()
     }
 
-    pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
+    fn requests_for_window(&mut self) -> Result<Vec<Observed>> {
         let Some(requests) = &self.requests else {
             return Ok(Vec::new());
         };
@@ -810,6 +909,22 @@ impl Native {
         Ok(seen
             .into_iter()
             .filter(|seen| seen.request.window() == self.window)
+            .collect())
+    }
+
+    pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
+        Ok(self
+            .requests_for_window()?
+            .into_iter()
+            .filter(|seen| !matches!(seen.request, Request::Activate { .. }))
+            .collect())
+    }
+
+    pub fn activations(&mut self) -> Result<Vec<Observed>> {
+        Ok(self
+            .requests_for_window()?
+            .into_iter()
+            .filter(|seen| matches!(seen.request, Request::Activate { .. }))
             .collect())
     }
 
@@ -992,7 +1107,7 @@ impl Native {
             .seeded_documents
             .get(DOCUMENT)
             .is_some_and(|(_, value)| !matches!(read(value.clone()), Reading::Open { .. }));
-        if unreadable {
+        if unreadable || self.install.is_some() {
             return Ok(());
         }
         let open = |frame: &Frame| {
@@ -1345,6 +1460,10 @@ impl Native {
             }) {
                 errors.push(format!("process {}: {error:#}", identity.pid));
             }
+        }
+        if let Some(mut recorder) = self.recorder.take() {
+            let stopped = recorder.stop();
+            errors.extend(self.retired("recorder", stopped));
         }
         if let Some(mut display) = self.display.take() {
             let stopped = display.stop();

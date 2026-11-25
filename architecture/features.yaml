@@ -1247,7 +1247,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: [quit-restore, voyage-close]
+    native_journeys: [quit-restore, voyage-close, daily-start]
     python_journeys: []
     invariants:
       - id: quit-keeps-programs
@@ -1262,24 +1262,25 @@ features:
           - 'journey:quit-restore/quit-busy-keeps-output'
           - 'journey:quit-restore/close-window-keeps'
           - 'journey:quit-restore/close-button-keeps'
+          - 'journey:daily-start/update-and-restart-keeps-programs'
         formal: []
-        journeys: [quit-restore]
+        journeys: [daily-start, quit-restore]
       - id: failed-start-touches-nothing
         kind: user
         says: 'When a build started by voyager start exits before it is ready, start returns to the previous build. The failed build started, stopped and closed no program, and the person''s Voyages reopen as they were.'
         owner: application-queue
         guards: ['type:app/src/client_ready.rs#Readiness']
-        checks: ['test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today']
+        checks: ['test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today', 'journey:daily-start/failed-build-returns']
         formal: []
-        journeys: []
+        journeys: [daily-start]
       - id: one-app-per-profile
         kind: user
         says: 'One VoyagerShell runs per profile. A second voyager start brings the running window forward and starts nothing.'
         owner: application-queue
         guards: ['type:app/src/profile_lock.rs#ProfileLock']
-        checks: ['test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends']
+        checks: ['test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends', 'journey:daily-start/second-start-focuses']
         formal: []
-        journeys: []
+        journeys: [daily-start]
       - id: stop-is-explicit
         kind: user
         says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'
@@ -1345,13 +1346,23 @@ features:
       - desktop/src/lib.rs
       - app/src/client_owner.rs
       - app/src/client_structure.rs
+      - app/src/app_start.rs
+      - app/src/install.rs
+      - app/src/profile_lock.rs
+      - app/src/app_socket.rs
+      - app/src/client_ready.rs
     code:
+      - app/src/app_socket.rs
+      - app/src/app_start.rs
       - app/src/client.rs
       - app/src/client_owner.rs
+      - app/src/client_ready.rs
       - app/src/client_structure.rs
       - app/src/core.rs
       - app/src/families/terminal/lifecycle.rs
       - app/src/families/voyage_close.rs
+      - app/src/install.rs
+      - app/src/profile_lock.rs
       - contract/src/voyage_close.rs
       - desktop/canvas/stop-session.ts
       - desktop/canvas/voyage-close.ts
@@ -2066,6 +2077,7 @@ features:
       - tests/native/src/journey/canvas_stack.rs
       - tests/native/src/journey/chat.rs
       - tests/native/src/journey/core_events.rs
+      - tests/native/src/journey/daily_start.rs
       - tests/native/src/journey/home_create.rs
       - tests/native/src/journey/input.rs
       - tests/native/src/journey/layout.rs
@@ -2099,6 +2111,7 @@ features:
       - tests/native/src/native.rs
       - tests/native/src/native/avatar.rs
       - tests/native/src/native/input.rs
+      - tests/native/src/native/install.rs
       - tests/native/src/native/settle.rs
       - tests/native/src/native/terminal.rs
       - tests/native/src/probe.rs

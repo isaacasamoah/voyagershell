@@ -1565,6 +1565,41 @@ The journey shows On with a microphone that hears only the fed speech. It does n
 headphones that the system labels, a loudspeaker that the microphone hears, a real voice
 or a room.
 
+### Daily start
+
+`daily-start` starts the app the way a person does each day, through `voyager start`
+from an install. It needs `--second-binary`. The run lays out an install in its
+evidence folder. `builds/local-<hash>` holds the candidate and its `voyager` command,
+`current` points at it and `start.json` names the run's profile and session. It runs
+`current/voyager` inside the sandbox, as a child subreaper, so the app that `voyager
+start` leaves behind is handed to the verifier, which adopts it as the viewer.
+`src/native/install.rs` owns the layout, the runs and the adoption.
+
+The candidate is build A and carries every app-behaviour expectation. The second
+binary is build B. It is a distinct binary for the switch mechanics only, which are
+which build runs, the links, and programs carrying on across the switch. No verdict
+counts on B's own behaviour. A third build, the stand-in, is a script that reports a version and
+exits 1 before it is ready.
+
+| Case | What it shows |
+| --- | --- |
+| `starts-installed-build` (setup) | `voyager start` exits 0, launches the installed build and nothing else, and the app shows its window with a live program in the first Vessel. `current` names A, and no `previous` or `next` is set. |
+| `update-and-restart-keeps-programs` | `voyager update --from` stages B as `next`. After a quit, `voyager start` runs B, `current` names B and `previous` A, the same Voyage is selected, and the first Vessel runs the same live program with the same pid. |
+| `second-start-focuses` | A second `voyager start` exits 0 and launches nothing, no second app runs from the install, the running app keeps its process and window, and it asks the window manager to activate its window. |
+| `failed-build-returns` | After an update to the stand-in, `voyager start` launches the stand-in, then the build that was current before. It prints the stand-in's log, and Core's terminals and the layout document do not change before that build is ready. This is the control case. |
+| `rollback-runs-the-previous-build` | After the failed start, `voyager rollback` stages A as `next`, and `voyager start` runs A with `previous` naming B. The programs carry on with the same pids. |
+
+Each case has its own plant. `tests/native/controls/daily-start.patch` treats every
+exit before ready as a failure, so `failed-build-returns` fails.
+`daily-start-installed.patch` launches the build `previous` names, which a first start
+lacks. `daily-start-update.patch` clears `next` without moving `current`.
+`daily-start-focus.patch` answers a raise without activating the window.
+`daily-start-rollback.patch` leaves `previous` alone when a failed start falls back.
+
+`--video on` records the owned display with `ffmpeg` into `recording.webm` in the
+evidence, from the moment the display answers until cleanup. The recording is a demo,
+not evidence. The checks, captures and action log are the result.
+
 ### Negative controls
 
 Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch

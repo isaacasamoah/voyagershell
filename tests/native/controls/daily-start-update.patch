@@ -1,0 +1,12 @@
+diff --git a/app/src/install.rs b/app/src/install.rs
+index 86065bc7..86d22205 100644
+--- a/app/src/install.rs
++++ b/app/src/install.rs
+@@ -213,7 +213,6 @@ impl Install {
+             if let Some(current) = &current {
+                 self.point(Link::Previous, current)?;
+             }
+-            self.point(Link::Current, &next)?;
+             Switch {
+                 to: next,
+                 from: current,

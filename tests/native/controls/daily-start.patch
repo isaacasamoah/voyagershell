@@ -1,0 +1,13 @@
+diff --git a/app/src/app_start.rs b/app/src/app_start.rs
+index a4557047..5df1022a 100644
+--- a/app/src/app_start.rs
++++ b/app/src/app_start.rs
+@@ -173,7 +173,7 @@ fn start_within(install: &Install, limit: Duration) -> Result<Started, NotStarte
+         Outcome::Ready => Ok(Started::Ready { build, log }),
+         Outcome::Uncertain(pid) => Err(NotStarted::Uncertain { build, pid, log }),
+         Outcome::Exited(status) => {
+-            let Some(switch) = switch else {
++            let Some(switch) = switch.filter(|_| false) else {
+                 return Err(NotStarted::Failed { build, log, status });
+             };
+             let previous = install.fall_back(&switch).map_err(|_| NotStarted::Failed {

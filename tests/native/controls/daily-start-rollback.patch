@@ -1,0 +1,15 @@
+diff --git a/app/src/install.rs b/app/src/install.rs
+index 86065bc7..f249cef8 100644
+--- a/app/src/install.rs
++++ b/app/src/install.rs
+@@ -230,10 +230,6 @@ impl Install {
+             .clone()
+             .ok_or_else(|| io::Error::other("There is no previous build to return to"))?;
+         self.point(Link::Current, &from)?;
+-        match &switch.before {
+-            Some(before) => self.point(Link::Previous, before)?,
+-            None => self.clear(Link::Previous)?,
+-        }
+         self.clear(Link::Next)?;
+         Ok(from)
+     }

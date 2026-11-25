@@ -11,7 +11,7 @@ owner = "application-queue"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
 guard = ["type:app/src/families/terminal/lifecycle.rs#Lifecycle"]
-check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps"]
+check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps", "journey:daily-start/update-and-restart-keeps-programs"]
 confidence = "stated"
 
 [[invariant]]
@@ -22,8 +22,7 @@ owner = "application-queue"
 source = "Isaac via Voyager, 26 Nov 05:00"
 features = ["close-quit-restore"]
 guard = ["type:app/src/client_ready.rs#Readiness"]
-check = ["test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today"]
-gap = "The journey case daily-start/failed-build-returns is not built yet. S23a adds it with the verification environment's second binary."
+check = ["test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today", "journey:daily-start/failed-build-returns"]
 confidence = "stated"
 
 [[invariant]]
@@ -34,8 +33,7 @@ owner = "application-queue"
 source = "Isaac via Voyager, 26 Nov 05:00"
 features = ["close-quit-restore"]
 guard = ["type:app/src/profile_lock.rs#ProfileLock"]
-check = ["test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends"]
-gap = "The journey case daily-start/second-start-focuses is not built yet. S23a adds it with the daily-start journey."
+check = ["test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends", "journey:daily-start/second-start-focuses"]
 confidence = "stated"
 
 [[invariant]]

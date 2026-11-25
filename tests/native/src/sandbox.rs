@@ -70,16 +70,25 @@ impl Sandbox<'_> {
         for relay in [PROVIDER, CORE_RELAY, AGENT] {
             command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
         }
-        let command_line = self
-            .candidate
-            .filter(|_| self.command)
-            .map(|candidate| candidate.with_file_name("voyager"));
-        if let Some(command_line) = command_line.filter(|path| path.is_file()) {
+        let beside = |build: Option<&Path>| {
+            build
+                .filter(|_| self.command)
+                .map(|build| build.with_file_name("voyager"))
+                .filter(|path| path.is_file())
+        };
+        if let Some(command_line) = beside(self.candidate) {
             command.extend(["--ro-bind".into(), text(&command_line)?, COMMAND.into()]);
             command.extend([
                 "--ro-bind".into(),
                 text(&command_line)?,
                 text(&command_line)?,
+            ]);
+        }
+        if let Some(second_command) = beside(self.second) {
+            command.extend([
+                "--ro-bind".into(),
+                text(&second_command)?,
+                text(&second_command)?,
             ]);
         }
         for path in [

@@ -480,16 +480,10 @@ fn journey_inputs(
             }
             let mut args: Vec<OsString> = vec!["--profile-fixture".into(), theme.into()];
             args.extend(core_document("voyager-verifier-probe", &document));
-            args.push("--second-binary".into());
-            args.push(other.binary.clone().into());
-            args.push("--second-sha256".into());
-            args.push(other.sha256.clone().into());
-            if let Some(folder) = other.assets.folder() {
-                args.push("--second-assets".into());
-                args.push(folder.into());
-            }
+            args.extend(second_build(other));
             Ok(args)
         }
+        Journey::DailyStart => Ok(second_build(other)),
         Journey::ProfileUpdates => {
             let updates = fixtures.join("profile-updates");
             if !updates.is_dir() {
@@ -519,6 +513,20 @@ fn journey_inputs(
         ),
         _ => Ok(Vec::new()),
     }
+}
+
+fn second_build(other: &Build) -> Vec<OsString> {
+    let mut args: Vec<OsString> = vec![
+        "--second-binary".into(),
+        other.binary.clone().into(),
+        "--second-sha256".into(),
+        other.sha256.clone().into(),
+    ];
+    if let Some(folder) = other.assets.folder() {
+        args.push("--second-assets".into());
+        args.push(folder.into());
+    }
+    args
 }
 
 fn core_document(name: &str, file: &Path) -> [OsString; 2] {
@@ -1047,11 +1055,20 @@ mod tests {
             Journey::LayoutCorrupt,
             Journey::Voice,
             Journey::VoiceTalkOver,
+            Journey::DailyStart,
         ];
         for journey in Journey::ALL.iter().filter(|j| !seeded.contains(j)) {
             let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();
             assert!(args.is_empty());
         }
+    }
+
+    #[test]
+    fn daily_start_gets_the_other_side_as_its_second_build() {
+        let base = build(Side::Base, "base");
+        let args = journey_inputs(Journey::DailyStart, &base, Path::new("/nowhere")).unwrap();
+        assert_eq!(args, second_build(&base));
+        assert!(args.contains(&OsString::from("--second-binary")));
     }
 
     #[test]

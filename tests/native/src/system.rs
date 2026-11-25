@@ -10,8 +10,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{
     Arc, Mutex, OnceLock,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -170,9 +171,71 @@ impl Identity {
     }
 }
 
+pub enum Process {
+    Spawned(Child),
+    Adopted {
+        pid: rustix::process::Pid,
+        status: Option<ExitStatus>,
+    },
+}
+
+impl Process {
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        match self {
+            Self::Spawned(child) => child.try_wait(),
+            Self::Adopted { pid, status } => {
+                if status.is_none() {
+                    *status =
+                        rustix::process::waitpid(Some(*pid), rustix::process::WaitOptions::NOHANG)?
+                            .map(|(_, waited)| ExitStatus::from_raw(waited.as_raw()));
+                }
+                Ok(*status)
+            }
+        }
+    }
+
+    pub fn wait(&mut self) -> io::Result<ExitStatus> {
+        match self {
+            Self::Spawned(child) => child.wait(),
+            Self::Adopted { pid, status } => {
+                if let Some(status) = status {
+                    return Ok(*status);
+                }
+                let waited =
+                    rustix::process::waitpid(Some(*pid), rustix::process::WaitOptions::empty())?
+                        .map(|(_, waited)| ExitStatus::from_raw(waited.as_raw()))
+                        .ok_or_else(|| io::Error::other("waitpid gave no status"))?;
+                *status = Some(waited);
+                Ok(waited)
+            }
+        }
+    }
+
+    pub fn kill(&mut self) -> io::Result<()> {
+        match self {
+            Self::Spawned(child) => child.kill(),
+            Self::Adopted { pid, status: None } => Ok(rustix::process::kill_process(
+                *pid,
+                rustix::process::Signal::KILL,
+            )?),
+            Self::Adopted { .. } => Ok(()),
+        }
+    }
+}
+
 pub struct Owned {
-    pub child: Child,
+    pub child: Process,
     pub identity: Identity,
+}
+
+pub fn parent(pid: u32) -> Result<u32> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    let (_, fields) = stat.rsplit_once(')').context("Malformed process stat")?;
+    Ok(fields
+        .split_whitespace()
+        .nth(1)
+        .context("Missing parent process")?
+        .parse()?)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -238,6 +301,19 @@ fn stuck(pid: u32) -> String {
 }
 
 impl Owned {
+    pub fn adopt(pid: u32) -> Result<Self> {
+        let identity = Identity::read(pid)?;
+        ensure!(
+            parent(pid)? == std::process::id(),
+            "Process {pid} was not handed to the verifier when its starter exited"
+        );
+        let pid = rustix::process::Pid::from_raw(i32::try_from(pid)?).context("Invalid PID")?;
+        Ok(Self {
+            child: Process::Adopted { pid, status: None },
+            identity,
+        })
+    }
+
     pub fn abandon(&mut self) -> Result<()> {
         if self.child.try_wait()?.is_none() {
             self.identity.verify()?;
@@ -499,7 +575,10 @@ impl System {
                 return Err(error);
             }
         };
-        let owned = Owned { child, identity };
+        let owned = Owned {
+            child: Process::Spawned(child),
+            identity,
+        };
         self.record(json!({"event":"spawn","identity":owned.identity,"arguments":arguments}))?;
         Ok(owned)
     }

@@ -1,0 +1,13 @@
+diff --git a/app/src/app_start.rs b/app/src/app_start.rs
+index a4557047..3fa0513f 100644
+--- a/app/src/app_start.rs
++++ b/app/src/app_start.rs
+@@ -97,7 +97,7 @@ fn launch(install: &Install, start: &Start) -> Result<(String, Child, PathBuf),
+     let error_file = file
+         .try_clone()
+         .map_err(|error| NotStarted::Refused(error.to_string()))?;
+-    let child = app_command(&install.shell(Link::Current), start, std::env::vars_os())
++    let child = app_command(&install.shell(Link::Previous), start, std::env::vars_os())
+         .stdout(file)
+         .stderr(error_file)
+         .spawn()
