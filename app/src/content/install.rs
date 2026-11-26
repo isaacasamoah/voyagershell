@@ -39,6 +39,12 @@ pub struct Update {
     pub diff: String,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Installed {
+    pub updates: Vec<Update>,
+    pub kept: Vec<String>,
+}
+
 #[derive(Default, Deserialize, Serialize)]
 struct Record {
     version: u32,
@@ -252,11 +258,13 @@ fn keep_diffs(profile: &Path, updates: &[Update], known: &HashSet<String>) -> io
 fn hold(
     next: &mut BTreeMap<String, String>,
     updates: &mut Vec<Update>,
+    kept: &mut Vec<String>,
     profile: &Path,
     file: &Shipped,
     current: &[u8],
     installed: Option<u64>,
 ) {
+    kept.push(file.path.to_owned());
     match installed {
         Some(installed) => {
             next.insert(file.path.to_owned(), format!("{installed:016x}"));
@@ -268,12 +276,13 @@ fn hold(
     }
 }
 
-pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
+pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Installed> {
     let record_path = profile.join(RECORD);
     let (record, original) = Record::read(&record_path);
     let before = history();
     let mut next = BTreeMap::new();
     let mut updates = Vec::new();
+    let mut kept = Vec::new();
     for file in files {
         let target = profile.join(file.path);
         let current = read_optional(&target)?;
@@ -308,13 +317,22 @@ pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
                     }
                     Swap::Changed => {
                         let latest = fs::read(&target)?;
-                        hold(&mut next, &mut updates, profile, file, &latest, installed);
+                        hold(
+                            &mut next,
+                            &mut updates,
+                            &mut kept,
+                            profile,
+                            file,
+                            &latest,
+                            installed,
+                        );
                     }
                 }
             }
             Stance::Edited { installed } => hold(
                 &mut next,
                 &mut updates,
+                &mut kept,
                 profile,
                 file,
                 &current.unwrap_or_default(),
@@ -323,6 +341,7 @@ pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
             Stance::Unrecorded => hold(
                 &mut next,
                 &mut updates,
+                &mut kept,
                 profile,
                 file,
                 &current.unwrap_or_default(),
@@ -348,6 +367,7 @@ pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
         .chain(record.files.keys().cloned())
         .collect::<HashSet<_>>();
     updates.sort_by(|a, b| a.path.cmp(&b.path));
+    kept.sort();
     keep_diffs(profile, &updates, &known)?;
     let mut text = serde_json::to_string_pretty(&Record {
         version: 1,
@@ -357,7 +377,7 @@ pub fn install(profile: &Path, files: &[Shipped]) -> io::Result<Vec<Update>> {
     if original.as_deref() != Some(text.as_bytes()) {
         write_atomic(&record_path, text.as_bytes())?;
     }
-    Ok(updates)
+    Ok(Installed { updates, kept })
 }
 
 mod diff;

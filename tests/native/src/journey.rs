@@ -710,6 +710,8 @@ mod tests {
                 "tests/native/controls/daily-start-focus.patch".to_owned(),
                 "tests/native/controls/daily-start-rollback.patch".to_owned(),
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
+                "tests/native/controls/profile-updates-kept-edit.patch".to_owned(),
+                "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

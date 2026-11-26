@@ -1,3 +1,4 @@
+use crate::shipped::StandardCanvas;
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
     StatefulInteractiveElement, Styled, Window, div, px, relative, rgb,
@@ -7,6 +8,30 @@ use voyager_contract::inspection::Role;
 
 const DIFF_LINES: usize = 6;
 
+pub(crate) fn load_failure(
+    error: &anyhow::Error,
+    kept_files: &[String],
+    standard: &StandardCanvas,
+) -> String {
+    let mut message = format!("Canvas load failed: {error:#}");
+    for path in kept_files
+        .iter()
+        .filter(|path| path.starts_with("canvas/") && path.ends_with(".js"))
+    {
+        message.push_str(&format!("\nYour edited file is kept: {path}"));
+    }
+    match standard {
+        StandardCanvas::NotNeeded => {}
+        StandardCanvas::Drawn { .. } => {
+            message.push_str("\nShowing the standard canvas until it loads.")
+        }
+        StandardCanvas::Failed(text) => {
+            message.push_str(&format!("\nThe shipped canvas also failed: {text}"))
+        }
+    }
+    message
+}
+
 pub(crate) fn errors(text: String) -> impl IntoElement {
     div()
         .absolute()
@@ -15,6 +40,11 @@ pub(crate) fn errors(text: String) -> impl IntoElement {
         .bg(rgb(0x351e25))
         .text_color(rgb(0xffcad3))
         .p(px(8.))
+        .child(crate::inspect::labelled(
+            Role::HostStatus,
+            String::new(),
+            text.clone(),
+        ))
         .child(text)
 }
 
@@ -82,5 +112,34 @@ impl Updates {
             );
         }
         Some(notice.into_any_element())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_standard_canvas_stays_named_in_every_status_built_from_it() {
+        let kept = vec!["canvas/status.js".to_owned(), "canvas/icons.txt".to_owned()];
+        let standard = StandardCanvas::Failed("Permission denied".to_owned());
+        let at_start = load_failure(&anyhow::anyhow!("first"), &kept, &standard);
+        let on_retry = load_failure(&anyhow::anyhow!("second"), &kept, &standard);
+        for message in [&at_start, &on_retry] {
+            assert!(message.ends_with("\nThe shipped canvas also failed: Permission denied"));
+            assert!(message.contains("\nYour edited file is kept: canvas/status.js"));
+            assert!(!message.contains("icons.txt"));
+        }
+        assert!(on_retry.starts_with("Canvas load failed: second"));
+    }
+
+    #[test]
+    fn an_unneeded_standard_canvas_adds_no_line() {
+        let silent = load_failure(
+            &anyhow::anyhow!("broken"),
+            &Vec::new(),
+            &StandardCanvas::NotNeeded,
+        );
+        assert_eq!(silent, "Canvas load failed: broken");
     }
 }

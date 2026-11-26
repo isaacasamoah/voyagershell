@@ -778,8 +778,8 @@ source = "#173 verdict: 'Canvas load failed: cannot resolve module' for the reti
 features = ["profile-updates", "scripts-live-edit"]
 guard = []
 type_gap = "A kept canvas file that cannot load beside the new ones can leave the canvas with nothing to draw, and no type holds a fallback. S16b splits the canvas into regions that fail on their own."
-check = []
-gap = "No case yet, so it stays apart from live-edit-keeps-last-good. Isaac, 19 Nov 2026: the two merge once a case exists."
+check = ["journey:profile-updates/kept-edit-that-cannot-load-still-draws", "journey:profile-updates/failed-standard-canvas-stays-named"]
+gap = "The case covers one kept file that cannot import, not a kept file that loads and breaks one region, nor a shipped canvas that also fails. S16b covers regions."
 confidence = "inferred"
 
 [[invariant]]
