@@ -126,6 +126,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let row = Target::agents_row(terminal.placement());
         stand_in_row(native, &terminal, &row, "none")?;
         let drawn = native.drawn_labels(&row, CANVAS_REFRESH)?;
+        native.keep_window("silent-agent-row")?;
         stop_stand_in(native, &terminal, &row)?;
         Verdict::new()
             .expect(
