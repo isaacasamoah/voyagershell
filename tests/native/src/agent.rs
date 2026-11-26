@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 const AGENT_NAME: &str = "claude";
+pub const REPORTS: &str = "STAND_IN_REPORTS";
 pub const REPLY_MARKER: &str = "[vy]";
 pub const SPOKEN_REPLY: &str = "Docked on this fleet.\n\nThe Fleet was already open.";
 pub const TYPED_REPLY: &str = "Typed reply must stay silent.";
@@ -21,6 +22,14 @@ pub fn started(name: &str, args: &[String]) -> i32 {
         0
     } else {
         1
+    }
+}
+
+fn first_report() -> Option<&'static str> {
+    match std::env::var(REPORTS).as_deref() {
+        Ok("none") => None,
+        Ok("working") => Some("working"),
+        _ => Some("idle"),
     }
 }
 
@@ -141,7 +150,9 @@ pub fn run() -> i32 {
         task.drain(at..=at + 1);
     }
     println!("Stand-in {AGENT_NAME} took the task: {}", task.join(" "));
-    report("idle");
+    if let Some(state) = first_report() {
+        report(state);
+    }
     let mut turns = 0u32;
     for line in std::io::stdin().lock().lines() {
         match line {

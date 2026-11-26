@@ -272,6 +272,12 @@ The `core-events` journey proves that Core's reports reach the app. It shows
 an Agents Vessel beside the first terminal. `foreground-reaches-agents-list`
 runs a program three times and stops it each time. Each change must show in the
 terminal's `agents-row` within 1 s of the driver reading it from Core.
+`silent-program-is-unknown` and `report-stays-until-replaced` start the stand-in
+`claude` from the first terminal with `STAND_IN_REPORTS=none` and
+`STAND_IN_REPORTS=working`. The stand-in reports idle when the variable is
+unset, nothing when it is `none`, and one working report when it is `working`.
+The first case expects no status word in the row for 3 s. The second expects
+the row to say Working for 3 s while the stand-in stays silent.
 `exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After
 Core runs again and reports the program finished, the layout must hold the
 Vessel closed within 1 s. The pause does not make Core send a `missed`
@@ -1723,6 +1729,13 @@ the Fleet's save was released`.
 The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.
+
+The `core-events-unreported-idle` patch makes the Agents list draw Idle for an
+agent with no reported status, as main did. `silent-program-is-unknown` then
+fails on the expectation `the Agents row of an agent that never reported shows
+no status word`, with `Idle` in the observed row. It is the control for that
+case only. `report-stays-until-replaced` guards a reported state and has no
+control of its own.
 
 The `adopt-by-label` patch restores the old drop rule. A `created` report for a
 terminal that no Vessel names is dropped even when it carries the label.

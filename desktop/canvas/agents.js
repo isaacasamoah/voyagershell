@@ -21,8 +21,13 @@ function statusGroup(activity) {
       return "Working";
     case "done":
       return "Done";
+    case "idle":
+      return "Idle";
   }
-  return "Idle";
+  return undefined;
+}
+function rank(status) {
+  return status ? STATES[status].rank : STATES.Idle.rank;
 }
 export function agentsShown(layout) {
   return (
@@ -158,6 +163,8 @@ export function agentsView(
               : terminalBacked(content.typeId) && !process
                 ? "Status unavailable"
                 : "";
+        const status = statusGroup(activity);
+        const hint = !agent ? state : status ? badge.hint : "";
         rows.push({
           id: placement.id,
           voyage: voyage.id,
@@ -165,11 +172,11 @@ export function agentsView(
           program,
           agent: Boolean(agent),
           group: program,
-          status: statusGroup(activity),
-          detail: [agent ? statusGroup(activity) : state, group.name]
+          status,
+          detail: [agent ? status : state, group.name]
             .filter(Boolean)
             .join(" · "),
-          hint: agent ? badge.hint : state,
+          hint,
         });
       }
   }
@@ -210,7 +217,7 @@ export function agentsView(
               ),
           )
           .children(
-            item.agent
+            item.agent && item.status
               ? [
                   div()
                     .role("label")
@@ -294,7 +301,7 @@ export function agentsView(
     if (voyageCollapsed) continue;
     const agents = mine
       .filter((item) => item.agent)
-      .sort((a, b) => STATES[a.status].rank - STATES[b.status].rank);
+      .sort((a, b) => rank(a.status) - rank(b.status));
     const agentKey = `expanded-agents-${voyage.id}`;
     const agentCollapsed = !options?.collapsed.has(agentKey);
     const groups = div()
