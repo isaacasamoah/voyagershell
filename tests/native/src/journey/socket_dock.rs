@@ -889,18 +889,39 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .clone()
             .context("The layout has no selected Voyage")?;
         let known = portals_of(&layout, &voyage);
-        native.click(&Target::toggle_portals(&voyage))?;
-        native.click(&Target::worker("terminal"))?;
-        let portal = native.observe("a new Portal drawn in the column", |seen| {
-            let fresh = portals_of(seen.document, &voyage)
+        let created = from_voyager(
+            native,
+            &voyager,
+            "socket-portal-create",
+            Action::CreateVessel {
+                type_id: "terminal".into(),
+                destination: ContentDestination::Placement {
+                    owner: PlacementOwner::Portals { voyage: voyage.clone() },
+                    insertion: PlacementInsertion::Empty,
+                },
+                launch: None,
+            },
+        )?;
+        let portal = native.observe("a new Portal saved in the Voyage", |seen| {
+            portals_of(seen.document, &voyage)
                 .into_iter()
-                .find(|id| !known.contains(id))?;
-            seen.shows(&Target::terminal(&fresh)).then_some(fresh)
+                .find(|id| !known.contains(id))
+        })?;
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        if !column_shown(&layout, &voyage) {
+            native.click(&Target::toggle_portals(&voyage))?;
+        }
+        native.observe("the new Portal drawn in the column", |seen| {
+            seen.shows(&Target::terminal(&portal)).then_some(())
         })?;
         let on_portal = Context::Portal { id: portal.clone() };
-        native.drag(
-            &Target::AVATAR,
-            &Target::name(&RenameTarget::Portal { id: portal.clone() }),
+        let dock = from_voyager(
+            native,
+            &voyager,
+            "socket-portal-dock",
+            Action::Dock {
+                context: on_portal.clone(),
+            },
         )?;
         let docked = native
             .settle(
@@ -935,6 +956,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
         native.keep_window("avatar-click-on-portal-changes-nothing")?;
         Verdict::new()
+            .expect(
+                "voyager do workspace applied the Portal's create-vessel and the dock on it",
+                created["reply"]["status"] == "applied" && dock["reply"]["status"] == "applied",
+            )
             .expect("the avatar docked on the new Portal", docked)
             .expect(
                 "the Portals button hid the column and the avatar was parked small beside it",
