@@ -26,6 +26,7 @@ mod panels;
 pub mod replies;
 pub mod reply_hook;
 mod scope;
+mod session_name;
 pub mod spoken;
 pub mod vessel_overview;
 pub mod vessel_socket;

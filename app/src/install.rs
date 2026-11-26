@@ -162,7 +162,7 @@ impl Install {
                 path.display()
             ));
         }
-        if crate::vessel_socket::directory(&file.session).is_none() {
+        if !crate::session_name::valid(&file.session) {
             return Err(format!(
                 "{}: session must start with voyager- and use lowercase letters, digits or hyphens",
                 path.display()

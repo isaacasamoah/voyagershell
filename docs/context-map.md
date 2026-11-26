@@ -80,6 +80,7 @@ Owns files:
 - `app/src/launch.rs`
 - `app/src/install.rs`
 - `app/src/install_tests.rs`
+- `app/src/session_name.rs`
 - `app/src/agent_programs.rs`
 - `app/src/activity.rs`
 - `app/src/diagnostics.rs`
