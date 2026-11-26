@@ -1737,8 +1737,13 @@ The `core-events-unreported-idle` patch makes the Agents list draw Idle for an
 agent with no reported status, as main did. `silent-program-is-unknown` then
 fails on the expectation `the Agents row of an agent that never reported shows
 no status word`, with `Idle` in the observed row. It is the control for that
-case only. `report-stays-until-replaced` guards a reported state and has no
-control of its own.
+case only.
+
+The `core-events-reported-decays` patch makes the Agents list drop a reported
+status once a terminal has shown it for 1.5 s. `report-stays-until-replaced`
+then fails on the expectation `the row keeps showing Working for 3 s while the
+agent stays silent`, and the observed rows go from Working to no status. The
+silent case still passes. It is the control for that case only.
 
 The `adopt-by-label` patch restores the old drop rule. A `created` report for a
 terminal that no Vessel names is dropped even when it carries the label.
