@@ -3,7 +3,38 @@ use crate::core_shapes::{HelloParams, HelloResult};
 use serde_json::{Value, json};
 use std::io::{BufRead, Read, Write};
 
-pub const MINIMUM_CORE: (u64, u64, u64) = (0, 1, 18);
+const CORE_VERSION: &str = include_str!("../../distribution/core-version");
+pub const MINIMUM_CORE: (u64, u64, u64) = parse_release(CORE_VERSION);
+
+pub(super) const fn parse_release(text: &str) -> (u64, u64, u64) {
+    let bytes = text.as_bytes();
+    let end = if !bytes.is_empty() && bytes[bytes.len() - 1] == b'\n' {
+        bytes.len() - 1
+    } else {
+        bytes.len()
+    };
+    let mut parts = [0u64; 3];
+    let mut part = 0;
+    let mut digits = 0;
+    let mut index = 0;
+    while index < end {
+        let byte = bytes[index];
+        if byte.is_ascii_digit() {
+            parts[part] = parts[part] * 10 + (byte - b'0') as u64;
+            digits += 1;
+        } else if byte == b'.' && digits > 0 && part < 2 {
+            part += 1;
+            digits = 0;
+        } else {
+            panic!("distribution/core-version must hold one release like 0.1.18");
+        }
+        index += 1;
+    }
+    if part != 2 || digits == 0 {
+        panic!("distribution/core-version must hold one release like 0.1.18");
+    }
+    (parts[0], parts[1], parts[2])
+}
 const REQUIRED_FEATURES: [&str; 3] = ["framed", "attach", "shell"];
 
 #[derive(Clone, Debug, Eq, PartialEq)]

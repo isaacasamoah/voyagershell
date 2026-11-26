@@ -442,6 +442,44 @@ fn generated_types_name_the_minimum_core_release() {
 }
 
 #[test]
+fn the_minimum_core_is_the_release_in_distribution_core_version() {
+    let file = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../distribution/core-version"
+    ))
+    .unwrap();
+    let (major, minor, patch) = MINIMUM_CORE;
+    assert_eq!(file.trim(), format!("{major}.{minor}.{patch}"));
+}
+
+#[test]
+fn a_release_file_parses_with_or_without_its_line_end() {
+    assert_eq!(hello::parse_release("0.1.18\n"), (0, 1, 18));
+    assert_eq!(hello::parse_release("10.20.300"), (10, 20, 300));
+}
+
+#[test]
+fn a_release_file_that_is_not_one_release_is_refused() {
+    for bad in [
+        "",
+        "\n",
+        "0.1",
+        "0.1.",
+        ".1.2",
+        "0.1.2.3",
+        "0.1.x",
+        "v0.1.2",
+        "0.1.2\n\n",
+        " 0.1.2",
+    ] {
+        assert!(
+            std::panic::catch_unwind(|| hello::parse_release(bad)).is_err(),
+            "{bad:?}"
+        );
+    }
+}
+
+#[test]
 fn typed_hello_keeps_the_existing_handshake() {
     let params = Core::hello_params();
     assert_eq!(

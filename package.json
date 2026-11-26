@@ -7,7 +7,7 @@
     "contract:check": "node contract/build.cjs --check",
     "core-schema:generate": "node app/core-schema.cjs --write",
     "core-schema:check": "node app/core-schema.cjs --check",
-    "test": "npm run typecheck && node --test contract/validator-test.cjs desktop/terminal-test.cjs desktop/rename-test.cjs desktop/typecheck-test.cjs desktop/canvas-test.cjs tests/architecture/gate-test.cjs tests/architecture/families-test.cjs tests/architecture/owners-test.cjs tests/architecture/vocabulary-test.cjs tests/architecture/observe-test.cjs tests/architecture/delta-test.cjs tests/architecture/features-test.cjs scripts/comments-check-test.cjs scripts/prose-check-test.cjs scripts/ci-steps-local-test.cjs",
+    "test": "npm run typecheck && node --test contract/validator-test.cjs desktop/terminal-test.cjs desktop/rename-test.cjs desktop/typecheck-test.cjs desktop/canvas-test.cjs tests/architecture/gate-test.cjs tests/architecture/families-test.cjs tests/architecture/owners-test.cjs tests/architecture/vocabulary-test.cjs tests/architecture/observe-test.cjs tests/architecture/delta-test.cjs tests/architecture/features-test.cjs scripts/comments-check-test.cjs scripts/prose-check-test.cjs scripts/ci-steps-local-test.cjs scripts/release-data-test.cjs scripts/release-test.cjs",
     "format:check": "prettier --check contract/build.cjs 'tests/architecture/*.cjs' app/core-schema.cjs 'desktop/*.{cjs,json}' 'desktop/canvas/**/*.{ts,js,json}' 'desktop/themes/*.json' 'content/**/*.{ts,js,json}' 'scripts/*.cjs'",
     "typecheck": "node desktop/typecheck.cjs --check",
     "scripts:generate": "node desktop/typecheck.cjs --write",
