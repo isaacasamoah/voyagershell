@@ -28,9 +28,88 @@ test("the release build uses the toolchain and Zig that checks uses", () => {
   assert.ok(release.includes("python3 desktop/prepare-sdk.py"));
 });
 
-test("a tag push or a manual run starts it, and nothing else", () => {
+const REHEARSAL_PATHS = [
+  ".github/workflows/release.yml",
+  "scripts/package",
+  "scripts/package-test.cjs",
+  "scripts/release-data.cjs",
+  "scripts/release-data-test.cjs",
+  "scripts/install-test.cjs",
+  "scripts/release-workflow-test.cjs",
+  "distribution/install.sh",
+  "distribution/core-version",
+  "CHANGELOG.md",
+];
+
+function condition(text, name) {
+  const found = /^ {4}if: (.+)$/m.exec(job(text, name));
+  return found ? found[1].trim() : null;
+}
+
+function runs(expression, context) {
+  if (expression === null) {
+    return true;
+  }
+  return expression.split(" && ").every((term) => {
+    const parts = /^github\.(event_name|ref_type) == '([a-z_]+)'$/.exec(term);
+    assert.ok(parts, `condition term the test cannot read: ${term}`);
+    return context[parts[1]] === parts[2];
+  });
+}
+
+test("a tag push, a pull request that touches the release files or a manual run starts it, and nothing else", () => {
   const on = /^on:\n([\s\S]*?)\n\n/m.exec(release)[1];
-  assert.strictEqual(on, '  push:\n    tags: ["v*"]\n  workflow_dispatch:');
+  assert.strictEqual(
+    on,
+    [
+      "  push:",
+      '    tags: ["v*"]',
+      "  pull_request:",
+      "    paths:",
+      ...REHEARSAL_PATHS.map((file) => `      - ${file}`),
+      "  workflow_dispatch:",
+    ].join("\n"),
+  );
+  for (const file of REHEARSAL_PATHS) {
+    assert.ok(fs.existsSync(path.join(__dirname, "..", file)), file);
+  }
+});
+
+test("a pull request or a manual run builds, and only a tag push reaches ci-passed or publish", () => {
+  const contexts = {
+    pullRequest: { event_name: "pull_request", ref_type: "branch" },
+    manual: { event_name: "workflow_dispatch", ref_type: "branch" },
+    branchPush: { event_name: "push", ref_type: "branch" },
+    tagPush: { event_name: "push", ref_type: "tag" },
+  };
+  for (const [name, context] of Object.entries(contexts)) {
+    const tag = name === "tagPush";
+    assert.ok(runs(condition(release, "build"), context), `build on ${name}`);
+    assert.strictEqual(
+      runs(condition(release, "ci-passed"), context),
+      tag,
+      `ci-passed on ${name}`,
+    );
+    assert.strictEqual(
+      runs(condition(release, "publish"), context),
+      tag,
+      `publish on ${name}`,
+    );
+  }
+});
+
+test("the release environment and write access belong to publish alone and no condition can bypass its tag test", () => {
+  const publish = job(release, "publish");
+  assert.match(publish, /environment: release\n/);
+  const others = release.replace(publish, "");
+  assert.doesNotMatch(others, /^ {4}environment:/m);
+  assert.doesNotMatch(others, /contents: write/);
+  assert.doesNotMatch(
+    release,
+    /always\(\)|cancelled\(\)|failure\(\)|success\(\)/,
+  );
+  assert.doesNotMatch(release, /pull_request_target/);
+  assert.doesNotMatch(job(release, "build"), /gh release|environment/);
 });
 
 test("a run is never cancelled", () => {

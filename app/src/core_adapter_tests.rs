@@ -442,6 +442,14 @@ fn generated_types_name_the_minimum_core_release() {
 }
 
 #[test]
+fn an_older_core_is_refused_with_the_same_words_as_before() {
+    assert_eq!(
+        Incompatible::Release("0.1.17".into()).to_string(),
+        "Herdr Core reports release 0.1.17; Voyager supports 0.1.18 and newer"
+    );
+}
+
+#[test]
 fn the_minimum_core_is_the_release_in_distribution_core_version() {
     let file = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),

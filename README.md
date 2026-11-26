@@ -179,10 +179,11 @@ token and only its publish job may write release contents. Anyone who may push
 tags can start the workflow, but nothing publishes until the required reviewer
 approves that run.
 
-To rehearse a release, run the `release` workflow by hand on a branch from the
-Actions tab. It builds the archive and writes `latest.json` as a workflow
-artifact named `voyagershell-dist`, and publishes nothing. Check that the
-archive's sha256 matches the manifest's.
+A pull request that changes the release files, and a hand-run of the
+`release` workflow from the Actions tab, rehearse a release. They build the
+archive and write `latest.json` as a workflow artifact named
+`voyagershell-dist`, and publish nothing. Neither reaches the `release`
+environment. Check that the archive's sha256 matches the manifest's.
 
 ## Set up voice
 

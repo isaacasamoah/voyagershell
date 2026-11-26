@@ -3,9 +3,21 @@ name: release
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/package
+      - scripts/package-test.cjs
+      - scripts/release-data.cjs
+      - scripts/release-data-test.cjs
+      - scripts/install-test.cjs
+      - scripts/release-workflow-test.cjs
+      - distribution/install.sh
+      - distribution/core-version
+      - CHANGELOG.md
   workflow_dispatch:
 
-run-name: ${{ github.ref_type == 'tag' && format('release {0}', github.ref_name) || format('dry run {0}', github.ref_name) }}
+run-name: ${{ github.ref_type == 'tag' && format('release {0}', github.ref_name) || format('rehearsal {0}', github.ref_name) }}
 
 permissions:
   contents: read
