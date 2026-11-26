@@ -7,6 +7,40 @@ use voyager_contract::inspection::Role;
 
 const DIFF_LINES: usize = 6;
 
+pub(crate) enum Standard<'a> {
+    Drawn,
+    Missing,
+    Failed(&'a anyhow::Error),
+}
+
+impl Standard<'_> {
+    pub(crate) fn drawn(drawn: bool) -> Self {
+        if drawn { Self::Drawn } else { Self::Missing }
+    }
+}
+
+pub(crate) fn load_failure(
+    error: &anyhow::Error,
+    kept_files: &[String],
+    standard: Standard,
+) -> String {
+    let mut message = format!("Canvas load failed: {error:#}");
+    for path in kept_files
+        .iter()
+        .filter(|path| path.starts_with("canvas/") && path.ends_with(".js"))
+    {
+        message.push_str(&format!("\nYour edited file is kept: {path}"));
+    }
+    match standard {
+        Standard::Drawn => message.push_str("\nShowing the standard canvas until it loads."),
+        Standard::Missing => {}
+        Standard::Failed(second) => {
+            message.push_str(&format!("\nThe shipped canvas also failed: {second:#}"))
+        }
+    }
+    message
+}
+
 pub(crate) fn errors(text: String) -> impl IntoElement {
     div()
         .absolute()

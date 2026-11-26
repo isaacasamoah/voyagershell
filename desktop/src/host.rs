@@ -28,6 +28,7 @@ use voyager_contract::operations;
 use crate::notice_listener::Listener;
 use voyager_contract::{Context as WorkspaceContext, Request};
 
+use crate::banner::{self, Standard};
 use crate::bridge::{Bridge, decimal};
 use crate::shipped::Fallback;
 use crate::terminal::Viewers;
@@ -469,18 +470,6 @@ fn load_shipped(
     Ok((root, fallback))
 }
 
-fn kept_message(error: &anyhow::Error, edited: &str, shipped_drawn: bool) -> String {
-    let mut message = format!("Canvas load failed: {error:#}");
-    if !edited.is_empty() {
-        message.push('\n');
-        message.push_str(edited);
-    }
-    if shipped_drawn {
-        message.push_str("\nShowing the standard canvas until it loads.");
-    }
-    message
-}
-
 pub struct CanvasHost {
     root: Option<Entity<ShellRoot>>,
     fallback: Option<Fallback>,
@@ -560,12 +549,6 @@ impl CanvasHost {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let edited = kept_files
-            .iter()
-            .filter(|path| path.starts_with("canvas/") && path.ends_with(".js"))
-            .map(|path| format!("Your edited file is kept: {path}"))
-            .collect::<Vec<_>>()
-            .join("\n");
         let (root, load_error, fallback) = match load(
             &runtime,
             &package,
@@ -587,14 +570,15 @@ impl CanvasHost {
                 ) {
                     Ok((root, fallback)) => (
                         Some(root),
-                        Some(kept_message(&error, &edited, true)),
+                        Some(banner::load_failure(&error, &kept_files, Standard::Drawn)),
                         Some(fallback),
                     ),
                     Err(second) => (
                         None,
-                        Some(format!(
-                            "{}\nThe shipped canvas also failed: {second:#}",
-                            kept_message(&error, &edited, false)
+                        Some(banner::load_failure(
+                            &error,
+                            &kept_files,
+                            Standard::Failed(&second),
                         )),
                         None,
                     ),
@@ -762,11 +746,9 @@ impl CanvasHost {
                                     canvas.load_error = None;
                                 }
                                 Err(error) => {
-                                    canvas.load_error = Some(kept_message(
-                                        &error,
-                                        &edited,
-                                        canvas.fallback.is_some(),
-                                    ))
+                                    let standard = Standard::drawn(canvas.fallback.is_some());
+                                    canvas.load_error =
+                                        Some(banner::load_failure(&error, &kept_files, standard))
                                 }
                             }
                         }
