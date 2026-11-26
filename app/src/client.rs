@@ -16,6 +16,9 @@ use voyager_contract::{Action, Context, Layout, Request, Response, VesselId};
 mod core_calls;
 #[path = "client_owner.rs"]
 mod owner;
+#[path = "client_ready.rs"]
+mod ready;
+pub use ready::FirstConnect;
 #[path = "client_reply.rs"]
 mod reply;
 #[path = "client_service.rs"]
@@ -202,6 +205,10 @@ impl Receipt {
 }
 
 impl Message {
+    fn inspects_workspace(&self) -> bool {
+        matches!(self, Self::Workspace { request, .. } if matches!(request.action, Action::Inspect))
+    }
+
     fn waits(&self, held: usize) -> bool {
         let effect = match self {
             Self::Workspace { request, scope, .. } => {
@@ -261,6 +268,34 @@ fn answer<T>(
     })
 }
 
+pub struct OpenedProfile {
+    pub lock: crate::profile_lock::ProfileLock,
+    pub updates: Vec<crate::content::Update>,
+    pub owner: crate::content::Owner,
+}
+
+pub fn open_profile(
+    profile: &std::path::Path,
+    files: &[crate::content::Shipped],
+) -> Result<OpenedProfile, String> {
+    let lock = crate::profile_lock::ProfileLock::hold(profile)?;
+    let (updates, owner) = crate::content::install_and_open(profile, files)
+        .map_err(|error| format!("{}: {error}", profile.display()))?;
+    Ok(OpenedProfile {
+        lock,
+        updates,
+        owner,
+    })
+}
+
+pub enum StartUp {
+    Refused(String),
+    Ready {
+        listener: std::io::Result<crate::app_socket::Listener>,
+        raises: async_channel::Receiver<()>,
+    },
+}
+
 #[derive(Clone)]
 pub struct Client {
     sender: async_channel::Sender<Message>,
@@ -272,9 +307,35 @@ pub struct Client {
     placement_notice: Arc<Mutex<Option<String>>>,
     workspace_words: Arc<Mutex<Vec<String>>>,
     replies: crate::replies::Replies,
+    readiness: Arc<ready::Readiness>,
 }
 
 impl Client {
+    pub fn first_connect(&self) -> FirstConnect {
+        self.readiness.first_connect()
+    }
+
+    pub fn start_up(&self, session: &str) -> StartUp {
+        if let FirstConnect::UnsupportedCore(message) = self.first_connect() {
+            return StartUp::Refused(message);
+        }
+        self.ready();
+        let (raise, raises) = async_channel::unbounded();
+        let listener = crate::app_socket::Listener::bind(session, move || {
+            let _ = raise.try_send(());
+        });
+        StartUp::Ready { listener, raises }
+    }
+
+    pub fn ready(&self) {
+        self.readiness.ready();
+        let _ = self.sender.try_send(Message::CoreReported);
+    }
+
+    pub(crate) fn wait_ready(&self, within: std::time::Duration) -> bool {
+        self.readiness.wait_ready(within)
+    }
+
     pub(crate) fn conversation_focus(
         &self,
         layout: &Layout,
@@ -334,7 +395,13 @@ impl Client {
         owner: crate::content::Owner,
         profile: std::path::PathBuf,
     ) -> Self {
-        Self::start_with_profile(session, cwd, Some(owner), Some(profile))
+        Self::start_held(
+            session,
+            cwd,
+            Some(owner),
+            Some(profile),
+            ready::Readiness::held(),
+        )
     }
 
     fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {

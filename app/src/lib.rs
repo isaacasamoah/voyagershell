@@ -2,6 +2,8 @@ mod activity;
 mod administrator;
 mod adoption;
 pub mod agent_programs;
+#[cfg(unix)]
+pub mod app_socket;
 mod canvas;
 pub mod change_sentence;
 pub mod client;
@@ -23,6 +25,7 @@ mod layout_parts;
 mod layout_store;
 pub mod observation;
 mod panels;
+pub mod profile_lock;
 pub mod replies;
 pub mod reply_hook;
 mod scope;

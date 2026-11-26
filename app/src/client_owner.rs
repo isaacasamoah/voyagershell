@@ -30,6 +30,8 @@ use voyager_contract::{
     Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest, VesselId,
 };
 
+const UNREADY: usize = 1;
+
 #[path = "client_structure.rs"]
 mod structure_calls;
 #[path = "client_voyager.rs"]
@@ -83,6 +85,7 @@ struct Owner {
     start: Start,
     door: FrontDoor<Receipt>,
     held: VecDeque<Message>,
+    unready: VecDeque<Message>,
     flight: Option<Flight>,
     unconfirmed: HashMap<String, String>,
     created_vessels: Vec<CreatedTerminal>,
@@ -104,6 +107,22 @@ impl Client {
         content: Option<crate::content::Owner>,
         profile: Option<PathBuf>,
     ) -> Self {
+        Self::start_held(
+            session,
+            cwd,
+            content,
+            profile,
+            super::ready::Readiness::open(),
+        )
+    }
+
+    pub(super) fn start_held(
+        session: String,
+        cwd: String,
+        content: Option<crate::content::Owner>,
+        profile: Option<PathBuf>,
+        readiness: super::ready::Readiness,
+    ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         let package_revision = Arc::new(AtomicU64::new(0));
         let client = Self {
@@ -115,6 +134,7 @@ impl Client {
             placement_notice: Arc::default(),
             workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
+            readiness: Arc::new(readiness),
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -158,6 +178,9 @@ impl Owner {
             }));
         }
         let mut core = connect(&session, client.activity.clone());
+        client
+            .readiness
+            .connected(core.as_ref().map(drop).map_err(Clone::clone));
         let mut subscription = Subscription::default();
         subscription.begin(&mut core, false, &sender);
         let caller = client.clone();
@@ -197,6 +220,7 @@ impl Owner {
             start: Start::Waiting(None),
             door: FrontDoor::default(),
             held: VecDeque::new(),
+            unready: VecDeque::new(),
             flight: None,
             unconfirmed: HashMap::new(),
             created_vessels: Vec::new(),
@@ -210,12 +234,22 @@ impl Owner {
     fn run(mut self, receiver: &async_channel::Receiver<Message>) {
         loop {
             self.observe();
+            let ready = self.client.readiness.is_ready();
+            if ready {
+                while let Some(message) = self.unready.pop_back() {
+                    self.held.push_front(message);
+                }
+            }
             let waiting = (!self.door.flying())
                 .then(|| self.held.pop_front())
                 .flatten();
             let Ok(message) = waiting.map_or_else(|| receiver.recv_blocking(), Ok) else {
                 break;
             };
+            if !ready && message.inspects_workspace() && self.unready.len() < UNREADY {
+                self.unready.push_back(message);
+                continue;
+            }
             if self.door.flying() && message.waits(self.held.len()) {
                 self.held.push_back(message);
                 continue;
@@ -230,6 +264,9 @@ impl Owner {
     }
 
     fn observe(&mut self) {
+        if !self.client.readiness.is_ready() {
+            return;
+        }
         self.seen.note(self.version, &self.layout);
         let door = &self.door;
         let reported = reports(

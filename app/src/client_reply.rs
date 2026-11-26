@@ -104,6 +104,7 @@ mod tests {
             workspace_words: Arc::default(),
             replies: crate::replies::Replies::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
+            readiness: Arc::new(super::super::ready::Readiness::open()),
         };
         (client, queue)
     }

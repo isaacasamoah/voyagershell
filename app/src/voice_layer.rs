@@ -22,6 +22,7 @@ use std::{
 
 pub type Vocabulary = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
+const READY_POLL: Duration = Duration::from_millis(100);
 const MICROPHONE_RETRY: Duration = Duration::from_secs(3);
 const REPLY_WAIT_FRAMES: usize = 150;
 const PLAY_OUT_LOOK: Duration = Duration::from_millis(20);
@@ -104,6 +105,10 @@ impl Shared {
 
     fn is_on(&self) -> bool {
         self.wanted() == Wanted::On
+    }
+
+    fn shutting_down(&self) -> bool {
+        self.state.lock().map_or(true, |state| state.shutdown)
     }
 
     fn wait_while_off(&self) -> Wanted {
@@ -690,6 +695,12 @@ pub fn start(
     let owner = shared.clone();
     let talk_over = TalkOver::from_environment();
     thread::spawn(move || {
+        while !client.wait_ready(READY_POLL) {
+            if owner.shutting_down() {
+                owner.set(Phase::Stopped, None);
+                return;
+            }
+        }
         let engine = match bring_up(&client, &settings) {
             Ok(engine) => engine,
             Err(reason) => {
