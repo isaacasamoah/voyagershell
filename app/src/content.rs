@@ -7,6 +7,16 @@ pub use description::{discover_all, open_registry};
 pub(crate) use manifest::valid_type_id;
 pub mod install;
 
+pub use install::{Shipped, Update};
+
+pub fn install_and_open(
+    profile: &Path,
+    files: &[Shipped],
+) -> std::io::Result<(Vec<Update>, Owner)> {
+    let updates = install::install(profile, files)?;
+    Ok((updates, Owner::open(profile)?))
+}
+
 use sha2::{Digest, Sha256};
 use std::{
     fs,

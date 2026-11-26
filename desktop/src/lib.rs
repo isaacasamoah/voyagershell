@@ -42,7 +42,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use voyager_app::client::{Client, FirstConnect};
+use voyager_app::client::{Client, StartUp};
 
 gpui::actions!(voyager, [Quit]);
 
@@ -67,24 +67,21 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &mut App) {
     cx.spawn(async move |cx: &mut AsyncApp| {
         let (sent, received) = async_channel::bounded(1);
-        std::thread::spawn({
-            let client = client.clone();
-            move || sent.send_blocking(client.first_connect())
-        });
-        let Ok(connected) = received.recv().await else {
+        std::thread::spawn(move || sent.send_blocking(client.start_up(&session)));
+        let Ok(started) = received.recv().await else {
             return;
         };
-        if let FirstConnect::UnsupportedCore(message) = connected {
-            eprintln!("{message}");
-            std::process::exit(1);
-        }
-        client.ready();
-        let (raise, raised) = async_channel::unbounded::<()>();
-        let _listener = voyager_app::app_socket::Listener::bind(&session, move || {
-            let _ = raise.try_send(());
-        })
-        .inspect_err(|error| eprintln!("The app socket is unavailable: {error}"));
-        while raised.recv().await.is_ok() {
+        let (_listener, raises) = match started {
+            StartUp::Refused(message) => {
+                eprintln!("{message}");
+                std::process::exit(1);
+            }
+            StartUp::Ready { listener, raises } => (
+                listener.inspect_err(|error| eprintln!("The app socket is unavailable: {error}")),
+                raises,
+            ),
+        };
+        while raises.recv().await.is_ok() {
             cx.update(|cx| {
                 cx.activate(true);
                 let _ = window.update(cx, |_, window, _| window.activate_window());
@@ -95,12 +92,13 @@ fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &m
 }
 
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
-    let _lock =
-        voyager_app::profile_lock::ProfileLock::hold(&profile).map_err(anyhow::Error::msg)?;
+    let opened = voyager_app::client::open_profile(&profile, &shipped::files())
+        .map_err(anyhow::Error::msg)?;
     let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
-    let profile_updates = voyager_app::content::install::install(&profile, &shipped::files())?;
-    let content_owner = voyager_app::content::Owner::open(&profile)?;
+    let _lock = opened.lock;
+    let profile_updates = opened.updates;
+    let content_owner = opened.owner;
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(package.join("canvas.json"))?)
             .context("Reading canvas manifest")?;

@@ -268,6 +268,34 @@ fn answer<T>(
     })
 }
 
+pub struct OpenedProfile {
+    pub lock: crate::profile_lock::ProfileLock,
+    pub updates: Vec<crate::content::Update>,
+    pub owner: crate::content::Owner,
+}
+
+pub fn open_profile(
+    profile: &std::path::Path,
+    files: &[crate::content::Shipped],
+) -> Result<OpenedProfile, String> {
+    let lock = crate::profile_lock::ProfileLock::hold(profile)?;
+    let (updates, owner) = crate::content::install_and_open(profile, files)
+        .map_err(|error| format!("{}: {error}", profile.display()))?;
+    Ok(OpenedProfile {
+        lock,
+        updates,
+        owner,
+    })
+}
+
+pub enum StartUp {
+    Refused(String),
+    Ready {
+        listener: std::io::Result<crate::app_socket::Listener>,
+        raises: async_channel::Receiver<()>,
+    },
+}
+
 #[derive(Clone)]
 pub struct Client {
     sender: async_channel::Sender<Message>,
@@ -285,6 +313,18 @@ pub struct Client {
 impl Client {
     pub fn first_connect(&self) -> FirstConnect {
         self.readiness.first_connect()
+    }
+
+    pub fn start_up(&self, session: &str) -> StartUp {
+        if let FirstConnect::UnsupportedCore(message) = self.first_connect() {
+            return StartUp::Refused(message);
+        }
+        self.ready();
+        let (raise, raises) = async_channel::unbounded();
+        let listener = crate::app_socket::Listener::bind(session, move || {
+            let _ = raise.try_send(());
+        });
+        StartUp::Ready { listener, raises }
     }
 
     pub fn ready(&self) {
