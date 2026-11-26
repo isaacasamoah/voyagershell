@@ -24,7 +24,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Voice | covered | none | none | python-only | voice, voice-talk-over | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | covered | none | none | covered | worktrees | - | linux |
-| Close Voyage / quit / restore | covered | none | none | covered | quit-restore, voyage-close | - | linux |
+| Close Voyage / quit / restore | covered | none | none | covered | quit-restore, voyage-close, daily-start | - | linux |
 | Window drag bar | covered | none | none | covered | workspace | - | linux |
 | Profile theme | covered | none | none | covered | profile | - | linux |
 | Profile updates | covered | none | none | covered | profile-updates | - | linux |

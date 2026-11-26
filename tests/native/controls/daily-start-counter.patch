@@ -1,0 +1,16 @@
+diff --git a/app/src/core.rs b/app/src/core.rs
+index fb7f87b8..9e7c4f0a 100644
+--- a/app/src/core.rs
++++ b/app/src/core.rs
+@@ -717,6 +717,11 @@ impl Core {
+             activity.fail("Voyager is quitting");
+         }
+         Self::activity_flow(&self.activity, &self.control, 0);
++        if !stop {
++            for terminal in self.terminal_list()? {
++                let _ = self.terminal_kill(&terminal.address);
++            }
++        }
+         if stop && self.server_status()?.core.id != self.identity {
+             return Err(Error::Rejected {
+                 kind: "changed_core".into(),

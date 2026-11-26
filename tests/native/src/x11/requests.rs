@@ -77,6 +77,10 @@ pub enum Request {
         second: Option<String>,
         source: u32,
     },
+    Activate {
+        window: Window,
+        source: u32,
+    },
 }
 
 impl Request {
@@ -84,7 +88,8 @@ impl Request {
         match self {
             Request::MoveResize { window, .. }
             | Request::ChangeState { window, .. }
-            | Request::NetWmState { window, .. } => *window,
+            | Request::NetWmState { window, .. }
+            | Request::Activate { window, .. } => *window,
         }
     }
 }
@@ -101,6 +106,7 @@ enum Kind {
     MoveResize,
     ChangeState,
     NetWmState,
+    Activate,
 }
 
 #[derive(Clone, Copy)]
@@ -108,6 +114,7 @@ struct Atoms {
     move_resize: Atom,
     change_state: Atom,
     net_wm_state: Atom,
+    activate: Atom,
     wake: Atom,
 }
 
@@ -117,6 +124,7 @@ impl Atoms {
             (self.move_resize, Kind::MoveResize),
             (self.change_state, Kind::ChangeState),
             (self.net_wm_state, Kind::NetWmState),
+            (self.activate, Kind::Activate),
         ]
         .into_iter()
         .find_map(|(atom, kind)| (atom == message).then_some(kind))
@@ -152,6 +160,10 @@ fn decode(
                 source: data[3],
             }
         }
+        Kind::Activate => Request::Activate {
+            window,
+            source: data[0],
+        },
     }
 }
 
@@ -189,6 +201,7 @@ impl Requests {
             move_resize: atom(&connection, "_NET_WM_MOVERESIZE")?,
             change_state: atom(&connection, "WM_CHANGE_STATE")?,
             net_wm_state: atom(&connection, "_NET_WM_STATE")?,
+            activate: atom(&connection, "_NET_ACTIVE_WINDOW")?,
             wake: atom(&connection, "VOYAGER_VERIFICATION_REQUESTS_WAKE")?,
         };
         connection
@@ -335,6 +348,7 @@ mod tests {
         move_resize: 10,
         change_state: 11,
         net_wm_state: 12,
+        activate: 14,
         wake: 13,
     };
 
@@ -344,7 +358,7 @@ mod tests {
 
     #[test]
     fn a_message_type_selects_one_kind_and_the_wake_selects_none() {
-        let kinds: Vec<_> = [10, 11, 12, 13, 99]
+        let kinds: Vec<_> = [10, 11, 12, 14, 13, 99]
             .map(|message| ATOMS.kind(message))
             .into();
         assert_eq!(
@@ -353,10 +367,21 @@ mod tests {
                 Some(Kind::MoveResize),
                 Some(Kind::ChangeState),
                 Some(Kind::NetWmState),
+                Some(Kind::Activate),
                 None,
                 None
             ]
         );
+    }
+
+    #[test]
+    fn an_activate_request_keeps_its_window_and_source() {
+        let request = decode(Kind::Activate, 7, [1, 0, 0, 0, 0], named);
+        assert_eq!(
+            serde_json::to_value(&request).unwrap(),
+            json!({"request":"activate","window":7,"source":1})
+        );
+        assert_eq!(request.window(), 7);
     }
 
     #[test]

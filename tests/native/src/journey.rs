@@ -5,6 +5,7 @@ mod avatar_drag;
 mod canvas_stack;
 mod chat;
 mod core_events;
+mod daily_start;
 mod home_create;
 mod input;
 mod layout;
@@ -166,6 +167,7 @@ journeys! {
     VoyagerCommand => "voyager-command" in voyager_command, sidebar: None, window: None;
     AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     VoiceTalkOver => "voice-talk-over" in voice_talk_over, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    DailyStart => "daily-start" in daily_start, sidebar: None, window: None;
 }
 
 impl Journey {
@@ -185,6 +187,10 @@ impl Journey {
 
     pub fn beside_command(self) -> bool {
         !matches!(self, Self::VoyagerCommand)
+    }
+
+    pub fn installs(self) -> bool {
+        matches!(self, Self::DailyStart)
     }
 
     pub fn traces_tools(self) -> bool {
@@ -699,6 +705,11 @@ mod tests {
                 "tests/native/controls/canvas-stack-reopened.patch".to_owned(),
                 "tests/native/controls/canvas-stack-untouched.patch".to_owned(),
                 "tests/native/controls/canvas-stack-once.patch".to_owned(),
+                "tests/native/controls/daily-start-installed.patch".to_owned(),
+                "tests/native/controls/daily-start-update.patch".to_owned(),
+                "tests/native/controls/daily-start-focus.patch".to_owned(),
+                "tests/native/controls/daily-start-rollback.patch".to_owned(),
+                "tests/native/controls/daily-start-counter.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")

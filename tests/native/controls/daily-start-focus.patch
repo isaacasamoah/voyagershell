@@ -1,0 +1,14 @@
+diff --git a/desktop/src/lib.rs b/desktop/src/lib.rs
+index a772da3e..37869626 100644
+--- a/desktop/src/lib.rs
++++ b/desktop/src/lib.rs
+@@ -83,8 +83,7 @@ fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &m
+         };
+         while raises.recv().await.is_ok() {
+             cx.update(|cx| {
+-                cx.activate(true);
+-                let _ = window.update(cx, |_, window, _| window.activate_window());
++                let _ = (cx, &window);
+             });
+         }
+     })
