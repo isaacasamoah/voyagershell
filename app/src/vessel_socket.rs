@@ -30,11 +30,7 @@ pub(crate) struct Services {
 }
 
 pub fn directory(session: &str) -> Option<PathBuf> {
-    let valid = session.starts_with("voyager-")
-        && session
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
-    valid.then(|| {
+    crate::session_name::valid(session).then(|| {
         crate::core_endpoint::endpoint(session).with_file_name(format!("{session}.vessels"))
     })
 }

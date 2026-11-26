@@ -16,6 +16,8 @@ pub mod diagnostics;
 mod families;
 pub mod focus_hook;
 mod front_door;
+#[cfg(unix)]
+pub mod install;
 pub mod launch;
 mod layout_parts;
 mod layout_store;
@@ -24,6 +26,7 @@ mod panels;
 pub mod replies;
 pub mod reply_hook;
 mod scope;
+mod session_name;
 pub mod spoken;
 pub mod vessel_overview;
 pub mod vessel_socket;
