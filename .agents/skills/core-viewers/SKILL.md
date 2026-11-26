@@ -93,6 +93,15 @@ limit of eight units, a control queue of two frames and three attach requests.
 The ratios match the code. 16 MiB is 64 slots of Core's 256 KiB credit, and 1 MiB
 is four credits. A pass covers these bounds, not every size.
 
+The model does not cover the threads that run the terminal pump. Before the app
+is ready, the client owner holds one workspace inspect, and the canvas call that
+sent it waits synchronously on a GPUI background-executor thread for up to 22
+seconds. The model cannot express whether a pool thread is free for
+`Pane::pump` while that inspect parks one. Two facts in the code bound it. The
+owner holds at most one such inspect (`UNREADY` in `app/src/client_owner.rs`),
+and GPUI starts at least two background threads, so a thread stays free. Issue
+#439 tracks an async desktop call path that would remove the parked thread.
+
 The model assumes, without checking, that Herdr Core:
 
 - never reuses a channel number within a connection (Core's `Conn::new_channel`
