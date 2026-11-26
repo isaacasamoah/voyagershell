@@ -1,12 +1,15 @@
 use super::adopt_by_label::{address, bound_to};
 use super::{Cases, Verdict, cases};
 use crate::core_relay::Fault;
+use crate::frames::rank;
 use crate::inspection::Target;
 use crate::native::{
-    CANVAS_REFRESH, Decorations, FRAME_POLL, Native, PROBE_AFTER_DOCK, PROBE_LATEST, Seen,
-    Terminal, bound_terminal, fleets, now_millis,
+    CANVAS_REFRESH, Decorations, Elapsed, FRAME_POLL, LOOK, MODEL_WORK_WAIT, Native,
+    PROBE_AFTER_DOCK, PROBE_LATEST, Seen, Stopwatch, Terminal, bound_terminal, fleets, now_millis,
 };
+use crate::request_relay::{RequestRelay, Traffic};
 use crate::sandbox::COMMAND;
+use crate::system::poll;
 use crate::x11::Key;
 use crate::x11::{Observed, Request};
 use anyhow::{Context as _, Result};
@@ -27,6 +30,8 @@ cases! {
     AvatarClickAtHomeOpensHome => "avatar-click-at-home-opens-home",
     AvatarClickWhileDockingHomeIsHeld => "avatar-click-while-docking-home-is-held",
     AvatarClickAwayChangesNothing => "avatar-click-away-changes-nothing",
+    ToolCallRoundTrip => "tool-call-round-trip",
+    DockWithNoChosenBehaviourAddsNoModelWork => "dock-with-no-chosen-behaviour-adds-no-model-work",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes";
     "reread-keeps-clicked-pane" needs "socket-dock-takes-keyboard",
     "redock-takes-keyboard" needs "reread-keeps-clicked-pane",
@@ -36,6 +41,8 @@ cases! {
     "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
     "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
     "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
+    "tool-call-round-trip" needs "socket-dock-takes-keyboard",
+    "dock-with-no-chosen-behaviour-adds-no-model-work" needs "socket-dock-takes-keyboard",
 }
 
 pub const CONTROL: Case = Case::RedockTakesKeyboard;
@@ -45,6 +52,11 @@ const SAVE: &str = "doc.set";
 const HELD_MS: u64 = 1_500;
 
 const RENAMED: &str = "Renamed by Voyager";
+const TIMED_CALLS: usize = 50;
+const COUNTED_CALLS: usize = 5;
+const CALL_LIMIT_MS: f64 = 50.;
+const HEARD: &str = "Stand-in claude heard:";
+const TURN_START: &str = "\"turn/start\"";
 
 struct Docked {
     first: Terminal,
@@ -764,6 +776,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("requests", &sent)
     })?;
 
+    cases.check(native, Case::ToolCallRoundTrip, |native| {
+        tool_call_round_trip(native, &voyager, &placed)
+    })?;
+
+    cases.check(
+        native,
+        Case::DockWithNoChosenBehaviourAddsNoModelWork,
+        |native| {
+            dock_with_no_chosen_behaviour_adds_no_model_work(
+                native, &voyager, &first, &placed, &fleet,
+            )
+        },
+    )?;
+
     cases.check(native, Case::VoyagerCreatesAndMaximizes, |native| {
         show_fleet(native)?;
         let (_, layout) = native.document()?.context("Missing saved layout")?;
@@ -849,6 +875,209 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("refused", &refused)?
             .observed("added", &added)
     })
+}
+
+fn tool_call_round_trip(
+    native: &mut Native,
+    voyager: &str,
+    placed: &PlacementId,
+) -> Result<Verdict> {
+    show_fleet(native)?;
+    let caller = voyager_caller(voyager);
+    let (mut inspect, mut change, mut applied) = (Vec::new(), Vec::new(), 0);
+    for index in 0..TIMED_CALLS {
+        let began = Stopwatch::start();
+        let line = request_line(
+            native,
+            &caller,
+            &format!("round-trip-{index}"),
+            set_maximized(placed, index % 2 == 0),
+        )?;
+        inspect.push(began.lap());
+        let began = Stopwatch::start();
+        let reply = send_line(native, &caller, &line)?;
+        change.push(began.lap());
+        applied += usize::from(reply["reply"]["status"] == "applied");
+    }
+    let relay = RequestRelay::vessel(&native.system.session, voyager)?;
+    let mut requests = Vec::new();
+    for index in 0..COUNTED_CALLS {
+        let status = requests_of(native, &relay, &[&caller, COMMAND, "status"])?;
+        let line = request_line(
+            native,
+            &caller,
+            &format!("round-trip-counted-{index}"),
+            set_maximized(placed, index % 2 == 0),
+        )?;
+        let change = requests_of(
+            native,
+            &relay,
+            &[&caller, COMMAND, "do", "workspace", &line],
+        )?;
+        requests.push((status, change));
+    }
+    let (_, layout) = native.document()?.context("Missing saved layout")?;
+    let fleet = layout
+        .selected_fleet
+        .clone()
+        .context("The layout has no selected Fleet")?;
+    if maximized(&layout, &fleet).is_some() {
+        let line = request_line(
+            native,
+            &caller,
+            "round-trip-restore",
+            set_maximized(placed, false),
+        )?;
+        send_line(native, &caller, &line)?;
+    }
+    let (status, done) = (Calls::of(&inspect), Calls::of(&change));
+    let one = Traffic {
+        connections: 1,
+        requests: 1,
+        replies: 1,
+    };
+    let single = requests
+        .iter()
+        .all(|(status, change)| *status == one && *change == one);
+    Verdict::new()
+        .expect(
+            "every timed voyager do workspace change from Voyager's terminal applied",
+            applied == TIMED_CALLS,
+        )
+        .expect(
+            "each counted voyager status and voyager do call made one connection, wrote one request line and read one reply line on the Vessel socket",
+            single,
+        )
+        .expect(
+            "19 in 20 voyager status calls and 19 in 20 voyager do calls finished in under 50 ms",
+            [&status, &done].iter().all(|calls| calls.within(CALL_LIMIT_MS) * 20 >= calls.calls * 19),
+        )
+        .observed(
+            "status and do traffic per counted call",
+            &requests,
+        )?
+        .observed("status calls", &status)?
+        .observed("do calls", &done)
+}
+
+fn requests_of(native: &Native, relay: &RequestRelay, arguments: &[&str]) -> Result<Traffic> {
+    let runtime = format!("XDG_RUNTIME_DIR={}", relay.runtime());
+    let mut relayed = vec![runtime.as_str()];
+    relayed.extend_from_slice(arguments);
+    relay.counted(|| native.system.execute("env", &relayed, None).map(drop))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Calls {
+    measure: &'static str,
+    calls: usize,
+    p50_ms: f64,
+    p95_ms: f64,
+    p99_ms: f64,
+    max_ms: f64,
+    samples_ms: Vec<f64>,
+}
+
+impl Calls {
+    fn within(&self, limit_ms: f64) -> usize {
+        self.samples_ms
+            .iter()
+            .filter(|sample| **sample < limit_ms)
+            .count()
+    }
+
+    fn of(durations: &[Elapsed]) -> Self {
+        let mut micros: Vec<u64> = durations.iter().map(|duration| duration.micros()).collect();
+        let samples_ms = micros.iter().map(|micros| *micros as f64 / 1e3).collect();
+        micros.sort_unstable();
+        let at = |fraction: f64| rank(&micros, fraction) as f64 / 1e3;
+        Self {
+            measure: "Wall time of one voyager command run in the sandbox with Voyager's terminal as caller, from spawn to exit",
+            calls: durations.len(),
+            p50_ms: at(0.5),
+            p95_ms: at(0.95),
+            p99_ms: at(0.99),
+            max_ms: at(1.0),
+            samples_ms,
+        }
+    }
+}
+
+fn model_work(native: &Native, voyager: &str) -> Result<(usize, usize)> {
+    let read = native
+        .system
+        .watch("terminal.read", json!({"terminal":voyager,"lines":10_000}))?;
+    let heard = read["text"]
+        .as_str()
+        .unwrap_or_default()
+        .matches(HEARD)
+        .count();
+    let turns = std::fs::read_to_string(native.system.evidence.join("provider.jsonl"))
+        .map(|ledger| ledger.matches(TURN_START).count())
+        .unwrap_or(0);
+    Ok((heard, turns))
+}
+
+fn dock_with_no_chosen_behaviour_adds_no_model_work(
+    native: &mut Native,
+    voyager: &str,
+    first: &Terminal,
+    placed: &PlacementId,
+    fleet: &FleetId,
+) -> Result<Verdict> {
+    show_fleet(native)?;
+    let before = model_work(native, voyager)?;
+    let targets = [
+        Context::Fleet { id: fleet.clone() },
+        Context::Vessel {
+            id: first.placement().clone(),
+        },
+        Context::Vessel { id: placed.clone() },
+    ];
+    let mut applied = 0;
+    for (index, target) in targets.iter().enumerate() {
+        let reply = from_voyager(
+            native,
+            voyager,
+            &format!("model-work-dock-{index}"),
+            Action::Dock {
+                context: target.clone(),
+            },
+        )?;
+        applied += usize::from(reply["reply"]["status"] == "applied");
+        native.settle(
+            "the dock from Voyager's terminal",
+            |seen| Some(seen.document.context.clone()),
+            |context| context == target,
+        )?;
+    }
+    let onto = Context::Fleet { id: fleet.clone() };
+    native.drag(
+        &Target::AVATAR,
+        &Target::name(&RenameTarget::Fleet { id: fleet.clone() }),
+    )?;
+    let dragged = native.settle(
+        "the avatar's dock on the Fleet",
+        |seen| Some(seen.document.context.clone()),
+        |context| context == &onto,
+    );
+    let after = poll(MODEL_WORK_WAIT.within(), LOOK, true, || {
+        let now = model_work(native, voyager)?;
+        Ok((now != before).then_some(now))
+    })?
+    .unwrap_or(before);
+    Verdict::new()
+        .expect(
+            "Voyager's three docks from its terminal applied and the avatar's drag docked on the Fleet",
+            applied == targets.len() && dragged.is_ok(),
+        )
+        .expect(
+            "Voyager's terminal heard no new line and the provider started no turn in the 2 s after the docks",
+            after == before,
+        )
+        .observed("heard lines and provider turns before", before)?
+        .observed("heard lines and provider turns after", after)
 }
 
 const PROBE_KEY: &str = "Q";
