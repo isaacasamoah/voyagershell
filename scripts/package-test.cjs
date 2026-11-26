@@ -88,3 +88,44 @@ test("every notice named by the packer exists in the tree", () => {
     assert.ok(text.includes(file), `${file} is packed`);
   }
 });
+
+test("every packed file is compared to the tree and a mismatch fails the pack", () => {
+  const entries = [
+    "voyagershell/LICENSE",
+    ...NOTICES.map((file) => `voyagershell/notices/${path.basename(file)}`),
+    "voyagershell/voyager",
+    "voyagershell/voyager-shell",
+  ];
+  const w = workspace();
+  try {
+    const real = spawnSync("sh", ["-c", "command -v tar"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    const shim = path.join(w.root, "shim");
+    fs.mkdirSync(shim);
+    fs.writeFileSync(
+      path.join(shim, "tar"),
+      `#!/bin/sh\nif [ "$1" = -xOf ] && [ "$3" = "$TAMPER" ]; then echo tampered; exit 0; fi\nexec ${real} "$@"\n`,
+      { mode: 0o755 },
+    );
+    for (const entry of entries) {
+      const result = spawnSync(PACKAGE, [w.bin, w.out], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${shim}:${process.env.PATH}`,
+          TAMPER: entry,
+        },
+      });
+      assert.notStrictEqual(result.status, 0, `${entry} is not compared`);
+      assert.match(result.stdout + result.stderr, /differ/, entry);
+    }
+    const clean = spawnSync(PACKAGE, [w.bin, w.out], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${shim}:${process.env.PATH}`, TAMPER: "" },
+    });
+    assert.strictEqual(clean.status, 0, clean.stderr);
+  } finally {
+    fs.rmSync(w.root, { recursive: true, force: true });
+  }
+});

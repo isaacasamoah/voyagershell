@@ -169,3 +169,40 @@ test("the entry command exits 1 and names the reason for an absent entry", () =>
   assert.strictEqual(result.status, 1);
   assert.match(result.stderr, /no "## \[9.9.9\] - YYYY-MM-DD" entry/);
 });
+
+test("core_min in the manifest is read from distribution/core-version", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "release-data-"));
+  try {
+    const copy = path.join(directory, "scripts", "release-data.cjs");
+    fs.mkdirSync(path.dirname(copy));
+    fs.copyFileSync(SCRIPT, copy);
+    fs.mkdirSync(path.join(directory, "distribution"));
+    fs.writeFileSync(
+      path.join(directory, "distribution", "core-version"),
+      "0.1.19\n",
+    );
+    fs.writeFileSync(path.join(directory, "CHANGELOG.md"), CHANGELOG);
+    const archive = path.join(directory, "a.tar.gz");
+    fs.writeFileSync(archive, "archive bytes");
+    const result = spawnSync(
+      process.execPath,
+      [
+        copy,
+        "manifest",
+        "--version",
+        "0.1.0",
+        "--commit",
+        COMMIT,
+        "--url",
+        URL,
+        "--archive",
+        archive,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(JSON.parse(result.stdout).core_min, "0.1.19");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
