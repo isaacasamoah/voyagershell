@@ -187,17 +187,14 @@ fn entry() -> Result<i32> {
                 .with_context(|| format!("Profile fixture {path} is not readable"))
         })
         .transpose()?;
-    let assets = get("--assets")
+    let assets_folder = get("--assets")
         .ok()
         .map(std::fs::canonicalize)
         .transpose()
         .context("Candidate assets")?;
-    system::check_assets(
-        &candidate.path,
-        assets.as_deref().context("Missing --assets")?,
-    )
-    .context("Candidate assets")?;
-    let second_assets = match get("--second-assets") {
+    let assets = system::candidate_assets(&candidate.path, assets_folder.as_deref())
+        .context("Candidate assets")?;
+    let second_folder = match get("--second-assets") {
         Ok(path) => Some(std::fs::canonicalize(path).context("Second candidate assets")?),
         Err(_) => None,
     };
@@ -212,22 +209,24 @@ fn entry() -> Result<i32> {
         }
         Err(_) => None,
     };
-    if let Some(second) = &second {
-        ensure!(
-            second.path != candidate.path,
-            "--second-binary is the same file as --binary"
-        );
-        system::check_assets(
-            &second.path,
-            second_assets
-                .as_deref()
-                .or(assets.as_deref())
-                .context("Missing --assets")?,
-        )
-        .context(
-            "Second candidate assets; give --second-assets for a build from another checkout",
-        )?;
-    }
+    let second_assets = match &second {
+        Some(second) => {
+            ensure!(
+                second.path != candidate.path,
+                "--second-binary is the same file as --binary"
+            );
+            Some(
+                system::candidate_assets(
+                    &second.path,
+                    second_folder.as_deref().or(assets_folder.as_deref()),
+                )
+                .context(
+                    "Second candidate assets; give --second-assets for a build from another checkout",
+                )?,
+            )
+        }
+        None => None,
+    };
     let documents = match get("--core-document") {
         Ok(text) => {
             let (name, path) = text
@@ -246,6 +245,10 @@ fn entry() -> Result<i32> {
     let mut readiness = system::doctor(&candidate, &hc)?;
     readiness["verificationSource"] = json!(source);
     readiness["verifierSha256"] = json!(system::digest(&verifier)?);
+    readiness["assets"] = assets.evidence();
+    if let Some(second_assets) = &second_assets {
+        readiness["secondAssets"] = second_assets.evidence();
+    }
     let host = sandbox::host_resources()?;
     let own = sandbox::text(&verifier)?;
     let confine = |evidence: Option<&Path>, with_command: bool, inner: &[&str]| {
@@ -254,8 +257,8 @@ fn entry() -> Result<i32> {
             candidate: Some(&candidate.path),
             core: Some(&hc.path),
             second: second.as_ref().map(|pinned| pinned.path.as_path()),
-            assets: assets.as_deref(),
-            second_assets: second_assets.as_deref(),
+            assets: assets.folder(),
+            second_assets: second_assets.as_ref().and_then(system::Assets::folder),
             voice: voice_engine.as_deref(),
             evidence,
             command: with_command,

@@ -4,6 +4,7 @@ mod avatar_motion;
 mod avatar_pack;
 mod avatar_sharp;
 mod banner;
+mod brand;
 mod bridge;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
@@ -44,6 +45,14 @@ use std::{
 use voyager_app::client::Client;
 
 gpui::actions!(voyager, [Quit]);
+
+pub fn version() -> String {
+    let (major, minor, patch) = voyager_app::core::MINIMUM_CORE;
+    format!(
+        "voyager-shell {}\ncore: {major}.{minor}.{patch}\nassets: embedded\n",
+        env!("CARGO_PKG_VERSION")
+    )
+}
 
 fn seed(path: &Path, data: &str) -> Result<()> {
     fs::create_dir_all(path.parent().context("Missing parent directory")?)?;

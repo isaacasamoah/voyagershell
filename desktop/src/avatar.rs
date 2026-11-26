@@ -4,7 +4,7 @@ mod paint;
 mod view;
 
 use crate::avatar_motion::Motion;
-use crate::avatar_pack::{self, Prepared, asset};
+use crate::avatar_pack::{self, Prepared};
 use drag::Drag;
 pub(crate) use drag::RedrawAtRest;
 use gpui::{
@@ -908,7 +908,7 @@ impl Binding {
                     .w(px(200.))
                     .h(px(202.))
                     .child(
-                        img(asset("native-brand.png"))
+                        img(Arc::clone(&crate::brand::NATIVE_BRAND))
                             .absolute()
                             .top_0()
                             .left_0()
@@ -916,7 +916,7 @@ impl Binding {
                             .h(px(107.)),
                     )
                     .child(
-                        img(asset("tagline.png"))
+                        img(Arc::clone(&crate::brand::TAGLINE))
                             .absolute()
                             .left_0()
                             .top(px(153.5))

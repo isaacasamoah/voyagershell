@@ -23,9 +23,6 @@ known:
   - id: 'no-child-cycles: rs:voyager_desktop::avatar <-> rs:voyager_desktop::avatar::view'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
-  - id: 'no-child-cycles: rs:voyager_desktop::avatar_pack <-> rs:voyager_desktop::avatar_pack::defaults'
-    owner: isaac
-    reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'
   - id: 'no-child-cycles: rs:voyager_desktop::terminal <-> rs:voyager_desktop::terminal::input'
     owner: isaac
     reason: 'The parent module uses its child and the child uses the parent. Moving the shared items to a third module clears it.'

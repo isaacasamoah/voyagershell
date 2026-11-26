@@ -1,13 +1,21 @@
-use super::asset;
-use std::{collections::BTreeMap, f32::consts::PI, path::PathBuf};
+use anyhow::{Result, bail};
+use std::{collections::BTreeMap, f32::consts::PI};
 use voyager_contract::avatar_animation::{Canvas, Clip, Configuration, Pack, Pose, Step, Triggers};
 
-pub fn source(name: &str) -> PathBuf {
-    if name == "idle.png" {
-        asset(name)
-    } else {
-        asset("stretch-frames").join(name)
-    }
+pub fn source(name: &str) -> Result<&'static [u8]> {
+    Ok(match name {
+        "idle.png" => include_bytes!("../../assets/idle.png"),
+        "frame-1-uncrossing.png" => {
+            include_bytes!("../../assets/stretch-frames/frame-1-uncrossing.png")
+        }
+        "frame-2-stretched.png" => {
+            include_bytes!("../../assets/stretch-frames/frame-2-stretched.png")
+        }
+        "frame-3-peak-stretch.png" => {
+            include_bytes!("../../assets/stretch-frames/frame-3-peak-stretch.png")
+        }
+        _ => bail!("No shipped avatar image is named {name}"),
+    })
 }
 
 pub fn pack() -> (Configuration, Pack) {
