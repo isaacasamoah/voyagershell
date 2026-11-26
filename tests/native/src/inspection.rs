@@ -86,7 +86,6 @@ impl Target {
         Self::keyed(Role::ProfileUpdate, path)
     }
 
-    pub const GO_THERE: Self = Self::single(Role::GoThere);
     pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
     pub const CREATE_AGENTS: Self = Self::single(Role::CreateAgents);
 

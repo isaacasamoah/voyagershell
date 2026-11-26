@@ -264,13 +264,13 @@ confidence = "stated"
 
 [[invariant]]
 id = "avatar-click-opens-home"
-says = "Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is docked anywhere else changes nothing. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands, which is to open home or to do nothing."
+says = "Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is parked, because the Fleet, Voyage or Vessel it is docked on is not on screen, shows that place again and the avatar stays docked on it. Clicking it while it is docked on a place that is on screen, or while it is docked on a Portal, changes nothing; opening a hidden Portal column is the Portals button's job. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands."
 kind = "user"
 owner = "desktop-presentation"
-source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'; Isaac, 23 Nov 2026: a click while docked anywhere else does nothing, which keeps that click free for a docking menu per Vessel type"
+source = "Isaac, 3 Nov 2026 owner UX note 1; reaffirmed 9 Nov 2026; Isaac, 22 Nov 2026: 'clicking voyager when it is home should take me to the home voyage, rather than minimise'; Isaac, 23 Nov 2026: a click while docked anywhere else does nothing, which keeps that click free for a docking menu per Vessel type; Isaac, 27 Nov 2026: when the dock target is off screen and the avatar is parked, a click on the avatar takes the person to the dock target, and the Go there control is removed; Isaac, 27 Nov 2026: a click on the avatar while it is parked beside the hidden Portals button does nothing; the Portals button opens the column"
 features = ["avatar"]
 guard = ["type:desktop/src/avatar/click.rs#Click"]
-check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-changes-nothing", "journey:socket-dock/avatar-click-while-docking-home-is-held"]
+check = ["journey:socket-dock/avatar-click-at-home-opens-home", "journey:socket-dock/avatar-click-away-changes-nothing", "journey:socket-dock/avatar-click-while-docking-home-is-held", "journey:socket-dock/avatar-click-parked-returns-to-dock", "journey:socket-dock/avatar-click-on-portal-changes-nothing"]
 gap = "Known edge: a click on the floating avatar, which exists only after the platform minimised the workspace, still restores the workspace. A click made while a request waits is kept and acts when the request ends, which is shown for a dock home only, because no other request leaves the avatar at home with another view shown."
 confidence = "stated"
 

@@ -100,6 +100,11 @@ impl Drawn {
             && centre.1 <= union.y + union.height
     }
 
+    fn parked(&self) -> bool {
+        self.avatar
+            .is_some_and(|avatar| (avatar.width - HIDDEN_SIZE).abs() <= SIZE_TOLERANCE)
+    }
+
     fn beside_toggle(&self) -> bool {
         let (Some(avatar), Some(toggle)) = (self.avatar, self.toggle) else {
             return false;
@@ -343,9 +348,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 (fresh && selected_new)
                     .then(|| (seen.document.clone(), Drawn::of(seen, &portal, &home)))
             },
-            |(_, drawn)| !drawn.portal() && !drawn.area,
+            |(_, drawn)| !drawn.portal() && !drawn.area && drawn.parked(),
         )?;
-        native.click(&Target::GO_THERE)?;
+        native.click(&Target::name(&RenameTarget::Voyage { id: home.clone() }))?;
         let (back, back_drawn) = native.settle(
             "the Portal's Voyage selected again with the avatar on the Portal",
             |seen| Some((seen.document.clone(), Drawn::of(seen, &portal, &home))),
@@ -361,8 +366,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 away.context == scope,
             )
             .expect(
-                "Go there selects the Portal's Voyage, draws the Portal and docks the avatar on it",
+                "in the new Voyage the avatar is parked small in the status row",
+                away_drawn.parked(),
+            )
+            .expect(
+                "a click on the Portal's Voyage selects it, draws the Portal and docks the avatar on it",
                 back.selected_voyage.as_ref() == Some(&home) && back_drawn.docked(),
+            )
+            .expect(
+                "after the click the context is still the Portal",
+                back.context == scope,
             )
             .observed("away", &away_drawn)?
             .observed("back", &back_drawn)

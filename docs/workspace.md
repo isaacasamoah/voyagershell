@@ -676,7 +676,7 @@ split tree, saved layouts, backend bindings and explicit context remain intact.
 Preparation retains all accepted-tree terminal and Vessel view entities. A split by the
 person or by Voyager clears maximize, and a split by a working agent keeps it
 (see [Labelled terminals become Vessels](#labelled-terminals-become-vessels)); loading an arrangement clears an omitted or redundant
-target. Go there to an occluded sibling restores the tree. A same-Fleet move
+target. Revealing an occluded sibling restores the tree. A same-Fleet move
 retains a still-present target.
 
 The corner Button stays keyboard reachable and appears on hover or native focus.
@@ -1062,7 +1062,7 @@ but rejects it at runtime. This exact-form adjustment changes no runtime method.
 The Shell's separate profile editor hints still contain the upstream declaration;
 they do not provide the repository's corrected strict authoring check.
 
-Go there sends `reveal-placement` with a retained Vessel or Portal placement ID. The
+`reveal-placement` takes a retained Vessel or Portal placement ID, and a click on the avatar parked away from its Vessel sends it. The
 owner selects its original arrangement, clears hidden state and reinserts its
 leaf only when absent. A Portal reveal also opens its own Voyage's column. This
 preserves content, backend and explicit dock context. Unknown placements refuse

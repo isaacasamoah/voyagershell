@@ -5,8 +5,8 @@
 A Portal is a terminal placed across a Voyage in a column beside its Fleets.
 Show Portals opens the column, and an empty column offers the content chooser.
 The avatar docks to a Portal, and a Portal can be renamed. A Portal stays shown
-on every Fleet of its Voyage and is absent from other Voyages. Go there returns
-to it. Ctrl+Alt+P hides the column, and the avatar then waits small beside the
+on every Fleet of its Voyage and is absent from other Voyages. A click on its
+Voyage returns to it. Ctrl+Alt+P hides the column, and the avatar then waits small beside the
 Portal toggle. Closing a Portal keeps its program running, and Hidden Portals
 reopens it. A relaunch draws it again with the avatar docked on it.
 
@@ -15,7 +15,7 @@ reopens it. A relaunch draws it again with the avatar docked on it.
 Open the isolated fixture app with the sidebar open and a window of at least
 1800 by 1000. Show Portals and choose a terminal. Drag the avatar onto the
 Portal's title, then rename the Portal. Make a second Fleet and switch between
-the Fleets. Make a second Voyage, then press Go there. Hide and show the column,
+the Fleets. Make a second Voyage, then click the first Voyage. Hide and show the column,
 close the Portal, reopen it from Hidden Portals, then quit and open the app
 again.
 
@@ -39,8 +39,9 @@ panel-view.ts.
   Ctrl+Shift+T and switches Fleets three times. The column stays shown, the
   Portal and the dock stay, and its shell is the same program.
 - `portal-stays-in-its-voyage` makes a second Voyage. The Portal and its
-  column are not drawn there, the context stays the Portal, and Go there
-  returns to it with the avatar docked.
+  column are not drawn there, the context stays the Portal, and the avatar is parked small. A click on
+  the Portal's Voyage selects it and draws the Portal with the avatar docked
+  on it.
 - `hide-portals` presses Ctrl+Alt+P in the first Vessel's terminal. The column
   hides, and the avatar is 38 pixels wide beside the toggle.
 - `show-portals` shows the same Portal again, with no chooser.

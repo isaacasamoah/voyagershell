@@ -777,7 +777,7 @@ def prove(
             == content
         )
         capture("avatar-hidden-vessel")
-        click(*control_point("Go there", button=True))
+        click(*control_point("Voyager avatar"))
         for _ in range(50):
             revealed = state()["value"]
             current_fleet = original_fleet(revealed)
@@ -790,7 +790,9 @@ def prove(
                 break
             time.sleep(0.1)
         else:
-            raise AssertionError("Go there did not reveal the original Vessel")
+            raise AssertionError(
+                "A click on the parked avatar did not reveal the original Vessel"
+            )
         assert (
             revealed["selectedVoyage"] == voyage["id"]
             and revealed["selectedFleet"] == fleet["id"]
@@ -826,7 +828,7 @@ def prove(
             )
         )
         capture("avatar-revealed-vessel")
-        stages.append("hidden-vessel-go-there-retained-backend-and-context")
+        stages.append("hidden-vessel-parked-click-retained-backend-and-context")
 
     def portal_journey():
         press("Show Portals")
@@ -932,13 +934,7 @@ def prove(
             "Hidden Portal retained a target"
         )
         capture("avatar-portal-out-of-view")
-        click(*control_point("Go there", button=True))
-        revealed = state()
-        assert revealed["value"]["selectedVoyage"] == original_voyage["id"]
-        assert revealed["value"]["context"] == focused_portal["value"]["context"]
-        assert revealed["value"]["voyages"][0]["portals"][0] == portal
-        capture("avatar-portal-go-there")
-        stages.append("genuine-voyage-portal-dock-navigation-and-go-there")
+        stages.append("genuine-voyage-portal-dock-navigation")
 
     try:
         time.sleep(1)

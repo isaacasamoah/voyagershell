@@ -658,6 +658,8 @@ mod tests {
                 "tests/native/controls/socket-dock-home.patch".to_owned(),
                 "tests/native/controls/avatar-click-home.patch".to_owned(),
                 "tests/native/controls/avatar-click-away.patch".to_owned(),
+                "tests/native/controls/avatar-click-parked.patch".to_owned(),
+                "tests/native/controls/avatar-click-portal.patch".to_owned(),
                 "tests/native/controls/avatar-click-wait.patch".to_owned(),
                 "tests/native/controls/dock-home-view.patch".to_owned(),
                 "tests/native/controls/avatar-home-prepare.patch".to_owned(),
@@ -880,6 +882,16 @@ mod tests {
             (
                 Journey::SocketDock,
                 "avatar-click-away-changes-nothing",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-parked-returns-to-dock",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-on-portal-changes-nothing",
                 &["socket-dock-takes-keyboard"],
             ),
             (

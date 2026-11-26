@@ -1,0 +1,12 @@
+diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
+--- a/desktop/src/avatar/click.rs
++++ b/desktop/src/avatar/click.rs
+@@ -56,7 +56,7 @@
+     }
+ 
+     fn click(&mut self, window: &Window, cx: &mut Context<Self>) {
+-        let parked = self.geometry.borrow().dock_target(&self.scope).is_none();
++        let parked = false;
+         match Click::of(
+             self.floating == Some(window.window_handle()),
+             parked,
