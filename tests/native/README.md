@@ -278,7 +278,7 @@ terminal's `agents-row` within 1 s of the driver reading it from Core.
 unset, nothing when it is `none`, and one working report when it is `working`.
 A program the canvas recognises as an agent moves into the Agents group of the
 Agents Vessel, which starts collapsed, so both cases click the `agents-group`
-header open first, the way a person does, and then read the row. The first
+button open first, the way a person does, and then read the row. The first
 case expects no status word in the row for 3 s. The second expects the row to
 say Working for 3 s while the stand-in stays silent.
 `exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After

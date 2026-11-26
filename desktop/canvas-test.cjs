@@ -1676,7 +1676,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
   assert.deepEqual(icons, ["Codex", "Bash", "dashboard", "python"]);
   const row = buttons.get("vessel-home-agent");
   const label = row.calls.find(([name]) => name === "accessibility_label")[1];
-  assert.match(label, /folder, Codex, Idle/);
+  assert.match(label, /^folder, Codex, Home$/);
   assert.deepEqual(deepMarkers(row), [["agents-row", "home-agent", label]]);
   const cx = {};
   row.calls.find(([name]) => name === "on_click")[1]({}, cx);
@@ -1721,7 +1721,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
     buttons
       .get("vessel-home-agent")
       .calls.find(([name]) => name === "accessibility_label")[1],
-    /Idle/,
+    /^folder, Codex, Home$/,
   );
   assert.ok(
     ![...buttons.keys()].some((key) => key.includes("Status unavailable")),
