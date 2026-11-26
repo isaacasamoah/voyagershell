@@ -456,8 +456,10 @@ features:
           - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
           - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
           - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+          - 'journey:core-events/silent-program-is-unknown'
+          - 'journey:core-events/report-stays-until-replaced'
         formal: []
-        journeys: []
+        journeys: [core-events]
       - id: agent-setup-untouched
         kind: developer
         says: 'Voyager never writes to an agent''s own home or configuration. It passes its settings through launch flags and the environment.'
@@ -1208,8 +1210,10 @@ features:
           - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
           - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
           - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+          - 'journey:core-events/silent-program-is-unknown'
+          - 'journey:core-events/report-stays-until-replaced'
         formal: []
-        journeys: []
+        journeys: [core-events]
     docs: [docs/layouts.md, docs/terminal.md]
     sources: [desktop/canvas/navigation-view.ts, desktop/canvas/menu.ts, docs/layouts.md]
     code: [desktop/canvas/menu.ts, desktop/canvas/navigation-view.ts, docs/layouts.md]
@@ -1803,7 +1807,7 @@ features:
     code: [app/src/client_reply.rs, contract/generated/workspace.ts, desktop/canvas/status.ts, desktop/canvas/voyage-close.ts]
   - id: core-reports
     name: 'Core reports and slow reads'
-    summary: 'Start a program in a terminal and see the Agents list name it at once, let a shell exit and see its Vessel close while Core is slow to list terminals, and get a read answered while the Agents list waits for Core.'
+    summary: 'Start a program in a terminal and see the Agents list name it at once and show no status for an agent that never reported one, let a shell exit and see its Vessel close while Core is slow to list terminals, and get a read answered while the Agents list waits for Core.'
     group: core-adapter
     owner: application-queue
     shared_with: [core-adapter, desktop-presentation]
@@ -1823,8 +1827,10 @@ features:
           - 'test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal'
           - 'test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts'
           - 'test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report'
+          - 'journey:core-events/silent-program-is-unknown'
+          - 'journey:core-events/report-stays-until-replaced'
         formal: []
-        journeys: []
+        journeys: [core-events]
       - id: waiting-never-blocks-app
         kind: user
         says: 'Waiting on the Provider or a slow Core reply never holds up ordinary workspace actions or inspection.'
