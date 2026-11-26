@@ -569,7 +569,7 @@ impl CanvasHost {
                     cx,
                 );
                 let (root, standard) = match shipped {
-                    Ok((root, fallback)) => (Some(root), StandardCanvas::Drawn(fallback)),
+                    Ok((root, fallback)) => (Some(root), StandardCanvas::Drawn { _copy: fallback }),
                     Err(second) => (None, StandardCanvas::Failed(format!("{second:#}"))),
                 };
                 let message = banner::load_failure(&error, &kept_files, &standard);

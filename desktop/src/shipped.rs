@@ -206,7 +206,7 @@ const FILES: &[(&str, &[u8])] = &[
 
 pub enum StandardCanvas {
     NotNeeded,
-    Drawn(Fallback),
+    Drawn { _copy: Fallback },
     Failed(String),
 }
 

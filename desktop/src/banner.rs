@@ -22,7 +22,7 @@ pub(crate) fn load_failure(
     }
     match standard {
         StandardCanvas::NotNeeded => {}
-        StandardCanvas::Drawn(_) => {
+        StandardCanvas::Drawn { .. } => {
             message.push_str("\nShowing the standard canvas until it loads.")
         }
         StandardCanvas::Failed(text) => {
