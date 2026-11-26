@@ -1264,6 +1264,22 @@ features:
           - 'journey:quit-restore/close-button-keeps'
         formal: []
         journeys: [quit-restore]
+      - id: failed-start-touches-nothing
+        kind: user
+        says: 'When a build started by voyager start exits before it is ready, start returns to the previous build. The failed build started, stopped and closed no program, and the person''s Voyages reopen as they were.'
+        owner: application-queue
+        guards: ['type:app/src/client_ready.rs#Readiness']
+        checks: ['test:app/tests/ready_gate.rs#a_held_client_changes_nothing_until_ready_then_reconciles_as_today']
+        formal: []
+        journeys: []
+      - id: one-app-per-profile
+        kind: user
+        says: 'One VoyagerShell runs per profile. A second voyager start brings the running window forward and starts nothing.'
+        owner: application-queue
+        guards: ['type:app/src/profile_lock.rs#ProfileLock']
+        checks: ['test:app/src/profile_lock.rs#one_app_holds_a_profile_until_it_ends']
+        formal: []
+        journeys: []
       - id: stop-is-explicit
         kind: user
         says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'

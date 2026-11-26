@@ -152,7 +152,8 @@ Each placed terminal Vessel has its own Unix socket, opened and closed by
 Voyager sets no identity variable, because Core starts an `hc run` child with
 Core's own environment, so such a variable would never reach an adopted
 terminal. Voyager does put the folder that holds `voyager` first on `PATH` for
-each terminal it starts. An `hc run` child gets Core's environment, not its
+each terminal it starts. Inside an install that folder is `<install>/current`,
+as [Install and daily start](#install-and-daily-start) describes. An `hc run` child gets Core's environment, not its
 parent's, so `voyager --skill` prints the full path of the command.
 The socket closes when its Vessel has no placement or its backend changes.
 
@@ -1308,6 +1309,105 @@ establishes that these consumed operations work across that additive upgrade.
 It does not establish a general compatibility matrix. Generation, capability
 and minimum-release checks are the admission rule. A newer release is accepted,
 and one older than 0.1.18 is refused.
+
+## Install and daily start
+
+An install keeps each build in its own folder and three links that name the
+builds in use. `app/src/install.rs` owns the layout.
+
+```text
+<install>/builds/<name>/   voyager-shell and voyager for one build
+<install>/current          the build voyager start launches
+<install>/previous         the build a failed start or a rollback returns to
+<install>/next             a build staged by update or rollback
+<install>/start.json       {"profile": "<absolute path>", "session": "voyager-..."}
+<install>/logs/            one log for each launch
+```
+
+The links are the only update record. Each link changes by writing a new link
+beside it and renaming it over the old one, so a crash leaves the old link or
+the new one, and a rerun of any verb converges. `voyager start` is the only
+step that moves `current`. Pruning keeps the three linked builds and any build
+folder a running process was started from, and removes every `.part` folder.
+`voyager start` prunes only once an app is ready, so a build that a failed
+start puts back as `previous` is still on disk for a later rollback.
+
+When the running executable sits in `<install>/builds/<name>/`, the command
+path is `<install>/current/voyager` (`app/src/launch.rs`). A program's `PATH`
+entry and Voyager's hook settings therefore name the link, which every switch
+keeps valid, and not a build folder that a later prune removes. Programs started
+by an earlier build keep the path they were started with.
+
+`voyager update --from <folder>` copies `voyager-shell` and `voyager` into
+`builds/local-<first 8 hex of the shell's sha256>.part`, checks each copy's
+sha256 against its source, runs `voyager-shell --version` and renames the
+folder into place. It then points `next` at the build. A failed copy, check or
+rename removes the `.part` folder and leaves `next` unchanged. `voyager
+rollback` points `next` at `previous`.
+
+`voyager start` reads `start.json` and first asks a running app to raise its
+window. When none answers, it applies `next`, so `previous` becomes the old
+`current`, and launches `current/voyager-shell` in its own process group with
+the caller's environment minus `HC_SOCKET`, `HC_TERMINAL_ID`, `HC_SCOPE` and
+`HC_TERMINAL_SOCKET` (`app/src/app_start.rs`). It waits for the app to answer
+on its socket or to exit. A build that exits before it is ready makes start
+point `current` back at the build it replaced, put `previous` back where it was
+before the switch, clear `next` and launch the build it returned to. A later
+`voyager rollback` therefore still reaches the build before that one. A build
+that does neither within the wait limit is reported with its pid and log, and
+start launches nothing else, because two apps on one profile is a known fault.
+The 60 second wait limit is a target to measure against time to first frame.
+
+### The ready gate
+
+The app owns its start-up order, and the desktop only calls it.
+`client::open_profile` takes an advisory lock on `app.lock` in the profile
+(`app/src/profile_lock.rs`), then installs the shipped content and opens the
+content owner, so a second app on the profile is refused before it writes
+anything. The app is ready once its window is open and its client's first Core
+connect has finished. The desktop then calls `Client::start_up`, which waits
+for that connect, refuses an unsupported Core, marks the client ready
+(`app/src/client_ready.rs`) and binds the app socket. Until then the client owner observes nothing, so
+it reconciles no ended program, starts no Voyager and opens no Vessel socket,
+and the voice layer waits before it brings up its engine. A build that exits
+before it is ready has therefore started, stopped and closed no program.
+
+A workspace inspect that arrives before ready is held, not refused, so a canvas
+that inspects early keeps showing that it is opening the workspace. The owner
+holds one such inspect (`UNREADY` in `app/src/client_owner.rs`) and answers it
+once the client is ready. A second inspect, and every write, is handled at once
+and refused as before. The canvas sends one inspect when it opens and none while
+that one is pending, so one is enough. If the app exits before it is ready, a
+held inspect gets no reply; `voyager start` then returns to the previous build.
+
+The bound is one because the wait blocks a thread. The canvas calls the client
+from a task on GPUI's background executor, and `Client::call` waits
+synchronously, for at most 22 seconds (`WORKSPACE_WAIT`). GPUI starts one
+background thread per available core, and at least two, so a single held
+inspect always leaves a thread free. A start slower than 22 seconds shows
+"Workspace busy" and the cancelled request instead of the opening message. The
+desktop runs `Client::start_up` on a thread of its own (`desktop/src/lib.rs`),
+so a held inspect cannot delay the step that makes the app ready.
+
+A first connect that Core refuses as `unsupported_core` never becomes ready.
+The app prints the refusal and the instruction to run Herdr Core's installer,
+then exits 1. Any other connect result keeps the earlier behaviour, and the app
+becomes ready without Core.
+
+At ready the app binds `<Core socket directory>/<session>.app.sock`
+(`app/src/app_socket.rs`) and hands the desktop a channel of raise requests;
+the desktop only activates its window for each. A connection that sends
+`raise` raises the window and reads `raised`. A connection that sends nothing changes nothing, and start
+uses such a connection as its ready test.
+
+A voice engine start stops every live program carrying the app's
+`voyager.service` label for that service in the session, whatever its server
+path, and then starts its own (`app/src/client_service.rs`). One engine serves
+one app, and only the app sets that label.
+
+`voyager-shell --version` prints the package version, the oldest supported
+Core release and `assets: embedded`. The avatar images are compiled into the
+executable, so a build folder needs only the two executables.
 
 ## Navigation and the structure revision
 

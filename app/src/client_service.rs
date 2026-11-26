@@ -44,10 +44,19 @@ pub enum ProgramReply {
     Sent,
 }
 
+fn serves(terminal: &Terminal, service: &str) -> bool {
+    terminal.is_live() && terminal.labels.get(LABEL).map(String::as_str) == Some(service)
+}
+
 fn runs(terminal: &Terminal, service: &str, program: &str) -> bool {
-    terminal.is_live()
-        && terminal.labels.get(LABEL).map(String::as_str) == Some(service)
-        && terminal.argv.first().map(Path::new) == Some(Path::new(program))
+    serves(terminal, service) && terminal.argv.first().map(Path::new) == Some(Path::new(program))
+}
+
+fn replaced<'a>(terminals: &'a [Terminal], service: &'a str) -> impl Iterator<Item = &'a str> {
+    terminals
+        .iter()
+        .filter(move |terminal| serves(terminal, service))
+        .map(|terminal| terminal.address.as_str())
 }
 
 pub(super) fn perform(
@@ -74,11 +83,9 @@ pub(super) fn perform(
 fn perform_now(core: &mut Core, request: ProgramRequest) -> Result<ProgramReply, Error> {
     match request {
         ProgramRequest::Start(spec) => {
-            let program = spec.argv.first().cloned().unwrap_or_default();
-            for terminal in core.terminal_list()? {
-                if runs(&terminal, &spec.service, &program) {
-                    core.terminal_kill(&terminal.address)?;
-                }
+            let terminals = core.terminal_list()?;
+            for address in replaced(&terminals, &spec.service) {
+                core.terminal_kill(address)?;
             }
             let started = core.terminal_run_with(RunParams {
                 argv: spec.argv,
@@ -147,5 +154,23 @@ mod tests {
         assert!(!runs(&finished, "voice-engine", "/s/llama-server"));
         let unlabelled = terminal("live", None, &["/s/llama-server"]);
         assert!(!runs(&unlabelled, "voice-engine", "/s/llama-server"));
+    }
+
+    #[test]
+    fn a_start_replaces_every_live_program_with_its_label_whatever_its_path() {
+        let mut terminals = vec![
+            terminal("live", Some("voice-engine"), &["/old/llama-server"]),
+            terminal("live", Some("voice-engine"), &["/new/llama-server"]),
+            terminal("finished", Some("voice-engine"), &["/old/llama-server"]),
+            terminal("live", Some("other"), &["/old/llama-server"]),
+            terminal("live", None, &["/old/llama-server"]),
+        ];
+        for (index, terminal) in terminals.iter_mut().enumerate() {
+            terminal.address = format!("t{index}");
+        }
+        assert_eq!(
+            replaced(&terminals, "voice-engine").collect::<Vec<_>>(),
+            ["t0", "t1"]
+        );
     }
 }

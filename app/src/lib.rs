@@ -4,6 +4,8 @@ mod adoption;
 pub mod agent_programs;
 #[cfg(unix)]
 pub mod app_socket;
+#[cfg(unix)]
+pub mod app_start;
 mod canvas;
 pub mod change_sentence;
 pub mod client;

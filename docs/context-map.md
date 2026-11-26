@@ -82,6 +82,7 @@ Owns files:
 - `app/src/install_tests.rs`
 - `app/src/session_name.rs`
 - `app/src/app_socket.rs`
+- `app/src/app_start.rs`
 - `app/src/profile_lock.rs`
 - `app/src/client_ready.rs`
 - `app/tests/ready_gate.rs`
