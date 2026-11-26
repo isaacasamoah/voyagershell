@@ -7,7 +7,8 @@ use crate::native::{
 use crate::system::until;
 use crate::x11::Key;
 use anyhow::{Context, Result, ensure};
-use voyager_contract::RenameTarget;
+use voyager_contract::inspection::Role;
+use voyager_contract::{RenameTarget, VoyageId};
 
 cases! {
     ForegroundReachesAgentsList => "foreground-reaches-agents-list",
@@ -35,6 +36,24 @@ fn status_in(label: &str) -> Option<&str> {
     })
 }
 
+fn open_agents_group(native: &Native) -> Result<()> {
+    let voyage = native.observe("the Voyage", |seen| {
+        seen.frame
+            .elements
+            .iter()
+            .find(|element| element.role == Role::VoyageName)
+            .map(|element| VoyageId(element.key.clone()))
+    })?;
+    let group = Target::agents_group(&voyage);
+    let label = native.observe("the Agents group header", |seen| {
+        seen.label(&group).map(str::to_owned)
+    })?;
+    if label.starts_with("Expand") {
+        native.click(&group)?;
+    }
+    Ok(())
+}
+
 fn stand_in_row(
     native: &Native,
     terminal: &Terminal,
@@ -46,6 +65,7 @@ fn stand_in_row(
         &format!("{}={reports} claude", crate::agent::REPORTS),
     )?;
     terminal.runs(native, "claude")?;
+    open_agents_group(native)?;
     native.observe("the terminal's Agents row naming Claude", |seen| {
         let label = seen.label(row)?;
         (program(label)? == "Claude").then(|| label.to_owned())

@@ -114,6 +114,7 @@ roles! {
     WindowDrag => "window-drag",
     FleetDrop => "fleet-drop",
     AgentsRow => "agents-row",
+    AgentsGroup => "agents-group",
     NewWorktree => "new-worktree",
     RemoveWorktree => "remove-worktree",
     WorktreeConfirm => "worktree-confirm",

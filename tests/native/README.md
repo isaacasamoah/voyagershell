@@ -276,8 +276,11 @@ terminal's `agents-row` within 1 s of the driver reading it from Core.
 `claude` from the first terminal with `STAND_IN_REPORTS=none` and
 `STAND_IN_REPORTS=working`. The stand-in reports idle when the variable is
 unset, nothing when it is `none`, and one working report when it is `working`.
-The first case expects no status word in the row for 3 s. The second expects
-the row to say Working for 3 s while the stand-in stays silent.
+A program the canvas recognises as an agent moves into the Agents group of the
+Agents Vessel, which starts collapsed, so both cases click the `agents-group`
+header open first, the way a person does, and then read the row. The first
+case expects no status word in the row for 3 s. The second expects the row to
+say Working for 3 s while the stand-in stays silent.
 `exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After
 Core runs again and reports the program finished, the layout must hold the
 Vessel closed within 1 s. The pause does not make Core send a `missed`

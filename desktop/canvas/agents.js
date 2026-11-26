@@ -312,6 +312,7 @@ export function agentsView(
       .border_color(`${color}55`)
       .pl(12)
       .ml(4);
+    const agentsLabel = `${agentCollapsed ? "Expand" : "Collapse"} Agents in ${voyage.name}, ${agents.length}`;
     if (agents.length)
       groups.child(
         div()
@@ -319,15 +320,14 @@ export function agentsView(
           .flex_col()
           .child(
             Button.new(`vessels-group-agents-${voyage.id}`)
-              .accessibility_label(
-                `${agentCollapsed ? "Expand" : "Collapse"} Agents in ${voyage.name}, ${agents.length}`,
-              )
+              .accessibility_label(agentsLabel)
               .w_full()
               .justify_start()
               .px(8)
               .py(4)
               .on_click((_event, cx) => options?.toggle(agentKey, cx))
-              .child(`${agentCollapsed ? "▸" : "▾"} Agents (${agents.length})`),
+              .child(`${agentCollapsed ? "▸" : "▾"} Agents (${agents.length})`)
+              .child(Marker.new("agents-group", voyage.id, agentsLabel)),
           )
           .children(agentCollapsed ? [] : agents.map(row)),
       );
