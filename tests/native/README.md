@@ -917,11 +917,11 @@ patch makes the app treat an edited file as untouched, so
 `edited-files-stay-as-they-were` fails. `kept-edit-that-cannot-load-still-draws`
 runs last. It quits, replaces the kept `canvas/status.js` with a file that
 imports a bare module name no build ships, starts again and expects the Home
-control to be drawn, the `host-status` line to hold the line `Your edited file is
-kept: canvas/status.js` and no line naming a text file, the update notice not to
-list `canvas/status.js` and the file to stay byte for byte as written. The file is
-edited and has no newer shipped version, so only the install record's kept paths
-can name it. A bare name is the form where the engine's error names the module
+control to be drawn, the `host-status` line to hold the line
+`Your edited file is kept: canvas/status.js` and no line naming a text file, the
+update notice not to list `canvas/status.js` and the file to stay byte for byte
+as written. The file is edited and has no newer shipped version, so only the
+install record's kept paths can name it. A bare name is the form where the engine's error names the module
 and not the importing file, and the case records whether the engine named it.
 The standard canvas is drawn from a copy the app writes into its runtime folder
 each time it falls back, never into the profile.
