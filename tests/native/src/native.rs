@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -549,6 +549,25 @@ impl Native {
             self.bind_core()?;
         }
         self.present()
+    }
+
+    pub fn launch_unprepared(&mut self) -> Result<()> {
+        self.start()?;
+        if self.core.is_none() {
+            self.bind_core()?;
+        }
+        Ok(())
+    }
+
+    pub fn set_runtime_folder_writable(&self, writable: bool) -> Result<()> {
+        let mode = if writable { 0o700 } else { 0o500 };
+        self.system.act(
+            json!({"input":"runtime-folder-mode","path":sandbox::RUNTIME,"mode":format!("{mode:o}")}),
+            || {
+                fs::set_permissions(sandbox::RUNTIME, fs::Permissions::from_mode(mode))
+                    .context("Changing the mode of the app's runtime folder")
+            },
+        )
     }
 
     pub fn window_look(&self) -> Result<Pixels> {
@@ -1137,6 +1156,33 @@ impl Native {
         check: impl FnMut(&Seen) -> Option<T>,
     ) -> Result<T> {
         self.settle(expected, check, |_| true)
+    }
+
+    pub fn observe_unprepared<T: PartialEq>(
+        &self,
+        expected: &str,
+        mut read: impl FnMut(&Seen) -> Option<T>,
+    ) -> Result<T> {
+        let held = settle(
+            PATIENCE,
+            GLANCE,
+            || {
+                let window = self.x11()?.geometry(self.window)?;
+                let frame =
+                    inspection::read(&self.inspection())?.filter(|frame| drawn_for(frame, window));
+                let saved = self.document()?;
+                Ok(match (frame.as_ref(), saved.as_ref()) {
+                    (Some(frame), Some((version, document))) => read(&Seen {
+                        document,
+                        version: *version,
+                        frame,
+                    }),
+                    _ => None,
+                })
+            },
+            |_| true,
+        )?;
+        held.ok_or_else(|| Unseen(expected.to_owned()).into())
     }
 
     pub fn settle<T: PartialEq>(

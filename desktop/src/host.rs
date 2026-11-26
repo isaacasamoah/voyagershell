@@ -28,9 +28,9 @@ use voyager_contract::operations;
 use crate::notice_listener::Listener;
 use voyager_contract::{Context as WorkspaceContext, Request};
 
-use crate::banner::{self, Standard};
+use crate::banner;
 use crate::bridge::{Bridge, decimal};
-use crate::shipped::Fallback;
+use crate::shipped::{Fallback, StandardCanvas};
 use crate::terminal::Viewers;
 
 thread_local! { static LOADING: Cell<bool> = const { Cell::new(false) }; }
@@ -472,7 +472,7 @@ fn load_shipped(
 
 pub struct CanvasHost {
     root: Option<Entity<ShellRoot>>,
-    fallback: Option<Fallback>,
+    standard: StandardCanvas,
     _watch: Option<Watcher>,
     _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
@@ -549,7 +549,7 @@ impl CanvasHost {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error, fallback) = match load(
+        let (root, load_error, standard) = match load(
             &runtime,
             &package,
             &current,
@@ -558,31 +558,22 @@ impl CanvasHost {
             window,
             cx,
         ) {
-            Ok(root) => (Some(root), None, None),
+            Ok(root) => (Some(root), None, StandardCanvas::NotNeeded),
             Err(error) => {
-                match load_shipped(
+                let shipped = load_shipped(
                     &runtime,
                     &current,
                     &workspace_binding,
                     &conversation,
                     window,
                     cx,
-                ) {
-                    Ok((root, fallback)) => (
-                        Some(root),
-                        Some(banner::load_failure(&error, &kept_files, Standard::Drawn)),
-                        Some(fallback),
-                    ),
-                    Err(second) => (
-                        None,
-                        Some(banner::load_failure(
-                            &error,
-                            &kept_files,
-                            Standard::Failed(&second),
-                        )),
-                        None,
-                    ),
-                }
+                );
+                let (root, standard) = match shipped {
+                    Ok((root, fallback)) => (Some(root), StandardCanvas::Drawn(fallback)),
+                    Err(second) => (None, StandardCanvas::Failed(format!("{second:#}"))),
+                };
+                let message = banner::load_failure(&error, &kept_files, &standard);
+                (root, Some(message), standard)
             }
         };
         let avatar_observe = root
@@ -590,7 +581,7 @@ impl CanvasHost {
             .map(|root| workspace_binding.avatar.observe(root, cx));
         let (watch, watch_error) = match root
             .as_ref()
-            .filter(|_| fallback.is_none())
+            .filter(|_| !standard.needed())
             .map(|root| runtime.watch(root, window, cx))
         {
             Some(Ok(watch)) => (Some(watch), None),
@@ -649,7 +640,7 @@ impl CanvasHost {
                 }
             }
         });
-        let mut retrying = root.is_none() || fallback.is_some();
+        let mut retrying = standard.needed();
         let handle = window.window_handle();
         let task = cx.spawn(async move |this, cx| {
             let mut prior_theme = Some(initial_theme);
@@ -742,13 +733,15 @@ impl CanvasHost {
                                         }
                                     }
                                     canvas.root = Some(root);
-                                    canvas.fallback = None;
+                                    canvas.standard = StandardCanvas::NotNeeded;
                                     canvas.load_error = None;
                                 }
                                 Err(error) => {
-                                    let standard = Standard::drawn(canvas.fallback.is_some());
-                                    canvas.load_error =
-                                        Some(banner::load_failure(&error, &kept_files, standard))
+                                    canvas.load_error = Some(banner::load_failure(
+                                        &error,
+                                        &kept_files,
+                                        &canvas.standard,
+                                    ))
                                 }
                             }
                         }
@@ -764,7 +757,7 @@ impl CanvasHost {
         });
         Self {
             root,
-            fallback,
+            standard,
             _watch: watch,
             _avatar: avatar_observe,
             _task: task,
@@ -782,7 +775,7 @@ impl CanvasHost {
     }
 
     fn on_profile_canvas(&self) -> bool {
-        self.root.is_some() && self.fallback.is_none()
+        self.root.is_some() && !self.standard.needed()
     }
 
     pub(crate) fn quit_status(&mut self, status: String, cx: &mut Context<Self>) {

@@ -204,6 +204,18 @@ const FILES: &[(&str, &[u8])] = &[
     ),
 ];
 
+pub enum StandardCanvas {
+    NotNeeded,
+    Drawn(Fallback),
+    Failed(String),
+}
+
+impl StandardCanvas {
+    pub fn needed(&self) -> bool {
+        !matches!(self, Self::NotNeeded)
+    }
+}
+
 pub struct Fallback {
     directory: PathBuf,
 }

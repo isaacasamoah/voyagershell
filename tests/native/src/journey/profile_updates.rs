@@ -12,6 +12,7 @@ cases! {
     Dropped => "a-dropped-file-is-deleted-only-when-untouched",
     SecondStart => "a-second-start-changes-no-file",
     KeptEditDraws => "kept-edit-that-cannot-load-still-draws",
+    FailedStandardStaysNamed => "failed-standard-canvas-stays-named",
 }
 
 pub const CONTROL: Case = Case::Edited;
@@ -24,6 +25,9 @@ const RETIRED: &str = "canvas/retired.js";
 const RETIRED_EDITED: &str = "canvas/retired-edited.js";
 const KEPT_CANVAS: &str = "canvas/status.js";
 const KEPT_CANVAS_BYTES: &[u8] = b"import \"retired_theme\";\n";
+const BROKEN_AGAIN_BYTES: &[u8] = b"import \"retired_theme_again\";\n";
+const SHIPPED_FAILED: &str = "The shipped canvas also failed: ";
+const KEPT_LINE: &str = "Your edited file is kept: canvas/status.js";
 const DIFF: &str = "updates/canvas__icons-LICENSE.txt.diff";
 
 type Tree = BTreeMap<String, (Vec<u8>, SystemTime)>;
@@ -219,5 +223,59 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 kept.as_deref() == Some(KEPT_CANVAS_BYTES),
             )
             .observed("status", status)
+    })?;
+    cases.check(native, Case::FailedStandardStaysNamed, |native| {
+        native.close()?;
+        native.set_runtime_folder_writable(false)?;
+        let shown = (|| -> Result<(String, String)> {
+            native.edit_profile_file(KEPT_CANVAS, KEPT_CANVAS_BYTES)?;
+            native.launch_unprepared()?;
+            let first = native
+                .observe_unprepared("the host status line after both canvases failed", |seen| {
+                    seen.label(&Target::HOST_STATUS)
+                        .filter(|text| text.contains(SHIPPED_FAILED))
+                        .map(str::to_owned)
+                })
+                .unwrap_or_default();
+            native.edit_profile_file(KEPT_CANVAS, BROKEN_AGAIN_BYTES)?;
+            let retried = native
+                .observe_unprepared("the host status line after the retry of the second edit", |seen| {
+                    seen.label(&Target::HOST_STATUS)
+                        .filter(|text| text.contains("retired_theme_again"))
+                        .map(str::to_owned)
+                })
+                .unwrap_or_default();
+            Ok((first, retried))
+        })();
+        native.set_runtime_folder_writable(true)?;
+        let (first, retried) = shown?;
+        let kept = fs::read(native.profile_path(KEPT_CANVAS)).ok();
+        Verdict::new()
+            .expect(
+                "the status line says the shipped canvas also failed and gives the cause, a refused write",
+                first.contains(&format!("{SHIPPED_FAILED}Creating the shipped canvas copy: Permission denied")),
+            )
+            .expect(
+                "the status line names the edited file the person kept",
+                first.lines().any(|line| line == KEPT_LINE),
+            )
+            .expect(
+                "the retry of the second edit ran, because the status line names its module",
+                retried.contains("retired_theme_again"),
+            )
+            .expect(
+                "after that failed retry the line that the shipped canvas also failed is still there",
+                retried.contains(&format!("{SHIPPED_FAILED}Creating the shipped canvas copy: Permission denied")),
+            )
+            .expect(
+                "after that failed retry the status line still names the kept file",
+                retried.lines().any(|line| line == KEPT_LINE),
+            )
+            .expect(
+                "the kept file stays on disk byte for byte as the person left it",
+                kept.as_deref() == Some(BROKEN_AGAIN_BYTES),
+            )
+            .observed("firstStatus", first)?
+            .observed("retriedStatus", retried)
     })
 }

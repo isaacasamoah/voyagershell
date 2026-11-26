@@ -240,6 +240,19 @@ middle click today. Two presses at one point in quick succession make a double
 or triple click. Six drags in a row that started at the same point each selected the whole
 word, and drags that started at different points did not.
 
+A journey may start the app when no canvas can be drawn. `launch` ends by
+waiting for the canvas's sidebar toggle, and every `observe` ignores a frame
+until the canvas marks it prepared, so neither fits a run where both the
+profile canvas and the shipped canvas failed. `Native::launch_unprepared` starts
+the app and binds Core and stops there, without that wait.
+`Native::observe_unprepared` reads a frame whether or not the canvas has
+prepared it, for what the host itself draws, such as the `host-status` line.
+`Native::set_runtime_folder_writable` sets the mode of the sandbox's private
+runtime folder, `/voyager/runtime`, to 0500 or back to 0700, so that the app
+cannot create the folder it writes the shipped canvas into. The change goes to
+`actions.jsonl`. Core stays reachable, because its socket lives in the
+`herdr-core` folder inside it, which keeps its own mode.
+
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
 identity, sends it SIGSTOP, runs the journey's closure and sends SIGCONT, also
@@ -929,6 +942,20 @@ The `profile-updates-kept-edit` patch makes that copy fail to write, so the
 canvas has nothing to draw and the case fails on the expectation `the workspace
 is drawn although a kept first-party file cannot load`. It is the control for
 this case only. The `profile-updates` patch above stays the journey's control.
+`failed-standard-canvas-stays-named` runs after it. It quits, makes the runtime
+folder read-only, replaces `canvas/status.js` with a file that imports a module
+no build ships and starts the app without waiting for a canvas. Both canvases
+fail, so nothing is drawn. It expects the `host-status` line to say that the
+shipped canvas also failed and to give the refused write as the cause, and to
+name the kept file. It then edits `canvas/status.js` again to another module that
+no build ships, because the app retries the profile canvas only when its source
+changes. The retry has run when the status line names the new module. The case
+expects the line that the shipped canvas also failed, its cause and the kept
+file to be still there, and the file to stay as written. It restores the mode of
+the runtime folder.
+The `profile-updates-failed-standard` patch builds the status of a failed retry
+without the state of the standard canvas, as the app did before it kept that
+state, so the line is gone after the retry. It is the control for this case only.
 
 The journey does not use a second build. A record in the fixture stands for the
 older build, which is the only way a profile reaches a new build. It does not

@@ -1462,7 +1462,7 @@ features:
     code: [desktop/src/host.rs, desktop/src/lib.rs, desktop/themes/voyager.json]
   - id: profile-updates
     name: 'Profile updates'
-    summary: 'Start a new build on an old profile and see untouched first-party files update, edited ones stay and an update notice with a diff. A kept canvas file that cannot load leaves the shipped canvas drawn and its file named.'
+    summary: 'Start a new build on an old profile and see untouched first-party files update, edited ones stay and an update notice with a diff. A kept canvas file that cannot load leaves the shipped canvas drawn and its file named. When the shipped canvas fails too, the status line says so until a canvas loads.'
     group: content-model
     owner: content
     shared_with: [desktop-presentation]
