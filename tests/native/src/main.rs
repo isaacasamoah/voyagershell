@@ -676,6 +676,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         "src/journey/socket_dock.rs",
         include_bytes!("journey/socket_dock.rs"),
     ),
+    (
+        "src/journey/terminal_agent.rs",
+        include_bytes!("journey/terminal_agent.rs"),
+    ),
     ("src/journey/voice.rs", include_bytes!("journey/voice.rs")),
     (
         "src/journey/voice_talk_over.rs",

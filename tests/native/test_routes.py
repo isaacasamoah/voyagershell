@@ -318,7 +318,6 @@ class Routes(unittest.TestCase):
                 for journey in (
                     "workspace-ux",
                     "conversation-voice",
-                    "terminal-agent-create",
                     "terminal-reported-status",
                     "arrangement",
                 ):
@@ -489,7 +488,6 @@ class Routes(unittest.TestCase):
         for name in (
             "proof_workspace",
             "proof_terminal",
-            "proof_terminal_agent",
             "proof_selected_stop",
             "proof_avatar",
             "proof_split_resize",

@@ -1,0 +1,20 @@
+diff --git a/app/src/launch.rs b/app/src/launch.rs
+index 413751fc..4aff1604 100644
+--- a/app/src/launch.rs
++++ b/app/src/launch.rs
+@@ -124,14 +124,7 @@ pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>
+ 
+ fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
+     let agent = match launch {
+-        Launch::Program { argv } => argv.first().is_some_and(|program| {
+-            let name = Path::new(program)
+-                .file_name()
+-                .and_then(|name| name.to_str())
+-                .unwrap_or("");
+-            crate::agent_programs::is_agent_program(name.trim_end_matches(".exe"))
+-        }),
+-        Launch::Terminal => false,
++        Launch::Program { .. } | Launch::Terminal => false,
+     };
+     if !agent {
+         return Ok(args);

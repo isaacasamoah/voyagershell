@@ -21,6 +21,7 @@ mod scrolling;
 mod slow_list;
 mod slow_save;
 mod socket_dock;
+mod terminal_agent;
 mod voice;
 mod voice_talk_over;
 mod voyage_close;
@@ -156,6 +157,7 @@ journeys! {
     AdoptByLabel => "adopt-by-label" in adopt_by_label, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     SocketDock => "socket-dock" in socket_dock, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     AgentSplit => "agent-split" in agent_split, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    TerminalAgent => "terminal-agent" in terminal_agent, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     HomeCreate => "home-create" in home_create, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Worktrees => "worktrees" in worktrees, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     ManifestVessel => "manifest-vessel" in manifest_vessel, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
@@ -665,6 +667,7 @@ mod tests {
                 "tests/native/controls/voice-reply-marker.patch".to_owned(),
                 "tests/native/controls/agent-resize.patch".to_owned(),
                 "tests/native/controls/agent-plain.patch".to_owned(),
+                "tests/native/controls/terminal-agent-created.patch".to_owned(),
                 "tests/native/controls/agent-person-plain.patch".to_owned(),
                 "tests/native/controls/voice-click-cuts.patch".to_owned(),
                 "tests/native/controls/voice-mic-reopens.patch".to_owned(),

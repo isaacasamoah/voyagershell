@@ -12,7 +12,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Fleets | covered | none | none | covered | workspace | - | linux |
 | Fleet arrangement | covered | none | python-only | covered | arrangement | layouts, arrangement | linux |
 | Vessels | covered | none | none | covered | workspace | - | linux |
-| Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
+| Agent Vessels | covered | none | python-only | python-only | terminal-agent | arrangement | linux |
 | Portals | covered | none | python-only | covered | portals | portal-terminal | linux |
 | Split / resize / maximize | covered | none | none | covered | arrangement | workspace-ux | linux |
 | Terminal I/O | covered | none | covered | covered | terminal-input | terminal-grid, portal-terminal | linux |

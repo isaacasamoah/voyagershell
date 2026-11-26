@@ -354,10 +354,10 @@ No case runs `voyager status`, so the status picture does not reach this journey
   Both exist because the shipped entry names everything and would hide a change
   to the default. The saved launch of each new Vessel must be the table's
   arguments, and the stand-in `codex` that Core reports as the foreground
-  program must have got them. The case covers the retained
-  `terminal-agent-create` journey's assertion that the person's Create Codex
-  gets the table default. That journey's other assertions, which need the
-  installed Codex, stay Python only.
+  program must have got them. The case covers the assertion
+  of the retired `terminal-agent-create` journey that the person's Create Codex
+  gets the table default. The `terminal-agent` journey covers the rest of that
+  journey, with the stand-in `codex`.
 - `voyager-resizes-a-split` puts two Vessels side by side in the second Fleet
   with the label and sends `resize-placement-split` for the Fleet's root split
   from Voyager's terminal. It passes when the command exits 0 and the saved
@@ -399,6 +399,32 @@ filled before the first maximize is the Fleet's area.
   the command exits 0, the new Vessel is in the Fleet's split tree, the saved
   layout holds no maximized Vessel and the canvas draws both the left Vessel
   and the new one.
+
+The `terminal-agent` journey proves where an agent runs. It uses the stand-in
+`codex`, so it needs no login and makes no model call. It takes `/proc` as the
+parent and folder of each program and Core's `server.status` for its holder.
+
+- `typed-agent-runs-under-the-retained-shell` types the agent's command into the
+  first shell. It passes when the shell is still the Vessel's Program, the
+  stand-in `codex` that Core reports as the foreground program is a child of
+  that shell, got the typed arguments and started in the shell's folder, and
+  the saved layout is the same as before the typing.
+- `created-agent-sits-beside-the-retained-shell` clicks Create Codex beside the
+  first shell. It passes when the first shell is still its Vessel's Program, the
+  new Vessel has its own Program, both Programs belong to Core's holder, the
+  stand-in `codex` is the foreground child of the new Program with the table's
+  default arguments and the new Vessel's folder, the saved launch is the
+  table's, the first Vessel is unchanged in the saved layout and both terminals
+  are drawn with a size.
+
+`tests/native/controls/terminal-agent.patch` makes the app kill the Core Program
+of a bound terminal when Core names `codex` as its foreground program. A
+candidate built with it must fail `typed-agent-runs-under-the-retained-shell`
+on the expectation that the retained shell is still the Vessel's Program.
+`tests/native/controls/terminal-agent-created.patch` starts every created agent
+without its wrapper shell, so the agent becomes the Core Program. A candidate
+built with it must fail `created-agent-sits-beside-the-retained-shell` on the
+expectation that the agent is the new Program's foreground child.
 
 The `worktrees` journey proves that a Voyage on a git repository makes,
 guards and removes a linked worktree from its row's context menu. Before the

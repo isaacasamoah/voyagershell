@@ -1,0 +1,29 @@
+diff --git a/app/src/client_owner.rs b/app/src/client_owner.rs
+index 90393723..fc1e2ad6 100644
+--- a/app/src/client_owner.rs
++++ b/app/src/client_owner.rs
+@@ -239,6 +239,24 @@ impl Owner {
+             &mut self.adoptions,
+             |event| door.gate(&Envelope::report(event)).is_ok(),
+         );
++        if reported && let Ok(core) = self.core.as_mut() {
++            let addresses: Vec<String> = self
++                .layout
++                .vessels
++                .iter()
++                .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.clone()))
++                .collect();
++            for address in addresses {
++                let agent = core
++                    .terminal_get(&address)
++                    .ok()
++                    .and_then(|terminal| terminal.foreground)
++                    .is_some_and(|process| process.name == "codex");
++                if agent {
++                    let _ = core.terminal_kill(&address);
++                }
++            }
++        }
+         let before = self.version;
+         self.prepare();
+         self.voyager();

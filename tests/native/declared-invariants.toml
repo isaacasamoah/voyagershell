@@ -455,8 +455,21 @@ owner = "application-queue"
 source = "The retained terminal-agent-create journey, which asserts the person's Create Codex gets the table default; the admiral's ruling A on plain mode applies to other Vessels only, 22 Nov 2026."
 features = ["adopted-vessels", "agent-vessels"]
 guard = ["type:contract/src/launch.rs#Defaults"]
-check = ["journey:agent-split/person-keeps-table-default"]
+check = ["journey:agent-split/person-keeps-table-default", "journey:terminal-agent/created-agent-sits-beside-the-retained-shell"]
 gap = "Only Linux X11 evidence exists. The journey starts the stand-in codex, not the installed one."
+confidence = "stated"
+
+[[invariant]]
+id = "agents-run-under-their-own-program"
+says = "An agent the person starts by typing in a Vessel's shell runs as a child of that shell, and the Vessel keeps the same Program. Create Codex starts the agent under its own new Program in a new Vessel beside the first, and the first Vessel's Program is not touched."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 26 Nov 10:00"
+features = ["adopted-vessels", "agent-vessels"]
+guard = ["type:contract/src/launch.rs#Launch"]
+type_gap = "Launch decides whether a Vessel runs a terminal or a program. It cannot say which operating-system process starts the program or what that process's parent is, which only the journey observes."
+check = ["journey:terminal-agent/typed-agent-runs-under-the-retained-shell", "journey:terminal-agent/created-agent-sits-beside-the-retained-shell"]
+gap = "Only Linux X11 evidence exists. The journey starts the stand-in codex, not the installed one. Known gaps accepted by Isaac via Voyager, 26 Nov 10:00: the real Codex version and sha check, the interactive composer text, and the model's computed answer."
 confidence = "stated"
 
 [[invariant]]

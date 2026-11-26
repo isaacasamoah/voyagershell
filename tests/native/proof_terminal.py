@@ -10,7 +10,7 @@ from secrets import token_hex
 from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
-from proof_process import observe_core_exit
+from proof_process import observe_core_exit, process_record
 
 LEGACY_DIV_CANVAS = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
 
@@ -171,8 +171,6 @@ def terminal(
         )
         assert original.get("pid"), "Terminal has no live process"
         if reported:
-            from proof_terminal_agent import process_record
-
             observations = {"nativeWords": [], "quietSeconds": 0.3}
 
             def save():

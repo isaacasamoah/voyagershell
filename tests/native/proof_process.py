@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import time
 
@@ -71,4 +72,19 @@ def process_identity(pid, *, metadata_only=False):
         "start": (process / "stat").read_text().rsplit(") ", 1)[1].split()[19],
         "command": (process / "cmdline").read_bytes().decode().split("\0")[:-1],
         "session": session,
+    }
+
+
+def process_record(pid):
+    identity = process_identity(pid, metadata_only=True)
+    path = Path("/proc") / str(pid)
+    fields = path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
+    return {
+        **identity,
+        "parent": int(fields[1]),
+        "cwd": str(path.joinpath("cwd").resolve(strict=True)),
+        "argv": [
+            os.fsdecode(value)
+            for value in path.joinpath("cmdline").read_bytes().split(b"\0")[:-1]
+        ],
     }
