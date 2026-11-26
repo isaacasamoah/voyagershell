@@ -128,6 +128,62 @@ To learn the app by using it, follow the tutorial,
 [Learn VoyagerShell by running it](docs/README.md). It walks through every
 part of the workspace and traces one click through the code.
 
+## Install a release
+
+Releases are Linux x86_64 builds on GitHub Releases. They run on Ubuntu 22.04
+and newer. Install one with:
+
+```sh
+curl -fsSL https://github.com/isaacasamoah/voyagershell/releases/latest/download/install.sh | sh
+```
+
+The installer reads `latest.json`, checks the archive's sha256 and that the
+build runs, then lays out the install described in
+[Daily start from an install](#daily-start-from-an-install). It writes
+`start.json` only when none exists and adds a launcher entry. It installs
+Herdr Core with Core's own installer only when no Core is found. It leaves an
+older Core alone and tells you.
+
+## Releasing
+
+Releasing takes two words from the owner. `scripts/release publish` is the
+first. Approving the `release` environment in GitHub is the second.
+
+1. Add the version's entry to `CHANGELOG.md` as `## [x.y.z] - YYYY-MM-DD` in
+   plain words. When a release changes the shape of stored data, say so,
+   because `voyager rollback` does not convert it.
+2. Run `scripts/release prepare x.y.z`. It checks that the version is plain
+   semver, that the entry exists, that the tree is clean and equal to
+   `origin/main` and that no such tag exists. It sets the crate versions,
+   refreshes the generated files, commits `Release x.y.z` on
+   `release/x.y.z`, runs `npm run ci:local`, prints the commits since the last
+   tag and opens a pull request. It never tags. When the crates already read
+   `x.y.z`, as for the first release, it says so and stops. Run it under your
+   load control, for example `heavy`, because `ci:local` builds.
+3. Merge that pull request through the normal path.
+4. Run `scripts/release publish x.y.z` from a clean checkout of `origin/main`.
+   It waits for the `checks` run on that exact commit. On red it prints
+   `nothing published` and tags nothing. On green it tags `vx.y.z` and pushes
+   the tag.
+5. The `release` workflow waits for `checks` on the tagged commit, builds on
+   Ubuntu 22.04 with `VOYAGER_RELEASE=1`, checks that the build reports the
+   tag's version, packs `voyagershell-linux-x86_64.tar.gz` and waits for the
+   environment's required reviewer. After approval it creates the release from
+   the changelog entry, uploads the archive and `install.sh`, and uploads
+   `latest.json` last.
+
+Set this up once in GitHub, in the repository's settings, before the first
+release. Create the environment `release` and add yourself as its required
+reviewer. The repository names no account. The workflow reads with a read-only
+token and only its publish job may write release contents. Anyone who may push
+tags can start the workflow, but nothing publishes until the required reviewer
+approves that run.
+
+To rehearse a release, run the `release` workflow by hand on a branch from the
+Actions tab. It builds the archive and writes `latest.json` as a workflow
+artifact named `voyagershell-dist`, and publishes nothing. Check that the
+archive's sha256 matches the manifest's.
+
 ## Set up voice
 
 Voice runs on LiquidAI's LFM3 Omni model through llama.cpp's `llama-server`, on
