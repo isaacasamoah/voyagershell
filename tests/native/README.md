@@ -1855,6 +1855,10 @@ before it wrote its end record, as `terminal-scrolling` does when it closes the 
 `tests/native/controls/frame-stall.patch` plants a 50 ms sleep in the terminal
 snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's
 `maxMs` and `p95Ms` then exceed 50 ms, and a build without the patch does not.
+The same patch is the control for `terminal-input/typing-echo`. Built with it,
+the case fails on the expectation `19 in 20 timed keys were echoed in under 60 ms`.
+The sleep raised the case's `p50Ms` by about 50 ms, which shows that the case
+times the drawn echo.
 
 ### Build and inspect
 

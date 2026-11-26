@@ -16,7 +16,7 @@ use std::io::{self, IoSlice};
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use x11rb::connection::Connection as _;
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ClientMessageEvent,
@@ -210,6 +210,15 @@ impl Pixels {
     }
 }
 
+pub struct Echo {
+    pub sent: Instant,
+    pub seen: Option<Duration>,
+    pub captures: u32,
+    pub capturing: Duration,
+    pub before: Pixels,
+    pub after: Pixels,
+}
+
 pub struct Display {
     connection: RustConnection<Bounded>,
     root: Window,
@@ -393,6 +402,47 @@ impl Display {
     }
 
     pub fn chord(&self, chord: Chord) -> Result<()> {
+        self.press(&self.held(chord)?, KEY_PACE)
+    }
+
+    pub fn echo(
+        &self,
+        window: Window,
+        region: Geometry,
+        chord: Chord,
+        every: Duration,
+        patience: Duration,
+    ) -> Result<Echo> {
+        let before = self.capture(window, region)?;
+        let held = self.held(chord)?;
+        let sent = Instant::now();
+        self.press(&held, Duration::ZERO)?;
+        let (mut captures, mut capturing) = (0, Duration::ZERO);
+        loop {
+            captures += 1;
+            if let Some(wait) = (sent + every * captures).checked_duration_since(Instant::now()) {
+                sleep(wait);
+            }
+            let began = Instant::now();
+            let after = self.capture(window, region)?;
+            let ended = Instant::now();
+            capturing += ended - began;
+            let elapsed = ended - sent;
+            let changed = after.differing(&before) > 0;
+            if changed || elapsed >= patience {
+                return Ok(Echo {
+                    sent,
+                    seen: changed.then_some(elapsed),
+                    captures,
+                    capturing,
+                    before,
+                    after,
+                });
+            }
+        }
+    }
+
+    fn held(&self, chord: Chord) -> Result<Vec<(u8, bool)>> {
         let mut held = Vec::new();
         if chord.ctrl {
             held.push(self.code(CONTROL)?);
@@ -404,7 +454,7 @@ impl Display {
             held.push((self.code(ALT)?.0, false));
         }
         held.push(self.code(chord.key.symbol()?)?);
-        self.press(&held)
+        Ok(held)
     }
 
     pub fn type_text(&self, text: &str) -> Result<()> {
@@ -413,7 +463,7 @@ impl Display {
                 '\n' => Key::Return,
                 character => Key::Char(character),
             };
-            self.press(&[self.code(key.symbol()?)?])?;
+            self.press(&[self.code(key.symbol()?)?], KEY_PACE)?;
         }
         Ok(())
     }
@@ -465,7 +515,7 @@ impl Display {
             .with_context(|| format!("No key produces keysym {symbol:#x}"))
     }
 
-    fn press(&self, keys: &[(u8, bool)]) -> Result<()> {
+    fn press(&self, keys: &[(u8, bool)], pace: Duration) -> Result<()> {
         let shift = self.code(SHIFT)?.0;
         let mut sequence = Vec::new();
         for &(code, shifted) in keys {
@@ -476,11 +526,11 @@ impl Display {
         }
         for &code in &sequence {
             self.fake(KEY_PRESS_EVENT, code, 0, 0)?;
-            sleep(KEY_PACE);
+            sleep(pace);
         }
         for &code in sequence.iter().rev() {
             self.fake(KEY_RELEASE_EVENT, code, 0, 0)?;
-            sleep(KEY_PACE);
+            sleep(pace);
         }
         Ok(())
     }

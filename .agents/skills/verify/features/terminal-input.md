@@ -52,6 +52,14 @@ fixture.
   journey sends no input. Both blocks must be drawn, each in the cell that the
   program addressed and on one cell grid, and each must hold glyph ink. After
   the `back` file the capture must equal the capture from before `go`.
+- `typing-echo` runs `cat`, types one letter and Backspace to find the cells
+  the echo changes, and then sends 200 keys through XTest, a letter and
+  Backspace in turn, at least 100 ms apart. After each key it captures those
+  cells every 1 ms until they differ. Every key must change them, 19 in 20
+  keys in under 60 ms, and none may take over 100 ms. The case records each
+  key's time from the press to the first differing capture, with p50, p95,
+  p99, max and the mean cost of one capture, under `timing` in `checks.json`.
+  The time is X server pixels on Xvfb, not light from a screen.
 - `drag-selects-text` prints `COPYβ界` on a truecolor background and drags
   from one pixel inside the left edge of that box to one pixel inside its
   right edge. Every pixel that had the background colour must take one other

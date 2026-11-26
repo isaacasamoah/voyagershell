@@ -1,12 +1,13 @@
 use super::{Defect, GLANCE, Native, POPOVER_AFTER_HOVER, STRIPS_AT_REST, Seen, hold};
 use crate::inspection::{Target, Unseen, clear_of, contains, inside, region};
 use crate::system::{PATIENCE, System, poll};
-use crate::x11::{Chord, Clipboard, Exchange, Geometry, Pixels, Reading, Selection, Window};
+use crate::x11::{Chord, Clipboard, Echo, Exchange, Geometry, Pixels, Reading, Selection, Window};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 use voyager_contract::inspection::{Frame, Role};
 
+const ECHO_POLL: std::time::Duration = std::time::Duration::from_millis(1);
 const PRIMARY: u8 = 1;
 const MIDDLE: u8 = 2;
 const SECONDARY: u8 = 3;
@@ -508,6 +509,24 @@ impl Native {
         let x11 = self.x11()?;
         self.system
             .act(json!({"input":"key","chord":chord}), || x11.chord(chord))
+    }
+
+    pub fn echo(
+        &self,
+        chord: impl Into<Chord>,
+        region: Geometry,
+        after: Option<&Echo>,
+        spacing: super::settle::Owed,
+    ) -> Result<Echo> {
+        let chord = chord.into();
+        let due = after.map_or_else(std::time::Instant::now, |echo| echo.sent + spacing.within());
+        self.keyboard()?;
+        let x11 = self.x11()?;
+        self.system.act_by(
+            json!({"input":"key","chord":chord,"watched":region}),
+            due,
+            || x11.echo(self.window, region, chord, ECHO_POLL, PATIENCE),
+        )
     }
 
     pub fn type_text(&self, text: &str) -> Result<()> {

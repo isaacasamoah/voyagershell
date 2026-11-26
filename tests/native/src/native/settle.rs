@@ -35,6 +35,7 @@ pub const POPOVER_AFTER_HOVER: Owed = Owed::secs(2);
 pub const STRIPS_AT_REST: Owed = Owed::millis(100);
 pub const VESSEL_CLOSED: Owed = Owed::secs(1);
 pub const FLOAT_SPACING: Owed = Owed::millis(90);
+pub const KEY_SPACING: Owed = Owed::millis(100);
 pub const STATUS_AFTER_CLICK: Owed = Owed::millis(600);
 pub const PROBE_AFTER_DOCK: Owed = Owed::millis(50);
 pub const PROBE_LATEST: Owed = Owed::millis(60);
