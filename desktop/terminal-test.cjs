@@ -80,6 +80,7 @@ function fixture(
     "TerminalState",
     "window_epoch",
     "workspace_notice",
+    "window",
     source,
   )(
     class {},
@@ -108,6 +109,7 @@ function fixture(
     { new: () => ({}) },
     () => "9",
     () => ({ revision: String(version), packageRevision: "1" }),
+    { has_active_dialog: () => false },
   );
   const view = new Canvas();
   Object.assign(view, {
@@ -459,41 +461,41 @@ test("shortcuts target the focused Vessel and queue only while busy", () => {
   assert.equal(choices.length, 1);
 });
 
-test("selection focus uses the actual current-Fleet terminal and preserves outside focus", async () => {
-  for (const eligible of [true, false]) {
-    const { view, cx, pending, layout, focus } = fixture("applied");
+test("a Fleet switch gives the keyboard to its first terminal in split order, or to an open chat", async () => {
+  for (const chat of [false, true]) {
+    const { view, cx, pending, layout } = fixture("applied");
     const calls = [];
     const fleet = layout.voyages[0].fleets[0];
     fleet.placements.push({ id: "second", vessel: "other" });
     fleet.root = {
       kind: "branch",
-      first: { kind: "leaf", placement: fleet.placements[0].id },
-      second: { kind: "leaf", placement: "second" },
+      first: { kind: "leaf", placement: "second" },
+      second: { kind: "leaf", placement: fleet.placements[0].id },
     };
-    focus("second");
-    view.terminals.set("content", {
-      rememberFocus() {
-        calls.push("remember");
-        return eligible;
+    for (const id of ["content", "other"]) {
+      view.terminals.set(id, {
+        focused: () => false,
+        focus() {
+          calls.push(id);
+        },
+        rememberFocus() {
+          calls.push("remember");
+          return true;
+        },
+      });
+      view.openings.set(id, { status: "applied" });
+    }
+    view.chat = {
+      open: chat,
+      input: {
+        focus() {
+          calls.push("composer");
+        },
       },
-      focusIfUnchanged() {
-        calls.push("focus");
-      },
-    });
-    view.terminals.set("other", {
-      rememberFocus() {
-        calls.push("other");
-        return false;
-      },
-    });
-    view.openings.set("content", { status: "applied" });
-    view.openings.set("other", { status: "applied" });
+    };
     view.run({ operation: "select-fleet", id: "fleet" }, cx);
     await pending[0];
-    assert.deepEqual(
-      calls,
-      eligible ? ["remember", "focus"] : ["remember", "other"],
-    );
+    assert.deepEqual(calls, chat ? ["composer"] : ["other"]);
   }
 });
 

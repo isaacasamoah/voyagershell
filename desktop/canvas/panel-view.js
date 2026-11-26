@@ -10,6 +10,7 @@ import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
 import {
+  keyboardPlacement,
   openingPlacement,
   shownPanels,
   terminalBacked,
@@ -131,6 +132,22 @@ function focusDocked(workspace, cx) {
   const terminal = target && workspace.terminals.get(target.vessel);
   if (terminal && !terminal.focused()) terminal.focus();
 }
+export function focusSwitched(workspace, cx) {
+  moveFocus(workspace, "keyboard", cx);
+  const target = shownPanels(workspace.layout).find(
+    (panel) => panel.id === focusedPlacement(workspace),
+  );
+  const terminal = target && workspace.terminals.get(target.vessel);
+  if (workspace.chat?.open) workspace.chat.input.focus();
+  else if (!terminal) refocus(workspace, cx);
+  else if (
+    !workspace.editing &&
+    !workspace.layoutName &&
+    !window.has_active_dialog() &&
+    !terminal.focused()
+  )
+    terminal.focus();
+}
 const focusedPlacements = new WeakMap();
 export function focusedPlacement(workspace) {
   return focusedPlacements.get(workspace) ?? null;
@@ -150,13 +167,20 @@ export function refocus(workspace, cx) {
   });
 }
 export function moveFocus(workspace, target, cx) {
+  const layout = workspace.layout;
   const id =
     target === "opening"
-      ? (openingPlacement(workspace.layout)?.id ?? null)
-      : target.placement;
+      ? (openingPlacement(layout)?.id ?? null)
+      : target === "keyboard"
+        ? ((
+            keyboardPlacement(layout, (panel) =>
+              workspace.terminals.has(panel.vessel),
+            ) ?? openingPlacement(layout)
+          )?.id ?? null)
+        : target.placement;
   const changed = id !== focusedPlacement(workspace);
   focusedPlacements.set(workspace, id);
-  if (id && changed && target !== "opening") noteFocus(workspace, id, cx);
+  if (id && changed && typeof target === "object") noteFocus(workspace, id, cx);
   return changed;
 }
 export function renderPanel(workspace, placement, scope, group) {
