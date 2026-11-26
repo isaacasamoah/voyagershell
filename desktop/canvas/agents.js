@@ -184,9 +184,8 @@ export function agentsView(
     const label = [item.name, item.program, item.detail]
       .filter(Boolean)
       .join(", ");
-    return Button.new(`vessel-${item.id}`)
-      .accessibility_label(label)
-      .tooltip(item.hint)
+    const button = Button.new(`vessel-${item.id}`).accessibility_label(label);
+    return (item.hint ? button.tooltip(item.hint) : button)
       .w_full()
       .justify_start()
       .px(10)

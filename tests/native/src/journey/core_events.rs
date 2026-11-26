@@ -14,7 +14,9 @@ cases! {
     ForegroundReachesAgentsList => "foreground-reaches-agents-list",
     SilentProgramIsUnknown => "silent-program-is-unknown",
     ReportStaysUntilReplaced => "report-stays-until-replaced",
-    ExitShownAfterCorePause => "exit-shown-after-core-pause",
+    ExitShownAfterCorePause => "exit-shown-after-core-pause";
+    "silent-program-is-unknown" needs "foreground-reaches-agents-list",
+    "report-stays-until-replaced" needs "foreground-reaches-agents-list",
 }
 
 pub const CONTROL: Case = Case::ForegroundReachesAgentsList;
@@ -127,12 +129,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         stand_in_row(native, &terminal, &row, "none")?;
         let drawn = native.drawn_labels(&row, CANVAS_REFRESH)?;
         native.keep_window("silent-agent-row")?;
+        let popover = native.hover_popover(&row)?;
+        native.keep_window("hover-unreported-row")?;
         stop_stand_in(native, &terminal, &row)?;
         Verdict::new()
             .expect(
                 "the Agents row of an agent that never reported shows no status word",
                 !drawn.is_empty() && drawn.iter().all(|label| status_in(label).is_none()),
             )
+            .expect(
+                "hovering the row of an agent that never reported draws no popover",
+                !popover.drawn(),
+            )
+            .observed("popoverPixels", popover)?
             .observed("rows", &drawn)
     })?;
     cases.check(native, Case::ReportStaysUntilReplaced, |native| {
@@ -142,9 +151,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             (status_in(seen.label(&row)?) == Some("Working")).then_some(())
         });
         let drawn = native.drawn_labels(&row, CANVAS_REFRESH)?;
+        let popover = native.hover_popover(&row)?;
+        native.keep_window("hover-working-row")?;
         stop_stand_in(native, &terminal, &row)?;
         Verdict::new()
             .expect("the Agents row shows the reported Working", shown.is_ok())
+            .expect(
+                "hovering the Working row draws its hover text, so the check can see a popover",
+                popover.drawn(),
+            )
+            .observed("popoverPixels", popover)?
             .expect(
                 "the row keeps showing Working for 3 s while the agent stays silent",
                 !drawn.is_empty()

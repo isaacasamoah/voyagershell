@@ -1,7 +1,7 @@
-use super::{Defect, GLANCE, Native, Seen};
+use super::{Defect, GLANCE, Native, POPOVER_AFTER_HOVER, STRIPS_AT_REST, Seen, hold};
 use crate::inspection::{Target, Unseen, clear_of, contains, inside, region};
 use crate::system::{PATIENCE, System, poll};
-use crate::x11::{Chord, Clipboard, Exchange, Geometry, Reading, Selection, Window};
+use crate::x11::{Chord, Clipboard, Exchange, Geometry, Pixels, Reading, Selection, Window};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
@@ -17,6 +17,23 @@ pub enum Wheel {
     Up,
     Down,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Popover {
+    pub above_unrest: usize,
+    pub below_unrest: usize,
+    pub above: usize,
+    pub below: usize,
+}
+
+impl Popover {
+    pub fn drawn(&self) -> bool {
+        self.above > 0 || self.below > 0
+    }
+}
+
+const STRIP_WIDTH: u16 = 200;
+const STRIP_HEIGHT: u16 = 120;
 
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct Moved {
@@ -318,6 +335,61 @@ impl Native {
 
     pub fn hover(&self, target: &Target) -> Result<()> {
         self.reach(target).map(drop)
+    }
+
+    pub fn hover_popover(&self, target: &Target) -> Result<Popover> {
+        let x11 = self.x11()?;
+        let window = x11.geometry(self.window)?;
+        let aim = self.spot(target)?;
+        let left = (aim.at.0 - (STRIP_WIDTH / 2) as i16).max(0);
+        let width = STRIP_WIDTH.min(window.width.saturating_sub(left as u16));
+        let above_top = (aim.region.y - STRIP_HEIGHT as i16).max(0);
+        let above = Geometry {
+            x: left,
+            y: above_top,
+            width,
+            height: (aim.region.y - above_top).max(0) as u16,
+        };
+        let below_top = aim.region.y + aim.region.height as i16;
+        let below = Geometry {
+            x: left,
+            y: below_top,
+            width,
+            height: STRIP_HEIGHT.min(window.height.saturating_sub(below_top as u16)),
+        };
+        ensure!(
+            above.height > 0 && below.height > 0 && width > 0,
+            "No room beside {target} to look for a popover"
+        );
+        let corner = (window.x + 8, window.y + window.height as i16 - 8);
+        self.system.act(
+            json!({"input":"move","target":"a corner with no control","at":corner}),
+            || x11.move_to(corner.0, corner.1),
+        )?;
+        hold(STRIPS_AT_REST)?;
+        let look = |strip: Geometry| self.look_at(strip);
+        let (above_rest, below_rest) = (look(above)?, look(below)?);
+        hold(STRIPS_AT_REST)?;
+        let (above_again, below_again) = (look(above)?, look(below)?);
+        let above_unrest = above_rest.differing(&above_again);
+        let below_unrest = below_rest.differing(&below_again);
+        ensure!(
+            above_unrest == 0 && below_unrest == 0,
+            "The strips beside {target} changed with no pointer on it, so a popover cannot be told from a redraw: {above_unrest} and {below_unrest} pixels"
+        );
+        self.reach(target)?;
+        hold(POPOVER_AFTER_HOVER)?;
+        let (above_hover, below_hover): (Pixels, Pixels) = (look(above)?, look(below)?);
+        let popover = Popover {
+            above_unrest,
+            below_unrest,
+            above: above_rest.differing(&above_hover),
+            below: below_rest.differing(&below_hover),
+        };
+        self.system.record(
+            json!({"event":"popover-strips","target":target,"above":above,"below":below,"pixels":popover}),
+        )?;
+        Ok(popover)
     }
 
     pub fn drag(&self, from: &Target, onto: &Target) -> Result<()> {

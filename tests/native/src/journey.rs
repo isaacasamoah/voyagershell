@@ -939,6 +939,16 @@ mod tests {
                 ],
             ),
             (
+                Journey::CoreEvents,
+                "silent-program-is-unknown",
+                &["foreground-reaches-agents-list"],
+            ),
+            (
+                Journey::CoreEvents,
+                "report-stays-until-replaced",
+                &["foreground-reaches-agents-list"],
+            ),
+            (
                 Journey::AgentSplit,
                 "voyager-split-clears-maximize",
                 &["bad-split-places-nothing", "voyager-resizes-a-split"],
