@@ -1,5 +1,6 @@
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use std::{
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
 };
@@ -222,16 +223,34 @@ pub struct Fallback {
 
 impl Fallback {
     pub fn write() -> Result<Self> {
-        let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
+        let set = |name| std::env::var_os(name).filter(|value| !value.is_empty());
+        Self::write_in(set("XDG_RUNTIME_DIR"), set("XDG_CACHE_HOME"), set("HOME"))
+    }
+
+    fn write_in(
+        runtime: Option<OsString>,
+        cache: Option<OsString>,
+        home: Option<OsString>,
+    ) -> Result<Self> {
+        let base = match runtime {
+            Some(runtime) => PathBuf::from(runtime),
+            None => {
+                let cache = cache
+                    .map(PathBuf::from)
+                    .or_else(|| home.map(|home| PathBuf::from(home).join(".cache")))
+                    .context("No runtime or cache folder for the shipped canvas copy")?;
+                private_folder(&cache.join("voyager"))?
+            }
+        };
         let directory = base.join(format!("voyager-shipped-canvas-{}", std::process::id()));
         match fs::remove_dir_all(&directory) {
             Ok(()) => (),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(error).context("Clearing the shipped canvas copy"),
         }
+        create_private(&directory).context("Creating the shipped canvas copy")?;
         let fallback = Self { directory };
+        ensure_same_owner(&fallback.directory, &base)?;
         for (path, bytes) in FILES {
             let Some(name) = path.strip_prefix("canvas/") else {
                 continue;
@@ -248,6 +267,65 @@ impl Fallback {
     pub fn path(&self) -> &Path {
         &self.directory
     }
+}
+
+fn private_folder(folder: &Path) -> Result<PathBuf> {
+    if let Some(parent) = folder.parent() {
+        fs::create_dir_all(parent).context("Creating the cache folder")?;
+    }
+    match fs::symlink_metadata(folder) {
+        Ok(found) => {
+            ensure!(
+                found.file_type().is_dir(),
+                "{} is a link or not a folder, so the shipped canvas copy is not written there",
+                folder.display()
+            );
+            set_private(folder).context("Making the cache folder private")?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            create_private(folder).context("Creating the cache folder")?;
+        }
+        Err(error) => return Err(error).context("Reading the cache folder"),
+    }
+    Ok(folder.to_path_buf())
+}
+
+#[cfg(unix)]
+fn create_private(folder: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    fs::DirBuilder::new().mode(0o700).create(folder)
+}
+
+#[cfg(not(unix))]
+fn create_private(folder: &Path) -> std::io::Result<()> {
+    fs::create_dir(folder)
+}
+
+#[cfg(unix)]
+fn set_private(folder: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(folder, fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn set_private(_folder: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn ensure_same_owner(created: &Path, parent: &Path) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    ensure!(
+        fs::metadata(created)?.uid() == fs::metadata(parent)?.uid(),
+        "{} belongs to someone else, so the shipped canvas copy is not written there",
+        parent.display()
+    );
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ensure_same_owner(_created: &Path, _parent: &Path) -> Result<()> {
+    Ok(())
 }
 
 impl Drop for Fallback {
@@ -279,9 +357,19 @@ mod tests {
 
     const OLD: [&str; 4] = ["main.js", "ui.js", "vessel.json", "validate.js"];
 
+    fn scratch(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("voyager-fallback-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
     #[test]
     fn the_fallback_holds_every_shipped_canvas_file_and_is_removed_on_drop() {
-        let fallback = Fallback::write().unwrap();
+        let root = scratch("holds");
+        let runtime = Some(root.clone().into_os_string());
+        let fallback = Fallback::write_in(runtime.clone(), None, None).unwrap();
         let directory = fallback.path().to_path_buf();
         for (path, bytes) in FILES {
             if let Some(name) = path.strip_prefix("canvas/") {
@@ -291,8 +379,63 @@ mod tests {
         fs::write(directory.join("stale.js"), b"stale").unwrap();
         drop(fallback);
         assert!(!directory.exists());
-        let again = Fallback::write().unwrap();
+        let again = Fallback::write_in(runtime, None, None).unwrap();
         assert!(!again.path().join("stale.js").exists());
+        drop(again);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn without_a_runtime_folder_the_copy_lands_in_the_private_cache_folder_and_nowhere_else() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = scratch("cache");
+        let cache = root.join("cache");
+        let fallback =
+            Fallback::write_in(None, Some(cache.clone().into_os_string()), None).unwrap();
+        let folder = cache.join("voyager");
+        assert_eq!(
+            fallback.path(),
+            folder.join(format!("voyager-shipped-canvas-{}", std::process::id()))
+        );
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&folder), 0o700);
+        assert_eq!(mode(fallback.path()), 0o700);
+        assert!(fallback.path().join("main.js").is_file());
+        let mut entries = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        entries.sort();
+        assert_eq!(entries, ["cache"]);
+        drop(fallback);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_cache_folder_defaults_to_the_home_cache_and_never_to_a_shared_temp_folder() {
+        let root = scratch("home");
+        let home = Some(root.clone().into_os_string());
+        let fallback = Fallback::write_in(None, None, home).unwrap();
+        assert!(fallback.path().starts_with(root.join(".cache/voyager")));
+        drop(fallback);
+        assert!(Fallback::write_in(None, None, None).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_cache_folder_that_is_a_link_is_refused() {
+        let root = scratch("link");
+        let elsewhere = root.join("elsewhere");
+        let cache = root.join("cache");
+        fs::create_dir_all(&elsewhere).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, cache.join("voyager")).unwrap();
+        let refusal = Fallback::write_in(None, Some(cache.into_os_string()), None);
+        assert!(refusal.is_err());
+        assert_eq!(fs::read_dir(&elsewhere).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

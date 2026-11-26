@@ -936,8 +936,10 @@ update notice not to list `canvas/status.js` and the file to stay byte for byte
 as written. The file is edited and has no newer shipped version, so only the
 install record's kept paths can name it. A bare name is the form where the engine's error names the module
 and not the importing file, and the case records whether the engine named it.
-The standard canvas is drawn from a copy the app writes into its runtime folder
-each time it falls back, never into the profile.
+The standard canvas is drawn from a copy the app writes each time it falls
+back, into its runtime folder, or when it has none into a private `voyager`
+folder of the user's cache folder. It never writes the copy into the profile or
+into a shared temp folder.
 The `profile-updates-kept-edit` patch makes that copy fail to write, so the
 canvas has nothing to draw and the case fails on the expectation `the workspace
 is drawn although a kept first-party file cannot load`. It is the control for
