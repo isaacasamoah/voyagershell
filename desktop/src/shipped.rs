@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use voyager_app::content::install::{Absent, Shipped};
+use voyager_app::folders::{cache_folder, runtime_folder};
 
 const FILES: &[(&str, &[u8])] = &[
     (
@@ -232,12 +233,10 @@ impl Fallback {
         cache: Option<OsString>,
         home: Option<OsString>,
     ) -> Result<Self> {
-        let base = match runtime {
-            Some(runtime) => PathBuf::from(runtime),
+        let base = match runtime_folder(runtime) {
+            Some(runtime) => runtime,
             None => {
-                let cache = cache
-                    .map(PathBuf::from)
-                    .or_else(|| home.map(|home| PathBuf::from(home).join(".cache")))
+                let cache = cache_folder(cache, home)
                     .context("No runtime or cache folder for the shipped canvas copy")?;
                 private_folder(&cache.join("voyager"))?
             }
@@ -421,6 +420,63 @@ mod tests {
         drop(fallback);
         assert!(Fallback::write_in(None, None, None).is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn relative_name(tag: &str) -> String {
+        format!("voyager-relative-{tag}-{}", std::process::id())
+    }
+
+    #[test]
+    fn a_relative_cache_folder_is_ignored_and_the_copy_never_lands_under_the_working_folder() {
+        let root = scratch("relative-cache");
+        let relative = relative_name("cache");
+        let result = Fallback::write_in(
+            None,
+            Some(OsString::from(&relative)),
+            Some(root.clone().into_os_string()),
+        );
+        let landed = Path::new(&relative).exists();
+        let _ = fs::remove_dir_all(&relative);
+        assert!(!landed, "the copy landed under the working folder");
+        let fallback = result.unwrap();
+        assert!(fallback.path().starts_with(root.join(".cache/voyager")));
+        drop(fallback);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_relative_runtime_folder_is_ignored_and_the_copy_goes_to_the_cache_folder() {
+        let root = scratch("relative-runtime");
+        let relative = relative_name("runtime");
+        let cache = root.join("cache");
+        let result = Fallback::write_in(
+            Some(OsString::from(&relative)),
+            Some(cache.clone().into_os_string()),
+            None,
+        );
+        let landed = Path::new(&relative).exists();
+        let _ = fs::remove_dir_all(&relative);
+        assert!(!landed, "the copy landed under the working folder");
+        let fallback = result.unwrap();
+        assert!(fallback.path().starts_with(cache.join("voyager")));
+        drop(fallback);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn with_only_relative_folders_the_copy_is_refused_and_nothing_is_written() {
+        let relative = relative_name("none");
+        let result = Fallback::write_in(
+            Some(OsString::from(".")),
+            Some(OsString::from(&relative)),
+            Some(OsString::from(&relative)),
+        );
+        let copy = Path::new(".").join(format!("voyager-shipped-canvas-{}", std::process::id()));
+        let landed = copy.exists() || Path::new(&relative).exists();
+        let _ = fs::remove_dir_all(&copy);
+        let _ = fs::remove_dir_all(&relative);
+        assert!(!landed, "the copy landed under the working folder");
+        assert!(result.is_err());
     }
 
     #[cfg(unix)]

@@ -19,6 +19,7 @@ pub mod core_state;
 pub mod diagnostics;
 mod families;
 pub mod focus_hook;
+pub mod folders;
 mod front_door;
 #[cfg(unix)]
 pub mod install;

@@ -84,6 +84,7 @@ Owns files:
 - `app/src/app_socket.rs`
 - `app/src/app_start.rs`
 - `app/src/profile_lock.rs`
+- `app/src/folders.rs`
 - `app/src/client_ready.rs`
 - `app/tests/ready_gate.rs`
 - `app/tests/profile_open.rs`

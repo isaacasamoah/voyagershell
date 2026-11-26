@@ -938,8 +938,9 @@ install record's kept paths can name it. A bare name is the form where the engin
 and not the importing file, and the case records whether the engine named it.
 The standard canvas is drawn from a copy the app writes each time it falls
 back, into its runtime folder, or when it has none into a private `voyager`
-folder of the user's cache folder. It never writes the copy into the profile or
-into a shared temp folder.
+folder of the user's cache folder. A relative `XDG_RUNTIME_DIR` or
+`XDG_CACHE_HOME` is ignored. It never writes the copy into the profile, into a
+shared temp folder or under the folder the app started in.
 The `profile-updates-kept-edit` patch makes that copy fail to write, so the
 canvas has nothing to draw and the case fails on the expectation `the workspace
 is drawn although a kept first-party file cannot load`. It is the control for
