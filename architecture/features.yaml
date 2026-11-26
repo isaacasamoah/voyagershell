@@ -1491,7 +1491,7 @@ features:
         says: 'After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix.'
         owner: desktop-presentation
         guards: []
-        checks: ['journey:profile-updates/kept-edit-that-cannot-load-still-draws']
+        checks: ['journey:profile-updates/kept-edit-that-cannot-load-still-draws', 'journey:profile-updates/failed-standard-canvas-stays-named']
         formal: []
         journeys: [profile-updates]
       - id: pass-means-observed
@@ -1663,7 +1663,7 @@ features:
         says: 'After an update, a first-party file the person edited never stops the workspace drawing. If the kept file cannot load beside the new ones, the app still shows a workspace and names the file to fix.'
         owner: desktop-presentation
         guards: []
-        checks: ['journey:profile-updates/kept-edit-that-cannot-load-still-draws']
+        checks: ['journey:profile-updates/kept-edit-that-cannot-load-still-draws', 'journey:profile-updates/failed-standard-canvas-stays-named']
         formal: []
         journeys: [profile-updates]
       - id: live-edit-keeps-last-good
