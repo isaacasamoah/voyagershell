@@ -98,6 +98,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     let theme = profile.join("themes/voyager.json");
     let _lock = opened.lock;
     let profile_updates = opened.updates;
+    let kept_files = opened.kept;
     let content_owner = opened.owner;
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(package.join("canvas.json"))?)
@@ -227,6 +228,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             avatar,
                             lifecycle,
                             profile_updates,
+                            kept_files,
                         },
                         window,
                         cx,

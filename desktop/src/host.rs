@@ -512,6 +512,7 @@ pub struct Setup {
     pub avatar: crate::avatar::Binding,
     pub lifecycle: crate::lifecycle::Requests,
     pub profile_updates: Vec<voyager_app::content::install::Update>,
+    pub kept_files: Vec<String>,
 }
 
 impl CanvasHost {
@@ -534,6 +535,7 @@ impl CanvasHost {
             avatar,
             lifecycle,
             profile_updates,
+            kept_files,
         } = setup;
         let workspace_binding = WorkspaceBinding {
             client,
@@ -558,10 +560,10 @@ impl CanvasHost {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let edited = profile_updates
+        let edited = kept_files
             .iter()
-            .filter(|update| update.path.starts_with("canvas/"))
-            .map(|update| format!("Your edited file is kept: {}", update.path))
+            .filter(|path| path.starts_with("canvas/") && path.ends_with(".js"))
+            .map(|path| format!("Your edited file is kept: {path}"))
             .collect::<Vec<_>>()
             .join("\n");
         let (root, load_error, fallback) = match load(

@@ -271,6 +271,7 @@ fn answer<T>(
 pub struct OpenedProfile {
     pub lock: crate::profile_lock::ProfileLock,
     pub updates: Vec<crate::content::Update>,
+    pub kept: Vec<String>,
     pub owner: crate::content::Owner,
 }
 
@@ -279,11 +280,12 @@ pub fn open_profile(
     files: &[crate::content::Shipped],
 ) -> Result<OpenedProfile, String> {
     let lock = crate::profile_lock::ProfileLock::hold(profile)?;
-    let (updates, owner) = crate::content::install_and_open(profile, files)
+    let (installed, owner) = crate::content::install_and_open(profile, files)
         .map_err(|error| format!("{}: {error}", profile.display()))?;
     Ok(OpenedProfile {
         lock,
-        updates,
+        updates: installed.updates,
+        kept: installed.kept,
         owner,
     })
 }

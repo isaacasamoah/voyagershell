@@ -173,13 +173,24 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 seen.label(&Target::HOST_STATUS).map(str::to_owned)
             })
             .unwrap_or_default();
-        let announced = native.observe("the update notice for the kept canvas file", |seen| {
-            seen.shows(&Target::profile_update(KEPT_CANVAS))
-                .then_some(())
-        });
+        let notice = native.settle(
+            "the update notice for the other edited files",
+            |seen| {
+                Some((
+                    seen.shows(&Target::profile_update(EDITED_RECORDED)),
+                    seen.shows(&Target::profile_update(KEPT_CANVAS)),
+                ))
+            },
+            |(recorded, _)| *recorded,
+        );
+        let no_newer_version = matches!(notice, Ok((true, false)));
         let listed = status
             .lines()
             .any(|line| line == format!("Your edited file is kept: {KEPT_CANVAS}"));
+        let names_text = status.lines().any(|line| {
+            line.strip_prefix("Your edited file is kept: ")
+                .is_some_and(|path| path.ends_with(".txt"))
+        });
         let engine_names_file = status
             .lines()
             .filter(|line| !line.starts_with("Your edited file is kept: "))
@@ -191,12 +202,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 drawn.is_ok(),
             )
             .expect(
-                "the update notice announces the kept canvas file as edited",
-                announced.is_ok(),
+                "the kept canvas file has no newer shipped version, so the update notice does not list it",
+                no_newer_version,
             )
             .expect(
                 "the status line has the line Your edited file is kept: canvas/status.js",
                 listed,
+            )
+            .expect(
+                "the status line names no text file, which the canvas never loads",
+                !names_text,
             )
             .observed("engineNamesFile", engine_names_file)?
             .expect(
