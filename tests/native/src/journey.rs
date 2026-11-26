@@ -855,6 +855,32 @@ mod tests {
     #[test]
     fn a_case_that_uses_the_state_of_earlier_cases_pulls_them_in_when_picked_alone() -> Result<()> {
         let table: &[(Journey, &str, &[&str])] = &[
+            (Journey::Workspace, "create-fleet", &["split-vessel"]),
+            (
+                Journey::Workspace,
+                "fleet-tab-gives-keyboard",
+                &["split-vessel", "create-fleet"],
+            ),
+            (
+                Journey::Workspace,
+                "create-voyage",
+                &["split-vessel", "create-fleet"],
+            ),
+            (
+                Journey::Workspace,
+                "voyage-switch-gives-keyboard",
+                &["split-vessel", "create-fleet", "create-voyage"],
+            ),
+            (
+                Journey::Workspace,
+                "fleet-without-input-takes-no-keyboard",
+                &["split-vessel", "create-fleet", "create-voyage"],
+            ),
+            (
+                Journey::Workspace,
+                "fleet-tab-keeps-chat-keyboard",
+                &["split-vessel", "create-fleet", "create-voyage"],
+            ),
             (
                 Journey::SocketDock,
                 "reread-keeps-clicked-pane",

@@ -96,20 +96,32 @@ export function openingPlacement(layout: Layout | null): Placement | undefined {
   return rememberedPlacement(layout, shown) || shown[0];
 }
 
+export function keyboardPlacement(
+  layout: Layout | null,
+  takesInput: (panel: Placement) => boolean,
+): Placement | undefined {
+  const fleet = layout
+    ? activeGroups(layout).find((group) => group.owner.kind === "fleet")
+    : undefined;
+  const shown = shownPanels(layout).filter(takesInput);
+  const first = leaves(fleet?.root ?? null)
+    .map((id) => shown.find((panel) => panel.id === id))
+    .find(Boolean);
+  return rememberedPlacement(layout, shown) || first;
+}
+
+function leaves(tree: Split | null): string[] {
+  if (!tree) return [];
+  return tree.kind === "leaf"
+    ? [tree.placement]
+    : [...leaves(tree.first), ...leaves(tree.second)];
+}
+
 export function visiblePanels(
   group: Pick<PanelGroup, "root" | "members" | "maximizedPlacement">,
   maximized = false,
 ): Placement[] {
-  const ids = new Set<string>();
-  const visit = (tree: Split | null) => {
-    if (!tree) return;
-    if (tree.kind === "leaf") ids.add(tree.placement);
-    else {
-      visit(tree.first);
-      visit(tree.second);
-    }
-  };
-  visit(group.root);
+  const ids = new Set(leaves(group.root));
   return group.members.filter(
     (panel) =>
       !panel.hidden &&
