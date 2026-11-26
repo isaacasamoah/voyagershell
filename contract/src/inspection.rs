@@ -101,6 +101,7 @@ roles! {
     ChatError => "chat-error",
     VoiceControl => "voice-control",
     WorkspaceStatus => "workspace-status",
+    HostStatus => "host-status",
     WorkspaceRefresh => "workspace-refresh",
     SplitDivider => "split-divider",
     MaximizePanel => "maximize-panel",

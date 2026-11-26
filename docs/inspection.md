@@ -176,6 +176,7 @@ union all come from that list.
 | `focused-vessel` | Placement id | The content area of the Vessel or Portal the canvas draws as focused, drawn only while it is | `renderPanel` |
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |
 | `profile-update` | Profile path of the file | One line of the notice that a newer first-party version of an edited or unrecorded profile file is available | `Updates::view` in `banner.rs` |
+| `host-status` | Empty | The host's error line over the canvas, drawn only while it has text. It gives the engine's error, one `Your edited file is kept:` line for each edited canvas file, and says when the standard canvas is drawn instead. Its `label` is the text | `errors` in `banner.rs` |
 | `window-minimize`, `window-maximize`, `window-close` | Empty | The window buttons at the right end of the top strip, drawn only under client decorations | `windowControls` in `navigation-view.ts` |
 | `window-drag` | `home`, `fleets` or `sidebar` | The empty filler that moves the window when it is dragged and maximises it on a double-click. It sits after the Fleet tabs, in the Home strip, or in the sidebar's top row. Only a filler carries it, never a tab or a button | `dragFiller` in `navigation-view.ts` |
 | `fleet-drop` | Fleet id of the tab under the pointer | The insertion bar on the edge of a Fleet tab while another Fleet tab is dragged over it | `renderFleets` in `navigation-view.ts` |

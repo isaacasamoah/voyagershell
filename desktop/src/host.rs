@@ -29,6 +29,7 @@ use crate::notice_listener::Listener;
 use voyager_contract::{Context as WorkspaceContext, Request};
 
 use crate::bridge::{Bridge, decimal};
+use crate::shipped::Fallback;
 use crate::terminal::Viewers;
 
 thread_local! { static LOADING: Cell<bool> = const { Cell::new(false) }; }
@@ -447,8 +448,42 @@ fn load(
     runtime.try_load(package, window, cx)
 }
 
+fn load_shipped(
+    runtime: &Rc<ShellRuntime>,
+    current: &SharedTheme,
+    workspace_binding: &WorkspaceBinding,
+    conversation: &voyager_app::conversation_client::Client,
+    window: &mut Window,
+    cx: &mut App,
+) -> Result<(Entity<ShellRoot>, Fallback)> {
+    let fallback = Fallback::write()?;
+    let root = load(
+        runtime,
+        fallback.path(),
+        current,
+        workspace_binding,
+        conversation,
+        window,
+        cx,
+    )?;
+    Ok((root, fallback))
+}
+
+fn kept_message(error: &anyhow::Error, edited: &str, shipped_drawn: bool) -> String {
+    let mut message = format!("Canvas load failed: {error:#}");
+    if !edited.is_empty() {
+        message.push('\n');
+        message.push_str(edited);
+    }
+    if shipped_drawn {
+        message.push_str("\nShowing the standard canvas until it loads.");
+    }
+    message
+}
+
 pub struct CanvasHost {
     root: Option<Entity<ShellRoot>>,
+    fallback: Option<Fallback>,
     _watch: Option<Watcher>,
     _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
@@ -523,7 +558,13 @@ impl CanvasHost {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error) = match load(
+        let edited = profile_updates
+            .iter()
+            .filter(|update| update.path.starts_with("canvas/"))
+            .map(|update| format!("Your edited file is kept: {}", update.path))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (root, load_error, fallback) = match load(
             &runtime,
             &package,
             &current,
@@ -532,13 +573,40 @@ impl CanvasHost {
             window,
             cx,
         ) {
-            Ok(root) => (Some(root), None),
-            Err(error) => (None, Some(format!("Canvas load failed: {error:#}"))),
+            Ok(root) => (Some(root), None, None),
+            Err(error) => {
+                match load_shipped(
+                    &runtime,
+                    &current,
+                    &workspace_binding,
+                    &conversation,
+                    window,
+                    cx,
+                ) {
+                    Ok((root, fallback)) => (
+                        Some(root),
+                        Some(kept_message(&error, &edited, true)),
+                        Some(fallback),
+                    ),
+                    Err(second) => (
+                        None,
+                        Some(format!(
+                            "{}\nThe shipped canvas also failed: {second:#}",
+                            kept_message(&error, &edited, false)
+                        )),
+                        None,
+                    ),
+                }
+            }
         };
         let avatar_observe = root
             .as_ref()
             .map(|root| workspace_binding.avatar.observe(root, cx));
-        let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
+        let (watch, watch_error) = match root
+            .as_ref()
+            .filter(|_| fallback.is_none())
+            .map(|root| runtime.watch(root, window, cx))
+        {
             Some(Ok(watch)) => (Some(watch), None),
             Some(Err(error)) => (None, Some(format!("Canvas reload unavailable: {error:#}"))),
             None => (None, initial_source.as_ref().err().cloned()),
@@ -595,7 +663,7 @@ impl CanvasHost {
                 }
             }
         });
-        let mut retrying = root.is_none();
+        let mut retrying = root.is_none() || fallback.is_some();
         let handle = window.window_handle();
         let task = cx.spawn(async move |this, cx| {
             let mut prior_theme = Some(initial_theme);
@@ -634,7 +702,7 @@ impl CanvasHost {
                         let changed_accessibility = canvas.accessibility != active;
                         canvas.accessibility = active;
                         if !changed_theme && !changed_source && !changed_accessibility {
-                            return canvas.root.is_some();
+                            return canvas.on_profile_canvas();
                         }
                         let mut valid_theme_change = false;
                         if changed_theme {
@@ -665,7 +733,7 @@ impl CanvasHost {
                         }
                         let source_ready = source_bytes.as_ref().is_some_and(Result::is_ok);
                         if (changed_source && source_ready || valid_theme_change)
-                            && canvas.root.is_none()
+                            && !canvas.on_profile_canvas()
                         {
                             match load(
                                 &runtime,
@@ -688,16 +756,20 @@ impl CanvasHost {
                                         }
                                     }
                                     canvas.root = Some(root);
+                                    canvas.fallback = None;
                                     canvas.load_error = None;
                                 }
                                 Err(error) => {
-                                    canvas.load_error =
-                                        Some(format!("Canvas load failed: {error:#}"))
+                                    canvas.load_error = Some(kept_message(
+                                        &error,
+                                        &edited,
+                                        canvas.fallback.is_some(),
+                                    ))
                                 }
                             }
                         }
                         cx.notify();
-                        canvas.root.is_some()
+                        canvas.on_profile_canvas()
                     })
                 });
                 match result {
@@ -708,6 +780,7 @@ impl CanvasHost {
         });
         Self {
             root,
+            fallback,
             _watch: watch,
             _avatar: avatar_observe,
             _task: task,
@@ -722,6 +795,10 @@ impl CanvasHost {
             accessibility: window.is_a11y_active(),
             _observers: Vec::new(),
         }
+    }
+
+    fn on_profile_canvas(&self) -> bool {
+        self.root.is_some() && self.fallback.is_none()
     }
 
     pub(crate) fn quit_status(&mut self, status: String, cx: &mut Context<Self>) {

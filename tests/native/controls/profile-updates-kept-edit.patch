@@ -1,0 +1,12 @@
+diff --git a/desktop/src/host.rs b/desktop/src/host.rs
+--- a/desktop/src/host.rs
++++ b/desktop/src/host.rs
+@@ -456,7 +456,7 @@
+     window: &mut Window,
+     cx: &mut App,
+ ) -> Result<(Entity<ShellRoot>, Fallback)> {
+-    let fallback = Fallback::write()?;
++    let fallback = Err::<Fallback, _>(anyhow::anyhow!("the shipped canvas fallback is dropped"))?;
+     let root = load(
+         runtime,
+         fallback.path(),

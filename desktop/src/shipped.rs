@@ -1,3 +1,8 @@
+use anyhow::{Context as _, Result};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use voyager_app::content::install::{Absent, Shipped};
 
 const FILES: &[(&str, &[u8])] = &[
@@ -199,6 +204,50 @@ const FILES: &[(&str, &[u8])] = &[
     ),
 ];
 
+pub struct Fallback {
+    directory: PathBuf,
+}
+
+impl Fallback {
+    pub fn write() -> Result<Self> {
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let directory = base.join(format!("voyager-shipped-canvas-{}", std::process::id()));
+        match fs::remove_dir_all(&directory) {
+            Ok(()) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error).context("Clearing the shipped canvas copy"),
+        }
+        let fallback = Self { directory };
+        for (path, bytes) in FILES {
+            let Some(name) = path.strip_prefix("canvas/") else {
+                continue;
+            };
+            let target = fallback.directory.join(name);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).context("Creating the shipped canvas copy")?;
+            }
+            fs::write(&target, bytes).context("Writing the shipped canvas copy")?;
+        }
+        Ok(fallback)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.directory
+    }
+}
+
+impl Drop for Fallback {
+    fn drop(&mut self) {
+        match fs::remove_dir_all(&self.directory) {
+            Ok(()) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => eprintln!("The shipped canvas copy was not removed: {error}"),
+        }
+    }
+}
+
 pub fn files() -> Vec<Shipped<'static>> {
     FILES
         .iter()
@@ -217,6 +266,22 @@ mod tests {
     use voyager_app::content::install::{fingerprint, install};
 
     const OLD: [&str; 4] = ["main.js", "ui.js", "vessel.json", "validate.js"];
+
+    #[test]
+    fn the_fallback_holds_every_shipped_canvas_file_and_is_removed_on_drop() {
+        let fallback = Fallback::write().unwrap();
+        let directory = fallback.path().to_path_buf();
+        for (path, bytes) in FILES {
+            if let Some(name) = path.strip_prefix("canvas/") {
+                assert_eq!(&fs::read(directory.join(name)).unwrap(), bytes, "{name}");
+            }
+        }
+        fs::write(directory.join("stale.js"), b"stale").unwrap();
+        drop(fallback);
+        assert!(!directory.exists());
+        let again = Fallback::write().unwrap();
+        assert!(!again.path().join("stale.js").exists());
+    }
 
     #[test]
     fn a_start_removes_untouched_old_notes_copies_and_keeps_edits_data_and_project_notes() {

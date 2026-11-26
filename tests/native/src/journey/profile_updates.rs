@@ -11,6 +11,7 @@ cases! {
     Announced => "edited-files-are-announced-with-a-diff",
     Dropped => "a-dropped-file-is-deleted-only-when-untouched",
     SecondStart => "a-second-start-changes-no-file",
+    KeptEditDraws => "kept-edit-that-cannot-load-still-draws",
 }
 
 pub const CONTROL: Case = Case::Edited;
@@ -21,6 +22,8 @@ const EDITED_RECORDED: &str = "canvas/icons-LICENSE.txt";
 const EDITED_UNRECORDED: &str = "canvas/icons-NOTICE.txt";
 const RETIRED: &str = "canvas/retired.js";
 const RETIRED_EDITED: &str = "canvas/retired-edited.js";
+const KEPT_CANVAS: &str = "canvas/status.js";
+const KEPT_CANVAS_BYTES: &[u8] = b"import \"retired_theme\";\n";
 const DIFF: &str = "updates/canvas__icons-LICENSE.txt.diff";
 
 type Tree = BTreeMap<String, (Vec<u8>, SystemTime)>;
@@ -156,5 +159,50 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("changed", json!(changed))?
             .observed("files", first.len())
+    })?;
+    cases.check(native, Case::KeptEditDraws, |native| {
+        native.close()?;
+        native.edit_profile_file(KEPT_CANVAS, KEPT_CANVAS_BYTES)?;
+        native.launch()?;
+        let drawn = native.observe(
+            "the workspace drawn with a kept file that cannot load",
+            |seen| seen.shows(&Target::HOME).then_some(()),
+        );
+        let status = native
+            .observe("the host status line", |seen| {
+                seen.label(&Target::HOST_STATUS).map(str::to_owned)
+            })
+            .unwrap_or_default();
+        let announced = native.observe("the update notice for the kept canvas file", |seen| {
+            seen.shows(&Target::profile_update(KEPT_CANVAS))
+                .then_some(())
+        });
+        let listed = status
+            .lines()
+            .any(|line| line == format!("Your edited file is kept: {KEPT_CANVAS}"));
+        let engine_names_file = status
+            .lines()
+            .filter(|line| !line.starts_with("Your edited file is kept: "))
+            .any(|line| line.contains("status.js"));
+        let kept = fs::read(native.profile_path(KEPT_CANVAS)).ok();
+        Verdict::new()
+            .expect(
+                "the workspace is drawn although a kept first-party file cannot load",
+                drawn.is_ok(),
+            )
+            .expect(
+                "the update notice announces the kept canvas file as edited",
+                announced.is_ok(),
+            )
+            .expect(
+                "the status line has the line Your edited file is kept: canvas/status.js",
+                listed,
+            )
+            .observed("engineNamesFile", engine_names_file)?
+            .expect(
+                "the kept file stays on disk byte for byte as the person left it",
+                kept.as_deref() == Some(KEPT_CANVAS_BYTES),
+            )
+            .observed("status", status)
     })
 }

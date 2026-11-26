@@ -15,6 +15,11 @@ pub(crate) fn errors(text: String) -> impl IntoElement {
         .bg(rgb(0x351e25))
         .text_color(rgb(0xffcad3))
         .p(px(8.))
+        .child(crate::inspect::labelled(
+            Role::HostStatus,
+            String::new(),
+            text.clone(),
+        ))
         .child(text)
 }
 

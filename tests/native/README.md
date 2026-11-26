@@ -914,7 +914,19 @@ diff file. `a-dropped-file-is-deleted-only-when-untouched` checks the two retire
 files. `a-second-start-changes-no-file` quits, starts again and compares the
 bytes and modification times of every first-party file. The `profile-updates`
 patch makes the app treat an edited file as untouched, so
-`edited-files-stay-as-they-were` fails.
+`edited-files-stay-as-they-were` fails. `kept-edit-that-cannot-load-still-draws`
+runs last. It quits, replaces the kept `canvas/status.js` with a file that
+imports a bare module name no build ships, starts again and expects the Home
+control to be drawn, the `host-status` line to hold the line `Your edited file is
+kept: canvas/status.js` and the file to stay byte for byte as written. A bare name
+is the form where the engine's error names the module and not the importing file,
+so only that line can name the file, and the case records whether the engine named it.
+The standard canvas is drawn from a copy the app writes into its runtime folder
+each time it falls back, never into the profile.
+The `profile-updates-kept-edit` patch makes that copy fail to write, so the
+canvas has nothing to draw and the case fails on the expectation `the workspace
+is drawn although a kept first-party file cannot load`. It is the control for
+this case only. The `profile-updates` patch above stays the journey's control.
 
 The journey does not use a second build. A record in the fixture stands for the
 older build, which is the only way a profile reaches a new build. It does not
