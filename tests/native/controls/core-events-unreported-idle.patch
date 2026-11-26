@@ -1,0 +1,26 @@
+diff --git a/desktop/canvas/agents.js b/desktop/canvas/agents.js
+index 517e4ec..4ce2335 100644
+--- a/desktop/canvas/agents.js
++++ b/desktop/canvas/agents.js
+@@ -24,7 +24,7 @@ function statusGroup(activity) {
+     case "idle":
+       return "Idle";
+   }
+-  return undefined;
++  return "Idle";
+ }
+ function rank(status) {
+   return status ? STATES[status].rank : STATES.Idle.rank;
+diff --git a/desktop/canvas/agents.ts b/desktop/canvas/agents.ts
+index 5cb1b45..6ea80a9 100644
+--- a/desktop/canvas/agents.ts
++++ b/desktop/canvas/agents.ts
+@@ -34,7 +34,7 @@ function statusGroup(
+     case "idle":
+       return "Idle";
+   }
+-  return undefined;
++  return "Idle";
+ }
+ function rank(status: keyof typeof STATES | undefined): number {
+   return status ? STATES[status].rank : STATES.Idle.rank;

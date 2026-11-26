@@ -253,6 +253,17 @@ cannot create the folder it writes the shipped canvas into. The change goes to
 `actions.jsonl`. Core stays reachable, because its socket lives in the
 `herdr-core` folder inside it, which keeps its own mode.
 
+The frame carries no tooltip text, so a hover popover is seen in pixels.
+`Native::hover_popover` moves the pointer to a corner with no control and takes two
+strips of the window, one above and one below the target and both outside its
+own bounds, because a popover is drawn just above the pointer and the target
+itself may tint on hover. It takes the strips twice, `STRIPS_AT_REST` apart,
+and refuses to answer when they differ, so a redraw cannot pass for a popover.
+It then hovers the target for `POPOVER_AFTER_HOVER`, takes the strips again and
+returns the number of pixels that differ in each strip. `actions.jsonl` records
+the counts as a `popover-strips` event, and a case records them as an observed
+value, so a negative result has a positive control beside it.
+
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
 identity, sends it SIGSTOP, runs the journey's closure and sends SIGCONT, also
@@ -272,6 +283,17 @@ The `core-events` journey proves that Core's reports reach the app. It shows
 an Agents Vessel beside the first terminal. `foreground-reaches-agents-list`
 runs a program three times and stops it each time. Each change must show in the
 terminal's `agents-row` within 1 s of the driver reading it from Core.
+`silent-program-is-unknown` and `report-stays-until-replaced` start the stand-in
+`claude` from the first terminal with `STAND_IN_REPORTS=none` and
+`STAND_IN_REPORTS=working`. The stand-in reports idle when the variable is
+unset, nothing when it is `none`, and one working report when it is `working`.
+A program the canvas recognises as an agent moves into the Agents group of the
+Agents Vessel, which starts collapsed, so both cases click the `agents-group`
+button open first, the way a person does, and then read the row. The first
+case expects no status word in the row for 3 s, and that hovering the row draws
+no popover. The second expects the row to say Working for 3 s while the
+stand-in stays silent, and that hovering the row draws its hover text, which is
+the positive control for the first case's pixel check.
 `exit-shown-after-core-pause` stops Core for 3 s while the shell exits. After
 Core runs again and reports the program finished, the layout must hold the
 Vessel closed within 1 s. The pause does not make Core send a `missed`
@@ -1724,6 +1746,18 @@ The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.
 
+The `core-events-unreported-idle` patch makes the Agents list draw Idle for an
+agent with no reported status, as main did. `silent-program-is-unknown` then
+fails on the expectation `the Agents row of an agent that never reported shows
+no status word`, with `Idle` in the observed row. It is the control for that
+case only.
+
+The `core-events-reported-decays` patch makes the Agents list drop a reported
+status once a terminal has shown it for 1.5 s. `report-stays-until-replaced`
+then fails on the expectation `the row keeps showing Working for 3 s while the
+agent stays silent`, and the observed rows go from Working to no status. The
+silent case still passes. It is the control for that case only.
+
 The `adopt-by-label` patch restores the old drop rule. A `created` report for a
 terminal that no Vessel names is dropped even when it carries the label.
 `agent-in-fleet` then fails, because no Vessel appears for the labelled agent.
@@ -2027,6 +2061,8 @@ declared once, with its source, and the pull request that adds one names it.
 | `CORE_SILENT` | 60 s | Core silent past the owner's read. |
 | `CANVAS_REFRESH` | 3 s | The canvas's observation loop in `docs/terminal.md`. `foreign-exit` holds for it so that the loop has run, and `exit-shown-after-core-pause` stops Core for it. |
 | `AGENTS_ROW` | 1 s | The `core-events` journey's stated bound for the Agents row to name a program that Core reported. |
+| `POPOVER_AFTER_HOVER` | 2 s | How long `hover_popover` holds the pointer on a target before it takes the strips again, which is longer than a popover needs to appear. The reviewer's probe used 3 s. |
+| `STRIPS_AT_REST` | 100 ms | The gap between the two looks that `hover_popover` takes with no pointer on the target, to tell a redraw from a popover. |
 | `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |
 | `FLOAT_SPACING` | 90 ms | The pace between two looks at the floating avatar. |
 | `STATUS_AFTER_CLICK` | 600 ms | How long `created-during-avatar-home-click-is-drawn` reads the status line after the click on the avatar at home, long enough for the canvas to show a render error. |

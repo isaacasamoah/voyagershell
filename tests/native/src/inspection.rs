@@ -102,6 +102,10 @@ impl Target {
         Self::keyed(Role::ManifestAction, &format!("{}:{action}", vessel.0))
     }
 
+    pub fn agents_group(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::AgentsGroup, &voyage.0)
+    }
+
     pub fn agents_row(placement: &PlacementId) -> Self {
         Self::keyed(Role::AgentsRow, &placement.0)
     }

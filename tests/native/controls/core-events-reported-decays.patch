@@ -1,0 +1,55 @@
+diff --git a/desktop/canvas/agents.js b/desktop/canvas/agents.js
+index 3cc4be3..0d55746 100644
+--- a/desktop/canvas/agents.js
++++ b/desktop/canvas/agents.js
+@@ -26,6 +26,12 @@ function statusGroup(activity) {
+   }
+   return undefined;
+ }
++const shownSince = {};
++function decays(id, status) {
++  if (!id || !status) return status;
++  if (shownSince[id] === undefined) shownSince[id] = Date.now();
++  return Date.now() - shownSince[id] > 1500 ? undefined : status;
++}
+ function rank(status) {
+   return status ? STATES[status].rank : STATES.Idle.rank;
+ }
+@@ -163,7 +169,7 @@ export function agentsView(
+               : terminalBacked(content.typeId) && !process
+                 ? "Status unavailable"
+                 : "";
+-        const status = statusGroup(activity);
++        const status = decays(content.backend, statusGroup(activity));
+         const hint = !agent ? state : status ? badge.hint : "";
+         rows.push({
+           id: placement.id,
+diff --git a/desktop/canvas/agents.ts b/desktop/canvas/agents.ts
+index a278045..e49f7ab 100644
+--- a/desktop/canvas/agents.ts
++++ b/desktop/canvas/agents.ts
+@@ -36,6 +36,15 @@ function statusGroup(
+   }
+   return undefined;
+ }
++const shownSince: Record<string, number> = {};
++function decays(
++  id: string | null | undefined,
++  status: keyof typeof STATES | undefined,
++): keyof typeof STATES | undefined {
++  if (!id || !status) return status;
++  if (shownSince[id] === undefined) shownSince[id] = Date.now();
++  return Date.now() - shownSince[id] > 1500 ? undefined : status;
++}
+ function rank(status: keyof typeof STATES | undefined): number {
+   return status ? STATES[status].rank : STATES.Idle.rank;
+ }
+@@ -191,7 +200,7 @@ export function agentsView(
+               : terminalBacked(content.typeId) && !process
+                 ? "Status unavailable"
+                 : "";
+-        const status = statusGroup(activity);
++        const status = decays(content.backend, statusGroup(activity));
+         const hint = !agent ? state : status ? badge.hint : "";
+         rows.push({
+           id: placement.id,

@@ -7,11 +7,16 @@ use crate::native::{
 use crate::system::until;
 use crate::x11::Key;
 use anyhow::{Context, Result, ensure};
-use voyager_contract::RenameTarget;
+use voyager_contract::inspection::Role;
+use voyager_contract::{RenameTarget, VoyageId};
 
 cases! {
     ForegroundReachesAgentsList => "foreground-reaches-agents-list",
-    ExitShownAfterCorePause => "exit-shown-after-core-pause",
+    SilentProgramIsUnknown => "silent-program-is-unknown",
+    ReportStaysUntilReplaced => "report-stays-until-replaced",
+    ExitShownAfterCorePause => "exit-shown-after-core-pause";
+    "silent-program-is-unknown" needs "foreground-reaches-agents-list",
+    "report-stays-until-replaced" needs "foreground-reaches-agents-list",
 }
 
 pub const CONTROL: Case = Case::ForegroundReachesAgentsList;
@@ -20,6 +25,59 @@ const ROUNDS: usize = 3;
 
 fn program(label: &str) -> Option<&str> {
     label.split(", ").nth(1)
+}
+
+const STATUS_WORDS: [&str; 4] = ["Needs attention", "Working", "Done", "Idle"];
+
+fn status_in(label: &str) -> Option<&str> {
+    label.split(", ").skip(2).find_map(|part| {
+        STATUS_WORDS
+            .iter()
+            .find(|word| part == **word || part.starts_with(&format!("{word} · ")))
+            .copied()
+    })
+}
+
+fn open_agents_group(native: &Native) -> Result<()> {
+    let voyage = native.observe("the Voyage", |seen| {
+        seen.frame
+            .elements
+            .iter()
+            .find(|element| element.role == Role::VoyageName)
+            .map(|element| VoyageId(element.key.clone()))
+    })?;
+    let group = Target::agents_group(&voyage);
+    let label = native.observe("the Agents group header", |seen| {
+        seen.label(&group).map(str::to_owned)
+    })?;
+    if label.starts_with("Expand") {
+        native.click(&group)?;
+    }
+    Ok(())
+}
+
+fn stand_in_row(
+    native: &Native,
+    terminal: &Terminal,
+    row: &Target,
+    reports: &str,
+) -> Result<String> {
+    terminal.line(
+        native,
+        &format!("{}={reports} claude", crate::agent::REPORTS),
+    )?;
+    terminal.runs(native, "claude")?;
+    open_agents_group(native)?;
+    native.observe("the terminal's Agents row naming Claude", |seen| {
+        let label = seen.label(row)?;
+        (program(label)? == "Claude").then(|| label.to_owned())
+    })
+}
+
+fn stop_stand_in(native: &Native, terminal: &Terminal, row: &Target) -> Result<()> {
+    terminal.focus(native)?;
+    native.press(Key::Char('c').ctrl())?;
+    named_after(native, terminal, row, "bash", "Bash").map(drop)
 }
 
 fn named_after(
@@ -65,6 +123,52 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("program named after ms", &started)?
             .observed("shell named after ms", &returned)
+    })?;
+    cases.check(native, Case::SilentProgramIsUnknown, |native| {
+        let row = Target::agents_row(terminal.placement());
+        stand_in_row(native, &terminal, &row, "none")?;
+        let drawn = native.drawn_labels(&row, CANVAS_REFRESH)?;
+        native.keep_window("silent-agent-row")?;
+        let popover = native.hover_popover(&row)?;
+        native.keep_window("hover-unreported-row")?;
+        stop_stand_in(native, &terminal, &row)?;
+        Verdict::new()
+            .expect(
+                "the Agents row of an agent that never reported shows no status word",
+                !drawn.is_empty() && drawn.iter().all(|label| status_in(label).is_none()),
+            )
+            .expect(
+                "hovering the row of an agent that never reported draws no popover",
+                !popover.drawn(),
+            )
+            .observed("popoverPixels", popover)?
+            .observed("rows", &drawn)
+    })?;
+    cases.check(native, Case::ReportStaysUntilReplaced, |native| {
+        let row = Target::agents_row(terminal.placement());
+        stand_in_row(native, &terminal, &row, "working")?;
+        let shown = native.observe("the Agents row showing the reported Working", |seen| {
+            (status_in(seen.label(&row)?) == Some("Working")).then_some(())
+        });
+        let drawn = native.drawn_labels(&row, CANVAS_REFRESH)?;
+        let popover = native.hover_popover(&row)?;
+        native.keep_window("hover-working-row")?;
+        stop_stand_in(native, &terminal, &row)?;
+        Verdict::new()
+            .expect("the Agents row shows the reported Working", shown.is_ok())
+            .expect(
+                "hovering the Working row draws its hover text, so the check can see a popover",
+                popover.drawn(),
+            )
+            .observed("popoverPixels", popover)?
+            .expect(
+                "the row keeps showing Working for 3 s while the agent stays silent",
+                !drawn.is_empty()
+                    && drawn
+                        .iter()
+                        .all(|label| status_in(label) == Some("Working")),
+            )
+            .observed("rows", &drawn)
     })?;
     cases.check(native, Case::ExitShownAfterCorePause, |native| {
         let (before, _) = native.document()?.context("Missing saved layout")?;

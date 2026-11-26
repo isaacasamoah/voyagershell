@@ -712,6 +712,8 @@ mod tests {
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
                 "tests/native/controls/profile-updates-kept-edit.patch".to_owned(),
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
+                "tests/native/controls/core-events-unreported-idle.patch".to_owned(),
+                "tests/native/controls/core-events-reported-decays.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")
@@ -935,6 +937,16 @@ mod tests {
                     "voyager-resizes-a-split",
                     "agent-split-keeps-maximize",
                 ],
+            ),
+            (
+                Journey::CoreEvents,
+                "silent-program-is-unknown",
+                &["foreground-reaches-agents-list"],
+            ),
+            (
+                Journey::CoreEvents,
+                "report-stays-until-replaced",
+                &["foreground-reaches-agents-list"],
             ),
             (
                 Journey::AgentSplit,

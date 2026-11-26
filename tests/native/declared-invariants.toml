@@ -725,8 +725,8 @@ source = "Isaac, 3 Nov 2026 owner UX note: 'Unknown/unavailable facts must not b
 features = ["agent-vessels", "layouts-home", "core-reports"]
 guard = []
 type_gap = "ReportedActivity holds state and reported as separate fields, so Idle can be set with no report. Terminal keeps state and reason as strings that has_ended and has_exited compare by hand. DI15 parses the terminal words once, and MIG-STATUS moves status into the agent type."
-check = ["test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal", "test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts", "test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report"]
-gap = "The linked tests pin the activity record, not what is drawn. The turn-ended half waits for the Status v1 unit."
+check = ["test:app/src/activity.rs#reported_words_optional_limits_and_nonreporters_are_literal", "test:app/src/activity.rs#split_early_events_missed_and_timestamps_preserve_reported_facts", "test:app/src/activity.rs#bounds_and_new_binding_seed_cannot_replace_a_later_report", "journey:core-events/silent-program-is-unknown", "journey:core-events/report-stays-until-replaced"]
+gap = "The unit tests pin the activity record. Two journeys pin what the Agents list draws, for an agent that never reported and for one that reported Working and then went silent, with one stand-in agent. Nothing pins the Vessel panel badge. The turn-ended half waits for the Status v1 unit."
 confidence = "stated"
 
 [[invariant]]

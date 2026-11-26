@@ -21,8 +21,13 @@ function statusGroup(activity) {
       return "Working";
     case "done":
       return "Done";
+    case "idle":
+      return "Idle";
   }
-  return "Idle";
+  return undefined;
+}
+function rank(status) {
+  return status ? STATES[status].rank : STATES.Idle.rank;
 }
 export function agentsShown(layout) {
   return (
@@ -158,6 +163,8 @@ export function agentsView(
               : terminalBacked(content.typeId) && !process
                 ? "Status unavailable"
                 : "";
+        const status = statusGroup(activity);
+        const hint = !agent ? state : status ? badge.hint : "";
         rows.push({
           id: placement.id,
           voyage: voyage.id,
@@ -165,11 +172,11 @@ export function agentsView(
           program,
           agent: Boolean(agent),
           group: program,
-          status: statusGroup(activity),
-          detail: [agent ? statusGroup(activity) : state, group.name]
+          status,
+          detail: [agent ? status : state, group.name]
             .filter(Boolean)
             .join(" · "),
-          hint: agent ? badge.hint : state,
+          hint,
         });
       }
   }
@@ -177,9 +184,8 @@ export function agentsView(
     const label = [item.name, item.program, item.detail]
       .filter(Boolean)
       .join(", ");
-    return Button.new(`vessel-${item.id}`)
-      .accessibility_label(label)
-      .tooltip(item.hint)
+    const button = Button.new(`vessel-${item.id}`).accessibility_label(label);
+    return (item.hint ? button.tooltip(item.hint) : button)
       .w_full()
       .justify_start()
       .px(10)
@@ -210,7 +216,7 @@ export function agentsView(
               ),
           )
           .children(
-            item.agent
+            item.agent && item.status
               ? [
                   div()
                     .role("label")
@@ -294,7 +300,7 @@ export function agentsView(
     if (voyageCollapsed) continue;
     const agents = mine
       .filter((item) => item.agent)
-      .sort((a, b) => STATES[a.status].rank - STATES[b.status].rank);
+      .sort((a, b) => rank(a.status) - rank(b.status));
     const agentKey = `expanded-agents-${voyage.id}`;
     const agentCollapsed = !options?.collapsed.has(agentKey);
     const groups = div()
@@ -305,6 +311,7 @@ export function agentsView(
       .border_color(`${color}55`)
       .pl(12)
       .ml(4);
+    const agentsLabel = `${agentCollapsed ? "Expand" : "Collapse"} Agents in ${voyage.name}, ${agents.length}`;
     if (agents.length)
       groups.child(
         div()
@@ -312,15 +319,14 @@ export function agentsView(
           .flex_col()
           .child(
             Button.new(`vessels-group-agents-${voyage.id}`)
-              .accessibility_label(
-                `${agentCollapsed ? "Expand" : "Collapse"} Agents in ${voyage.name}, ${agents.length}`,
-              )
+              .accessibility_label(agentsLabel)
               .w_full()
               .justify_start()
               .px(8)
               .py(4)
               .on_click((_event, cx) => options?.toggle(agentKey, cx))
-              .child(`${agentCollapsed ? "▸" : "▾"} Agents (${agents.length})`),
+              .child(`${agentCollapsed ? "▸" : "▾"} Agents (${agents.length})`)
+              .child(Marker.new("agents-group", voyage.id, agentsLabel)),
           )
           .children(agentCollapsed ? [] : agents.map(row)),
       );

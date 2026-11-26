@@ -172,6 +172,15 @@ impl Pixels {
             .chunks_exact(usize::from(self.region.width).max(1) * 4)
     }
 
+    pub fn differing(&self, other: &Pixels) -> usize {
+        let (own, theirs) = (self.bgrx.as_chunks::<4>().0, other.bgrx.as_chunks::<4>().0);
+        own.iter()
+            .zip(theirs)
+            .filter(|(left, right)| left[..3] != right[..3])
+            .count()
+            + self.bgrx.len().abs_diff(other.bgrx.len()) / 4
+    }
+
     pub fn mask(&mut self, area: Geometry) {
         let span = |start: i16, length: u16, origin: i16, limit: u16| {
             let clamp = |edge: i32| (edge - i32::from(origin)).clamp(0, i32::from(limit)) as usize;
