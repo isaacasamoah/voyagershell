@@ -878,6 +878,17 @@ mod tests {
             ),
             (
                 Journey::Workspace,
+                "switch-fleet",
+                &[
+                    "split-vessel",
+                    "dock-vessel",
+                    "avatar-float",
+                    "avatar-small",
+                    "create-fleet",
+                ],
+            ),
+            (
+                Journey::Workspace,
                 "fleet-tab-gives-keyboard",
                 &[
                     "split-vessel",
@@ -885,6 +896,7 @@ mod tests {
                     "avatar-float",
                     "avatar-small",
                     "create-fleet",
+                    "switch-fleet",
                 ],
             ),
             (
@@ -896,6 +908,20 @@ mod tests {
                     "avatar-float",
                     "avatar-small",
                     "create-fleet",
+                    "switch-fleet",
+                ],
+            ),
+            (
+                Journey::Workspace,
+                "switch-voyage",
+                &[
+                    "split-vessel",
+                    "dock-vessel",
+                    "avatar-float",
+                    "avatar-small",
+                    "create-fleet",
+                    "switch-fleet",
+                    "create-voyage",
                 ],
             ),
             (
@@ -907,7 +933,9 @@ mod tests {
                     "avatar-float",
                     "avatar-small",
                     "create-fleet",
+                    "switch-fleet",
                     "create-voyage",
+                    "switch-voyage",
                 ],
             ),
             (
@@ -919,6 +947,7 @@ mod tests {
                     "avatar-float",
                     "avatar-small",
                     "create-fleet",
+                    "switch-fleet",
                     "create-voyage",
                 ],
             ),
@@ -931,6 +960,7 @@ mod tests {
                     "avatar-float",
                     "avatar-small",
                     "create-fleet",
+                    "switch-fleet",
                     "create-voyage",
                 ],
             ),
