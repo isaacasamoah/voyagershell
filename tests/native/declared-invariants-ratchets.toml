@@ -27,6 +27,7 @@ unguarded = [
   "restart-reopens-plain-shells",
   "sdk-graph-coherent",
   "status-is-reported-or-unknown",
+  "switch-gives-the-keyboard",
   "terminal-input-arrives-intact",
   "typing-feels-immediate",
   "uncertain-settled-by-reading",
