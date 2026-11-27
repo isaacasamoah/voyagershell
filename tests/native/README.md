@@ -1770,6 +1770,8 @@ The `rests-where-put` patch docks the avatar on the Workspace when a drag ends o
 no target. `workspace/rests-where-put` then fails on the expectation `a drop on
 the empty Fleet tab bar left the avatar docked on the Vessel, at the same
 bounds and pixels`. It is the control for that case only.
+`Native::window_bounds` reads the candidate window's position and size, which
+`rests-where-put` records before and after its drop on the Fleet tab bar.
 
 The `views-leave-avatar-put` patch makes the Home button dock the avatar on the
 Home Voyage instead of only opening Home. `workspace/views-leave-avatar-put`
@@ -2113,6 +2115,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `CORE_SILENT` | 60 s | Core silent past the owner's read. |
 | `CANVAS_REFRESH` | 3 s | The canvas's observation loop in `docs/terminal.md`. `foreign-exit` holds for it so that the loop has run, and `exit-shown-after-core-pause` stops Core for it. |
 | `AGENTS_ROW` | 1 s | The `core-events` journey's stated bound for the Agents row to name a program that Core reported. |
+| `AVATAR_AT_REST` | 3 s | How long `rests-where-put` holds with the avatar docked before it looks again, longer than the 2 s float an applied dock plays. |
 | `POPOVER_AFTER_HOVER` | 2 s | How long `hover_popover` holds the pointer on a target before it takes the strips again, which is longer than a popover needs to appear. The reviewer's probe used 3 s. |
 | `STRIPS_AT_REST` | 100 ms | The gap between the two looks that `hover_popover` takes with no pointer on the target, to tell a redraw from a popover. |
 | `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |
