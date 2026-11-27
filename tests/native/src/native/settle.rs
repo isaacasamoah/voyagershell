@@ -53,6 +53,7 @@ pub const SEND_WAIT: Owed = Owed::secs(5);
 pub const CLIPS_KEPT: Owed = Owed::secs(60);
 pub const ROOM_FEED: Owed = Owed::secs(330);
 pub const MODEL_WORK_WAIT: Owed = Owed::secs(2);
+pub const PAST_FIRST_CHECK: Owed = Owed::secs(25);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Elapsed(Duration);

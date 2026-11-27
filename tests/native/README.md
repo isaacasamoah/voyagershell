@@ -1749,7 +1749,7 @@ comparison, so `bad-checksum-changes-nothing` stages the stand-in and fails.
 `release-update-source.patch` treats every build as a release build.
 `release-update-releases.patch` makes the releases address honour
 `VOYAGER_RELEASES_URL` in every build. Apply either one to the second build only, and
-`source-build-stages-nothing` fails: the listener records the source build's request
+`source-build-stages-nothing` fails. The listener records the source build's request,
 and the source build stages the stand-in. The battery does not run this journey, because it needs this pair.
 
 `--video on` records the owned display with `ffmpeg` into `recording.webm` in the
@@ -2166,6 +2166,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
 | `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |
 | `MODEL_WORK_WAIT` | 2 s | How long `dock-with-no-chosen-behaviour-adds-no-model-work` watches Voyager's terminal after the docks for a new heard line. The control's line arrived inside it. |
+| `PAST_FIRST_CHECK` | 25 s | How long `source-build-stages-nothing` holds the relaunched source build before it looks for a Restart card. That is more than twice `FIRST_CHECK` in `app/src/release.rs`, the 10 s wait before a release build's first check. |
 
 `voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
 constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an

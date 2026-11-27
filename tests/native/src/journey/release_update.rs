@@ -1,11 +1,9 @@
 use super::daily_start::{climbed, count, holds, runs, selected};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Build, Native, Site, Terminal};
+use crate::native::{Build, Native, PAST_FIRST_CHECK, Site, Terminal, hold};
 use anyhow::Result;
 use serde_json::json;
-use std::thread::sleep;
-use std::time::Duration;
 
 cases! {
     OffersRestart => "offers-restart" setup,
@@ -19,7 +17,6 @@ cases! {
 pub const CONTROL: Case = Case::Restart;
 
 const RESTART_WORDS: &str = "Restart now, or the new version starts the next time you open VoyagerShell. Your programs keep running.";
-const PAST_THE_FIRST_CHECK: Duration = Duration::from_secs(25);
 const DEFAULT_LATEST: &str =
     "https://github.com/isaacasamoah/voyagershell/releases/latest/download/latest.json";
 
@@ -211,7 +208,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let update = native.install_network_update()?;
         native.close()?;
         native.install_launch(&versions.second)?;
-        sleep(PAST_THE_FIRST_CHECK);
+        hold(PAST_FIRST_CHECK)?;
         let offered = native.observe("the source build past the first check", |seen| {
             Some(seen.shows(&Target::RESTART_OFFER))
         })?;
@@ -252,7 +249,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("interfaces", &interfaces)?
             .observed("requests", &requests)?
             .observed("update", &update)?
-            .observed("waited", PAST_THE_FIRST_CHECK.as_secs())?
+            .observed("waited", PAST_FIRST_CHECK.within().as_secs())?
             .observed("links", json!({"before":links,"after":links_after}))?
             .observed("folders", json!({"before":folders,"after":folders_after}))
     })

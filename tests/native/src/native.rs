@@ -8,7 +8,6 @@ mod terminal;
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
 pub use install::{Build, InstallLayout, Linked, STAND_IN_LINE, Site};
-pub use settle::MODEL_WORK_WAIT;
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
     DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH, KEY_SPACING,
@@ -17,6 +16,7 @@ pub use settle::{
     STATUS_AFTER_CLICK, STRIPS_AT_REST, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis,
     hold, now_millis,
 };
+pub use settle::{MODEL_WORK_WAIT, PAST_FIRST_CHECK};
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 use crate::audio::Stack;
