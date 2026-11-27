@@ -1,0 +1,13 @@
+diff --git a/desktop/src/avatar.rs b/desktop/src/avatar.rs
+index 4e05a72e..e5120006 100644
+--- a/desktop/src/avatar.rs
++++ b/desktop/src/avatar.rs
+@@ -535,7 +535,7 @@ impl Avatar {
+                 }
+                 self.position_float(origin, window, cx);
+             } else {
+-                crate::platform::tone(true);
++                self.dock(Scope::Workspace, cx);
+             }
+         } else if drag.began.elapsed().as_millis() < 350 {
+             self.activate(window, cx);

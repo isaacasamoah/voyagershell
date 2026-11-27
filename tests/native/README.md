@@ -1766,6 +1766,16 @@ save before it takes the next request. `inspect-answered-during-held-save` then
 fails on the expectation `the inspect was answered before Core's held reply to
 the Fleet's save was released`.
 
+The `rests-where-put` patch docks the avatar on the Workspace when a drag ends on
+no target. `workspace/rests-where-put` then fails on the expectation `a drop on
+the empty Fleet tab bar left the avatar docked on the Vessel, at the same
+bounds and pixels`. It is the control for that case only.
+
+The `views-leave-avatar-put` patch makes the Home button dock the avatar on the
+Home Voyage instead of only opening Home. `workspace/views-leave-avatar-put`
+then fails on the expectation `switching Fleet, opening Home and switching
+Voyage left the dock on the Vessel`. It is the control for that case only.
+
 The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.

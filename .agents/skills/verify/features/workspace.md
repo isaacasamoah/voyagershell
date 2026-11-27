@@ -48,12 +48,14 @@ the next case needs.
 | `avatar-sharp` | Move the pointer off the avatar, wait until the avatar's pixels hold still, capture the avatar's region | The opaque interior of the drawn 94 pixel avatar is within the case's tolerance of the shipped artwork reduced to its device size with Lanczos3 in premultiplied alpha, and nearer that reference than a bilinear reduction of the same artwork. The case takes the best fit over a few device pixels around the nominal position |
 | `avatar-float` | Drag `avatar` onto the first Fleet's name, then capture five frames at 90 ms intervals | The dock is the Fleet. Each frame's opaque interior is within the tolerance of the 38 pixel Lanczos reference and nearer it than a bilinear reduction, at a vertical offset within the float's reach. The offset is not the same in every frame, which shows that the float was running |
 | `avatar-small` | Move the pointer off the avatar, wait until it holds still, capture, then drag `avatar` back onto the Vessel's name | The same two checks for the drawn 38 pixel avatar, and the avatar is back on the Vessel dock as in `dock-vessel` |
+| `rests-where-put` | Wait until the docked avatar holds still, wait 3 s, then drag it onto an empty part of the Fleet tab bar | Over the 3 s its bounds and pixels stay the same, and after the drop it is still docked on the Vessel at the same bounds and pixels, with no window request and the window bounds unchanged |
 | `create-fleet` | Click `create-fleet`, click `create-worker` `terminal` | Exactly one Fleet is new, it is named `Fleet 2`, it holds one Vessel, it is selected, its tab and its Vessel's title and terminal are drawn, its tab shows `Fleet 2`, and the dock is unchanged, with the avatar drawn as in `switch-fleet` |
 | `switch-fleet` | Click the first Fleet's name, the new Fleet's name, then the first again | Each click selects that Fleet. At every step the dock is unchanged and the avatar is drawn inside the docked Vessel's terminal, or, while another Fleet is shown, in a slot that overlaps no drawn terminal |
 | `fleet-tab-gives-keyboard` | Click the new Fleet's name and type `echo FLEET-$((6*7))` and Return with no click in a Vessel, then click the first Fleet's name and type `echo BACK-$((6*7))` the same way | The new Fleet has no remembered Vessel, and its only Vessel's shell prints `FLEET-42`. The first Fleet remembers its second Vessel, which prints `BACK-42`. No other shell prints either line. The document's context and the frame's `dock` are the same before and after each click |
 | `create-voyage` | Type `cd /voyager/home/second-project` into the new Vessel's terminal, wait until Core reports that folder for its shell, click `create-voyage` | Exactly one Voyage is new, it is open in `/voyager/home/second-project` and named `second-project`, it holds one Fleet with one Vessel, it is selected, it is drawn with its Fleet tab and its Vessel, its row shows `second-project`, its Fleet's tab shows that Fleet's saved name, and the dock is unchanged, with the avatar drawn as in `switch-fleet` |
 | `switch-voyage` | Click the first Voyage's name, the new Voyage's name, then the first again | Each click selects that Voyage, the dock is unchanged with the avatar drawn as in `switch-fleet`, and the first Voyage shows the Fleet last used in it again |
 | `voyage-switch-gives-keyboard` | Click the new Voyage's name and type `echo VOYAGE-$((6*7))` and Return with no click in a Vessel, then click the first Voyage's name and type `echo RETURN-$((6*7))` the same way | The new Voyage opens on a Fleet with no remembered Vessel, and its only Vessel's shell prints `VOYAGE-42`. The first Voyage opens on its first Fleet, whose remembered second Vessel prints `RETURN-42`. No other shell prints either line, and the dock is the same before and after each click |
+| `views-leave-avatar-put` | With the avatar docked on the first Vessel, click the second Fleet, Home, the second Voyage, then the first Voyage and its first Fleet | Each view leaves the dock on the Vessel, and back on its Fleet the avatar is drawn at the same bounds and pixels as before |
 | `reopen-voyage-restores-fleet` | Click the new Fleet's name, the new Voyage's name, then the first Voyage's name | The first Voyage opens on the new Fleet, which was last used in it, not on its first Fleet. The new Fleet's Vessel, the one last focused there, is drawn as `focused-vessel`. The dock is unchanged. After the case the journey clicks the first Fleet's name so that the next case starts where it expects |
 | `rename-fleet-enter` | Double-click the Fleet's name, type, press Return | The editor holds the typed text before Return, the saved name is the typed text, and the drawn name is the saved name |
 | `rename-voyage-blur` | Double-click the Voyage's name, type, click the first terminal | The same three, with the click as the finishing input |
@@ -191,6 +193,18 @@ desktop/canvas/main.ts and in the compiled main.js. A candidate built
 with it must fail `rename-fleet-enter` on the expectation `the saved name is
 the typed text`, and `firstFailingCheck.observed.rename.after` must read
 `NATIVE FLEET`.
+
+tests/native/controls/rests-where-put.patch docks the avatar on the
+Workspace when a drag ends on no target. `rests-where-put` then fails on the
+expectation `a drop on the empty Fleet tab bar left the avatar docked on the Vessel,
+at the same bounds and pixels`.
+
+tests/native/controls/views-leave-avatar-put.patch makes the Home button dock
+the avatar on the Home Voyage instead of only opening Home. `switch-fleet` and
+`switch-voyage` already fail on a Fleet or Voyage switch that moves the dock, so
+this patch moves it on the one view change only this case makes. The case then
+fails on the expectation `switching Fleet, opening Home and switching Voyage
+left the dock on the Vessel`.
 
 ## Gaps
 

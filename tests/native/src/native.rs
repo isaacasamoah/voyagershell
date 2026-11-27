@@ -18,6 +18,8 @@ pub use settle::{
 };
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
+pub use settle::AVATAR_AT_REST;
+
 use crate::audio::Stack;
 use crate::frames;
 use crate::inspection::{self, Target, Unseen, drawn_for};
