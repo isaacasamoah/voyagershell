@@ -2215,6 +2215,7 @@ features:
       - tests/native/src/native/avatar.rs
       - tests/native/src/native/input.rs
       - tests/native/src/native/install.rs
+      - tests/native/src/native/loopback.rs
       - tests/native/src/native/settle.rs
       - tests/native/src/native/terminal.rs
       - tests/native/src/probe.rs
