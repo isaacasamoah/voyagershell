@@ -1529,7 +1529,7 @@ with `voyager_process` under the captured dock context.
 **The canvas's focused placement.** `moveFocus` in
 `desktop/canvas/panel-view.ts` is its only writer. It keeps the placement in a
 store private to that module, and `Canvas.focused` only reads it, so an
-assignment anywhere else does not compile. A move has one of two targets:
+assignment anywhere else does not compile. A move has one of three targets:
 
 - A placement the user chose. It comes from a click on a pane, the Maximize or Restore
   button or menu item, or the Vessel a split or create focuses. When this
@@ -1537,11 +1537,43 @@ assignment anywhere else does not compile. A move has one of two targets:
   it outside the action queue, does not wait for it and ignores its reply.
 - The opening placement. It is the remembered placement when it is shown, and the
   first shown placement otherwise. The canvas moves here after a selection
-  change or a dock, when nothing is focused in an ordinary Voyage, as on the
-  first layout after launch, and when the focused placement is no longer shown.
-  It sends nothing, because the record already names this placement. A Fleet
-  with no remembered Vessel opens on its first shown placement. A tab click
-  therefore costs one save, the selection itself.
+  change other than a switch, after a dock, when nothing is focused in an
+  ordinary Voyage, as on the first layout after launch, and when the focused
+  placement is no longer shown. It sends nothing, because the record already
+  names this placement. A Fleet with no remembered Vessel opens on its first
+  shown placement.
+- The keyboard placement. The canvas moves here after a switch, which is a
+  `select-fleet` or `select-voyage` that the owner applied, from a click on a
+  Fleet tab or a Voyage. It is the remembered placement when it is shown and
+  has a terminal. Otherwise it is the first placement with a terminal in the
+  shown Fleet's split tree, top left first, and with none it is the opening
+  placement. It sends nothing either, so a tab click costs one save, the
+  selection itself.
+
+**A switch gives the keyboard to a Vessel.** `focusSwitched` in
+`desktop/canvas/panel-view.ts` runs once the switch's reply is accepted and
+the Fleet it shows is prepared. It moves the focused placement to the keyboard
+placement and gives that terminal the keyboard, unless a rename, a layout name
+or a dialog is open. With the chat open, it gives the keyboard to the chat
+composer instead, because the tab's click has just taken it from there. Keys
+typed mid-chat therefore stay in the chat, and a switch made while a terminal
+held the keyboard with the chat open sends the keyboard to the chat, not to a
+terminal. When the Fleet has no Vessel with a terminal,
+it moves the keyboard to the canvas, as `refocus` does when the focused
+placement leaves the view, so no hidden terminal keeps it. The tab click first
+gives the keyboard to the tab, so the move does not depend on where the
+keyboard was before. `acceptSnapshot` passes the request to `refocus`, which
+does nothing for an applied switch, so its deferred move to the canvas cannot
+land after the move to the terminal. The switch sends no `dock` and no `focus-vessel`, so the dock
+and the remembered Vessel stay as they were. `rememberedPlacement` in
+`desktop/canvas/panels.ts` is the one reader of the remembered placement for
+the opening and the keyboard placements. This follows `Tab::focused_pane` and
+the keyboard follow in pinned
+[Herdr App](https://github.com/herdrdev/herdr-app/tree/1581a587919dddd6f1efd5f78eb542c4b2b02cb5).
+Each tab remembers its focused pane, falls back to the first pane in tree
+order, and the keyboard follows on every tab or space switch unless a modal
+dialog is open. No keyboard shortcut switches Fleets. The Fleet tab's own
+keyboard activation runs the same switch as a click.
 
 ## Each part has its own revision
 

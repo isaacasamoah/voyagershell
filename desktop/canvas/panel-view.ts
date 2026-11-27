@@ -10,6 +10,7 @@ import { response as validateResponse } from "./validate.js";
 import { activityBadge } from "./activity.js";
 import { panelFrame } from "./regions.js";
 import {
+  keyboardPlacement,
   openingPlacement,
   shownPanels,
   terminalBacked,
@@ -31,6 +32,7 @@ import type { Action } from "../../contract/generated/request";
 import type {
   Context,
   Placement,
+  Reply,
   Response,
 } from "../../contract/generated/response";
 
@@ -173,13 +175,48 @@ function focusDocked(workspace: Canvas, cx: AsyncContext) {
   if (terminal && !terminal.focused()) terminal.focus();
 }
 
+const SWITCHES: Action["operation"][] = ["select-fleet", "select-voyage"];
+
+function switched(action: Action, result: Reply) {
+  return SWITCHES.includes(action.operation) && result.status === "applied";
+}
+
+export function focusSwitched(
+  workspace: Canvas,
+  action: Action,
+  result: Reply,
+  cx: AsyncContext,
+) {
+  if (!switched(action, result)) return;
+  moveFocus(workspace, "keyboard", cx);
+  const target = shownPanels(workspace.layout).find(
+    (panel) => panel.id === focusedPlacement(workspace),
+  );
+  const terminal = target && workspace.terminals.get(target.vessel);
+  if (workspace.chat?.open) workspace.chat.input.focus();
+  else if (!terminal) refocus(workspace, cx);
+  else if (
+    !workspace.editing &&
+    !workspace.layoutName &&
+    !window.has_active_dialog() &&
+    !terminal.focused()
+  )
+    terminal.focus();
+}
+
 const focusedPlacements = new WeakMap<Canvas, string | null>();
 
 export function focusedPlacement(workspace: Canvas): string | null {
   return focusedPlacements.get(workspace) ?? null;
 }
 
-export function refocus(workspace: Canvas, cx: UIContext | AsyncContext) {
+export function refocus(
+  workspace: Canvas,
+  cx: UIContext | AsyncContext,
+  action?: Action,
+  result?: Reply,
+) {
+  if (action && result && switched(action, result)) return;
   const target = workspace.focused;
   cx.spawn(async () => {
     await Promise.resolve();
@@ -196,16 +233,23 @@ export function refocus(workspace: Canvas, cx: UIContext | AsyncContext) {
 
 export function moveFocus(
   workspace: Canvas,
-  target: { placement: string } | "opening",
+  target: { placement: string } | "opening" | "keyboard",
   cx: UIContext | AsyncContext,
 ): boolean {
+  const layout = workspace.layout;
   const id =
     target === "opening"
-      ? (openingPlacement(workspace.layout)?.id ?? null)
-      : target.placement;
+      ? (openingPlacement(layout)?.id ?? null)
+      : target === "keyboard"
+        ? ((
+            keyboardPlacement(layout, (panel) =>
+              workspace.terminals.has(panel.vessel),
+            ) ?? openingPlacement(layout)
+          )?.id ?? null)
+        : target.placement;
   const changed = id !== focusedPlacement(workspace);
   focusedPlacements.set(workspace, id);
-  if (id && changed && target !== "opening") noteFocus(workspace, id, cx);
+  if (id && changed && typeof target === "object") noteFocus(workspace, id, cx);
   return changed;
 }
 

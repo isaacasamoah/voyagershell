@@ -64,6 +64,7 @@ function fixture() {
     ),
     projection: () => ({}),
     workspace_notice: () => ({ revision: "0", dockRevision: "0" }),
+    window: { has_active_dialog: () => false },
     invoke(action) {
       calls.push(action);
       return new Promise((resolve) => {

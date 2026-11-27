@@ -1,8 +1,8 @@
 diff --git a/desktop/canvas/main.js b/desktop/canvas/main.js
-index 62cb7849..80be7232 100644
+index d74aad08..accc9a95 100644
 --- a/desktop/canvas/main.js
 +++ b/desktop/canvas/main.js
-@@ -39,7 +39,6 @@ import {
+@@ -40,7 +40,6 @@ import {
    noticeArrived,
    focusedPlacement,
    moveFocus,
@@ -14,29 +14,29 @@ index 62cb7849..80be7232 100644
        !window.has_active_dialog()
      ) {
        moveFocus(this, "opening", task);
--      refocus(this, task);
+-      refocus(this, task, action, result);
 +      this.focus.focus();
      }
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/main.ts b/desktop/canvas/main.ts
-index bd34e886..dd70be04 100644
+index 8d7b7d41..c36cd029 100644
 --- a/desktop/canvas/main.ts
 +++ b/desktop/canvas/main.ts
 @@ -777,7 +777,7 @@ export default class Canvas extends View {
        !window.has_active_dialog()
      ) {
        moveFocus(this, "opening", task);
--      refocus(this, task);
+-      refocus(this, task, action, result);
 +      this.focus.focus();
      }
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index 4662370d..6d98bada 100644
+index d8673b03..12e91ecd 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -47,12 +47,7 @@ export function inspectNotice(workspace, cx) {
+@@ -48,12 +48,7 @@ export function inspectNotice(workspace, cx) {
    const changed = changedBesidesRevision(notice, workspace.workspaceNotice);
    workspace.workspaceNotice = notice;
    workspace.refreshRequested = false;
@@ -50,7 +50,7 @@ index 4662370d..6d98bada 100644
    workspace.automaticRefresh = true;
    try {
      workspace.run({ operation: "inspect" }, cx);
-@@ -77,12 +72,8 @@ export function acceptDockResult(workspace, cx) {
+@@ -78,12 +73,8 @@ export function acceptDockResult(workspace, cx) {
    if (raw !== null) {
      const result = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -64,7 +64,7 @@ index 4662370d..6d98bada 100644
    }
  }
  export function noticeArrived(workspace, cx) {
-@@ -100,20 +91,13 @@ export function followDockNotice(workspace, cx) {
+@@ -101,20 +92,13 @@ export function followDockNotice(workspace, cx) {
    const dock = workspace_notice().dockRevision;
    const seen = seenDocks.get(workspace);
    if (seen === undefined) seenDocks.set(workspace, dock);
@@ -91,10 +91,10 @@ index 4662370d..6d98bada 100644
  function focusDocked(workspace, cx) {
    const home = workspace.layout?.context.kind === "workspace";
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index 6cc7b308..04787857 100644
+index 3652e594..a4d78c88 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -72,8 +72,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
+@@ -74,8 +74,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
    workspace.refreshRequested = false;
    if (
      !changed &&
@@ -104,7 +104,7 @@ index 6cc7b308..04787857 100644
    )
      return;
    workspace.automaticRefresh = true;
-@@ -109,12 +108,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -111,12 +110,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    if (raw !== null) {
      const result: unknown = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -118,7 +118,7 @@ index 6cc7b308..04787857 100644
    }
  }
  
-@@ -134,26 +129,14 @@ export function followDockNotice(workspace: Canvas, cx: UIContext) {
+@@ -136,26 +131,14 @@ export function followDockNotice(workspace: Canvas, cx: UIContext) {
    const dock = workspace_notice().dockRevision;
    const seen = seenDocks.get(workspace);
    if (seen === undefined) seenDocks.set(workspace, dock);

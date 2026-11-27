@@ -1,8 +1,8 @@
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index d5607d1b..8343483c 100644
+index d8673b03..884928dc 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
-@@ -104,19 +104,13 @@ function followDock(workspace, seen, dock, cx) {
+@@ -117,19 +117,13 @@ function followDock(workspace, seen, dock, cx) {
    });
  }
  function focusDocked(workspace, cx) {
@@ -25,13 +25,13 @@ index d5607d1b..8343483c 100644
 +    : undefined;
 +  if (target) workspace.terminals.get(target.vessel)?.focus();
  }
- const focusedPlacements = new WeakMap();
- export function focusedPlacement(workspace) {
+ const SWITCHES = ["select-fleet", "select-voyage"];
+ function switched(action, result) {
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index f83bd51d..d7c5efe3 100644
+index 3652e594..49c834e8 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -143,19 +143,13 @@ function followDock(
+@@ -159,19 +159,13 @@ function followDock(
  }
  
  function focusDocked(workspace: Canvas, cx: AsyncContext) {
@@ -55,4 +55,4 @@ index f83bd51d..d7c5efe3 100644
 +  if (target) workspace.terminals.get(target.vessel)?.focus();
  }
  
- const focusedPlacements = new WeakMap<Canvas, string | null>();
+ const SWITCHES: Action["operation"][] = ["select-fleet", "select-voyage"];

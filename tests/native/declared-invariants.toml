@@ -239,6 +239,19 @@ check = ["journey:socket-dock/socket-dock-takes-keyboard", "journey:socket-dock/
 confidence = "stated"
 
 [[invariant]]
+id = "switch-gives-the-keyboard"
+says = "Clicking a Fleet tab or a Voyage gives the keyboard to the Vessel last focused in the Fleet it shows, or, when none is remembered, to that Fleet's first Vessel that takes keyboard input in split order, top left first, unless a chat, a rename or a dialog is open. A Fleet with no Vessel that takes input leaves the keyboard in no Vessel and shows no error. Moving the keyboard this way never changes the dock."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 27 Nov 2026: when the person clicks a Fleet or a Voyage, keyboard focus goes to the Vessel they last typed in, in the Fleet now on screen, else the first Vessel in that Fleet that takes keyboard input; Voyager, 27 Nov 2026: the remembered Vessel is the stored lastVessels entry, the last Vessel clicked into; Herdr App 1581a587, src/model.rs Tab::focused_pane"
+features = ["fleets", "voyages", "terminal-io"]
+guard = []
+type_gap = "Not state-shaped: it is a rule about where the keyboard goes when a Fleet or Voyage is clicked, and the stored lastVessels entry it reads is already covered by the LastUsed type_gap."
+check = ["journey:workspace/fleet-tab-gives-keyboard", "journey:workspace/voyage-switch-gives-keyboard", "journey:workspace/fleet-without-input-takes-no-keyboard", "journey:workspace/fleet-tab-keeps-chat-keyboard"]
+gap = "The switch control fails the Fleet tab and Voyage cases, and a second control that drops the chat guard fails the chat case. The no-input case passes without the change too, because before it nothing took the keyboard, so it proves only that no Vessel gets the keys and no error shows. No case opens a rename or a dialog before the click, so those two exceptions are not proved."
+confidence = "stated"
+
+[[invariant]]
 id = "created-while-preparing-is-drawn"
 says = "A Vessel that Voyager creates while the canvas is still preparing the view it shows is drawn with its terminal, whether the person opened that view from the sidebar or by clicking the avatar at home. The canvas opens every Vessel that the owner reports as created in any reply it takes, not only in the reply to its own request."
 kind = "user"

@@ -37,6 +37,7 @@ import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
+  focusSwitched,
   followDockNotice,
   inspectNotice,
   noticeArrived,
@@ -598,9 +599,7 @@ export default class Canvas extends View {
       "close-voyage",
       "reopen-voyage",
       "create-fleet",
-      "select-fleet",
       "create-voyage",
-      "select-voyage",
     ].includes(action.operation);
     const oldLayout = this.layout;
     const maximization =
@@ -637,7 +636,7 @@ export default class Canvas extends View {
       let prepared = false;
       try {
         result = await invoke(action, expectedVersion);
-        accepted = this.acceptSnapshot(result, task);
+        accepted = this.acceptSnapshot(result, task, action);
         if (
           accepted &&
           action.operation === "dock" &&
@@ -694,6 +693,7 @@ export default class Canvas extends View {
             this.status = errorMessage(error);
           }
         }
+        if (accepted) focusSwitched(this, action, result, task);
       } catch (error) {
         this.status = errorMessage(error);
         this.fresh = false;
@@ -748,7 +748,7 @@ export default class Canvas extends View {
     cx.notify();
   }
 
-  acceptSnapshot(result: Reply, task: AsyncContext) {
+  acceptSnapshot(result: Reply, task: AsyncContext, action?: Action) {
     this.drag = null;
     if (!("layout" in result)) {
       this.status = outcome(result);
@@ -777,7 +777,7 @@ export default class Canvas extends View {
       !window.has_active_dialog()
     ) {
       moveFocus(this, "opening", task);
-      refocus(this, task);
+      refocus(this, task, action, result);
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))

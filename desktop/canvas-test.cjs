@@ -2840,3 +2840,71 @@ test("a render after an outside workspace change finishes, and the notice starts
   assert.equal(view.busy, true);
   assert.equal(view.workspaceNotice.revision, "10");
 });
+
+test("a switched Fleet gives the keyboard to its remembered input Vessel, else its first in split order", () => {
+  const panels = {};
+  new Function(
+    "exports",
+    ts.transpileModule(
+      fs.readFileSync(`${__dirname}/canvas/panels.ts`, "utf8"),
+      { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+    ).outputText,
+  )(panels);
+  const layout = (lastVessels) => ({
+    view: "fleet",
+    selectedVoyage: "voyage",
+    selectedFleet: "fleet",
+    lastVessels,
+    voyages: [
+      {
+        id: "voyage",
+        fleets: [
+          {
+            id: "fleet",
+            placements: [
+              { id: "right", vessel: "right" },
+              { id: "bottom", vessel: "bottom" },
+              { id: "left", vessel: "left" },
+            ],
+            root: {
+              kind: "branch",
+              first: { kind: "leaf", placement: "left" },
+              second: {
+                kind: "branch",
+                first: { kind: "leaf", placement: "right" },
+                second: { kind: "leaf", placement: "bottom" },
+              },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const pick = (lastVessels, terminals) => {
+    return panels.keyboardPlacement(layout(lastVessels), (panel) =>
+      terminals.includes(panel.vessel),
+    )?.id;
+  };
+  const all = ["left", "right", "bottom"];
+  assert.equal(
+    pick([], all),
+    "left",
+    "the top-left Vessel, not the first member",
+  );
+  assert.equal(
+    pick([{ fleet: "fleet", vessel: "bottom" }], all),
+    "bottom",
+    "the remembered Vessel",
+  );
+  assert.equal(
+    pick([], ["right", "bottom"]),
+    "right",
+    "the first Vessel that takes input",
+  );
+  assert.equal(
+    pick([{ fleet: "fleet", vessel: "left" }], ["bottom"]),
+    "bottom",
+    "a remembered Vessel without input falls back to the first with input",
+  );
+  assert.equal(pick([{ fleet: "fleet", vessel: "left" }], []), undefined);
+});

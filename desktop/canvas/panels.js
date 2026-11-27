@@ -69,17 +69,24 @@ export function openingPlacement(layout) {
   const shown = shownPanels(layout);
   return rememberedPlacement(layout, shown) || shown[0];
 }
+export function keyboardPlacement(layout, takesInput) {
+  const fleet = layout
+    ? activeGroups(layout).find((group) => group.owner.kind === "fleet")
+    : undefined;
+  const shown = shownPanels(layout).filter(takesInput);
+  const first = leaves(fleet?.root ?? null)
+    .map((id) => shown.find((panel) => panel.id === id))
+    .find(Boolean);
+  return rememberedPlacement(layout, shown) || first;
+}
+function leaves(tree) {
+  if (!tree) return [];
+  return tree.kind === "leaf"
+    ? [tree.placement]
+    : [...leaves(tree.first), ...leaves(tree.second)];
+}
 export function visiblePanels(group, maximized = false) {
-  const ids = new Set();
-  const visit = (tree) => {
-    if (!tree) return;
-    if (tree.kind === "leaf") ids.add(tree.placement);
-    else {
-      visit(tree.first);
-      visit(tree.second);
-    }
-  };
-  visit(group.root);
+  const ids = new Set(leaves(group.root));
   return group.members.filter(
     (panel) =>
       !panel.hidden &&

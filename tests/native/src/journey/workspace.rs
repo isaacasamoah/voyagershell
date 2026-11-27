@@ -27,8 +27,10 @@ cases! {
     AvatarSmall => "avatar-small",
     CreateFleet => "create-fleet",
     SwitchFleet => "switch-fleet",
+    FleetTabGivesKeyboard => "fleet-tab-gives-keyboard",
     CreateVoyage => "create-voyage",
     SwitchVoyage => "switch-voyage",
+    VoyageSwitchGivesKeyboard => "voyage-switch-gives-keyboard",
     SplitFocusRemembered => "split-focus-remembered",
     ReopenVoyageFleet => "reopen-voyage-restores-fleet",
     RenameFleetEnter => "rename-fleet-enter",
@@ -47,8 +49,21 @@ cases! {
     SidebarDragMovesWindow => "sidebar-drag-moves-window",
     VoyageDragDoesNotMoveWindow => "voyage-drag-does-not-move-window",
     TerminalSelectionDoesNotMoveWindow => "terminal-selection-does-not-move-window",
+    FleetWithoutInputTakesNoKeyboard => "fleet-without-input-takes-no-keyboard",
+    FleetTabKeepsChatKeyboard => "fleet-tab-keeps-chat-keyboard",
     AgentPlanSurvivesClick => "agent-plan-survives-click",
-    StaleAgentEditRefused => "stale-agent-edit-refused",
+    StaleAgentEditRefused => "stale-agent-edit-refused";
+    "dock-vessel" needs "split-vessel",
+    "avatar-float" needs "dock-vessel",
+    "avatar-small" needs "avatar-float",
+    "create-fleet" needs "avatar-small",
+    "fleet-tab-gives-keyboard" needs "switch-fleet",
+    "switch-fleet" needs "create-fleet",
+    "create-voyage" needs "switch-fleet",
+    "switch-voyage" needs "create-voyage",
+    "voyage-switch-gives-keyboard" needs "switch-voyage",
+    "fleet-without-input-takes-no-keyboard" needs "switch-voyage",
+    "fleet-tab-keeps-chat-keyboard" needs "switch-voyage",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -62,6 +77,7 @@ const VOYAGE_NAME: &str = "Keyboard Voyage";
 const VESSEL_NAME: &str = "+";
 const FILLER_GAP: f32 = 10.0;
 const MODELLED: &str = "the saved and drawn workspace match the journey's model";
+const CHAT_KEPT: &str = "KEPT-42";
 
 #[derive(PartialEq)]
 struct Start {
@@ -137,6 +153,26 @@ struct Focus {
     saved: Option<PlacementId>,
     #[serde(flatten)]
     landing: Landing,
+}
+
+#[derive(Serialize)]
+struct Typed {
+    focus: Focus,
+    dock_before: Context,
+    printed: String,
+    reached: bool,
+    elsewhere: Vec<PlacementId>,
+}
+
+impl Typed {
+    fn kept_dock(&self) -> bool {
+        self.focus.landing.context == self.dock_before
+            && self.focus.landing.dock == self.dock_before
+    }
+
+    fn reached_only(&self) -> bool {
+        self.reached && self.elsewhere.is_empty()
+    }
 }
 
 #[derive(PartialEq, Serialize)]
@@ -456,6 +492,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         modelled(native, &model, verdict)
     })?;
 
+    cases.check(native, Case::FleetTabGivesKeyboard, |native| {
+        let shells = [&first, &shell, &second.shell];
+        let away = type_after_switch(
+            native,
+            &RenameTarget::Fleet { id: second.id.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&second.id),
+            "FLEET",
+            &second.shell,
+            &shells,
+        )?;
+        let back = type_after_switch(
+            native,
+            &RenameTarget::Fleet { id: start.fleet.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+            "BACK",
+            &shell,
+            &shells,
+        )?;
+        let verdict = Verdict::new()
+            .expect(
+                "the second Fleet has no remembered Vessel and the first remembers its second Vessel, not its first",
+                away.focus.saved.is_none() && back.focus.saved.as_ref() == Some(shell.placement()),
+            )
+            .expect(
+                "keys typed after the Fleet tab click, with no click in a Vessel, reach the only Vessel of the Fleet with none remembered",
+                away.reached_only(),
+            )
+            .expect(
+                "keys typed after the Fleet tab click, with no click in a Vessel, reach the remembered Vessel and not the Fleet's first",
+                back.reached_only(),
+            )
+            .expect(
+                "the dock is the same before and after each switch",
+                away.kept_dock() && back.kept_dock(),
+            )
+            .observed("away", &away)?
+            .observed("back", &back)?;
+        model.fleet = start.fleet.clone();
+        modelled(native, &model, verdict)
+    })?;
+
     let made = cases.make(native, Case::CreateVoyage, |native| {
         shell.enter(native, sandbox::SECOND_PROJECT)?;
         let before = at_rest(native)?.document;
@@ -576,6 +653,50 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     .is_some_and(|step| step.fleet.as_ref() == Some(&start.fleet)),
             )
             .observed("steps", &steps)?;
+        model.voyage = start.voyage.clone();
+        model.fleet = start.fleet.clone();
+        modelled(native, &model, verdict)
+    })?;
+
+    cases.check(native, Case::VoyageSwitchGivesKeyboard, |native| {
+        let shells = [&first, &shell, &second.shell, &other.shell];
+        let away = type_after_switch(
+            native,
+            &RenameTarget::Voyage { id: other.id.clone() },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&other.id),
+            "VOYAGE",
+            &other.shell,
+            &shells,
+        )?;
+        let back = type_after_switch(
+            native,
+            &RenameTarget::Voyage { id: start.voyage.clone() },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+            "RETURN",
+            &shell,
+            &shells,
+        )?;
+        let verdict = Verdict::new()
+            .expect(
+                "the new Voyage opens on a Fleet with no remembered Vessel and the first Voyage on its first Fleet, which remembers its second Vessel",
+                away.focus.saved.is_none()
+                    && back.focus.fleet.as_ref() == Some(&start.fleet)
+                    && back.focus.saved.as_ref() == Some(shell.placement()),
+            )
+            .expect(
+                "keys typed after the Voyage click, with no click in a Vessel, reach the only Vessel of the Fleet it opens on",
+                away.reached_only(),
+            )
+            .expect(
+                "keys typed after the Voyage click, with no click in a Vessel, reach the remembered Vessel of the Fleet it opens on",
+                back.reached_only(),
+            )
+            .expect(
+                "the dock is the same before and after each switch",
+                away.kept_dock() && back.kept_dock(),
+            )
+            .observed("away", &away)?
+            .observed("back", &back)?;
         model.voyage = start.voyage.clone();
         model.fleet = start.fleet.clone();
         modelled(native, &model, verdict)
@@ -1108,7 +1229,182 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .observed("requests", &sent)
     })?;
+    cases.check(native, Case::FleetWithoutInputTakesNoKeyboard, |native| {
+        let shells = [&shell, &first, &second.shell, &other.shell];
+        select(
+            native,
+            &RenameTarget::Voyage { id: start.voyage.clone() },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
+        select(
+            native,
+            &RenameTarget::Fleet { id: start.fleet.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+        )?;
+        let before = at_rest(native)?.document;
+        native.click(&Target::create_fleet(&start.voyage))?;
+        native.click(&Target::CREATE_AGENTS)?;
+        let (agents, only_agents) = native.observe(
+            "a new Fleet holding one Agents Vessel, selected and drawn",
+            |seen| {
+                let fleet = born(fleets(&before), fleets(seen.document), |fleet| &fleet.id)
+                    .into_iter()
+                    .next()?;
+                let agents = |placed: &Placement| {
+                    seen.document
+                        .vessels
+                        .iter()
+                        .any(|content| content.id == placed.vessel && content.type_id == "agents")
+                };
+                let only_agents = matches!(&fleet.placements[..], [placed] if agents(placed));
+                (seen.document.selected_fleet.as_ref() == Some(&fleet.id) && shown(seen, fleet))
+                    .then(|| (fleet.id.clone(), only_agents))
+            },
+        )?;
+        select(
+            native,
+            &RenameTarget::Fleet { id: start.fleet.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+        )?;
+        let status = native.observe("the workspace status before the switch", |seen| {
+            Some(seen.label(&Target::STATUS).map(str::to_owned))
+        })?;
+        let typed = type_after_switch(
+            native,
+            &RenameTarget::Fleet { id: agents.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&agents),
+            "NONE",
+            &shell,
+            &shells,
+        )?;
+        let after = native.observe("the workspace status after typing", |seen| {
+            Some(seen.label(&Target::STATUS).map(str::to_owned))
+        })?;
+        select(
+            native,
+            &RenameTarget::Fleet { id: start.fleet.clone() },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+        )?;
+        Verdict::new()
+            .expect("the new Fleet holds only an Agents Vessel", only_agents)
+            .expect(
+                "keys typed after the tab click of a Fleet with no Vessel that takes input reach no shell",
+                !typed.reached && typed.elsewhere.is_empty(),
+            )
+            .expect("the switch and the typing show no new status", after == status)
+            .expect("the dock is the same before and after the switch", typed.kept_dock())
+            .observed("agents", &agents)?
+            .observed("typed", &typed)?
+            .observed("status before", &status)?
+            .observed("status after", &after)
+    })?;
+    cases.check(native, Case::FleetTabKeepsChatKeyboard, |native| {
+        let shells = [&first, &shell, &second.shell, &other.shell];
+        select(
+            native,
+            &RenameTarget::Voyage {
+                id: start.voyage.clone(),
+            },
+            |seen| seen.document.selected_voyage.as_ref() == Some(&start.voyage),
+        )?;
+        select(
+            native,
+            &RenameTarget::Fleet {
+                id: start.fleet.clone(),
+            },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+        )?;
+        native.click(&Target::CHAT_TOGGLE)?;
+        let opened = native.observe("the chat composer drawn", |seen| {
+            seen.shows(&Target::CHAT_COMPOSER)
+                .then(|| seen.label(&Target::CHAT_COMPOSER).map(str::to_owned))
+        })?;
+        let dock_before = at_rest(native)?.document.context;
+        let focus = select(
+            native,
+            &RenameTarget::Fleet {
+                id: second.id.clone(),
+            },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&second.id),
+        )?;
+        native.type_text(CHAT_KEPT)?;
+        let draft = native
+            .settle(
+                "the composer holding the keys typed after the tab click",
+                |seen| Some(seen.label(&Target::CHAT_COMPOSER).map(str::to_owned)),
+                |draft| draft.as_deref() == Some(CHAT_KEPT),
+            )
+            .ok()
+            .flatten();
+        let mut elsewhere = Vec::new();
+        for shell in shells {
+            if shell.holds_now(native, CHAT_KEPT)? {
+                elsewhere.push(shell.placement().clone());
+            }
+        }
+        native.click(&Target::CHAT_COMPOSER)?;
+        for _ in CHAT_KEPT.chars() {
+            native.press(Key::BackSpace)?;
+        }
+        native.click(&Target::CHAT_TOGGLE)?;
+        native.observe("the chat closed", |seen| {
+            (!seen.shows(&Target::CHAT_COMPOSER)).then_some(())
+        })?;
+        select(
+            native,
+            &RenameTarget::Fleet {
+                id: start.fleet.clone(),
+            },
+            |seen| seen.document.selected_fleet.as_ref() == Some(&start.fleet),
+        )?;
+        Verdict::new()
+            .expect(
+                "keys typed after the Fleet tab click, with the chat open, reach the chat composer",
+                draft.as_deref() == Some(CHAT_KEPT),
+            )
+            .expect(
+                "no shell shows the keys typed with the chat open",
+                elsewhere.is_empty(),
+            )
+            .expect(
+                "the dock is the same before and after the switch",
+                focus.landing.context == dock_before && focus.landing.dock == dock_before,
+            )
+            .observed("opened", &opened)?
+            .observed("composer", &draft)?
+            .observed("elsewhere", &elsewhere)?
+            .observed("focus", &focus)
+    })?;
     plan::drive(native, cases)
+}
+
+fn type_after_switch(
+    native: &Native,
+    subject: &RenameTarget,
+    done: impl Fn(&Seen) -> bool,
+    word: &str,
+    expected: &Terminal,
+    shells: &[&Terminal],
+) -> Result<Typed> {
+    let dock_before = at_rest(native)?.document.context;
+    let focus = select(native, subject, done)?;
+    native.type_text(&format!("echo {word}-$((6*7))"))?;
+    native.press(Key::Return)?;
+    let printed = format!("{word}-42");
+    let reached = expected.printed(native, &printed)?;
+    let mut elsewhere = Vec::new();
+    for shell in shells {
+        if shell.placement() != expected.placement() && shell.holds_now(native, &printed)? {
+            elsewhere.push(shell.placement().clone());
+        }
+    }
+    Ok(Typed {
+        focus,
+        dock_before,
+        printed,
+        reached,
+        elsewhere,
+    })
 }
 
 fn on_bar(native: &mut Native, start: &Start) -> Result<()> {
