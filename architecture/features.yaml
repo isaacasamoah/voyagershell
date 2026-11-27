@@ -436,9 +436,9 @@ features:
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
         owner: desktop-presentation
         guards: []
-        checks: []
+        checks: ['journey:terminal-input/typing-echo', 'perf:typing-latency']
         formal: []
-        journeys: []
+        journeys: [terminal-input]
       - id: wheel-scrolls-full-screen-programs
         kind: user
         says: 'The mouse wheel scrolls full-screen programs such as Codex, as it does in Herdr, and scrolls shell history otherwise, including after reattach.'
@@ -682,9 +682,9 @@ features:
         says: 'Typing into a terminal or agent Vessel shows on screen within the limit in the usage envelope, while a full captain and crew run is going.'
         owner: desktop-presentation
         guards: []
-        checks: []
+        checks: ['journey:terminal-input/typing-echo', 'perf:typing-latency']
         formal: []
-        journeys: []
+        journeys: [terminal-input]
       - id: terminal-input-arrives-intact
         kind: user
         says: 'Every key, paste and click in a focused terminal, Tab included, reaches the Program once and in order, and selecting or copying sends no bytes.'

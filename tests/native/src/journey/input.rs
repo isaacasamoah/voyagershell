@@ -1,25 +1,28 @@
 use super::layout::{born, split_right};
 use super::{Cases, Verdict, cases};
+use crate::frames::rank;
 use crate::inspection::{centre, contains};
 use crate::native::{
-    Defect, EXPECTATION, LOOK, Lines, Native, Patch, Terminal, boxes, changed, pid, quote,
-    repainted, state, vessels,
+    Defect, EXPECTATION, KEY_SPACING, LOOK, Lines, Native, Patch, Terminal, boxes, changed, pid,
+    quote, repainted, state, vessels,
 };
 use crate::probe::{BLOCKS, COMPOSER, COMPOSER_ROW, READY, SIGNALS, WAITING, composer_column};
 use crate::sandbox;
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
-use crate::x11::{Chord, Exchange, Geometry, Key, Pixels, Reading, Selection as Owned};
+use crate::x11::{Chord, Echo, Exchange, Geometry, Key, Pixels, Reading, Selection as Owned};
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 cases! {
     TypedCommandRuns => "typed-command-runs",
     KeysReachTheProgram => "keys-reach-the-program",
     KeysFollowProgramModes => "keys-follow-program-modes",
     OutputDrawnWithoutInput => "output-drawn-without-input",
+    TypingEcho => "typing-echo",
     DragSelectsText => "drag-selects-text",
     ReleaseCopiesToBoth => "release-copies-the-selection-to-clipboard-and-primary",
     CopyToClipboard => "copy-puts-the-selection-on-the-clipboard",
@@ -63,6 +66,10 @@ const RIGHT: &[u8] = b"\x1b[C";
 const SHELL_LINE: &str = "echo abcdef";
 const SHELL_PROMPT: u16 = 2;
 const SHELL_CLICK: u16 = SHELL_PROMPT + 7;
+const TIMED_KEYS: usize = 200;
+const ECHOED: [char; 2] = ['a', 'o'];
+const ECHO_LIMIT_MS: f64 = 60.;
+const ECHO_CEILING_MS: f64 = 100.;
 
 struct Probe {
     name: &'static str,
@@ -329,6 +336,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("first cell", origin)?
             .observed("inputs sent while the program drew", native.system.acted() - sent)?
             .observed("changed after leaving", changed(&before, &restored))
+    })?;
+
+    cases.check(native, Case::TypingEcho, |native| {
+        typing_echo(native, &terminal)
     })?;
 
     let selection = cases.make(native, Case::DragSelectsText, |native| {
@@ -892,6 +903,107 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(ENDED, ended)
             .observed("received", escaped(&typed))
     })
+}
+
+fn typing_echo(native: &Native, terminal: &Terminal) -> Result<Verdict> {
+    terminal.line(native, "cat")?;
+    terminal.runs(native, "cat")?;
+    let blank = terminal.settled(native, "echo-blank", |_| true)?;
+    native.press(Key::Char(ECHOED[0]))?;
+    let typed = terminal.settled(native, "echo-typed", |look| look != &blank)?;
+    native.press(Key::BackSpace)?;
+    let erased = terminal.settled(native, "echo-erased", |look| look == &blank)?;
+    let watched = changed(&blank, &typed).context("The first typed letter changed no pixel")?;
+    let mut echoes: Vec<Echo> = Vec::with_capacity(TIMED_KEYS);
+    for index in 0..TIMED_KEYS {
+        let key = match index % 2 {
+            0 => Key::Char(ECHOED[index / 2 % ECHOED.len()]),
+            _ => Key::BackSpace,
+        };
+        let echo = native.echo(key, watched, echoes.last(), KEY_SPACING)?;
+        echoes.push(echo);
+    }
+    native.press(Key::Char('d').ctrl())?;
+    let left = poll(PATIENCE, LOOK, true, || {
+        Ok((terminal.foreground(native)? != "cat").then_some(()))
+    })?;
+    let timing = Timing::of(&echoes);
+    Verdict::new()
+        .expect(
+            "a typed letter changed the watched cells and Backspace returned them to their blank look",
+            erased == blank,
+        )
+        .expect(
+            "every timed key changed the watched cells before the patience ran out",
+            timing.missed == 0,
+        )
+        .expect(
+            "19 in 20 timed keys were echoed in under 60 ms",
+            timing.within(ECHO_LIMIT_MS) * 20 >= timing.keys * 19,
+        )
+        .expect(
+            "no timed key took over 100 ms to echo",
+            timing.missed == 0 && timing.max_ms.is_some_and(|max| max <= ECHO_CEILING_MS),
+        )
+        .expect("Ctrl+D on the empty line ended cat", left.is_some())
+        .observed("watched", watched)?
+        .observed("timing", &timing)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Timing {
+    measure: &'static str,
+    keys: usize,
+    missed: usize,
+    changed_between_keys: usize,
+    p50_ms: Option<f64>,
+    p95_ms: Option<f64>,
+    p99_ms: Option<f64>,
+    max_ms: Option<f64>,
+    capture_mean_ms: f64,
+    samples_ms: Vec<Option<f64>>,
+}
+
+impl Timing {
+    fn within(&self, limit_ms: f64) -> usize {
+        self.samples_ms
+            .iter()
+            .flatten()
+            .filter(|sample| **sample < limit_ms)
+            .count()
+    }
+
+    fn of(echoes: &[Echo]) -> Self {
+        let millis = |micros: u64| micros as f64 / 1e3;
+        let samples: Vec<Option<u64>> = echoes
+            .iter()
+            .map(|echo| echo.seen.map(|seen| seen.as_micros() as u64))
+            .collect();
+        let mut seen: Vec<u64> = samples.iter().flatten().copied().collect();
+        seen.sort_unstable();
+        let at = |fraction: f64| (!seen.is_empty()).then(|| millis(rank(&seen, fraction)));
+        let captures: u32 = echoes.iter().map(|echo| echo.captures).sum();
+        let capturing: Duration = echoes.iter().map(|echo| echo.capturing).sum();
+        Self {
+            measure: "X server time from the XTest key press to the first capture of the watched cells that differs, polled every 1 ms",
+            keys: echoes.len(),
+            missed: samples.iter().filter(|sample| sample.is_none()).count(),
+            changed_between_keys: echoes
+                .windows(2)
+                .filter(|pair| pair[0].after.differing(&pair[1].before) > 0)
+                .count(),
+            p50_ms: at(0.5),
+            p95_ms: at(0.95),
+            p99_ms: at(0.99),
+            max_ms: at(1.0),
+            capture_mean_ms: capturing.as_secs_f64() * 1e3 / f64::from(captures.max(1)),
+            samples_ms: samples
+                .into_iter()
+                .map(|sample| sample.map(millis))
+                .collect(),
+        }
+    }
 }
 
 fn served_to_others(exchanges: &[Exchange], verifier: u32, selection: Owned) -> usize {

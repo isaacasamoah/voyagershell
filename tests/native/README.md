@@ -253,6 +253,15 @@ cannot create the folder it writes the shipped canvas into. The change goes to
 `actions.jsonl`. Core stays reachable, because its socket lives in the
 `herdr-core` folder inside it, which keeps its own mode.
 
+`Display::echo` in `src/x11.rs` times one echo. It captures a region of a
+window, presses a key and releases it with no pause between, then captures the
+same region every 1 ms until it differs from the first capture or the patience
+runs out. It returns the press time, the time to the capture that differed,
+none when nothing changed, the number of captures and their total cost, and the
+first and last capture. `Native::echo` checks that the candidate holds the
+keyboard, waits until `KEY_SPACING` after the previous echo's press, records the
+key in `actions.jsonl` and calls `Display::echo` on the candidate's window.
+
 The frame carries no tooltip text, so a hover popover is seen in pixels.
 `Native::hover_popover` moves the pointer to a corner with no control and takes two
 strips of the window, one above and one below the target and both outside its
@@ -1870,6 +1879,13 @@ before it wrote its end record, as `terminal-scrolling` does when it closes the 
 `tests/native/controls/frame-stall.patch` plants a 50 ms sleep in the terminal
 snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's
 `maxMs` and `p95Ms` then exceed 50 ms, and a build without the patch does not.
+The limits of `terminal-input/typing-echo`, 19 in 20 echoes under
+`ECHO_LIMIT_MS` and none over `ECHO_CEILING_MS`, are in `src/journey/input.rs`.
+They count recorded samples rather than bound one wait, so they are not `Owed`
+values. `frame-stall.patch` is also the control for `terminal-input/typing-echo`.
+Built with it, the case fails on the expectation `19 in 20 timed keys were echoed in under 60 ms`.
+The sleep raised the case's `p50Ms` by about 50 ms, which shows that the case
+times the drawn echo.
 
 ### Build and inspect
 
@@ -2083,6 +2099,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `STRIPS_AT_REST` | 100 ms | The gap between the two looks that `hover_popover` takes with no pointer on the target, to tell a redraw from a popover. |
 | `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |
 | `FLOAT_SPACING` | 90 ms | The pace between two looks at the floating avatar. |
+| `KEY_SPACING` | 100 ms | The least gap between two timed keys in `typing-echo`, measured from one press to the next, so each echo lands before the next key. |
 | `STATUS_AFTER_CLICK` | 600 ms | How long `created-during-avatar-home-click-is-drawn` reads the status line after the click on the avatar at home, long enough for the canvas to show a render error. |
 | `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
 | `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |

@@ -603,8 +603,8 @@ source = "Isaac, 8 Nov 2026: 'Typing into Codex in Voyager should feel as immedi
 features = ["terminal-io", "agent-vessels"]
 guard = []
 type_gap = "Not state-shaped: it is a time limit on echo, which no type can bound."
-check = []
-gap = "The typing-latency envelope entry has no command or measurement yet. The unit that measures typing latency (DI13) closes it."
+check = ["journey:terminal-input/typing-echo", "perf:typing-latency"]
+gap = "typing-echo checks that every typed key is echoed, that 19 in 20 echoes take under 60 ms and that none takes over 100 ms, the limit set from the measurements. The limit holds in every run that is not void, idle or beside a release build. The time is to the X server's pixels under Xvfb, so it leaves out the compositor and the display. A release build beside it stands in for a full captain and crew run."
 confidence = "stated"
 
 [[invariant]]
@@ -1074,11 +1074,11 @@ confidence = "inferred"
 
 [[envelope]]
 id = "typing-latency"
-fact = "Time from a key press in a terminal Vessel to its echo being drawn, at idle and during a cargo build, in Voyager and in Herdr for the same program"
-command = "No command yet. The disabled typing trace in docs/terminal.md (VOYAGER_TYPING_TRACE) records receipt to paint; it does not compare with Herdr."
-measured = ""
+fact = "Time from a key press in a terminal Vessel to its echo being drawn, at idle and during a cargo build, in Voyager and in Ghostty on the same Core terminal"
+command = "voyager-verification run --journey terminal-input, case typing-echo, under heavy timed: 200 keys per run, idle and beside a release workspace build."
+measured = "27 Nov 2026, main 388c9f9d with the typing-echo case. Idle, 10 runs, 2000 keys: p50 39.4, p95 46.7, p99 48.1, max 52.2 ms. Beside a release workspace build, 8 runs, 1600 keys: p50 44.8, p95 52.2, p99 54.1, max 68.4 ms. Proposal baseline, Ghostty on the same Core terminal: idle p50 35.7, max 60.8 ms; loaded p50 45.3, max 65.4 ms. Limit, set 27 Nov: 19 in 20 keys under 60 ms, none over 100 ms."
 expires = "When the terminal input, render or output pump paths change"
-confidence = "inferred"
+confidence = "stated"
 
 [[envelope]]
 id = "workspace-counts"
