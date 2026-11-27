@@ -18,6 +18,7 @@ import {
 import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
 import { changedBesidesRevision } from "./status.js";
+import { layoutItems } from "./menu.js";
 function noteFocus(workspace, id, cx) {
   if (workspace.layout?.view !== "fleet") return;
   cx.spawn(() =>
@@ -236,7 +237,7 @@ export function renderPanel(workspace, placement, scope, group) {
           version,
         ),
     },
-    ...(scope.kind === "portal" ? workspace.layoutItems(group) : []),
+    ...(scope.kind === "portal" ? layoutItems(workspace, group) : []),
   ];
   return workspace.target(
     `${scope.kind}-${placement.id}`,
