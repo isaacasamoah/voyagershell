@@ -59,6 +59,18 @@ features:
           - 'journey:workspace/sidebar-drag-moves-window'
         formal: []
         journeys: [workspace]
+      - id: switch-gives-the-keyboard
+        kind: user
+        says: 'Clicking a Fleet tab or a Voyage gives the keyboard to the Vessel last focused in the Fleet it shows, or, when none is remembered, to that Fleet''s first Vessel that takes keyboard input in split order, top left first, unless a chat, a rename or a dialog is open. A Fleet with no Vessel that takes input leaves the keyboard in no Vessel and shows no error. Moving the keyboard this way never changes the dock.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/fleet-tab-gives-keyboard'
+          - 'journey:workspace/voyage-switch-gives-keyboard'
+          - 'journey:workspace/fleet-without-input-takes-no-keyboard'
+          - 'journey:workspace/fleet-tab-keeps-chat-keyboard'
+        formal: []
+        journeys: [workspace]
     docs: [docs/terminal.md, docs/workspace.md]
     sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', desktop/canvas/voyage-colours.ts, app/src/workspace.rs, app/src/scope.rs, app/src/families/structure.rs, app/src/client_structure.rs]
     code:
@@ -159,6 +171,18 @@ features:
         checks: []
         formal: []
         journeys: []
+      - id: switch-gives-the-keyboard
+        kind: user
+        says: 'Clicking a Fleet tab or a Voyage gives the keyboard to the Vessel last focused in the Fleet it shows, or, when none is remembered, to that Fleet''s first Vessel that takes keyboard input in split order, top left first, unless a chat, a rename or a dialog is open. A Fleet with no Vessel that takes input leaves the keyboard in no Vessel and shows no error. Moving the keyboard this way never changes the dock.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/fleet-tab-gives-keyboard'
+          - 'journey:workspace/voyage-switch-gives-keyboard'
+          - 'journey:workspace/fleet-without-input-takes-no-keyboard'
+          - 'journey:workspace/fleet-tab-keeps-chat-keyboard'
+        formal: []
+        journeys: [workspace]
     docs: [docs/terminal.md, docs/workspace.md]
     sources: ['desktop/canvas/main.*', 'desktop/canvas/navigation-view.*', 'desktop/canvas/creation.*', app/src/workspace.rs, app/src/families/structure.rs, app/src/client_structure.rs]
     code:
@@ -669,6 +693,18 @@ features:
     native_journeys: [terminal-input]
     python_journeys: [terminal-grid, portal-terminal]
     invariants:
+      - id: switch-gives-the-keyboard
+        kind: user
+        says: 'Clicking a Fleet tab or a Voyage gives the keyboard to the Vessel last focused in the Fleet it shows, or, when none is remembered, to that Fleet''s first Vessel that takes keyboard input in split order, top left first, unless a chat, a rename or a dialog is open. A Fleet with no Vessel that takes input leaves the keyboard in no Vessel and shows no error. Moving the keyboard this way never changes the dock.'
+        owner: desktop-presentation
+        guards: []
+        checks:
+          - 'journey:workspace/fleet-tab-gives-keyboard'
+          - 'journey:workspace/voyage-switch-gives-keyboard'
+          - 'journey:workspace/fleet-without-input-takes-no-keyboard'
+          - 'journey:workspace/fleet-tab-keeps-chat-keyboard'
+        formal: []
+        journeys: [workspace]
       - id: terminal-output-is-kept
         kind: user
         says: 'A terminal Vessel''s screen and scrollback show every line its Program prints, in order, and the Program never waits on the view, during an avatar drag as at rest.'
