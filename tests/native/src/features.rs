@@ -9,6 +9,15 @@ use std::process::Command;
 
 pub const REGISTRY: &str = "tests/native/features.toml";
 pub const TABLE_FILE: &str = ".agents/skills/verify/features/README.md";
+pub const AFTER_MERGE_CORE: &[&str] = &[
+    "quit-restore",
+    "workspace",
+    "portals",
+    "voyage-close",
+    "arrangement",
+    "canvas-stack",
+    "agent-split",
+];
 const BEGIN: &str = "<!-- features:begin -->";
 const END: &str = "<!-- features:end -->";
 
@@ -44,6 +53,17 @@ pub struct Registry {
 
 pub struct Selection<'a> {
     pub feature: &'a Feature,
+}
+
+pub struct AfterMerge {
+    pub journeys: Vec<&'static str>,
+    pub cases: Vec<(&'static str, String)>,
+}
+
+#[derive(Default)]
+struct Declared {
+    names: Vec<String>,
+    needs: Vec<(String, String)>,
 }
 
 impl Status {
@@ -189,6 +209,99 @@ impl Registry {
     }
 }
 
+impl AfterMerge {
+    pub fn lines(&self) -> String {
+        let mut text = format!("journeys: {}\n", self.journeys.join(","));
+        for (journey, case) in &self.cases {
+            text.push_str(&format!("case: {journey}/{case}\n"));
+        }
+        text
+    }
+}
+
+impl Declared {
+    fn parse(text: &str) -> Self {
+        let mut declared = Self::default();
+        let Some(start) = text.find("cases! {") else {
+            return declared;
+        };
+        for line in text[start..].lines().skip(1) {
+            if line.starts_with('}') {
+                break;
+            }
+            let line = line.trim().trim_end_matches([',', ';']);
+            if let Some((_, rest)) = line.split_once("=> \"") {
+                declared
+                    .names
+                    .extend(rest.split_once('"').map(|(name, _)| name.to_owned()));
+            } else if let Some((later, earlier)) = line.split_once("\" needs \"") {
+                declared.needs.push((
+                    later.trim_start_matches('"').to_owned(),
+                    earlier.trim_end_matches('"').to_owned(),
+                ));
+            }
+        }
+        declared
+    }
+
+    fn at(root: &Path, revision: &str, source: &str) -> Result<Self> {
+        if git(root, &["ls-tree", "--name-only", revision, "--", source])?.is_empty() {
+            return Ok(Self::default());
+        }
+        Ok(Self::parse(&git(
+            root,
+            &["show", &format!("{revision}:{source}")],
+        )?))
+    }
+
+    fn needed_by(&self, case: &str) -> BTreeSet<&str> {
+        self.needs
+            .iter()
+            .filter(|(later, _)| later == case)
+            .map(|(_, earlier)| earlier.as_str())
+            .collect()
+    }
+}
+
+pub fn after_merge(root: &Path, registry: &Registry, range: &str) -> Result<AfterMerge> {
+    let (base, head) = range
+        .split_once("..")
+        .filter(|(base, head)| !base.is_empty() && !head.is_empty() && !head.starts_with('.'))
+        .with_context(|| format!("--journeys needs a BASE..HEAD range, not {range}"))?;
+    let changed: Vec<String> = git(root, &["diff", "--name-only", range])?
+        .lines()
+        .map(String::from)
+        .collect();
+    let picked = registry.select(&changed)?;
+    let touched: BTreeSet<&str> = picked
+        .iter()
+        .flat_map(|selection| selection.feature.journeys.iter().map(String::as_str))
+        .collect();
+    let mut cases = Vec::new();
+    for journey in Journey::ALL
+        .iter()
+        .filter(|journey| changed.iter().any(|file| file == journey.source()))
+    {
+        let before = Declared::at(root, base, journey.source())?;
+        let after = Declared::at(root, head, journey.source())?;
+        for name in &after.names {
+            if !before.names.contains(name) || before.needed_by(name) != after.needed_by(name) {
+                cases.push((journey.name(), name.clone()));
+            }
+        }
+    }
+    let journeys = Journey::ALL
+        .iter()
+        .filter(|journey| {
+            AFTER_MERGE_CORE.contains(&journey.name())
+                || touched.contains(journey.name())
+                || changed.iter().any(|file| file == journey.source())
+        })
+        .map(|journey| journey.name())
+        .collect();
+    Ok(AfterMerge { journeys, cases })
+}
+
 pub fn splice(readme: &str, table: &str) -> Result<String> {
     let begin = readme
         .find(BEGIN)
@@ -283,7 +396,11 @@ pub fn run(args: &[String]) -> Result<i32> {
                 );
             }
         }
-        _ => bail!("Usage: features [--check | --write | --changed GIT_RANGE]"),
+        [flag, range, output] if flag == "--changed" && output == "--journeys" => {
+            ensure!(!range.starts_with('-'), "Unsupported git range {range}");
+            print!("{}", after_merge(root, &registry, range)?.lines());
+        }
+        _ => bail!("Usage: features [--check | --write | --changed GIT_RANGE [--journeys]]"),
     }
     Ok(0)
 }
@@ -291,6 +408,7 @@ pub fn run(args: &[String]) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scratch::Scratch;
 
     const SEED: &str = r#"
 [[feature]]
@@ -446,5 +564,215 @@ debug = "none"
     #[test]
     fn committed_registry_validates_and_table_is_current() {
         assert_eq!(run(&["--check".to_string()]).unwrap(), 0);
+    }
+
+    struct Repo {
+        folder: Scratch,
+    }
+
+    impl Repo {
+        fn new() -> Self {
+            let folder = Scratch::new("features").unwrap();
+            git(folder.path(), &["init", "-q"]).unwrap();
+            Self { folder }
+        }
+
+        fn commit(&self, files: &[(&str, &str)]) -> String {
+            for (path, text) in files {
+                let file = self.folder.path().join(path);
+                std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+                std::fs::write(file, text).unwrap();
+            }
+            git(self.folder.path(), &["add", "-A"]).unwrap();
+            git(
+                self.folder.path(),
+                &[
+                    "-c",
+                    "user.name=test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "commit",
+                    "-q",
+                    "--allow-empty",
+                    "-m",
+                    "step",
+                ],
+            )
+            .unwrap();
+            git(self.folder.path(), &["rev-parse", "HEAD"])
+                .unwrap()
+                .trim()
+                .to_owned()
+        }
+
+        fn after_merge(&self, base: &str, head: &str) -> AfterMerge {
+            let registry = Registry::parse(SEED).unwrap();
+            after_merge(self.folder.path(), &registry, &format!("{base}..{head}")).unwrap()
+        }
+    }
+
+    const SCROLLING: &str = "tests/native/src/journey/scrolling.rs";
+
+    const TWO_CASES: &str = r#"cases! {
+    First => "first",
+    Second => "second";
+    "second" needs "first",
+}
+"#;
+
+    fn core() -> Vec<&'static str> {
+        Journey::ALL
+            .iter()
+            .map(|journey| journey.name())
+            .filter(|name| AFTER_MERGE_CORE.contains(name))
+            .collect()
+    }
+
+    #[test]
+    fn a_range_touching_a_features_code_names_its_journey() {
+        let repo = Repo::new();
+        let base = repo.commit(&[("desktop/src/terminal_scroll.rs", "a\n")]);
+        let head = repo.commit(&[("desktop/src/terminal_scroll.rs", "b\n")]);
+        let selected = repo.after_merge(&base, &head);
+        assert!(
+            selected.journeys.contains(&"terminal-scrolling"),
+            "{}",
+            selected.lines()
+        );
+        assert_eq!(selected.journeys.len(), core().len() + 1);
+        assert!(selected.cases.is_empty(), "{}", selected.lines());
+    }
+
+    #[test]
+    fn a_range_adding_a_case_prints_its_case_line() {
+        let repo = Repo::new();
+        let base = repo.commit(&[(SCROLLING, TWO_CASES)]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            r#"cases! {
+    First => "first",
+    Second => "second",
+    Third => "third";
+    "second" needs "first",
+}
+"#,
+        )]);
+        let lines = repo.after_merge(&base, &head).lines();
+        assert!(
+            lines.contains("case: terminal-scrolling/third\n"),
+            "{lines}"
+        );
+        assert!(!lines.contains("/second"), "{lines}");
+    }
+
+    #[test]
+    fn a_range_changing_only_a_journey_file_puts_that_journey_on_the_journeys_line() {
+        let repo = Repo::new();
+        let base = repo.commit(&[(SCROLLING, TWO_CASES)]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            r#"cases! {
+    First => "first",
+    Second => "second",
+    Third => "third";
+    "second" needs "first",
+}
+"#,
+        )]);
+        let selected = repo.after_merge(&base, &head);
+        assert!(!AFTER_MERGE_CORE.contains(&"terminal-scrolling"));
+        assert!(
+            selected.journeys.contains(&"terminal-scrolling"),
+            "{}",
+            selected.lines()
+        );
+    }
+
+    #[test]
+    fn a_range_changing_only_an_assertion_puts_the_journey_on_the_journeys_line_with_no_case_line()
+    {
+        let repo = Repo::new();
+        let base = repo.commit(&[(
+            SCROLLING,
+            &format!("{TWO_CASES}fn check() {{ assert!(true); }}\n"),
+        )]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            &format!("{TWO_CASES}fn check() {{ assert!(!false); }}\n"),
+        )]);
+        let selected = repo.after_merge(&base, &head);
+        assert!(
+            selected.journeys.contains(&"terminal-scrolling"),
+            "{}",
+            selected.lines()
+        );
+        assert!(selected.cases.is_empty(), "{}", selected.lines());
+    }
+
+    #[test]
+    fn a_case_whose_needs_changed_prints_its_case_line() {
+        let repo = Repo::new();
+        let base = repo.commit(&[(SCROLLING, TWO_CASES)]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            r#"cases! {
+    First => "first",
+    Second => "second",
+}
+"#,
+        )]);
+        let selected = repo.after_merge(&base, &head);
+        assert_eq!(
+            selected.cases,
+            [("terminal-scrolling", "second".to_owned())],
+            "{}",
+            selected.lines()
+        );
+    }
+
+    #[test]
+    fn a_docs_only_range_names_only_the_core_set() {
+        let repo = Repo::new();
+        let base = repo.commit(&[("docs/a.md", "a\n")]);
+        let head = repo.commit(&[("docs/a.md", "b\n")]);
+        let selected = repo.after_merge(&base, &head);
+        assert_eq!(selected.journeys, core());
+        assert_eq!(
+            selected.lines(),
+            format!("journeys: {}\n", core().join(","))
+        );
+    }
+
+    #[test]
+    fn a_range_without_two_ends_is_refused() {
+        let repo = Repo::new();
+        let head = repo.commit(&[("docs/a.md", "a\n")]);
+        let registry = Registry::parse(SEED).unwrap();
+        assert!(after_merge(repo.folder.path(), &registry, &head).is_err());
+    }
+
+    #[test]
+    fn every_core_journey_is_a_native_journey() {
+        assert_eq!(core().len(), AFTER_MERGE_CORE.len());
+    }
+
+    #[test]
+    fn every_journey_file_parses_to_its_compiled_cases_and_needs() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for journey in Journey::ALL {
+            let text = std::fs::read_to_string(root.join(journey.source())).unwrap();
+            let declared = Declared::parse(&text);
+            assert_eq!(declared.names, journey.cases(), "{}", journey.source());
+            let needs: Vec<(&str, &str)> = declared
+                .needs
+                .iter()
+                .map(|(later, earlier)| (later.as_str(), earlier.as_str()))
+                .collect();
+            assert_eq!(needs, journey.needs(), "{}", journey.source());
+        }
     }
 }

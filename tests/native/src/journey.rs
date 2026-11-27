@@ -114,6 +114,12 @@ macro_rules! journeys {
                 }
             }
 
+            pub fn source(self) -> &'static str {
+                match self {
+                    $(Journey::$variant => concat!("tests/native/src/journey/", stringify!($module), ".rs")),+
+                }
+            }
+
             pub fn sidebar(self) -> Option<Sidebar> {
                 match self {
                     $(Journey::$variant => $sidebar),+
