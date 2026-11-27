@@ -352,6 +352,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             },
             |(_, drawn)| !drawn.portal() && !drawn.area && drawn.parked(),
         )?;
+        let requests = native.window_requests()?.len();
+        native.click(&Target::AVATAR)?;
+        native.requests_through_quiet(requests)?;
+        let (clicked, clicked_drawn) = native.observe("the frame after the parked click", |seen| {
+            Some((seen.document.clone(), Drawn::of(seen, &portal, &home)))
+        })?;
         native.click(&Target::name(&RenameTarget::Voyage { id: home.clone() }))?;
         let (back, back_drawn) = native.settle(
             "the Portal's Voyage selected again with the avatar on the Portal",
@@ -370,6 +376,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "in the new Voyage the avatar is parked small in the status row",
                 away_drawn.parked(),
+            )
+            .expect(
+                "a click on the parked avatar changed nothing, the new Voyage stayed selected and the Portal was not drawn",
+                clicked == away && !clicked_drawn.portal() && !clicked_drawn.area,
             )
             .expect(
                 "a click on the Portal's Voyage selects it, draws the Portal and docks the avatar on it",

@@ -40,6 +40,7 @@ panel-view.ts.
   Portal and the dock stay, and its shell is the same program.
 - `portal-stays-in-its-voyage` makes a second Voyage. The Portal and its
   column are not drawn there, the context stays the Portal, and the avatar is parked small. A click on
+  the parked avatar changes nothing and the new Voyage stays selected. A click on
   the Portal's Voyage selects it and draws the Portal with the avatar docked
   on it.
 - `hide-portals` presses Ctrl+Alt+P in the first Vessel's terminal. The column
