@@ -2065,6 +2065,8 @@ the shared patience passes, so a slow machine makes it wait longer and never
 makes it fail a bound. `Stopwatch` times an interval for the evidence. Its
 `Elapsed` has no number to compare. It offers `Elapsed::within` against a named
 `Owed` and `Elapsed::under_share_of` a hold that the run set.
+`Elapsed::micros` gives the interval in microseconds for a recorded sample, such
+as the call times of `tool-call-round-trip`, whose limit is judged on the samples.
 
 An `Owed` is a wait that the product or a run option owes the case. Each is
 declared once, with its source, and the pull request that adds one names it.
@@ -2083,6 +2085,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `STATUS_AFTER_CLICK` | 600 ms | How long `created-during-avatar-home-click-is-drawn` reads the status line after the click on the avatar at home, long enough for the canvas to show a render error. |
 | `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
 | `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |
+| `MODEL_WORK_WAIT` | 2 s | How long `dock-with-no-chosen-behaviour-adds-no-model-work` watches Voyager's terminal and the provider after the docks for a model turn. A turn the app sends arrives within milliseconds, and the control's turn was seen inside it. |
 
 `voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
 constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an
