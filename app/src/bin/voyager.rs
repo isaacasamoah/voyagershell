@@ -273,3 +273,32 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::staged;
+    use voyager_app::install::Staged;
+
+    #[test]
+    fn each_update_outcome_prints_its_own_line() {
+        assert_eq!(
+            staged(Staged::Next("0.1.1".into())),
+            "Build 0.1.1 is staged. Restart VoyagerShell or run voyager start to use it."
+        );
+        assert_eq!(
+            staged(Staged::AlreadyCurrent("0.1.1".into())),
+            "Build 0.1.1 is already current; nothing is staged."
+        );
+        assert_eq!(
+            staged(Staged::AlreadyNext("0.1.1".into())),
+            "Build 0.1.1 is already staged; nothing new is staged. Restart VoyagerShell or run voyager start to use it."
+        );
+        assert_eq!(
+            staged(Staged::Older {
+                latest: "0.1.0".into(),
+                current: "0.1.1".into()
+            }),
+            "The latest release, 0.1.0, is older than the current build 0.1.1; nothing is staged."
+        );
+    }
+}
