@@ -123,6 +123,21 @@ validates it and prints the coverage table. `features --write` regenerates the t
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
 `features --changed GIT_RANGE` lists the features and journeys a diff touches.
 
+`features --changed BASE..HEAD --journeys` prints the journeys to run after a merge,
+as `journeys: a,b,c`. The list is the core set in `AFTER_MERGE_CORE` in
+`src/features.rs` (quit-restore, workspace, portals, voyage-close, arrangement,
+canvas-stack and agent-split, chosen by the declared invariants they cover per
+second of run time) plus every journey of each feature whose sources the range
+touches, in the order `journeys` lists them. The battery takes the list through
+`--journeys`. After it comes one `case: journey/case` line for each case that is
+new at HEAD, or whose `needs` lines differ from BASE's, in a journey file the
+range changes. Those are the cases whose declared needs a full run cannot prove,
+because a full run gives every case the state of all the cases before it. Run
+each one picked with `--case`. The cases come from reading the text of each
+journey file's `cases!` block at BASE and at HEAD, and
+`every_journey_file_parses_to_its_compiled_cases_and_needs` fails first when a
+change to that block's format would make the reading wrong.
+
 ### Declared invariants
 
 `tests/native/declared-invariants.toml` holds the declared invariants the app keeps. The same
