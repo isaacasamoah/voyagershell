@@ -150,6 +150,19 @@ check = ["journey:arrangement/split-below", "journey:arrangement/split-right-sho
 confidence = "inferred"
 
 [[invariant]]
+id = "loading-a-layout-keeps-programs"
+says = "Save layout in a Fleet's layout menu keeps that Fleet's current split tree under the name given. Loading it puts that tree back over the same Vessels and keeps every program running, with no backend replaced, started or stopped. Loading a saved tree that names a missing or repeated placement, or missing content, is refused and changes nothing. Going Home afterwards starts no program and leaves the loaded tree as it is."
+kind = "user"
+owner = "placement"
+source = "docs/layouts.md, Home and saved Fleet arrangements: loading checks each saved leaf against the current Fleet and content records and does not replace current backend identities with saved copies; Loading, Home and navigation do not start unbound content"
+features = ["layouts-home", "fleet-arrangement"]
+guard = []
+type_gap = "A saved arrangement names placements by id inside its split tree, so a tree that names a missing or repeated placement can be stored; the owner refuses it when loading. No planned unit removes it."
+check = ["journey:arrangement/layout-save-load-then-home"]
+gap = "The case proves save, load and Home on a Fleet whose Vessels are all present. No case loads a tree with a missing or repeated placement or missing content, so the refusal clause is not proved."
+confidence = "inferred"
+
+[[invariant]]
 id = "drag-never-moves-window"
 says = "A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it."
 kind = "user"
