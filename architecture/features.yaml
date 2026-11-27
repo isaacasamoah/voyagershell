@@ -1382,6 +1382,7 @@ features:
       - app/src/client_structure.rs
       - app/src/app_start.rs
       - app/src/install.rs
+      - app/src/release.rs
       - app/src/profile_lock.rs
       - app/src/app_socket.rs
       - app/src/client_ready.rs
@@ -1397,6 +1398,7 @@ features:
       - app/src/families/voyage_close.rs
       - app/src/install.rs
       - app/src/profile_lock.rs
+      - app/src/release.rs
       - contract/src/voyage_close.rs
       - desktop/canvas/stop-session.ts
       - desktop/canvas/voyage-close.ts

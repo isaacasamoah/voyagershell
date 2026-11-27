@@ -12,7 +12,7 @@ const USAGE: &str = "Usage: voyager status
        voyager do workspace '<request json>'
        voyager --skill
        voyager start
-       voyager update --from <build folder>
+       voyager update [--from <build folder>]
        voyager rollback
 Run status, focus, reply and do inside a VoyagerShell Vessel. `voyager --skill` prints the agent guide.
 start, update and rollback run from an installed build and need no Vessel.";
@@ -130,6 +130,12 @@ fn staged(staged: voyager_app::install::Staged) -> String {
         voyager_app::install::Staged::AlreadyCurrent(name) => {
             format!("Build {name} is already current; nothing is staged.")
         }
+        voyager_app::install::Staged::AlreadyNext(name) => format!(
+            "Build {name} is already staged. Restart VoyagerShell or run voyager start to use it."
+        ),
+        voyager_app::install::Staged::Older { latest, current } => format!(
+            "The latest release, {latest}, is older than the current build {current}; nothing is staged."
+        ),
     }
 }
 
@@ -138,8 +144,8 @@ fn manage(arguments: &[String]) -> Option<Result<String, (ExitCode, String)>> {
     use voyager_app::app_start::{NotStarted, Started};
     let refused = |message: String| (ExitCode::from(1), message);
     let verb = match arguments {
-        [verb] if verb == "start" || verb == "rollback" => verb.as_str(),
-        [verb, flag, _] if verb == "update" && flag == "--from" => verb.as_str(),
+        [verb] if verb == "start" || verb == "rollback" || verb == "update" => verb.as_str(),
+        [verb, flag, _] if verb == "update" && flag == "--from" => "update --from",
         _ => return None,
     };
     Some(install().map_err(refused).and_then(|install| match verb {
@@ -177,6 +183,9 @@ fn manage(arguments: &[String]) -> Option<Result<String, (ExitCode, String)>> {
             .rollback()
             .map(staged)
             .map_err(|error| refused(error.to_string())),
+        "update" => voyager_app::release::update(&install)
+            .map(staged)
+            .map_err(refused),
         _ => {
             let source = std::path::Path::new(&arguments[2]);
             let name = install.add_from(source).map_err(refused)?;
@@ -262,5 +271,34 @@ fn main() -> ExitCode {
             eprintln!("{message}");
             code
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::staged;
+    use voyager_app::install::Staged;
+
+    #[test]
+    fn each_update_outcome_prints_its_own_line() {
+        assert_eq!(
+            staged(Staged::Next("0.1.1".into())),
+            "Build 0.1.1 is staged. Restart VoyagerShell or run voyager start to use it."
+        );
+        assert_eq!(
+            staged(Staged::AlreadyCurrent("0.1.1".into())),
+            "Build 0.1.1 is already current; nothing is staged."
+        );
+        assert_eq!(
+            staged(Staged::AlreadyNext("0.1.1".into())),
+            "Build 0.1.1 is already staged. Restart VoyagerShell or run voyager start to use it."
+        );
+        assert_eq!(
+            staged(Staged::Older {
+                latest: "0.1.0".into(),
+                current: "0.1.1".into()
+            }),
+            "The latest release, 0.1.0, is older than the current build 0.1.1; nothing is staged."
+        );
     }
 }

@@ -1345,6 +1345,23 @@ folder into place. It then points `next` at the build. A failed copy, check or
 rename removes the `.part` folder and leaves `next` unchanged. `voyager
 rollback` points `next` at `previous`.
 
+`voyager update` with no folder reads `latest.json` with the system `curl`
+(`app/src/release.rs`). It reads it from
+`https://github.com/isaacasamoah/voyagershell/releases/latest/download`, the
+installer's default. A build compiled with `VOYAGER_RELEASE=1` reads
+`VOYAGER_RELEASES_URL` in its place, and a source build ignores that variable.
+The manifest must name a plain version and a `linux-x86_64` archive with its
+sha256. Other fields are ignored, so a later manifest can add fields. When
+`current` names a release at the manifest's version or newer, the command
+downloads nothing and stages nothing. A `local-` build counts as no release.
+When `next` already names the manifest's version, it stages nothing more.
+Otherwise it downloads the archive into `builds/<version>.part`, checks its
+sha256, unpacks it with the system `tar` and removes the archive. It then runs
+`voyager-shell --version` and requires the first line `voyager-shell
+<version>`. The rename, the `next` link and the prune are the `--from` steps. A
+failed download, checksum, unpack, version check or rename removes the `.part`
+folder, leaves `next` as it was and exits 1 with the reason.
+
 `voyager start` reads `start.json` and first asks a running app to raise its
 window. When none answers, it applies `next`, so `previous` becomes the old
 `current`, and launches `current/voyager-shell` in its own process group with

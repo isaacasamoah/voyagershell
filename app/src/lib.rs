@@ -29,6 +29,8 @@ mod layout_store;
 pub mod observation;
 mod panels;
 pub mod profile_lock;
+#[cfg(unix)]
+pub mod release;
 pub mod replies;
 pub mod reply_hook;
 mod scope;
