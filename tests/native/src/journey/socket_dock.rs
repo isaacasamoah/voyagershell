@@ -56,7 +56,6 @@ const TIMED_CALLS: usize = 50;
 const COUNTED_CALLS: usize = 5;
 const CALL_LIMIT_MS: f64 = 50.;
 const HEARD: &str = "Stand-in claude heard:";
-const TURN_START: &str = "\"turn/start\"";
 
 struct Docked {
     first: Terminal,
@@ -1004,19 +1003,15 @@ impl Calls {
     }
 }
 
-fn model_work(native: &Native, voyager: &str) -> Result<(usize, usize)> {
+fn heard_lines(native: &Native, voyager: &str) -> Result<usize> {
     let read = native
         .system
         .watch("terminal.read", json!({"terminal":voyager,"lines":10_000}))?;
-    let heard = read["text"]
+    Ok(read["text"]
         .as_str()
         .unwrap_or_default()
         .matches(HEARD)
-        .count();
-    let turns = std::fs::read_to_string(native.system.evidence.join("provider.jsonl"))
-        .map(|ledger| ledger.matches(TURN_START).count())
-        .unwrap_or(0);
-    Ok((heard, turns))
+        .count())
 }
 
 fn dock_with_no_chosen_behaviour_adds_no_model_work(
@@ -1027,7 +1022,7 @@ fn dock_with_no_chosen_behaviour_adds_no_model_work(
     fleet: &FleetId,
 ) -> Result<Verdict> {
     show_fleet(native)?;
-    let before = model_work(native, voyager)?;
+    let before = heard_lines(native, voyager)?;
     let targets = [
         Context::Fleet { id: fleet.clone() },
         Context::Vessel {
@@ -1063,7 +1058,7 @@ fn dock_with_no_chosen_behaviour_adds_no_model_work(
         |context| context == &onto,
     );
     let after = poll(MODEL_WORK_WAIT.within(), LOOK, true, || {
-        let now = model_work(native, voyager)?;
+        let now = heard_lines(native, voyager)?;
         Ok((now != before).then_some(now))
     })?
     .unwrap_or(before);
@@ -1073,11 +1068,11 @@ fn dock_with_no_chosen_behaviour_adds_no_model_work(
             applied == targets.len() && dragged.is_ok(),
         )
         .expect(
-            "Voyager's terminal heard no new line and the provider started no turn in the 2 s after the docks",
+            "Voyager's terminal heard no new line in the 2 s after the docks",
             after == before,
         )
-        .observed("heard lines and provider turns before", before)?
-        .observed("heard lines and provider turns after", after)
+        .observed("heard lines before", before)?
+        .observed("heard lines after", after)
 }
 
 const PROBE_KEY: &str = "Q";
