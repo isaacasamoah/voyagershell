@@ -837,10 +837,16 @@ mod tests {
         let selection = picked(Journey::SocketDock, &["avatar-click-away-changes-nothing"])?;
         assert!(selection.partial);
         assert_eq!(selection.picked, ["avatar-click-away-changes-nothing"]);
-        assert_eq!(selection.included, ["socket-dock-takes-keyboard"]);
+        assert_eq!(
+            selection.included,
+            [
+                "socket-dock-takes-keyboard",
+                "avatar-click-at-home-opens-home"
+            ]
+        );
         assert_eq!(
             selection.left_out.len(),
-            Journey::SocketDock.cases().len() - 2
+            Journey::SocketDock.cases().len() - 3
         );
         assert!(!selection.left_out.contains(&"socket-dock-takes-keyboard"));
         Ok(())
@@ -882,7 +888,10 @@ mod tests {
             (
                 Journey::SocketDock,
                 "avatar-click-away-changes-nothing",
-                &["socket-dock-takes-keyboard"],
+                &[
+                    "socket-dock-takes-keyboard",
+                    "avatar-click-at-home-opens-home",
+                ],
             ),
             (
                 Journey::SocketDock,

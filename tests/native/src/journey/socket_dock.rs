@@ -41,6 +41,7 @@ cases! {
     "avatar-click-at-home-opens-home" needs "socket-dock-takes-keyboard",
     "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
     "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
+    "avatar-click-away-changes-nothing" needs "avatar-click-at-home-opens-home",
     "avatar-click-parked-returns-to-dock" needs "socket-dock-takes-keyboard",
     "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
     "tool-call-round-trip" needs "socket-dock-takes-keyboard",
