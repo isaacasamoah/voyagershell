@@ -15,6 +15,7 @@ unguarded = [
   "layout-is-never-lost",
   "live-edit-keeps-last-good",
   "live-vessel-attaches",
+  "loading-a-layout-keeps-programs",
   "one-operation-list",
   "one-window-by-default",
   "personal-edits-kept",
