@@ -162,7 +162,6 @@ union all come from that list.
 | `reopen-placement` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
 | `workspace-dock` | Empty | The avatar's workspace dock, which wraps the brand | `renderSidebar` |
 | `portal-area` | Voyage id | The area that holds the Voyage's Portals while they are visible | `Workspace.render` in `main.ts` |
-| `go-there` | Empty | The Go there button of the context bar, drawn when the dock target is out of view | `renderContext` in `navigation-view.ts` |
 | `chat-toggle` | Empty | The button that opens and closes the chat | `Chat.toggleView` in `chat.ts` |
 | `chat-composer` | Empty | The chat's message editor. Its `label` is the current draft | `Chat.render`, with `ComposerMarker` |
 | `chat-send` | Empty | The Send button, or the Interrupt button while a reply is in progress. Its `label` is `Send` or `Interrupt` | `Chat.render` |

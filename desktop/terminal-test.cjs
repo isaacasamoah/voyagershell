@@ -1439,13 +1439,6 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     [],
     "Activity must not request Inspect or prepare content",
   );
-  const goThere = nodes.find(
-    (node) => node.calls.children?.[0].at(-1) === "Go there",
-  );
-  assert.ok(goThere);
-  goThere.calls.on_click[0]({ click_count: 1 }, {});
-  assert.deepEqual(actions, [{ operation: "reveal-placement", id: "vessel" }]);
-  actions.length = 0;
   packageRevision = "1";
   view.render({});
   assert.deepEqual(actions, [], "A render starts no workspace request");

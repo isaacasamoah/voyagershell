@@ -658,6 +658,8 @@ mod tests {
                 "tests/native/controls/socket-dock-home.patch".to_owned(),
                 "tests/native/controls/avatar-click-home.patch".to_owned(),
                 "tests/native/controls/avatar-click-away.patch".to_owned(),
+                "tests/native/controls/avatar-click-parked.patch".to_owned(),
+                "tests/native/controls/avatar-click-portal.patch".to_owned(),
                 "tests/native/controls/avatar-click-wait.patch".to_owned(),
                 "tests/native/controls/dock-home-view.patch".to_owned(),
                 "tests/native/controls/avatar-home-prepare.patch".to_owned(),
@@ -835,10 +837,16 @@ mod tests {
         let selection = picked(Journey::SocketDock, &["avatar-click-away-changes-nothing"])?;
         assert!(selection.partial);
         assert_eq!(selection.picked, ["avatar-click-away-changes-nothing"]);
-        assert_eq!(selection.included, ["socket-dock-takes-keyboard"]);
+        assert_eq!(
+            selection.included,
+            [
+                "socket-dock-takes-keyboard",
+                "avatar-click-at-home-opens-home"
+            ]
+        );
         assert_eq!(
             selection.left_out.len(),
-            Journey::SocketDock.cases().len() - 2
+            Journey::SocketDock.cases().len() - 3
         );
         assert!(!selection.left_out.contains(&"socket-dock-takes-keyboard"));
         Ok(())
@@ -880,7 +888,18 @@ mod tests {
             (
                 Journey::SocketDock,
                 "avatar-click-away-changes-nothing",
-                &["socket-dock-takes-keyboard"],
+                &[
+                    "socket-dock-takes-keyboard",
+                    "avatar-click-at-home-opens-home",
+                ],
+            ),
+            (
+                Journey::SocketDock,
+                "avatar-click-parked-returns-to-dock",
+                &[
+                    "socket-dock-takes-keyboard",
+                    "avatar-click-at-home-opens-home",
+                ],
             ),
             (
                 Journey::SocketDock,
@@ -907,21 +926,72 @@ mod tests {
                 "seeded-core-document-kept",
                 &["live-edit-recolours", "second-build-keeps-voyage"],
             ),
-            (Journey::Portals, "show-portals", &["hide-portals"]),
+            (Journey::Portals, "dock-portal", &["open-portal"]),
+            (
+                Journey::Portals,
+                "portal-across-fleets",
+                &["open-portal", "dock-portal"],
+            ),
+            (
+                Journey::Portals,
+                "portal-stays-in-its-voyage",
+                &["open-portal", "dock-portal", "portal-across-fleets"],
+            ),
+            (
+                Journey::Portals,
+                "hide-portals",
+                &["open-portal", "dock-portal", "portal-across-fleets"],
+            ),
+            (
+                Journey::Portals,
+                "avatar-click-beside-hidden-portals-changes-nothing",
+                &[
+                    "open-portal",
+                    "dock-portal",
+                    "portal-across-fleets",
+                    "hide-portals",
+                ],
+            ),
+            (
+                Journey::Portals,
+                "show-portals",
+                &[
+                    "open-portal",
+                    "dock-portal",
+                    "portal-across-fleets",
+                    "hide-portals",
+                ],
+            ),
             (
                 Journey::Portals,
                 "close-portal",
-                &["hide-portals", "show-portals"],
+                &[
+                    "open-portal",
+                    "dock-portal",
+                    "portal-across-fleets",
+                    "hide-portals",
+                    "show-portals",
+                ],
             ),
             (
                 Journey::Portals,
                 "reopen-portal",
-                &["hide-portals", "show-portals", "close-portal"],
+                &[
+                    "open-portal",
+                    "dock-portal",
+                    "portal-across-fleets",
+                    "hide-portals",
+                    "show-portals",
+                    "close-portal",
+                ],
             ),
             (
                 Journey::Portals,
                 "relaunch-restores-portal",
                 &[
+                    "open-portal",
+                    "dock-portal",
+                    "portal-across-fleets",
                     "hide-portals",
                     "show-portals",
                     "close-portal",

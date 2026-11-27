@@ -51,6 +51,17 @@ function dragAreas(node, seen = new Set()) {
   );
 }
 
+function draws(node, text, seen = new Set()) {
+  if (node === text) return true;
+  if (!node || typeof node !== "object" || seen.has(node)) return false;
+  if (Array.isArray(node)) return node.some((item) => draws(item, text, seen));
+  if (!Array.isArray(node.calls)) return false;
+  seen.add(node);
+  return node.calls.some(([, ...args]) =>
+    args.some((arg) => draws(arg, text, seen)),
+  );
+}
+
 function deepMarkers(node, seen = new Set()) {
   if (!node || typeof node !== "object" || seen.has(node)) return [];
   if (Array.isArray(node))
@@ -399,11 +410,15 @@ test("inspection markers name each control by its role and id and report the tex
   );
   const menus = new Map();
   let dockVisible = false;
+  const targets = [];
   const view = Object.assign(new Canvas(), {
     sidebar: true,
     names: new Map(),
     chat: { toggleView: element, render: element },
-    target: (_id, _scope, child) => child,
+    target: (id, _scope, child) => {
+      targets.push(id);
+      return child;
+    },
     contextMenu: (id, child, items) => {
       menus.set(id, items);
       return child;
@@ -572,17 +587,18 @@ test("inspection markers name each control by its role and id and report the tex
   );
   const vessel = { kind: "vessel", id: "placement-4" };
   const away = { ...populated, context: vessel };
+  targets.length = 0;
+  const parked = view.contextRegion(away, portals, undefined);
   assert.deepEqual(
-    deepMarkers(view.contextRegion(away, portals, undefined)).filter(
-      ([role]) => role === "go-there",
-    ),
-    [["go-there", ""]],
+    targets.filter((id) => id === "out-of-view-avatar"),
+    ["out-of-view-avatar"],
   );
+  assert.equal(draws(parked, "Go there"), false);
   dockVisible = true;
+  targets.length = 0;
+  view.contextRegion(away, portals, undefined);
   assert.deepEqual(
-    deepMarkers(view.contextRegion(away, portals, undefined)).filter(
-      ([role]) => role === "go-there",
-    ),
+    targets.filter((id) => id === "out-of-view-avatar"),
     [],
   );
 });

@@ -40,7 +40,8 @@ schedules a weak, deferred avatar and script refresh; unchanged bounds do not
 schedule one. Retiring a target also invalidates the view. Its mouse capture
 listeners register during paint, including frames where the source image is
 hidden. A hidden focused Vessel retains its context and uses the reference's
-compact out-of-view presentation with a `Go there` action for its original Fleet.
+compact out-of-view presentation, where the avatar is parked in the status row
+and a click on it reveals the Vessel in its original Fleet.
 Temporary drag previews do not change application context.
 
 Window intentions carry a monotonically advancing local epoch. A late float
@@ -145,8 +146,17 @@ The avatar is still at rest and runs finite animations on deliberate triggers.
 Hover starts one stretch on entry. Staying over the hit area does not repeat it.
 An applied dock replaces any active clip with a pronounced two-second float.
 Hover is ignored while a clip runs and is never queued. Clicking the floating avatar restores the workspace. While the
-avatar is home, a click sends the existing Home request and the window stays up. While the avatar is docked anywhere
-else, a click changes nothing, so that click stays free for a later docking
+avatar is home, a click sends the existing Home request and the window stays up. While the avatar is parked,
+because no target for its dock is drawn, a click sends the request that shows
+that place again. A Fleet sends `select-fleet`, a Voyage sends `select-voyage`
+and a Vessel sends `reveal-placement`. The avatar is parked in the status row
+when its dock is off screen. A click while it is docked on a Portal changes
+nothing, including beside the Portals button when the column is hidden, because
+opening the column is that button's job. `Click::of` in
+`desktop/src/avatar/click.rs` is the one table for these choices, and the click
+reads the parked state from the drawn targets when it is made, so it adds no
+request beyond the one it sends. While the avatar is docked on a place that is
+on screen, a click changes nothing, so that click stays free for a later docking
 menu. A dock on the home dock leaves the view, the Voyage and the Fleet where
 they were, and only a click on the avatar at home opens the home Voyage. A dock
 on a Vessel or a Voyage inside Home still shows Home. A click made while a
@@ -261,7 +271,7 @@ and release-geometry journey in the working terminal app. Full material, motion
 and audible-sound parity remain unaccepted. Assets currently resolve from the build checkout; relocation or a
 packaged artifact is not established here. The independently accepted P3 provider
 supplies actual Voyage-owned Portals and the shared content renderer. Portal
-targets and Go there now use that owner data and passed the integrated native
+targets and the parked avatar's click now use that owner data and passed the integrated native
 journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
 An avatar reply is accepted in render, as the canvas always did, so the layout,
@@ -294,7 +304,8 @@ The same controller runs with the working-core workspace, terminal and
 private-chat hosts. The combined release completed the bounded native docking,
 floating, restoration and Portal journey. The Home overview preserves the
 captured context. When its target is outside the visible Home view, it reuses
-the existing compact out-of-view target and Go there action.
+the existing compact out-of-view target, and a click on the parked avatar there
+goes back to it.
 No Dock or terminal start follows from selecting Home.
 
 The earlier unexpected floating startups remain unexplained. The retained P4

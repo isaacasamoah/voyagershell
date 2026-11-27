@@ -3,18 +3,34 @@ use gpui::{Context, Window};
 use voyager_contract::avatar_animation::Trigger;
 use voyager_contract::{Action, Context as Scope};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum Click {
     Restore,
     Home,
+    Return(Box<Action>),
 }
 
 impl Click {
-    pub(super) fn of(floating: bool, scope: &Scope) -> Option<Self> {
-        match (floating, scope) {
-            (true, _) => Some(Self::Restore),
-            (false, Scope::Workspace) => Some(Self::Home),
-            (false, _) => None,
+    pub(super) fn of(floating: bool, parked: bool, scope: &Scope) -> Option<Self> {
+        match (floating, parked, scope) {
+            (true, _, _) => Some(Self::Restore),
+            (false, _, Scope::Workspace) => Some(Self::Home),
+            (false, _, Scope::Portal { .. }) | (false, false, _) => None,
+            (false, true, Scope::Voyage { id }) => {
+                Some(Self::Return(Box::new(Action::SelectVoyage {
+                    id: id.clone(),
+                })))
+            }
+            (false, true, Scope::Fleet { id }) => {
+                Some(Self::Return(Box::new(Action::SelectFleet {
+                    id: id.clone(),
+                })))
+            }
+            (false, true, Scope::Vessel { id }) => {
+                Some(Self::Return(Box::new(Action::RevealPlacement {
+                    id: id.clone(),
+                })))
+            }
         }
     }
 }
@@ -46,9 +62,15 @@ impl Avatar {
     }
 
     fn click(&mut self, window: &Window, cx: &mut Context<Self>) {
-        match Click::of(self.floating == Some(window.window_handle()), &self.scope) {
+        let parked = self.geometry.borrow().dock_target(&self.scope).is_none();
+        match Click::of(
+            self.floating == Some(window.window_handle()),
+            parked,
+            &self.scope,
+        ) {
             Some(Click::Restore) => self.restore_workspace(cx),
             Some(Click::Home) => self.submit(Action::Home, cx),
+            Some(Click::Return(action)) => self.submit(*action, cx),
             None => {}
         }
     }
@@ -57,16 +79,39 @@ impl Avatar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voyager_contract::FleetId;
+    use voyager_contract::{FleetId, PlacementId, VoyageId};
 
     #[test]
-    fn a_click_opens_home_at_home_and_does_nothing_anywhere_else() {
-        let fleet = Scope::Fleet {
-            id: FleetId("fleet".into()),
-        };
-        assert_eq!(Click::of(false, &Scope::Workspace), Some(Click::Home));
-        assert_eq!(Click::of(false, &fleet), None);
-        assert_eq!(Click::of(true, &Scope::Workspace), Some(Click::Restore));
-        assert_eq!(Click::of(true, &fleet), Some(Click::Restore));
+    fn a_click_opens_home_returns_a_parked_dock_and_leaves_a_portal_or_a_dock_in_view() {
+        let fleet = FleetId("fleet".into());
+        let voyage = VoyageId("voyage".into());
+        let placement = PlacementId("placement".into());
+        let scopes = [
+            Scope::Workspace,
+            Scope::Voyage { id: voyage.clone() },
+            Scope::Fleet { id: fleet.clone() },
+            Scope::Vessel {
+                id: placement.clone(),
+            },
+            Scope::Portal {
+                id: placement.clone(),
+            },
+        ];
+        let parked = [
+            Some(Click::Home),
+            Some(Click::Return(Box::new(Action::SelectVoyage { id: voyage }))),
+            Some(Click::Return(Box::new(Action::SelectFleet { id: fleet }))),
+            Some(Click::Return(Box::new(Action::RevealPlacement {
+                id: placement,
+            }))),
+            None,
+        ];
+        for (scope, parked) in scopes.iter().zip(parked) {
+            assert_eq!(Click::of(true, false, scope), Some(Click::Restore));
+            assert_eq!(Click::of(true, true, scope), Some(Click::Restore));
+            assert_eq!(Click::of(false, true, scope), parked);
+            let in_view = matches!(scope, Scope::Workspace).then_some(Click::Home);
+            assert_eq!(Click::of(false, false, scope), in_view);
+        }
     }
 }

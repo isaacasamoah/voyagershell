@@ -93,7 +93,6 @@ roles! {
     ReopenPlacement => "reopen-placement",
     WorkspaceDock => "workspace-dock",
     PortalArea => "portal-area",
-    GoThere => "go-there",
     ChatToggle => "chat-toggle",
     ChatComposer => "chat-composer",
     ChatSend => "chat-send",

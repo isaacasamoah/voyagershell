@@ -18,10 +18,16 @@ cases! {
     PortalAcrossFleets => "portal-across-fleets",
     PortalStaysInItsVoyage => "portal-stays-in-its-voyage",
     HidePortals => "hide-portals",
+    AvatarClickBesideHiddenPortalsChangesNothing => "avatar-click-beside-hidden-portals-changes-nothing",
     ShowPortals => "show-portals",
     ClosePortal => "close-portal",
     ReopenPortal => "reopen-portal",
     RelaunchRestoresPortal => "relaunch-restores-portal";
+    "dock-portal" needs "open-portal",
+    "portal-across-fleets" needs "dock-portal",
+    "portal-stays-in-its-voyage" needs "portal-across-fleets",
+    "hide-portals" needs "portal-across-fleets",
+    "avatar-click-beside-hidden-portals-changes-nothing" needs "hide-portals",
     "show-portals" needs "hide-portals",
     "close-portal" needs "show-portals",
     "reopen-portal" needs "close-portal",
@@ -98,6 +104,11 @@ impl Drawn {
             && centre.0 <= union.x + union.width
             && centre.1 >= union.y
             && centre.1 <= union.y + union.height
+    }
+
+    fn parked(&self) -> bool {
+        self.avatar
+            .is_some_and(|avatar| (avatar.width - HIDDEN_SIZE).abs() <= SIZE_TOLERANCE)
     }
 
     fn beside_toggle(&self) -> bool {
@@ -343,9 +354,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 (fresh && selected_new)
                     .then(|| (seen.document.clone(), Drawn::of(seen, &portal, &home)))
             },
-            |(_, drawn)| !drawn.portal() && !drawn.area,
+            |(_, drawn)| !drawn.portal() && !drawn.area && drawn.parked(),
         )?;
-        native.click(&Target::GO_THERE)?;
+        let requests = native.window_requests()?.len();
+        native.click(&Target::AVATAR)?;
+        native.requests_through_quiet(requests)?;
+        let (clicked, clicked_drawn) = native.observe("the frame after the parked click", |seen| {
+            Some((seen.document.clone(), Drawn::of(seen, &portal, &home)))
+        })?;
+        native.click(&Target::name(&RenameTarget::Voyage { id: home.clone() }))?;
         let (back, back_drawn) = native.settle(
             "the Portal's Voyage selected again with the avatar on the Portal",
             |seen| Some((seen.document.clone(), Drawn::of(seen, &portal, &home))),
@@ -361,8 +378,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 away.context == scope,
             )
             .expect(
-                "Go there selects the Portal's Voyage, draws the Portal and docks the avatar on it",
+                "in the new Voyage the avatar is parked small in the status row",
+                away_drawn.parked(),
+            )
+            .expect(
+                "a click on the parked avatar changed nothing, the new Voyage stayed selected and the Portal was not drawn",
+                clicked == away && !clicked_drawn.portal() && !clicked_drawn.area,
+            )
+            .expect(
+                "a click on the Portal's Voyage selects it, draws the Portal and docks the avatar on it",
                 back.selected_voyage.as_ref() == Some(&home) && back_drawn.docked(),
+            )
+            .expect(
+                "after the click the context is still the Portal",
+                back.context == scope,
             )
             .observed("away", &away_drawn)?
             .observed("back", &back_drawn)
@@ -396,6 +425,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("avatar", drawn.avatar)?
             .observed("toggle", drawn.toggle)
     })?;
+    cases.check(
+        native,
+        Case::AvatarClickBesideHiddenPortalsChangesNothing,
+        |native| {
+            let (_, before) = at_rest(native)?;
+            let parked = native.observe("the avatar beside the Portals button", |seen| {
+                Drawn::of(seen, &portal, &home)
+                    .beside_toggle()
+                    .then_some(())
+            });
+            let requests = native.window_requests()?.len();
+            native.click(&Target::AVATAR)?;
+            native.requests_through_quiet(requests)?;
+            let (after, drawn) = native.observe("the frame after the click", |seen| {
+                Some((seen.document.clone(), Drawn::of(seen, &portal, &home)))
+            })?;
+            Verdict::new()
+                .expect(
+                    "before the click the column was hidden and the avatar waited beside the Portals button",
+                    column(&before, &home).is_some_and(|column| !column.visible) && parked.is_ok(),
+                )
+                .expect(
+                    "after a click on the avatar the column stayed hidden and the Portal was not drawn",
+                    column(&after, &home).is_some_and(|column| !column.visible)
+                        && !drawn.portal(),
+                )
+                .expect(
+                    "the Voyage, the Fleet and the dock were the same after the click",
+                    after.selected_voyage == before.selected_voyage
+                        && after.selected_fleet == before.selected_fleet
+                        && after.context == scope,
+                )
+                .expect("the layout was the same after the click", after == before)
+                .expect(
+                    "the avatar still waited beside the Portals button",
+                    drawn.beside_toggle(),
+                )
+                .observed("avatar", drawn.avatar)?
+                .observed("toggle", drawn.toggle)
+        },
+    )?;
     cases.check(native, Case::ShowPortals, |native| {
         native.click(&Target::toggle_portals(&home))?;
         let (layout, drawn) = native.settle(

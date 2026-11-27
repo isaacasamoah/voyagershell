@@ -633,15 +633,6 @@ export function renderContext(workspace, layout, voyage, fleet) {
     compactPrimary ||
     workspace.compactPortalContext() ||
     dock_target_visible(JSON.stringify(context));
-  let goThere;
-  if (context.kind === "fleet")
-    goThere = { operation: "select-fleet", id: context.id };
-  else if (context.kind === "voyage")
-    goThere = { operation: "select-voyage", id: context.id };
-  else if (context.kind === "vessel")
-    goThere = { operation: "reveal-placement", id: context.id };
-  else if (context.kind === "portal")
-    goThere = { operation: "reveal-placement", id: context.id };
   const facts = workspace.contextFacts;
   const branch =
     workspace.observation?.branch.kind === "named"
@@ -683,10 +674,6 @@ export function renderContext(workspace, layout, voyage, fleet) {
       ),
   );
   if (facts) row.child(div().child(facts.path.join(" / ")));
-  if (!visible && goThere)
-    row.child(
-      workspace.action("Go there", goThere).child(Marker.new("go-there")),
-    );
   const region = div().flex().flex_col().child(row);
   if (noticed(workspace) || workspace.worktrees?.status || unboundLine())
     region.child(workspace.statusView());

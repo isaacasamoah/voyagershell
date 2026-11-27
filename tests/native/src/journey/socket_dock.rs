@@ -32,6 +32,7 @@ cases! {
     AvatarClickAwayChangesNothing => "avatar-click-away-changes-nothing",
     ToolCallRoundTrip => "tool-call-round-trip",
     DockWithNoChosenBehaviourAddsNoModelWork => "dock-with-no-chosen-behaviour-adds-no-model-work",
+    AvatarClickParkedReturnsToDock => "avatar-click-parked-returns-to-dock",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes";
     "reread-keeps-clicked-pane" needs "socket-dock-takes-keyboard",
     "redock-takes-keyboard" needs "reread-keeps-clicked-pane",
@@ -40,6 +41,9 @@ cases! {
     "avatar-click-at-home-opens-home" needs "socket-dock-takes-keyboard",
     "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
     "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
+    "avatar-click-away-changes-nothing" needs "avatar-click-at-home-opens-home",
+    "avatar-click-parked-returns-to-dock" needs "socket-dock-takes-keyboard",
+    "avatar-click-parked-returns-to-dock" needs "avatar-click-at-home-opens-home",
     "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
     "tool-call-round-trip" needs "socket-dock-takes-keyboard",
     "dock-with-no-chosen-behaviour-adds-no-model-work" needs "socket-dock-takes-keyboard",
@@ -56,6 +60,9 @@ const TIMED_CALLS: usize = 50;
 const COUNTED_CALLS: usize = 5;
 const CALL_LIMIT_MS: f64 = 50.;
 const HEARD: &str = "Stand-in claude heard:";
+const PARKED_SIZE: f32 = 38.0;
+const DOCKED_SIZE: f32 = 94.0;
+const SIZE_TOLERANCE: f32 = 1.0;
 
 struct Docked {
     first: Terminal,
@@ -789,6 +796,91 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         },
     )?;
 
+    cases.check(native, Case::AvatarClickParkedReturnsToDock, |native| {
+        show_fleet(native)?;
+        let target = Context::Vessel { id: placed.clone() };
+        native.drag(
+            &Target::AVATAR,
+            &Target::name(&RenameTarget::Vessel { id: placed.clone() }),
+        )?;
+        let docked = native
+            .settle(
+                "the avatar docked on the second shell",
+                |seen| (seen.document.context == target).then(|| avatar_width(seen)),
+                |width| width.is_some_and(|width| sized(width, DOCKED_SIZE)),
+            )
+            .is_ok();
+        let (_, layout) = native.document()?.context("Missing saved layout")?;
+        let voyage = layout
+            .selected_voyage
+            .clone()
+            .context("The layout has no selected Voyage")?;
+        let known: Vec<FleetId> = fleets(&layout).map(|item| item.id.clone()).collect();
+        native.click(&Target::create_fleet(&voyage))?;
+        native.click(&Target::worker("terminal"))?;
+        let (away, away_context, away_width) = native.settle(
+            "another Fleet selected with the avatar parked",
+            |seen| {
+                let selected = seen.document.selected_fleet.clone()?;
+                (!known.contains(&selected) && !seen.shows(&Target::terminal(&placed)))
+                    .then(|| (selected, seen.document.context.clone(), avatar_width(seen)))
+            },
+            |(_, _, width)| width.is_some_and(|width| sized(width, PARKED_SIZE)),
+        )?;
+        let requests = native.window_requests()?.len();
+        native.click(&Target::AVATAR)?;
+        let back = native
+            .settle(
+                "the docked shell's Fleet shown again with the avatar on the shell",
+                |seen| {
+                    Some((
+                        seen.document.selected_fleet.clone(),
+                        seen.document.context.clone(),
+                        seen.shows(&Target::terminal(&placed)),
+                        avatar_width(seen),
+                    ))
+                },
+                |(selected, _, shown, width)| {
+                    selected.as_ref() == Some(&fleet)
+                        && *shown
+                        && width.is_some_and(|width| sized(width, DOCKED_SIZE))
+                },
+            )
+            .ok();
+        let sent = native.requests_through_quiet(requests)?;
+        native.keep_window("avatar-click-parked-returns-to-dock")?;
+        Verdict::new()
+            .expect("the avatar docked on the second shell", docked)
+            .expect(
+                "in a new Fleet the docked shell was off screen and the avatar was parked small",
+                away != fleet
+                    && away_context == target
+                    && away_width.is_some_and(|width| sized(width, PARKED_SIZE)),
+            )
+            .expect(
+                "a click on the parked avatar showed the docked shell's Fleet with the shell drawn",
+                back.as_ref().is_some_and(|(selected, _, shown, _)| {
+                    selected.as_ref() == Some(&fleet) && *shown
+                }),
+            )
+            .expect(
+                "the avatar stayed docked on the shell and was drawn on it at full size",
+                back.as_ref().is_some_and(|(_, context, _, width)| {
+                    *context == target && width.is_some_and(|width| sized(width, DOCKED_SIZE))
+                }),
+            )
+            .expect(
+                "the click sent no minimise request for the window",
+                !minimises(&sent),
+            )
+            .observed("awayWidth", away_width)?
+            .observed(
+                "back",
+                back.as_ref().map(|(_, _, shown, width)| (*shown, *width)),
+            )?
+            .observed("requests", &sent)
+    })?;
+
     cases.check(native, Case::VoyagerCreatesAndMaximizes, |native| {
         show_fleet(native)?;
         let (_, layout) = native.document()?.context("Missing saved layout")?;
@@ -1133,6 +1225,16 @@ pub(super) fn show_fleet(native: &mut Native) -> Result<()> {
         |seen| (seen.document.view == WorkspaceView::Fleet).then_some(()),
         |_| true,
     )
+}
+
+fn avatar_width(seen: &Seen) -> Option<f32> {
+    Target::AVATAR
+        .find(seen.frame)
+        .map(|element| element.bounds.width)
+}
+
+fn sized(width: f32, size: f32) -> bool {
+    (width - size).abs() <= SIZE_TOLERANCE
 }
 
 fn minimises(sent: &[Observed]) -> bool {

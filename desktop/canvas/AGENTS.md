@@ -24,8 +24,8 @@ agents use the generated typed JSON actions through the same Rust owner.
 
 Vessels and Portals share split, resize, move, rename, maximize/restore,
 hide/show, remove-entry and saved-arrangement controls. Hide retains the leaf;
-remove-entry retains the placement, content and backend. Go there reveals that
-same placement in its original owner. Stop, package removal and Quit remain
+remove-entry retains the placement, content and backend. A click on the avatar
+parked away from its Vessel reveals that Vessel in its original owner. Stop, package removal and Quit remain
 separate operations. Never resubmit an uncertain effect automatically.
 
 Home uses the same retained panel layout and content controls. The Rust owner

@@ -8,7 +8,7 @@ import { client_decorated, quit } from "voyager_workspace";
 import type Canvas from "./main.js";
 import type { NativeElement } from "gpui-kit";
 import type { NameState } from "voyager_native";
-import type { Action, RenameTarget } from "../../contract/generated/request";
+import type { RenameTarget } from "../../contract/generated/request";
 import type {
   Layout,
   Fleet,
@@ -687,15 +687,6 @@ export function renderContext(
     compactPrimary ||
     workspace.compactPortalContext() ||
     dock_target_visible(JSON.stringify(context));
-  let goThere: Action | undefined;
-  if (context.kind === "fleet")
-    goThere = { operation: "select-fleet", id: context.id };
-  else if (context.kind === "voyage")
-    goThere = { operation: "select-voyage", id: context.id };
-  else if (context.kind === "vessel")
-    goThere = { operation: "reveal-placement", id: context.id };
-  else if (context.kind === "portal")
-    goThere = { operation: "reveal-placement", id: context.id };
   const facts = workspace.contextFacts;
   const branch =
     workspace.observation?.branch.kind === "named"
@@ -737,10 +728,6 @@ export function renderContext(
       ),
   );
   if (facts) row.child(div().child(facts.path.join(" / ")));
-  if (!visible && goThere)
-    row.child(
-      workspace.action("Go there", goThere).child(Marker.new("go-there")),
-    );
   const region = div().flex().flex_col().child(row);
   if (noticed(workspace) || workspace.worktrees?.status || unboundLine())
     region.child(workspace.statusView());

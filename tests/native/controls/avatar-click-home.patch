@@ -1,26 +1,26 @@
 diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
 --- a/desktop/src/avatar/click.rs
 +++ b/desktop/src/avatar/click.rs
-@@ -7,13 +7,14 @@ use voyager_contract::{Action, Context as Scope};
- pub(super) enum Click {
+@@ -8,13 +8,14 @@
      Restore,
      Home,
+     Return(Box<Action>),
 +    Minimize,
  }
  
  impl Click {
-     pub(super) fn of(floating: bool, scope: &Scope) -> Option<Self> {
-         match (floating, scope) {
-             (true, _) => Some(Self::Restore),
--            (false, Scope::Workspace) => Some(Self::Home),
-+            (false, Scope::Workspace) => Some(Self::Minimize),
-             (false, _) => None,
-         }
-     }
-@@ -49,6 +50,9 @@ impl Avatar {
-         match Click::of(self.floating == Some(window.window_handle()), &self.scope) {
+     pub(super) fn of(floating: bool, parked: bool, scope: &Scope) -> Option<Self> {
+         match (floating, parked, scope) {
+             (true, _, _) => Some(Self::Restore),
+-            (false, _, Scope::Workspace) => Some(Self::Home),
++            (false, _, Scope::Workspace) => Some(Self::Minimize),
+             (false, _, Scope::Portal { .. }) | (false, false, _) => None,
+             (false, true, Scope::Voyage { id }) => {
+                 Some(Self::Return(Box::new(Action::SelectVoyage {
+@@ -71,6 +72,9 @@
              Some(Click::Restore) => self.restore_workspace(cx),
              Some(Click::Home) => self.submit(Action::Home, cx),
+             Some(Click::Return(action)) => self.submit(*action, cx),
 +            Some(Click::Minimize) => {
 +                self.float(window, cx);
 +            }
