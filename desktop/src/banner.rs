@@ -130,7 +130,7 @@ impl Notices {
         let mut notice = div()
         .id("profile-updates")
         .min_h(px(0.))
-        .flex_shrink()
+        .flex_shrink(1.)
         .max_w(px(640.))
         .overflow_y_scroll()
         .bg(rgb(0x2b2a1a))

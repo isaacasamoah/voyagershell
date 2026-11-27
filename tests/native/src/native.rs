@@ -7,7 +7,7 @@ mod terminal;
 
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
-pub use install::{Build, Layout, Linked, STAND_IN_LINE, Site};
+pub use install::{Build, InstallLayout, Linked, STAND_IN_LINE, Site};
 pub use settle::MODEL_WORK_WAIT;
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
@@ -260,7 +260,7 @@ pub struct Native {
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
     pub talk_over: Option<TalkOver>,
-    pub installs: Option<Layout>,
+    pub installs: Option<InstallLayout>,
     install: Option<install::Install>,
     surface: Surface,
     display: Option<Owned>,

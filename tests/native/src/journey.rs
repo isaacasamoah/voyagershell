@@ -191,10 +191,10 @@ impl Journey {
         !matches!(self, Self::VoyagerCommand)
     }
 
-    pub fn installs(self) -> Option<crate::native::Layout> {
+    pub fn installs(self) -> Option<crate::native::InstallLayout> {
         match self {
-            Self::DailyStart => Some(crate::native::Layout::Local),
-            Self::ReleaseUpdate => Some(crate::native::Layout::Release),
+            Self::DailyStart => Some(crate::native::InstallLayout::Local),
+            Self::ReleaseUpdate => Some(crate::native::InstallLayout::Release),
             _ => None,
         }
     }

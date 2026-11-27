@@ -29,7 +29,7 @@ const ARCHIVE: &str = "voyagershell-linux-x86_64.tar.gz";
 const AHEAD: &str = "voyagershell-ahead.tar.gz";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Layout {
+pub enum InstallLayout {
     Local,
     Release,
 }
@@ -434,7 +434,7 @@ impl Install {
 }
 
 impl Native {
-    pub(super) fn lay_out_install(&mut self, layout: Layout) -> Result<()> {
+    pub(super) fn lay_out_install(&mut self, layout: InstallLayout) -> Result<()> {
         ensure!(
             self.surface.sidebar.is_none(),
             "An app started by voyager start writes no inspection, so the run cannot set its sidebar"
@@ -466,7 +466,7 @@ impl Native {
             release: None,
         };
         let interfaces = loopback::interfaces()?;
-        if layout == Layout::Release {
+        if layout == InstallLayout::Release {
             ensure!(
                 interfaces == ["lo"],
                 "The sandbox has network interfaces {interfaces:?}, not loopback alone, so a build could reach the real releases address"
@@ -477,7 +477,7 @@ impl Native {
         let name = install.lay_out(&self.profile(), &self.system.session)?;
         self.system.record(json!({"event":"install","root":install.root,"current":install.link("current")?,"releases":install.releases(),"interfaces":interfaces,"versions":install.release.as_ref().map(|release| &release.versions)}))?;
         self.install = Some(install);
-        if layout == Layout::Release {
+        if layout == InstallLayout::Release {
             self.install_launch(&name)?;
         }
         Ok(())
