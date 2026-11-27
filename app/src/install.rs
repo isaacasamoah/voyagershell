@@ -55,6 +55,8 @@ pub struct Switch {
 pub enum Staged {
     Next(String),
     AlreadyCurrent(String),
+    AlreadyNext(String),
+    Older { latest: String, current: String },
 }
 
 #[derive(Deserialize)]
@@ -64,7 +66,7 @@ struct StartFile {
     session: String,
 }
 
-fn digest(path: &Path) -> io::Result<String> {
+pub(crate) fn digest(path: &Path) -> io::Result<String> {
     let mut hasher = Sha256::new();
     io::copy(&mut fs::File::open(path)?, &mut hasher)?;
     Ok(format!("{:x}", hasher.finalize()))
@@ -253,6 +255,35 @@ impl Install {
             expected.push(digest(file).map_err(|error| format!("{}: {error}", file.display()))?);
         }
         let name = format!("local-{}", &expected[0][..8]);
+        self.add(
+            &name,
+            |part| {
+                for (file, expected) in files.iter().zip(&expected) {
+                    let copied = part.join(file.file_name().unwrap_or_default());
+                    copy(file, &copied)
+                        .map_err(|error| format!("{}: {error}", copied.display()))?;
+                    let found = digest(&copied)
+                        .map_err(|error| format!("{}: {error}", copied.display()))?;
+                    if &found != expected {
+                        return Err(format!(
+                            "The copy of {} does not match its source (sha256 {found}, expected {expected})",
+                            file.display()
+                        ));
+                    }
+                }
+                Ok(())
+            },
+            None,
+        )?;
+        Ok(name)
+    }
+
+    pub(crate) fn add(
+        &self,
+        name: &str,
+        fill: impl FnOnce(&Path) -> Result<(), String>,
+        version: Option<&str>,
+    ) -> Result<(), String> {
         let part = self.build(&format!("{name}{PART}"));
         let built = (|| {
             absent(
@@ -263,31 +294,40 @@ impl Install {
             )
             .map_err(|error| format!("{}: {error}", part.display()))?;
             fs::create_dir_all(&part).map_err(|error| format!("{}: {error}", part.display()))?;
-            for (file, expected) in files.iter().zip(&expected) {
-                let copied = part.join(file.file_name().unwrap_or_default());
-                copy(file, &copied).map_err(|error| format!("{}: {error}", copied.display()))?;
-                let found =
-                    digest(&copied).map_err(|error| format!("{}: {error}", copied.display()))?;
-                if &found != expected {
-                    return Err(format!(
-                        "The copy of {} does not match its source (sha256 {found}, expected {expected})",
-                        file.display()
-                    ));
-                }
+            fill(&part)?;
+            let mut expected = Vec::with_capacity(2);
+            for file in [SHELL, COMMAND] {
+                let file = part.join(file);
+                expected
+                    .push(digest(&file).map_err(|error| format!("{}: {error}", file.display()))?);
             }
-            let version = Command::new(part.join(SHELL))
+            let shell = part.join(SHELL);
+            let output = Command::new(&shell)
                 .arg("--version")
                 .stdin(Stdio::null())
                 .output()
-                .map_err(|error| format!("{} --version: {error}", part.join(SHELL).display()))?;
-            if !version.status.success() {
+                .map_err(|error| format!("{} --version: {error}", shell.display()))?;
+            if !output.status.success() {
                 return Err(format!(
                     "{} --version failed: {}",
-                    part.join(SHELL).display(),
-                    String::from_utf8_lossy(&version.stderr).trim()
+                    shell.display(),
+                    String::from_utf8_lossy(&output.stderr).trim()
                 ));
             }
-            let build = self.build(&name);
+            if let Some(version) = version {
+                let printed = String::from_utf8_lossy(&output.stdout);
+                let found = printed
+                    .lines()
+                    .next()
+                    .and_then(|line| line.strip_prefix(&format!("{SHELL} ")))
+                    .unwrap_or_default();
+                if found != version {
+                    return Err(format!(
+                        "The build says {found:?}, but the manifest says {version}"
+                    ));
+                }
+            }
+            let build = self.build(name);
             match fs::rename(&part, &build) {
                 Ok(()) => Ok(()),
                 Err(_) if self.holds(&build, &expected) => {
@@ -304,7 +344,7 @@ impl Install {
             let _ = fs::remove_dir_all(&part);
             return Err(error);
         }
-        Ok(name)
+        Ok(())
     }
 
     fn holds(&self, build: &Path, expected: &[String]) -> bool {

@@ -120,6 +120,9 @@ Run these commands with the `voyager` from the install:
   failed build's log.
 - `voyager update --from ~/voyagershell/target/release` copies a local build
   into the install, checks it and stages it for the next start.
+- `voyager update` downloads the latest release, checks its sha256 and that it
+  runs, and stages it for the next start. It stages nothing when the current
+  build is that release or a newer one.
 - `voyager rollback` stages the previous build for the next start.
 
 None of these restarts or updates Herdr Core, and none stops a program.
