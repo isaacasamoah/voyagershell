@@ -896,7 +896,10 @@ mod tests {
             (
                 Journey::SocketDock,
                 "avatar-click-parked-returns-to-dock",
-                &["socket-dock-takes-keyboard"],
+                &[
+                    "socket-dock-takes-keyboard",
+                    "avatar-click-at-home-opens-home",
+                ],
             ),
             (
                 Journey::SocketDock,

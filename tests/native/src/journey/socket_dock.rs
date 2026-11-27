@@ -43,6 +43,7 @@ cases! {
     "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
     "avatar-click-away-changes-nothing" needs "avatar-click-at-home-opens-home",
     "avatar-click-parked-returns-to-dock" needs "socket-dock-takes-keyboard",
+    "avatar-click-parked-returns-to-dock" needs "avatar-click-at-home-opens-home",
     "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
     "tool-call-round-trip" needs "socket-dock-takes-keyboard",
     "dock-with-no-chosen-behaviour-adds-no-model-work" needs "socket-dock-takes-keyboard",
