@@ -873,9 +873,10 @@ features:
           - 'journey:socket-dock/avatar-click-away-changes-nothing'
           - 'journey:socket-dock/avatar-click-while-docking-home-is-held'
           - 'journey:socket-dock/avatar-click-parked-returns-to-dock'
-          - 'journey:socket-dock/avatar-click-on-portal-changes-nothing'
+          - 'journey:portals/avatar-click-beside-hidden-portals-changes-nothing'
+          - 'journey:portals/portal-stays-in-its-voyage'
         formal: []
-        journeys: [socket-dock]
+        journeys: [portals, socket-dock]
       - id: authority-comes-from-assignment
         kind: user
         says: 'The avatar always acts with its user''s authority. Any other agent instructs another only through a recorded Assignment with a Rank, stored by the app. Fleet membership and Core parentage grant nothing.'
