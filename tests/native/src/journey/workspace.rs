@@ -53,7 +53,10 @@ cases! {
     FleetTabKeepsChatKeyboard => "fleet-tab-keeps-chat-keyboard",
     AgentPlanSurvivesClick => "agent-plan-survives-click",
     StaleAgentEditRefused => "stale-agent-edit-refused";
-    "create-fleet" needs "split-vessel",
+    "dock-vessel" needs "split-vessel",
+    "avatar-float" needs "dock-vessel",
+    "avatar-small" needs "avatar-float",
+    "create-fleet" needs "avatar-small",
     "fleet-tab-gives-keyboard" needs "create-fleet",
     "create-voyage" needs "create-fleet",
     "voyage-switch-gives-keyboard" needs "create-voyage",
