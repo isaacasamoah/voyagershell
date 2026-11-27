@@ -52,7 +52,7 @@ import {
   renderNameEditor,
   renderName,
 } from "./navigation-view.js";
-import { WorkspaceMenu } from "./menu.js";
+import { WorkspaceMenu, layoutItems } from "./menu.js";
 import { VoyageClose } from "./voyage-close.js";
 import { WorktreeControls } from "./worktrees.js";
 import {
@@ -1407,42 +1407,6 @@ export default class Canvas extends View {
     cx.notify();
   }
 
-  layoutItems(group: PanelGroup): MenuItem[] {
-    const owner = group.owner;
-    const items: MenuItem[] = [
-      {
-        label: "Save layout",
-        choose: (_version, cx) => this.saveLayout(owner, cx),
-      },
-    ];
-    for (const saved of this.layout?.arrangements || []) {
-      if (JSON.stringify(saved.owner) !== JSON.stringify(owner)) continue;
-      items.push(
-        {
-          label: `Load ${saved.name}`,
-          choose: (version, cx) =>
-            this.run(
-              { operation: "load-arrangement", owner, name: saved.name },
-              cx,
-              undefined,
-              version,
-            ),
-        },
-        {
-          label: `Remove saved ${saved.name}`,
-          choose: (version, cx) =>
-            this.run(
-              { operation: "remove-arrangement", owner, name: saved.name },
-              cx,
-              undefined,
-              version,
-            ),
-        },
-      );
-    }
-    return items;
-  }
-
   closedVoyageItems(): MenuItem[] {
     return (this.layout?.voyages || [])
       .filter((item) => item.closed && this.worktrees.available(item.cwd))
@@ -1510,7 +1474,7 @@ export default class Canvas extends View {
             group.owner.kind === "fleet" && group.owner.id === fleet.id,
         )
       : undefined;
-    return group ? [...items, ...this.layoutItems(group)] : items;
+    return group ? [...items, ...layoutItems(this, group)] : items;
   }
 
   sidebarToggle(): NativeElement {

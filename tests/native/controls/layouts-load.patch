@@ -1,0 +1,22 @@
+--- a/desktop/canvas/menu.js
++++ b/desktop/canvas/menu.js
+@@ -20,7 +20,7 @@
+         marker: { role: "load-layout", key: `${key}:${saved.name}` },
+         choose: (version, cx) =>
+           host.run(
+-            { operation: "load-arrangement", owner, name: saved.name },
++            { operation: "remove-arrangement", owner, name: saved.name },
+             cx,
+             undefined,
+             version,
+--- a/desktop/canvas/menu.ts
++++ b/desktop/canvas/menu.ts
+@@ -38,7 +38,7 @@
+         marker: { role: "load-layout", key: `${key}:${saved.name}` },
+         choose: (version, cx) =>
+           host.run(
+-            { operation: "load-arrangement", owner, name: saved.name },
++            { operation: "remove-arrangement", owner, name: saved.name },
+             cx,
+             undefined,
+             version,

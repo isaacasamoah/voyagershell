@@ -1,3 +1,4 @@
+use super::socket_dock::show_fleet;
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Program, Terminal, fleets};
@@ -7,10 +8,14 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
 use voyager_contract::inspection::{Frame, Rect, Role};
-use voyager_contract::{Axis, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split};
+use voyager_contract::{
+    Axis, Fleet, FleetId, Layout, Placement, PlacementId, PlacementOwner, RenameTarget, Split,
+    WorkspaceView,
+};
 
 cases! {
     SplitBelow => "split-below",
+    LayoutSaveLoadThenHome => "layout-save-load-then-home",
     SplitRightShortcut => "split-right-shortcut",
     ResizeDividers => "resize-dividers",
     MaximizeButton => "maximize-button",
@@ -20,11 +25,13 @@ cases! {
     RelaunchKeepsArrangement => "relaunch-keeps-arrangement",
     WindowResizeFitsGrid => "window-resize-fits-grid",
     MaximizeShortcutRestoreButton => "maximize-shortcut-restore-button",
-    SplitBelowShortcut => "split-below-shortcut",
+    SplitBelowShortcut => "split-below-shortcut";
+    "layout-save-load-then-home" needs "split-below",
 }
 
 pub const CONTROL: Case = Case::RestoreShortcut;
 
+const SAVED: &str = "Focus";
 const EVEN: u16 = 5000;
 const LOGICAL_TOLERANCE: f32 = 1.0;
 const DIVIDER_TOLERANCE: f32 = 4.0;
@@ -142,6 +149,121 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     else {
         return Ok(());
     };
+    cases.check(native, Case::LayoutSaveLoadThenHome, |native| {
+        let tab = Target::name(&RenameTarget::Fleet { id: fleet.clone() });
+        let (_, before) = at_rest(native)?;
+        let dock = native.observe("the dock before saving", |seen| {
+            Some(seen.frame.dock.clone())
+        })?;
+        let terminals = native.live_terminals()?;
+        native.context_click(&tab)?;
+        native.click(&Target::save_layout(&fleet))?;
+        native.observe(
+            "the layout name editor in place of the Fleet tab's name",
+            |seen| (!seen.shows(&tab)).then_some(()),
+        )?;
+        native.type_text(SAVED)?;
+        native.press(Key::Return)?;
+        let saved = native.observe(
+            "the layout Focus saved for the Fleet, with its tab's name drawn again",
+            |seen| {
+                seen.shows(&tab)
+                    .then(|| arrangement(seen.document, &fleet))
+                    .filter(Option::is_some)
+            },
+        )?;
+        native.hover(&Target::name(&vessel(&second)))?;
+        native.click(&Target::close_panel(&second))?;
+        let (version, closed) = native.observe(
+            "the second Vessel closed out of the tree and no longer drawn",
+            |seen| {
+                (root(seen.document, &fleet) == Some(leaf(&first))
+                    && Drawn::of(seen.frame).terminal(&second).is_none())
+                .then(|| (seen.version, seen.document.clone()))
+            },
+        )?;
+        native.context_click(&tab)?;
+        native.click(&Target::load_layout(&fleet, SAVED))?;
+        let load = Target::load_layout(&fleet, SAVED);
+        let (loaded, drawn) = native.observe(
+            "the workspace saved and drawn after Load Focus",
+            |seen| {
+                (seen.version != version && !seen.shows(&load))
+                    .then(|| (seen.document.clone(), Drawn::of(seen.frame)))
+            },
+        )?;
+        let terminals_loaded = native.live_terminals()?;
+        let same_shell = running(&two.program(native)?);
+        native.click(&Target::HOME)?;
+        let (home, home_dock) = native.observe(
+            "the Home view drawn with its first Vessel in place of the Fleet",
+            |seen| {
+                let shown = home_vessel(seen.document)
+                    .is_some_and(|placement| seen.shows(&Target::name(&vessel(&placement))));
+                (seen.document.view == WorkspaceView::Home
+                    && shown
+                    && !seen.shows(&Target::terminal(&first)))
+                .then(|| (seen.document.clone(), seen.frame.dock.clone()))
+            },
+        )?;
+        let terminals_home = native.live_terminals()?;
+        show_fleet(native)?;
+        Verdict::new()
+            .expect(
+                "the saved layout Focus holds the Fleet's tree as it was when saved",
+                root(&before, &fleet).is_some() && saved == Some(root(&before, &fleet)),
+            )
+            .expect(
+                "closing the second Vessel took it out of the Fleet's tree",
+                root(&closed, &fleet) == Some(leaf(&first)),
+            )
+            .expect(
+                "after Load Focus the Fleet's tree is the saved tree",
+                saved
+                    .as_ref()
+                    .is_some_and(|saved| &root(&loaded, &fleet) == saved),
+            )
+            .expect(
+                "after the load the second Vessel has the terminal address it had before the close, and Core lists it live",
+                backend(&before, &second).is_some_and(|address| {
+                    backend(&loaded, &second).as_ref() == Some(&address)
+                        && terminals_loaded.contains(&address)
+                }),
+            )
+            .expect(
+                "the Fleet's placements and every content record with its backend are the same",
+                placements(&loaded, &fleet) == placements(&before, &fleet)
+                    && loaded.vessels == before.vessels,
+            )
+            .expect(
+                "the second Vessel's terminal is drawn again with the same shell",
+                drawn.terminal(&second).is_some() && same_shell,
+            )
+            .expect(
+                "Core lists the same live terminals after the load",
+                terminals_loaded == terminals,
+            )
+            .expect(
+                "Home keeps the loaded tree, the avatar's context and the dock",
+                root(&home, &fleet) == root(&loaded, &fleet)
+                    && home.context == before.context
+                    && home_dock == dock,
+            )
+            .expect(
+                "Core lists the same live terminals after Home, so no program started",
+                terminals_home == terminals,
+            )
+            .observed("saved", &saved)?
+            .observed("loaded", root(&loaded, &fleet))?
+            .observed(
+                "secondAddress",
+                json!({"before":backend(&before, &second),"loaded":backend(&loaded, &second)}),
+            )?
+            .observed(
+                "terminals",
+                json!({"before":terminals,"loaded":terminals_loaded,"home":terminals_home}),
+            )
+    })?;
     let Some(shells) = cases.make(native, Case::SplitRightShortcut, |native| {
         two.focus(native)?;
         let before = grid(native, &two, "GRID-C")?;
@@ -640,6 +762,37 @@ fn fleet<'a>(layout: &'a Layout, id: &FleetId) -> Option<&'a Fleet> {
 
 fn root(layout: &Layout, id: &FleetId) -> Option<Split> {
     fleet(layout, id).and_then(|fleet| fleet.root.clone())
+}
+
+fn arrangement(layout: &Layout, id: &FleetId) -> Option<Option<Split>> {
+    let owner = PlacementOwner::Fleet { id: id.clone() };
+    layout
+        .arrangements
+        .iter()
+        .find(|saved| saved.owner == owner && saved.name == SAVED)
+        .map(|saved| saved.root.clone())
+}
+
+fn placements<'a>(layout: &'a Layout, id: &FleetId) -> Option<&'a [Placement]> {
+    fleet(layout, id).map(|fleet| fleet.placements.as_slice())
+}
+
+fn home_vessel(layout: &Layout) -> Option<PlacementId> {
+    let home = layout.home.as_ref()?.fleets.first()?;
+    home.placements.first().map(|placed| placed.id.clone())
+}
+
+fn backend(layout: &Layout, placement: &PlacementId) -> Option<String> {
+    let placed = fleets(layout)
+        .flat_map(|fleet| &fleet.placements)
+        .find(|placed| &placed.id == placement)?;
+    layout
+        .vessels
+        .iter()
+        .find(|content| content.id == placed.vessel)?
+        .backend
+        .as_ref()
+        .map(|address| address.0.clone())
 }
 
 fn maximized(layout: &Layout, id: &FleetId) -> Option<PlacementId> {

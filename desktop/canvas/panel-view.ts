@@ -19,6 +19,7 @@ import { invoke } from "./workspace.js";
 import { processIcon } from "./process-icons.js";
 import { changedBesidesRevision } from "./status.js";
 import type Canvas from "./main.js";
+import { layoutItems } from "./menu.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
 import type {
@@ -291,7 +292,7 @@ export function renderPanel(
           version,
         ),
     },
-    ...(scope.kind === "portal" ? workspace.layoutItems(group) : []),
+    ...(scope.kind === "portal" ? layoutItems(workspace, group) : []),
   ];
   return workspace.target(
     `${scope.kind}-${placement.id}`,

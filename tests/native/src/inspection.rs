@@ -138,6 +138,14 @@ impl Target {
         Self::keyed(Role::ReopenVoyage, &voyage.0)
     }
 
+    pub fn save_layout(fleet: &FleetId) -> Self {
+        Self::keyed(Role::SaveLayout, &fleet.0)
+    }
+
+    pub fn load_layout(fleet: &FleetId, name: &str) -> Self {
+        Self::keyed(Role::LoadLayout, &format!("{}:{name}", fleet.0))
+    }
+
     pub fn voyage_close_cancel(voyage: &VoyageId) -> Self {
         Self::keyed(Role::VoyageCloseCancel, &voyage.0)
     }

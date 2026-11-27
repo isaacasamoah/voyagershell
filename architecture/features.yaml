@@ -218,6 +218,14 @@ features:
           - 'journey:arrangement/relaunch-keeps-arrangement'
         formal: []
         journeys: [arrangement, portals, workspace]
+      - id: loading-a-layout-keeps-programs
+        kind: user
+        says: 'Save layout in a Fleet''s layout menu keeps that Fleet''s current split tree under the name given. Loading it puts that tree back over the same Vessels and keeps every program running, with no backend replaced, started or stopped. Loading a saved tree that names a missing or repeated placement, or missing content, is refused and changes nothing. Going Home afterwards starts no program and leaves the loaded tree as it is.'
+        owner: placement
+        guards: []
+        checks: ['journey:arrangement/layout-save-load-then-home']
+        formal: []
+        journeys: [arrangement]
       - id: drag-never-moves-window
         kind: user
         says: 'A drag that starts on a Fleet tab, a Vessel, a Voyage row or a terminal selection never moves the window, wherever it is released. Only a drag that starts on the empty top bar or the sidebar moves it.'
@@ -1194,13 +1202,21 @@ features:
     summary: 'Pick a layout and return to the Home view.'
     group: workspace-layout
     owner: desktop-presentation
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    proof: native
+    state: {behavior: covered, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
     checks: []
-    native_journeys: []
+    native_journeys: [arrangement]
     python_journeys: [layouts, workspace-ux]
     invariants:
+      - id: loading-a-layout-keeps-programs
+        kind: user
+        says: 'Save layout in a Fleet''s layout menu keeps that Fleet''s current split tree under the name given. Loading it puts that tree back over the same Vessels and keeps every program running, with no backend replaced, started or stopped. Loading a saved tree that names a missing or repeated placement, or missing content, is refused and changes nothing. Going Home afterwards starts no program and leaves the loaded tree as it is.'
+        owner: placement
+        guards: []
+        checks: ['journey:arrangement/layout-save-load-then-home']
+        formal: []
+        journeys: [arrangement]
       - id: status-is-reported-or-unknown
         kind: user
         says: 'A Program''s status is Core''s latest report or unknown. Silence, or a turn that ended while the agent''s work continues, is never shown as idle or finished.'

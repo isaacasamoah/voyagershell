@@ -78,6 +78,8 @@ roles! {
     CloseVoyage => "close-voyage",
     RecentVoyages => "recent-voyages",
     ReopenVoyage => "reopen-voyage",
+    SaveLayout => "save-layout",
+    LoadLayout => "load-layout",
     VoyageCloseEntry => "voyage-close-entry",
     VoyageCloseCancel => "voyage-close-cancel",
     VoyageCloseConfirm => "voyage-close-confirm",

@@ -32,11 +32,13 @@ module.exports = function workspaceSource(
           "agents.js",
           "panel-view.js",
           "navigation-view.js",
+          "menu.js",
         ]
           .map((name) =>
             fs
               .readFileSync(`${__dirname}/canvas/${name}`, "utf8")
               .replace(/^import [\s\S]*?;\n/gm, "")
+              .replace(/^export \{[^}]+\} from [^;]+;\n/gm, "")
               .replace(/^export /gm, ""),
           )
           .join("\n")

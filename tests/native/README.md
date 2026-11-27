@@ -1736,7 +1736,11 @@ program of the closed Voyage stopped`, with one of its shells observed live. The
 `arrangement` patch stops the split tracker from applying a saved share, so a
 restore from maximize puts every divider back in the middle.
 `restore-shortcut` then fails on the expectation `all three terminals are
-drawn where they were before maximize`. The
+drawn where they were before maximize`. The arrangement journey's second
+patch, `layouts-load`, makes the Fleet tab's Load entry remove the saved
+layout instead of loading it. `layout-save-load-then-home` then fails on the
+expectation `after Load Focus the Fleet's tree is the saved tree`, because the
+closed Vessel stays out of the tree. The
 `portals` patch hides the Portal column whenever a Fleet is selected.
 `portal-across-fleets` then fails on the expectation `the Portal column stays
 shown on every Fleet`. The `chat`
