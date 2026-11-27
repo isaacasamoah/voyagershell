@@ -29,9 +29,9 @@ Follow the exact doctor and run commands in ../SKILL.md with
 `--journey arrangement`. The Rust journey in
 tests/native/src/journey/arrangement.rs owns the recipe. The split tree
 belongs to app/src/panels.rs, the divider and its share tracker to
-desktop/src/split.rs, the title buttons, shortcuts, drag preview and layout
-menu to desktop/canvas/main.ts and panel-view.ts, and Home to
-navigation-view.ts.
+desktop/src/split.rs, the title buttons, shortcuts and drag preview to
+desktop/canvas/main.ts and panel-view.ts, the layout menu to menu.ts, and
+Home to navigation-view.ts.
 
 V1 is the first Vessel, and the journey makes V2, V3 and V4.
 
