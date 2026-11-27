@@ -1686,34 +1686,61 @@ fn views_leave_avatar_put(
     let mut contexts = Vec::new();
     native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
     contexts.push(native.settle(
-        "the second Fleet shown",
+        "the second Fleet selected and drawn",
         |seen| {
-            (seen.document.selected_fleet.as_ref() == Some(fleet))
-                .then(|| seen.document.context.clone())
+            let drawn = seen.document.selected_fleet.as_ref() == Some(fleet)
+                && shown(seen, self::fleet(seen.document, fleet)?);
+            drawn.then(|| seen.document.context.clone())
         },
         |_| true,
     )?);
     native.click(&Target::HOME)?;
     contexts.push(native.settle(
-        "the Home view shown",
-        |seen| (seen.document.view == WorkspaceView::Home).then(|| seen.document.context.clone()),
+        "the Home view selected and drawn",
+        |seen| {
+            let home = seen.document.home.as_ref()?.fleets.first()?;
+            let drawn = seen.document.view == WorkspaceView::Home && shown(seen, home);
+            drawn.then(|| seen.document.context.clone())
+        },
         |_| true,
     )?);
     native.click(&Target::name(&RenameTarget::Voyage { id: voyage.clone() }))?;
     contexts.push(native.settle(
-        "the second Voyage shown",
+        "the second Voyage selected and drawn",
         |seen| {
-            (seen.document.selected_voyage.as_ref() == Some(voyage))
-                .then(|| seen.document.context.clone())
+            let selected = seen.document.selected_fleet.as_ref()?;
+            let drawn = seen.document.selected_voyage.as_ref() == Some(voyage)
+                && shown(seen, self::fleet(seen.document, selected)?);
+            drawn.then(|| seen.document.context.clone())
         },
         |_| true,
     )?);
     native.click(&Target::name(&RenameTarget::Voyage {
         id: start.voyage.clone(),
     }))?;
+    native.settle(
+        "the first Voyage selected and drawn",
+        |seen| {
+            let selected = seen.document.selected_fleet.as_ref()?;
+            (seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+                && shown(seen, self::fleet(seen.document, selected)?))
+            .then_some(())
+        },
+        |_| true,
+    )?;
     native.click(&Target::name(&RenameTarget::Fleet {
         id: start.fleet.clone(),
     }))?;
+    native.settle(
+        "the first Voyage and its first Fleet shown again",
+        |seen| {
+            let shown_again = seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+                && seen.document.selected_fleet.as_ref() == Some(&start.fleet)
+                && shown(seen, self::fleet(seen.document, &start.fleet)?);
+            shown_again.then_some(())
+        },
+        |_| true,
+    )?;
     let (back, after) = avatar_still(native)?;
     Verdict::new()
         .expect(
