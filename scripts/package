@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+executables=(voyager-shell voyager)
+notices=(
+  desktop/canvas/icons-LICENSE.txt
+  desktop/canvas/icons-NOTICE.txt
+  app/models/LICENSE-silero-vad
+)
+
+bin=${1:-target/release}
+out=${2:-dist}
+archive=$out/voyagershell-linux-x86_64.tar.gz
+
+for file in "${executables[@]}"; do
+  [ -x "$bin/$file" ] || { echo "package: $bin/$file is missing or not executable" >&2; exit 1; }
+done
+for file in LICENSE "${notices[@]}"; do
+  [ -s "$file" ] || { echo "package: $file is missing or empty" >&2; exit 1; }
+done
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+dir=$work/voyagershell
+mkdir -p "$dir/notices" "$out"
+for file in "${executables[@]}"; do
+  cp "$bin/$file" "$dir/$file"
+done
+cp LICENSE "$dir/LICENSE"
+for file in "${notices[@]}"; do
+  cp "$file" "$dir/notices/$(basename "$file")"
+done
+tar --sort=name --owner=0 --group=0 --numeric-owner -czf "$archive" -C "$work" voyagershell
+
+tar -xOf "$archive" voyagershell/LICENSE | cmp - LICENSE
+for file in "${notices[@]}"; do
+  tar -xOf "$archive" "voyagershell/notices/$(basename "$file")" | cmp - "$file"
+done
+for file in "${executables[@]}"; do
+  tar -xOf "$archive" "voyagershell/$file" | cmp - "$bin/$file"
+done
+echo "package: $archive ($(sha256sum "$archive" | cut -d' ' -f1))"

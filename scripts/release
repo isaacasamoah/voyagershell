@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+crates=(app/Cargo.toml contract/Cargo.toml desktop/Cargo.toml)
+
+die() {
+  echo "release: $*" >&2
+  exit 1
+}
+
+usage() {
+  die "usage: scripts/release prepare VERSION | publish VERSION"
+}
+
+crate_version() {
+  sed -n 's/^version = "\(.*\)"/\1/p' "$1" | head -1
+}
+
+check_version() {
+  node scripts/release-data.cjs entry "$1" >/dev/null
+}
+
+require_clean() {
+  [ -z "$(git status --porcelain)" ] || die "the working tree must be clean"
+}
+
+require_tag_absent() {
+  if git rev-parse -q --verify "refs/tags/v$1" >/dev/null; then
+    die "v$1 already exists"
+  fi
+}
+
+require_origin_main() {
+  git fetch --quiet origin main --tags
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] ||
+    die "this checkout is not at origin/main"
+}
+
+prepare() {
+  local version=$1
+  check_version "$version"
+  require_clean
+  require_origin_main
+  require_tag_absent "$version"
+  local differs=0
+  for crate in "${crates[@]}"; do
+    [ "$(crate_version "$crate")" = "$version" ] || differs=1
+  done
+  if [ "$differs" = 0 ]; then
+    echo "release: the crates already read $version, so there is nothing to prepare."
+    echo "release: merge its CHANGELOG.md entry to main, then run: scripts/release publish $version"
+    return 0
+  fi
+  git switch -c "release/$version"
+  for crate in "${crates[@]}"; do
+    sed -i '0,/^version = ".*"/s//version = "'"$version"'"/' "$crate"
+  done
+  cargo update --workspace --offline
+  npm run contract:generate
+  npm run scripts:generate
+  git add -A
+  git commit --quiet -m "Release $version"
+  npm run ci:local
+  local last
+  last=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || true)
+  if [ -n "$last" ]; then
+    echo "Since $last:"
+    git log --oneline "$last"..origin/main
+  else
+    echo "No earlier release tag. Everything on main is new:"
+    git log --oneline origin/main
+  fi
+  git push --quiet -u origin "release/$version"
+  gh pr create --base main --head "release/$version" \
+    --title "Release $version" \
+    --body "Sets the crate versions to $version and refreshes the generated files. The CHANGELOG.md entry for $version is on main. After this merges, run: scripts/release publish $version"
+}
+
+publish() {
+  local version=$1
+  check_version "$version"
+  require_clean
+  require_origin_main
+  for crate in "${crates[@]}"; do
+    [ "$(crate_version "$crate")" = "$version" ] ||
+      die "$crate says $(crate_version "$crate"), not $version; run scripts/release prepare $version"
+  done
+  require_tag_absent "$version"
+  local sha run=""
+  sha=$(git rev-parse HEAD)
+  for _ in $(seq 60); do
+    run=$(gh run list --workflow checks --event push --commit "$sha" --json databaseId -q '.[0].databaseId')
+    [ -n "$run" ] && break
+    sleep "${RELEASE_POLL_SECONDS:-5}"
+  done
+  [ -n "$run" ] || die "no checks run for $sha; nothing published"
+  gh run watch "$run" --exit-status --interval 30 ||
+    die "checks failed on $sha; nothing published"
+  git tag "v$version"
+  git push origin "v$version"
+  echo "v$version is tagged. The release workflow builds it and waits for your approval of the release environment."
+}
+
+[ $# -eq 2 ] || usage
+case "$1" in
+  prepare) prepare "$2" ;;
+  publish) publish "$2" ;;
+  *) usage ;;
+esac
