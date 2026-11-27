@@ -62,8 +62,8 @@ cases! {
     "create-voyage" needs "switch-fleet",
     "switch-voyage" needs "create-voyage",
     "voyage-switch-gives-keyboard" needs "switch-voyage",
-    "fleet-without-input-takes-no-keyboard" needs "create-voyage",
-    "fleet-tab-keeps-chat-keyboard" needs "create-voyage",
+    "fleet-without-input-takes-no-keyboard" needs "switch-voyage",
+    "fleet-tab-keeps-chat-keyboard" needs "switch-voyage",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;

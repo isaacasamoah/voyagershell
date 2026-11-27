@@ -949,6 +949,7 @@ mod tests {
                     "create-fleet",
                     "switch-fleet",
                     "create-voyage",
+                    "switch-voyage",
                 ],
             ),
             (
@@ -962,6 +963,7 @@ mod tests {
                     "create-fleet",
                     "switch-fleet",
                     "create-voyage",
+                    "switch-voyage",
                 ],
             ),
             (
