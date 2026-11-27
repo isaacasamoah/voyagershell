@@ -7,7 +7,7 @@ use voyager_contract::{Action, Context as Scope};
 pub(super) enum Click {
     Restore,
     Home,
-    Return(Action),
+    Return(Box<Action>),
 }
 
 impl Click {
@@ -17,13 +17,19 @@ impl Click {
             (false, _, Scope::Workspace) => Some(Self::Home),
             (false, _, Scope::Portal { .. }) | (false, false, _) => None,
             (false, true, Scope::Voyage { id }) => {
-                Some(Self::Return(Action::SelectVoyage { id: id.clone() }))
+                Some(Self::Return(Box::new(Action::SelectVoyage {
+                    id: id.clone(),
+                })))
             }
             (false, true, Scope::Fleet { id }) => {
-                Some(Self::Return(Action::SelectFleet { id: id.clone() }))
+                Some(Self::Return(Box::new(Action::SelectFleet {
+                    id: id.clone(),
+                })))
             }
             (false, true, Scope::Vessel { id }) => {
-                Some(Self::Return(Action::RevealPlacement { id: id.clone() }))
+                Some(Self::Return(Box::new(Action::RevealPlacement {
+                    id: id.clone(),
+                })))
             }
         }
     }
@@ -64,7 +70,7 @@ impl Avatar {
         ) {
             Some(Click::Restore) => self.restore_workspace(cx),
             Some(Click::Home) => self.submit(Action::Home, cx),
-            Some(Click::Return(action)) => self.submit(action, cx),
+            Some(Click::Return(action)) => self.submit(*action, cx),
             None => {}
         }
     }
@@ -93,9 +99,11 @@ mod tests {
         ];
         let parked = [
             Some(Click::Home),
-            Some(Click::Return(Action::SelectVoyage { id: voyage })),
-            Some(Click::Return(Action::SelectFleet { id: fleet })),
-            Some(Click::Return(Action::RevealPlacement { id: placement })),
+            Some(Click::Return(Box::new(Action::SelectVoyage { id: voyage }))),
+            Some(Click::Return(Box::new(Action::SelectFleet { id: fleet }))),
+            Some(Click::Return(Box::new(Action::RevealPlacement {
+                id: placement,
+            }))),
             None,
         ];
         for (scope, parked) in scopes.iter().zip(parked) {

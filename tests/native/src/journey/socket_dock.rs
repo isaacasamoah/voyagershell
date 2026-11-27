@@ -875,7 +875,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("awayWidth", away_width)?
             .observed(
                 "back",
-                &back.as_ref().map(|(_, _, shown, width)| (*shown, *width)),
+                back.as_ref().map(|(_, _, shown, width)| (*shown, *width)),
             )?
             .observed("requests", &sent)
     })?;

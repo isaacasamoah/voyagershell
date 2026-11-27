@@ -4,7 +4,7 @@ diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
 @@ -8,6 +8,7 @@
      Restore,
      Home,
-     Return(Action),
+     Return(Box<Action>),
 +    Minimize,
  }
  
@@ -16,12 +16,12 @@ diff --git a/desktop/src/avatar/click.rs b/desktop/src/avatar/click.rs
 -            (false, _, Scope::Portal { .. }) | (false, false, _) => None,
 +            (false, _, Scope::Portal { .. }) | (false, false, _) => Some(Self::Minimize),
              (false, true, Scope::Voyage { id }) => {
-                 Some(Self::Return(Action::SelectVoyage { id: id.clone() }))
-             }
-@@ -65,6 +66,9 @@
+                 Some(Self::Return(Box::new(Action::SelectVoyage {
+                     id: id.clone(),
+@@ -71,6 +72,9 @@
              Some(Click::Restore) => self.restore_workspace(cx),
              Some(Click::Home) => self.submit(Action::Home, cx),
-             Some(Click::Return(action)) => self.submit(action, cx),
+             Some(Click::Return(action)) => self.submit(*action, cx),
 +            Some(Click::Minimize) => {
 +                self.float(window, cx);
 +            }
