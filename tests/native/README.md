@@ -128,7 +128,7 @@ as `journeys: a,b,c`. The list is the core set in `AFTER_MERGE_CORE` in
 `src/features.rs` (quit-restore, workspace, portals, voyage-close, arrangement,
 canvas-stack and agent-split, chosen by the declared invariants they cover per
 second of run time), every journey of each feature whose sources the range
-touches, and every journey that has a case line below, in the order `journeys`
+touches, and every journey whose file the range changes, in the order `journeys`
 lists them. The battery takes the list through
 `--journeys`. After it comes one `case: journey/case` line for each case that is
 new at HEAD, or whose `needs` lines differ from BASE's, in a journey file the

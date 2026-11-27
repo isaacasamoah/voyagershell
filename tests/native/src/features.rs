@@ -292,12 +292,12 @@ pub fn after_merge(root: &Path, registry: &Registry, range: &str) -> Result<Afte
     }
     let journeys = Journey::ALL
         .iter()
-        .map(|journey| journey.name())
-        .filter(|name| {
-            AFTER_MERGE_CORE.contains(name)
-                || touched.contains(name)
-                || cases.iter().any(|(journey, _)| journey == name)
+        .filter(|journey| {
+            AFTER_MERGE_CORE.contains(&journey.name())
+                || touched.contains(journey.name())
+                || changed.iter().any(|file| file == journey.source())
         })
+        .map(|journey| journey.name())
         .collect();
     Ok(AfterMerge { journeys, cases })
 }
@@ -690,6 +690,27 @@ debug = "none"
             "{}",
             selected.lines()
         );
+    }
+
+    #[test]
+    fn a_range_changing_only_an_assertion_puts_the_journey_on_the_journeys_line_with_no_case_line()
+    {
+        let repo = Repo::new();
+        let base = repo.commit(&[(
+            SCROLLING,
+            &format!("{TWO_CASES}fn check() {{ assert!(true); }}\n"),
+        )]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            &format!("{TWO_CASES}fn check() {{ assert!(!false); }}\n"),
+        )]);
+        let selected = repo.after_merge(&base, &head);
+        assert!(
+            selected.journeys.contains(&"terminal-scrolling"),
+            "{}",
+            selected.lines()
+        );
+        assert!(selected.cases.is_empty(), "{}", selected.lines());
     }
 
     #[test]
