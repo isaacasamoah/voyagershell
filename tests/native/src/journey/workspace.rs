@@ -76,6 +76,7 @@ pub const CONTROL: Case = Case::RenameFleetEnter;
 
 const DOCKED_DIAMETER: f32 = 94.;
 const COMPACT_DIAMETER: f32 = 38.;
+const PARKED_TOLERANCE: f32 = 1.;
 const SHARP_TOLERANCE: f64 = 3.5;
 
 const FLEET_NAME: &str = "Native Fleet";
@@ -131,6 +132,26 @@ struct Landing {
     dock: Context,
     avatar: Option<Rect>,
     on_dock: bool,
+}
+
+#[derive(PartialEq, Serialize)]
+struct Parked {
+    avatar: Option<Rect>,
+    row: Option<Rect>,
+}
+
+impl Parked {
+    fn in_row(&self) -> bool {
+        let (Some(avatar), Some(row)) = (self.avatar, self.row) else {
+            return false;
+        };
+        let x = avatar.x + avatar.width / 2.;
+        let y = avatar.y + avatar.height / 2.;
+        (avatar.width - COMPACT_DIAMETER).abs() <= PARKED_TOLERANCE
+            && (avatar.height - COMPACT_DIAMETER).abs() <= PARKED_TOLERANCE
+            && (row.x..=row.x + row.width).contains(&x)
+            && (row.y..=row.y + row.height).contains(&y)
+    }
 }
 
 impl Landing {
@@ -1694,6 +1715,16 @@ fn views_leave_avatar_put(
         },
         |_| true,
     )?);
+    let parked = native.settle(
+        "the avatar and the status row holding still on the second Fleet",
+        |seen| {
+            Some(Parked {
+                avatar: avatar_bounds(seen),
+                row: Target::STATUS_ROW.find(seen.frame).map(|row| row.bounds),
+            })
+        },
+        |_| true,
+    )?;
     native.click(&Target::HOME)?;
     contexts.push(native.settle(
         "the Home view selected and drawn",
@@ -1748,6 +1779,10 @@ fn views_leave_avatar_put(
             contexts.iter().all(|context| context == docked),
         )
         .expect(
+            "while the second Fleet is shown, the avatar is drawn at the parked size with its centre inside the status row",
+            parked.in_row(),
+        )
+        .expect(
             "back on its Fleet, the avatar is drawn at the same bounds and pixels as before",
             put.stayed(docked)
                 && back.stayed(docked)
@@ -1756,6 +1791,7 @@ fn views_leave_avatar_put(
                 && after == look,
         )
         .observed("contexts", &contexts)?
+        .observed("parked", &parked)?
         .observed("put", &put)?
         .observed("back", &back)
 }

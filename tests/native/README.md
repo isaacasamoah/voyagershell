@@ -1778,6 +1778,13 @@ Home Voyage instead of only opening Home. `workspace/views-leave-avatar-put`
 then fails on the expectation `switching Fleet, opening Home and switching
 Voyage left the dock on the Vessel`. It is the control for that case only.
 
+The `views-leave-avatar-put-parked` patch draws the parked avatar at the top
+left of the workspace instead of in the status row, at the same 38 px size. `workspace/views-leave-avatar-put` then fails on
+the expectation `while the second Fleet is shown, the avatar is drawn at the
+parked size with its centre inside the status row`. It is the control for that
+expectation only. The case finds the row through `Target::STATUS_ROW`, the
+`status-row` role in [docs/inspection.md](../../docs/inspection.md).
+
 The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.

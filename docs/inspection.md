@@ -171,6 +171,7 @@ union all come from that list.
 | `chat-error` | Empty | The chat's error line. Its `label` is the error text | `Chat.render` |
 | `voice-control` | Empty | The avatar's voice button. Its `label` says what it does now, such as `Loading voice…`, `Start voice`, `Connecting…`, `Listening` or `Can't hear the microphone` | `Speech.render` |
 | `workspace-status` | Empty | The workspace status line, drawn only while it has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `statusLine` in `status.ts` |
+| `status-row` | Empty | The row at the foot of the workspace that shows the branch and the context path. While the avatar's dock is off screen, the avatar is drawn parked at its left | `renderContext` in `navigation-view.ts` |
 | `workspace-refresh` | Empty | The Refresh button beside the workspace status line | `statusLine` in `status.ts` |
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |

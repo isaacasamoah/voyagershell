@@ -716,6 +716,7 @@ mod tests {
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
                 "tests/native/controls/rests-where-put.patch".to_owned(),
                 "tests/native/controls/views-leave-avatar-put.patch".to_owned(),
+                "tests/native/controls/views-leave-avatar-put-parked.patch".to_owned(),
                 "tests/native/controls/core-events-unreported-idle.patch".to_owned(),
                 "tests/native/controls/core-events-reported-decays.patch".to_owned(),
                 "tests/native/controls/tool-call-round-trip.patch".to_owned(),

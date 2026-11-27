@@ -1,0 +1,13 @@
+diff --git a/desktop/src/avatar/view.rs b/desktop/src/avatar/view.rs
+index 987cf4dc..01a1aadf 100644
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -365,7 +365,7 @@ impl AvatarView {
+             return None;
+         }
+         if fallback {
+-            return Some((b.origin + point(px(5.), px(2.)), 38.));
++            return Some((point(px(5.), px(2.)), 38.));
+         }
+         match avatar.scope {
+             Scope::Workspace => Some(workspace_landing(b)),

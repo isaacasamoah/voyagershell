@@ -55,7 +55,7 @@ the next case needs.
 | `create-voyage` | Type `cd /voyager/home/second-project` into the new Vessel's terminal, wait until Core reports that folder for its shell, click `create-voyage` | Exactly one Voyage is new, it is open in `/voyager/home/second-project` and named `second-project`, it holds one Fleet with one Vessel, it is selected, it is drawn with its Fleet tab and its Vessel, its row shows `second-project`, its Fleet's tab shows that Fleet's saved name, and the dock is unchanged, with the avatar drawn as in `switch-fleet` |
 | `switch-voyage` | Click the first Voyage's name, the new Voyage's name, then the first again | Each click selects that Voyage, the dock is unchanged with the avatar drawn as in `switch-fleet`, and the first Voyage shows the Fleet last used in it again |
 | `voyage-switch-gives-keyboard` | Click the new Voyage's name and type `echo VOYAGE-$((6*7))` and Return with no click in a Vessel, then click the first Voyage's name and type `echo RETURN-$((6*7))` the same way | The new Voyage opens on a Fleet with no remembered Vessel, and its only Vessel's shell prints `VOYAGE-42`. The first Voyage opens on its first Fleet, whose remembered second Vessel prints `RETURN-42`. No other shell prints either line, and the dock is the same before and after each click |
-| `views-leave-avatar-put` | With the avatar docked on the first Vessel, click the second Fleet, Home, the second Voyage, then the first Voyage and its first Fleet | Each view leaves the dock on the Vessel, and back on its Fleet the avatar is drawn at the same bounds and pixels as before |
+| `views-leave-avatar-put` | With the avatar docked on the first Vessel, click the second Fleet, Home, the second Voyage, then the first Voyage and its first Fleet | Each view leaves the dock on the Vessel. While the second Fleet is shown, the avatar is drawn at the parked 38 px size with its centre inside the `status-row` bounds. Back on its Fleet the avatar is drawn at the same bounds and pixels as before |
 | `reopen-voyage-restores-fleet` | Click the new Fleet's name, the new Voyage's name, then the first Voyage's name | The first Voyage opens on the new Fleet, which was last used in it, not on its first Fleet. The new Fleet's Vessel, the one last focused there, is drawn as `focused-vessel`. The dock is unchanged. After the case the journey clicks the first Fleet's name so that the next case starts where it expects |
 | `rename-fleet-enter` | Double-click the Fleet's name, type, press Return | The editor holds the typed text before Return, the saved name is the typed text, and the drawn name is the saved name |
 | `rename-voyage-blur` | Double-click the Voyage's name, type, click the first terminal | The same three, with the click as the finishing input |
@@ -205,6 +205,12 @@ the avatar on the Home Voyage instead of only opening Home. `switch-fleet` and
 this patch moves it on the one view change only this case makes. The case then
 fails on the expectation `switching Fleet, opening Home and switching Voyage
 left the dock on the Vessel`.
+
+tests/native/controls/views-leave-avatar-put-parked.patch draws the parked
+avatar at the top left of the workspace instead of in the status row, at the
+same 38 px size. The case then fails on the
+expectation `while the second Fleet is shown, the avatar is drawn at the parked
+size with its centre inside the status row`.
 
 ## Gaps
 
