@@ -23,6 +23,10 @@ cases! {
     ClosePortal => "close-portal",
     ReopenPortal => "reopen-portal",
     RelaunchRestoresPortal => "relaunch-restores-portal";
+    "dock-portal" needs "open-portal",
+    "portal-across-fleets" needs "dock-portal",
+    "portal-stays-in-its-voyage" needs "portal-across-fleets",
+    "hide-portals" needs "portal-across-fleets",
     "avatar-click-beside-hidden-portals-changes-nothing" needs "hide-portals",
     "show-portals" needs "hide-portals",
     "close-portal" needs "show-portals",
