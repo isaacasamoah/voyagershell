@@ -1194,11 +1194,11 @@ features:
     summary: 'Pick a layout and return to the Home view.'
     group: workspace-layout
     owner: desktop-presentation
-    proof: python-only
-    state: {behavior: python-only, performance: none, visual: python-only, debug: python-only}
+    proof: native
+    state: {behavior: covered, performance: none, visual: python-only, debug: python-only}
     platforms: [linux]
     checks: []
-    native_journeys: []
+    native_journeys: [arrangement]
     python_journeys: [layouts, workspace-ux]
     invariants:
       - id: status-is-reported-or-unknown
