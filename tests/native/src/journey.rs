@@ -978,7 +978,7 @@ mod tests {
             (
                 Journey::ReleaseUpdate,
                 "source-build-stages-nothing",
-                &["restart-runs-the-newer-build"],
+                &["offers-restart", "restart-runs-the-newer-build"],
             ),
             (
                 Journey::SocketDock,

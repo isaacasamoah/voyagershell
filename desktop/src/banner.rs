@@ -55,6 +55,8 @@ pub(crate) struct Offer {
     pub(crate) notes: String,
 }
 
+type Hider = Rc<dyn Fn(&Hide, &mut Window, &mut App)>;
+
 #[derive(Clone, Copy)]
 pub(crate) enum Hide {
     Updates,
@@ -179,7 +181,7 @@ fn restart_text(offer: &Offer) -> String {
     text
 }
 
-fn restart(offer: &Offer, hide: Rc<dyn Fn(&Hide, &mut Window, &mut App)>) -> AnyElement {
+fn restart(offer: &Offer, hide: Hider) -> AnyElement {
     let button = |id: &'static str, role: Role, label: &'static str| {
         div()
             .id(id)
