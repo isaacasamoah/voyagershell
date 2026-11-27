@@ -889,6 +889,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .clone()
             .context("The layout has no selected Voyage")?;
         let known = portals_of(&layout, &voyage);
+        let on_voyage = from_voyager(
+            native,
+            &voyager,
+            "socket-portal-voyage",
+            Action::Dock {
+                context: Context::Voyage { id: voyage.clone() },
+            },
+        )?;
+        native.settle(
+            "the avatar docked on the Voyage",
+            |seen| (seen.document.context == Context::Voyage { id: voyage.clone() }).then_some(()),
+            |_| true,
+        )?;
         let created = from_voyager(
             native,
             &voyager,
@@ -957,8 +970,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native.keep_window("avatar-click-on-portal-changes-nothing")?;
         Verdict::new()
             .expect(
-                "voyager do workspace applied the Portal's create-vessel and the dock on it",
-                created["reply"]["status"] == "applied" && dock["reply"]["status"] == "applied",
+                "voyager do workspace applied the dock on the Voyage, the Portal's create-vessel and the dock on it",
+                on_voyage["reply"]["status"] == "applied"
+                    && created["reply"]["status"] == "applied"
+                    && dock["reply"]["status"] == "applied",
             )
             .expect("the avatar docked on the new Portal", docked)
             .expect(
