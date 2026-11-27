@@ -132,7 +132,12 @@ function focusDocked(workspace, cx) {
   const terminal = target && workspace.terminals.get(target.vessel);
   if (terminal && !terminal.focused()) terminal.focus();
 }
-export function focusSwitched(workspace, cx) {
+const SWITCHES = ["select-fleet", "select-voyage"];
+function switched(action, result) {
+  return SWITCHES.includes(action.operation) && result.status === "applied";
+}
+export function focusSwitched(workspace, action, result, cx) {
+  if (!switched(action, result)) return;
   moveFocus(workspace, "keyboard", cx);
   const target = shownPanels(workspace.layout).find(
     (panel) => panel.id === focusedPlacement(workspace),
@@ -152,7 +157,8 @@ const focusedPlacements = new WeakMap();
 export function focusedPlacement(workspace) {
   return focusedPlacements.get(workspace) ?? null;
 }
-export function refocus(workspace, cx) {
+export function refocus(workspace, cx, action, result) {
+  if (action && result && switched(action, result)) return;
   const target = workspace.focused;
   cx.spawn(async () => {
     await Promise.resolve();

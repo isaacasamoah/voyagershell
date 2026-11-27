@@ -32,6 +32,7 @@ import type { Action } from "../../contract/generated/request";
 import type {
   Context,
   Placement,
+  Reply,
   Response,
 } from "../../contract/generated/response";
 
@@ -174,7 +175,19 @@ function focusDocked(workspace: Canvas, cx: AsyncContext) {
   if (terminal && !terminal.focused()) terminal.focus();
 }
 
-export function focusSwitched(workspace: Canvas, cx: AsyncContext) {
+const SWITCHES: Action["operation"][] = ["select-fleet", "select-voyage"];
+
+function switched(action: Action, result: Reply) {
+  return SWITCHES.includes(action.operation) && result.status === "applied";
+}
+
+export function focusSwitched(
+  workspace: Canvas,
+  action: Action,
+  result: Reply,
+  cx: AsyncContext,
+) {
+  if (!switched(action, result)) return;
   moveFocus(workspace, "keyboard", cx);
   const target = shownPanels(workspace.layout).find(
     (panel) => panel.id === focusedPlacement(workspace),
@@ -197,7 +210,13 @@ export function focusedPlacement(workspace: Canvas): string | null {
   return focusedPlacements.get(workspace) ?? null;
 }
 
-export function refocus(workspace: Canvas, cx: UIContext | AsyncContext) {
+export function refocus(
+  workspace: Canvas,
+  cx: UIContext | AsyncContext,
+  action?: Action,
+  result?: Reply,
+) {
+  if (action && result && switched(action, result)) return;
   const target = workspace.focused;
   cx.spawn(async () => {
     await Promise.resolve();

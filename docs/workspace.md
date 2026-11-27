@@ -1545,9 +1545,9 @@ terminal. When the Fleet has no Vessel with a terminal,
 it moves the keyboard to the canvas, as `refocus` does when the focused
 placement leaves the view, so no hidden terminal keeps it. The tab click first
 gives the keyboard to the tab, so the move does not depend on where the
-keyboard was before. The switch's reply skips the `refocus` that
-`acceptSnapshot` runs, so that move to the canvas cannot land after the move
-to the terminal. The switch sends no `dock` and no `focus-vessel`, so the dock
+keyboard was before. `acceptSnapshot` passes the request to `refocus`, which
+does nothing for an applied switch, so its deferred move to the canvas cannot
+land after the move to the terminal. The switch sends no `dock` and no `focus-vessel`, so the dock
 and the remembered Vessel stay as they were. `rememberedPlacement` in
 `desktop/canvas/panels.ts` is the one reader of the remembered placement for
 the opening and the keyboard placements. This follows `Tab::focused_pane` and

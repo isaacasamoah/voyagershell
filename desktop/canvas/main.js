@@ -34,11 +34,11 @@ import {
 import { CreationPicker } from "./creation.js";
 import {
   acceptDockResult,
+  focusSwitched,
   followDockNotice,
   inspectNotice,
   noticeArrived,
   focusedPlacement,
-  focusSwitched,
   moveFocus,
   refocus,
   renderPanel,
@@ -450,9 +450,6 @@ export default class Canvas extends View {
     }
     const retryRefusals = !this.automaticRefresh;
     if (action.operation === "inspect") this.refreshRequested = false;
-    const switches = ["select-fleet", "select-voyage"].includes(
-      action.operation,
-    );
     const changesSelection = [
       "create-voyage-from-source",
       "create-fleet-with-vessel",
@@ -498,8 +495,7 @@ export default class Canvas extends View {
       let prepared = false;
       try {
         result = await invoke(action, expectedVersion);
-        const switched = switches && result.status === "applied";
-        accepted = this.acceptSnapshot(result, task, switched);
+        accepted = this.acceptSnapshot(result, task, action);
         if (
           accepted &&
           action.operation === "dock" &&
@@ -556,7 +552,7 @@ export default class Canvas extends View {
             this.status = errorMessage(error);
           }
         }
-        if (accepted && switched) focusSwitched(this, task);
+        if (accepted) focusSwitched(this, action, result, task);
       } catch (error) {
         this.status = errorMessage(error);
         this.fresh = false;
@@ -610,7 +606,7 @@ export default class Canvas extends View {
     });
     cx.notify();
   }
-  acceptSnapshot(result, task, switching = false) {
+  acceptSnapshot(result, task, action) {
     this.drag = null;
     if (!("layout" in result)) {
       this.status = outcome(result);
@@ -639,7 +635,7 @@ export default class Canvas extends View {
       !window.has_active_dialog()
     ) {
       moveFocus(this, "opening", task);
-      if (!switching) refocus(this, task);
+      refocus(this, task, action, result);
     }
     this.closeVoyage.observe(result.closePlan);
     for (const voyage of result.layout.voyages.filter((item) => !item.closed))
