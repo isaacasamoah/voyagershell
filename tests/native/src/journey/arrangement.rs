@@ -164,37 +164,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         )?;
         native.type_text(SAVED)?;
         native.press(Key::Return)?;
-        let saved = native.settle(
-            "the layout Focus saved for the Fleet",
-            |seen| Some(arrangement(seen.document, &fleet)),
-            Option::is_some,
+        let saved = native.observe(
+            "the layout Focus saved for the Fleet, with its tab's name drawn again",
+            |seen| {
+                seen.shows(&tab)
+                    .then(|| arrangement(seen.document, &fleet))
+                    .filter(Option::is_some)
+            },
         )?;
         native.hover(&Target::name(&vessel(&second)))?;
         native.click(&Target::close_panel(&second))?;
-        let (version, closed) = native.settle(
-            "the second Vessel closed out of the tree",
-            |seen| Some((seen.version, seen.document.clone())),
-            |(_, layout)| root(layout, &fleet) == Some(leaf(&first)),
+        let (version, closed) = native.observe(
+            "the second Vessel closed out of the tree and no longer drawn",
+            |seen| {
+                (root(seen.document, &fleet) == Some(leaf(&first))
+                    && Drawn::of(seen.frame).terminal(&second).is_none())
+                .then(|| (seen.version, seen.document.clone()))
+            },
         )?;
         native.context_click(&tab)?;
         native.click(&Target::load_layout(&fleet, SAVED))?;
-        let (loaded, drawn) = native.settle(
-            "the workspace saved after Load Focus",
+        let load = Target::load_layout(&fleet, SAVED);
+        let (loaded, drawn) = native.observe(
+            "the workspace saved and drawn after Load Focus",
             |seen| {
-                (seen.version != version).then(|| (seen.document.clone(), Drawn::of(seen.frame)))
+                (seen.version != version && !seen.shows(&load))
+                    .then(|| (seen.document.clone(), Drawn::of(seen.frame)))
             },
-            |_| true,
         )?;
         let terminals_loaded = native.live_terminals()?;
         let same_shell = running(&two.program(native)?);
         native.click(&Target::HOME)?;
-        let (home, home_dock) = native.settle(
-            "the Home view shown",
+        let (home, home_dock) = native.observe(
+            "the Home view drawn with its first Vessel in place of the Fleet",
             |seen| {
-                (seen.document.view == WorkspaceView::Home)
-                    .then(|| (seen.document.clone(), seen.frame.dock.clone()))
+                let shown = home_vessel(seen.document)
+                    .is_some_and(|placement| seen.shows(&Target::name(&vessel(&placement))));
+                (seen.document.view == WorkspaceView::Home
+                    && shown
+                    && !seen.shows(&Target::terminal(&first)))
+                .then(|| (seen.document.clone(), seen.frame.dock.clone()))
             },
-            |_| true,
         )?;
         let terminals_home = native.live_terminals()?;
         show_fleet(native)?;
@@ -765,6 +775,11 @@ fn arrangement(layout: &Layout, id: &FleetId) -> Option<Option<Split>> {
 
 fn placements<'a>(layout: &'a Layout, id: &FleetId) -> Option<&'a [Placement]> {
     fleet(layout, id).map(|fleet| fleet.placements.as_slice())
+}
+
+fn home_vessel(layout: &Layout) -> Option<PlacementId> {
+    let home = layout.home.as_ref()?.fleets.first()?;
+    home.placements.first().map(|placed| placed.id.clone())
 }
 
 fn backend(layout: &Layout, placement: &PlacementId) -> Option<String> {
