@@ -51,6 +51,7 @@ pub const FLOOR_WAIT: Owed = Owed::secs(60);
 pub const SEND_WAIT: Owed = Owed::secs(5);
 pub const CLIPS_KEPT: Owed = Owed::secs(60);
 pub const ROOM_FEED: Owed = Owed::secs(330);
+pub const MODEL_WORK_WAIT: Owed = Owed::secs(2);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Elapsed(Duration);
@@ -58,6 +59,10 @@ pub struct Elapsed(Duration);
 impl Elapsed {
     pub fn within(self, owed: Owed) -> bool {
         self.0 <= owed.within
+    }
+
+    pub fn micros(self) -> u64 {
+        u64::try_from(self.0.as_micros()).unwrap_or(u64::MAX)
     }
 
     pub fn under_share_of(self, hold_ms: u64, parts: u64) -> bool {

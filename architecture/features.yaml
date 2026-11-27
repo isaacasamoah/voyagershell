@@ -875,9 +875,9 @@ features:
         kind: user
         says: 'Each avatar tool call is one round trip and finishes within the limit in the usage envelope. A dock adds model work only when a dock behaviour the user chose asks for it.'
         guards: []
-        checks: []
+        checks: ['journey:socket-dock/tool-call-round-trip', 'journey:socket-dock/dock-with-no-chosen-behaviour-adds-no-model-work', 'perf:avatar-tool-calls']
         formal: []
-        journeys: []
+        journeys: [socket-dock]
       - id: avatar-drag-follows-pointer
         kind: user
         says: 'While the user drags the avatar, it is drawn under the pointer on every display frame, at idle and up to the load in the usage envelope.'
@@ -2132,6 +2132,7 @@ features:
       - tests/native/src/profile.rs
       - tests/native/src/proof.rs
       - tests/native/src/provider.rs
+      - tests/native/src/request_relay.rs
       - tests/native/src/sandbox.rs
       - tests/native/src/scratch.rs
       - tests/native/src/system.rs

@@ -1,0 +1,12 @@
+diff --git a/app/src/bin/voyager.rs b/app/src/bin/voyager.rs
+index dd157953..cf0ab032 100644
+--- a/app/src/bin/voyager.rs
++++ b/app/src/bin/voyager.rs
+@@ -239,6 +239,7 @@ fn main() -> ExitCode {
+             return ExitCode::from(1);
+         }
+     };
++    std::thread::sleep(std::time::Duration::from_millis(60));
+     match send(&request) {
+         Ok(reply) => {
+             if let SocketRequest::Workspace { request } = &request

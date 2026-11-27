@@ -1,0 +1,12 @@
+diff --git a/app/src/bin/voyager.rs b/app/src/bin/voyager.rs
+index dd157953..8d1da114 100644
+--- a/app/src/bin/voyager.rs
++++ b/app/src/bin/voyager.rs
+@@ -67,6 +67,7 @@ fn send(request: &SocketRequest) -> Result<SocketReply, (ExitCode, String)> {
+     stream
+         .write_all(&encoded)
+         .map_err(|error| refused(format!("Nothing was sent: {error}")))?;
++    let _ = stream.write_all(&encoded);
+     let mut line = String::new();
+     BufReader::new(&stream)
+         .read_line(&mut line)

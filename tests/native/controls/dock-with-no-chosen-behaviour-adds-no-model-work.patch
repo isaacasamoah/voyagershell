@@ -1,0 +1,17 @@
+diff --git a/app/src/client_structure.rs b/app/src/client_structure.rs
+index 6db7993e..af5945b3 100644
+--- a/app/src/client_structure.rs
++++ b/app/src/client_structure.rs
+@@ -435,6 +435,12 @@ impl Owner {
+         response.close_plan = self.closing.projected(&self.layout, scope.as_ref());
+         let docked = matches!(request.action, Action::Dock { .. })
+             && response.status == voyager_contract::Outcome::Applied;
++        if docked
++            && let (Some(terminal), Ok(core)) =
++                (self.sockets.binding().terminal(), self.core.as_mut())
++        {
++            let _ = core.begin_terminal_send(&terminal.0, "A dock started a model turn");
++        }
+         self.publish(
+             previous_version,
+             scope.is_some() || resume.program.is_some(),

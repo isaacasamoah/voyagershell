@@ -264,6 +264,17 @@ returns the number of pixels that differ in each strip. `actions.jsonl` records
 the counts as a `popover-strips` event, and a case records them as an observed
 value, so a negative result has a positive control beside it.
 
+`RequestRelay` in `src/request_relay.rs` counts the requests a program makes on
+a Vessel socket. `RequestRelay::vessel` listens at the same socket path under
+`/voyager/runtime/relay` and passes every connection on to the real socket, so
+a `voyager` command run with `XDG_RUNTIME_DIR` set to `RequestRelay::runtime`
+reaches the app unchanged. `RequestRelay::counted` runs a step and returns the
+connections, the request lines the program wrote and the reply lines it read
+during that step, once every relayed connection has closed. It counts lines,
+because the app reads one request line per connection and answers with one
+line. The relay adds its own hops, so a call timed through it is not the
+call's real time.
+
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
 identity, sends it SIGSTOP, runs the journey's closure and sends SIGCONT, also
@@ -1816,6 +1827,10 @@ The `socket-dock` journey also covers typing right after an avatar dock and the 
 
 The `socket-dock-home` patch puts back the focus a dock home gave before. The canvas moves the keyboard to the first Vessel shown, as on any other dock. `dock-home-keeps-keyboard` then fails on the expectation `the canvas focus stayed on the Home Vessel the user had clicked`, because the focus moved to another Home Vessel.
 
+`tool-call-round-trip` and `dock-with-no-chosen-behaviour-adds-no-model-work` run before `voyager-creates-and-maximizes`. `tool-call-round-trip` runs `voyager status` and then a `voyager do workspace` maximize or restore of the docked Vessel 50 times, with Voyager's terminal as the caller. It records the wall time of each call from spawn to exit, with p50, p95, p99 and max, under `status calls` and `do calls`. 19 in 20 calls of each command must finish in under 50 ms, so a single slow call does not fail it. That limit is `CALL_LIMIT_MS` in `src/journey/socket_dock.rs`. It is a share of recorded samples, not a wait, so it is not an `Owed`. It then runs each command 5 more times through `RequestRelay`, which counts the connections, the request lines the command writes and the reply lines it reads. Every change must apply, and each counted call must make one connection, write one request line and read one reply line, which is the one round trip. The 50 timed calls do not pass through the relay, and the counted calls are not timed. `dock-with-no-chosen-behaviour-adds-no-model-work` docks from Voyager's terminal on the Fleet, the first Vessel and the docked Vessel, then drags the avatar onto the Fleet. Over the next 2 s, Voyager's terminal must show no new `Stand-in claude heard:` line. The app hands Voyager a turn as a line sent to that terminal, as `app/src/voice_voyager.rs` does for a spoken turn, and the stand-in Voyager prints `Stand-in claude heard:` for each line it reads. The dock control, which sends that terminal a line on every applied dock, fails on the heard line. The journey starts no stand-in provider, so the chat's provider is not watched here. No Vessel type declares a dock behaviour yet, so every dock in the case has none chosen. The case and its control say nothing about a dock whose behaviour the user chose.
+
+The `tool-call-round-trip` patch makes the `voyager` command write its request line a second time on the same connection. The app reads one line per connection, so the command still works, and `tool-call-round-trip` fails on the expectation `each counted voyager status and voyager do call made one connection, wrote one request line and read one reply line on the Vessel socket`. The `dock-with-no-chosen-behaviour-adds-no-model-work` patch sends a line to Voyager's terminal on every applied dock. `dock-with-no-chosen-behaviour-adds-no-model-work` then fails on the expectation `Voyager's terminal heard no new line in the 2 s after the docks`. The `tool-call-round-trip-slow` patch makes the `voyager` command wait 60 ms before it sends its request. `tool-call-round-trip` then fails on the expectation `19 in 20 voyager status calls and 19 in 20 voyager do calls finished in under 50 ms`.
+
 The `avatar-click-home` patch makes a click on the avatar at home minimize the workspace. `avatar-click-at-home-opens-home` then fails on the expectation `a click on the avatar at home showed the Home view`, because the click sent a minimise request instead.
 
 The `avatar-click-wait` patch puts back the old guard, so a click made while a request waits for its reply is dropped. `avatar-click-while-docking-home-is-held` is then expected to fail on the expectation `the click made while the dock waited was kept and opened the Home view once the reply landed`, because the Fleet view stays shown. This result is a prediction until the control runs.
@@ -2048,8 +2063,11 @@ for an outcome with `observe`, `Native::settle`, `until` or `Native::watch`.
 Each ends as soon as the app has drawn or saved the outcome and fails only when
 the shared patience passes, so a slow machine makes it wait longer and never
 makes it fail a bound. `Stopwatch` times an interval for the evidence. Its
-`Elapsed` has no number to compare. It offers `Elapsed::within` against a named
-`Owed` and `Elapsed::under_share_of` a hold that the run set.
+`Elapsed` gives no number to test against a deadline. It offers `Elapsed::within`
+against a named `Owed` and `Elapsed::under_share_of` a hold that the run set.
+`Elapsed::micros` gives the interval in microseconds only to record a sample, such
+as a call time of `tool-call-round-trip`, whose limit counts a share of the
+recorded samples rather than bounding one wait.
 
 An `Owed` is a wait that the product or a run option owes the case. Each is
 declared once, with its source, and the pull request that adds one names it.
@@ -2068,6 +2086,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `STATUS_AFTER_CLICK` | 600 ms | How long `created-during-avatar-home-click-is-drawn` reads the status line after the click on the avatar at home, long enough for the canvas to show a render error. |
 | `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
 | `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |
+| `MODEL_WORK_WAIT` | 2 s | How long `dock-with-no-chosen-behaviour-adds-no-model-work` watches Voyager's terminal after the docks for a new heard line. The control's line arrived inside it. |
 
 `voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
 constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an

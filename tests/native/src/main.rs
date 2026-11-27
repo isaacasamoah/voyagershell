@@ -16,6 +16,7 @@ mod probe;
 mod profile;
 mod proof;
 mod provider;
+mod request_relay;
 mod sandbox;
 #[cfg(test)]
 mod scratch;
@@ -745,6 +746,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/profile.rs", include_bytes!("profile.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),
     ("src/provider.rs", include_bytes!("provider.rs")),
+    ("src/request_relay.rs", include_bytes!("request_relay.rs")),
     ("src/sandbox.rs", include_bytes!("sandbox.rs")),
     ("src/scratch.rs", include_bytes!("scratch.rs")),
     ("src/system.rs", include_bytes!("system.rs")),

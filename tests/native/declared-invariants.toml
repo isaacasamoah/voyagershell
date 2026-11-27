@@ -525,8 +525,8 @@ source = "Isaac's top complaint, corrected by Isaac on 18 Nov 2026; declared inv
 features = ["avatar"]
 guard = []
 type_gap = "Not state-shaped: it is a time limit on each call, which no type can bound."
-check = []
-gap = "No timing case and no envelope limit yet. Section 3c named no owner, so a later unit sets it."
+check = ["journey:socket-dock/tool-call-round-trip", "journey:socket-dock/dock-with-no-chosen-behaviour-adds-no-model-work", "perf:avatar-tool-calls"]
+gap = "tool-call-round-trip checks that each voyager command makes one round trip, and that 19 in 20 calls of each command finish within 50 ms, the limit set from the measurements; a single slow call does not fail it (#450). dock-with-no-chosen-behaviour-adds-no-model-work checks that a dock with no chosen behaviour starts no model turn."
 confidence = "stated"
 
 [[invariant]]
@@ -1135,6 +1135,14 @@ command = "Sample /proc/pressure, available memory and CPU during each of those 
 measured = "Defined by Isaac, 16 Nov 2026: a full captain and crew run is ordinary load. Its numbers are in the crew resource log and are not yet summarised here."
 expires = "When the build machine or the crew's job limits change"
 confidence = "inferred"
+
+[[envelope]]
+id = "avatar-tool-calls"
+fact = "Time from spawning a voyager command in Voyager's terminal to its exit, for voyager status and voyager do, and the socket requests each call makes"
+command = "voyager-verification run --journey socket-dock, case tool-call-round-trip, under heavy timed: 50 timed calls of each command per run"
+measured = "27 Nov 2026, 10 runs, 500 calls of each. voyager status: p50 8.5, p95 18.1, p99 27.1, max 73.5 ms. voyager do: p50 10.1, p95 23.3, p99 33.7, max 475.9 ms, one call (#450). Every counted call made one request and one reply. Limit, set 27 Nov: 19 in 20 calls under 50 ms."
+expires = "When the voyager command, the Vessel socket or the app's request handling changes"
+confidence = "stated"
 
 # Out of scope. Each was checked on origin/main at 87ffcd4.
 

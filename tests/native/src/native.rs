@@ -7,6 +7,7 @@ mod terminal;
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
 pub use install::{Build, Linked, STAND_IN_LINE};
+pub use settle::MODEL_WORK_WAIT;
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
     DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH,

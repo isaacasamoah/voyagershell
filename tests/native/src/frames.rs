@@ -27,7 +27,7 @@ pub fn summarize(text: &str) -> Result<Value> {
     );
     draws.sort_unstable();
     let ms = |ns: u64| ns as f64 / 1e6;
-    let rank = |fraction: f64| draws[((draws.len() as f64 * fraction).ceil() as usize).max(1) - 1];
+    let rank = |fraction: f64| rank(&draws, fraction);
     Ok(json!({
         "file": RECORD,
         "frames": draws.len(),
@@ -41,6 +41,10 @@ pub fn summarize(text: &str) -> Result<Value> {
         "expired": end.as_ref().map(|end| end["expired"].clone()),
         "coverage": "The frames up to the last drain before the stop or before the candidate ended, not the process lifetime",
     }))
+}
+
+pub fn rank(sorted: &[u64], fraction: f64) -> u64 {
+    sorted[((sorted.len() as f64 * fraction).ceil() as usize).clamp(1, sorted.len()) - 1]
 }
 
 pub fn ended(text: &str) -> bool {

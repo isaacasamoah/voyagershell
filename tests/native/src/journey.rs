@@ -714,6 +714,10 @@ mod tests {
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
                 "tests/native/controls/core-events-unreported-idle.patch".to_owned(),
                 "tests/native/controls/core-events-reported-decays.patch".to_owned(),
+                "tests/native/controls/tool-call-round-trip.patch".to_owned(),
+                "tests/native/controls/tool-call-round-trip-slow.patch".to_owned(),
+                "tests/native/controls/dock-with-no-chosen-behaviour-adds-no-model-work.patch"
+                    .to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")
@@ -880,6 +884,16 @@ mod tests {
             (
                 Journey::SocketDock,
                 "voyager-creates-and-maximizes",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "tool-call-round-trip",
+                &["socket-dock-takes-keyboard"],
+            ),
+            (
+                Journey::SocketDock,
+                "dock-with-no-chosen-behaviour-adds-no-model-work",
                 &["socket-dock-takes-keyboard"],
             ),
             (
