@@ -1,3 +1,4 @@
+use super::loopback::{self, Loopback};
 use super::{Defect, Native, REQUEST_PATIENCE};
 use crate::inspection::Target;
 use crate::sandbox;
@@ -50,6 +51,7 @@ pub struct Versions {
 
 struct Release {
     site: PathBuf,
+    loopback: Loopback,
     versions: Versions,
 }
 
@@ -170,9 +172,7 @@ pub(super) struct Install {
 
 impl Install {
     pub(super) fn releases(&self) -> Option<String> {
-        self.release
-            .as_ref()
-            .map(|release| format!("file://{}", release.site.display()))
+        self.release.as_ref().map(|release| release.loopback.url())
     }
 
     fn prepare_site(&mut self) -> Result<()> {
@@ -208,6 +208,7 @@ impl Install {
             &site.join(AHEAD),
         )?;
         self.release = Some(Release {
+            loopback: Loopback::serve(site.clone())?,
             site,
             versions: Versions {
                 first,
@@ -223,7 +224,7 @@ impl Install {
             .release
             .as_ref()
             .context("This run lays out no release install")?;
-        let at = |file: &str| format!("file://{}", release.site.join(file).display());
+        let at = |file: &str| format!("{}/{file}", release.loopback.url());
         let ahead = digest(&release.site.join(AHEAD))?;
         let (version, url, sha256) = match served {
             Site::Second => (
@@ -464,19 +465,42 @@ impl Native {
             second,
             release: None,
         };
+        let interfaces = loopback::interfaces()?;
         if layout == Layout::Release {
+            ensure!(
+                interfaces == ["lo"],
+                "The sandbox has network interfaces {interfaces:?}, not loopback alone, so a build could reach the real releases address"
+            );
             install.prepare_site()?;
             install.publish(Site::Second)?;
         }
         let name = install.lay_out(&self.profile(), &self.system.session)?;
-        self.system.record(json!({"event":"install","root":install.root,"current":install.link("current")?,"releases":install.releases(),"versions":install.release.as_ref().map(|release| &release.versions)}))?;
-        let shell = install.build(&name).join(SHELL);
+        self.system.record(json!({"event":"install","root":install.root,"current":install.link("current")?,"releases":install.releases(),"interfaces":interfaces,"versions":install.release.as_ref().map(|release| &release.versions)}))?;
         self.install = Some(install);
         if layout == Layout::Release {
-            self.start_from(&shell)?;
-            self.present()?;
+            self.install_launch(&name)?;
         }
         Ok(())
+    }
+
+    pub fn install_launch(&mut self, name: &str) -> Result<()> {
+        let shell = self.install()?.build(name).join(SHELL);
+        self.start_from(&shell)?;
+        self.present()
+    }
+
+    pub fn install_requests(&self) -> Result<Vec<String>> {
+        Ok(self
+            .install()?
+            .release
+            .as_ref()
+            .context("This run lays out no release install")?
+            .loopback
+            .requests())
+    }
+
+    pub fn install_interfaces(&self) -> Result<Vec<String>> {
+        loopback::interfaces()
     }
 
     pub fn install_versions(&self) -> Result<Versions> {

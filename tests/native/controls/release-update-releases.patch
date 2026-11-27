@@ -1,0 +1,13 @@
+diff --git a/app/src/release.rs b/app/src/release.rs
+index 767860b..ed1a820 100644
+--- a/app/src/release.rs
++++ b/app/src/release.rs
+@@ -116,7 +116,7 @@ pub fn release_build() -> bool {
+ }
+ 
+ pub fn releases() -> String {
+-    releases_for(release_build(), std::env::var("VOYAGER_RELEASES_URL").ok())
++    releases_for(true, std::env::var("VOYAGER_RELEASES_URL").ok())
+ }
+ 
+ fn releases_for(release: bool, set: Option<String>) -> String {

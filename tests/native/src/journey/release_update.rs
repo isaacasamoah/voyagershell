@@ -20,6 +20,8 @@ pub const CONTROL: Case = Case::Restart;
 
 const RESTART_WORDS: &str = "Restart now, or the new version starts the next time you open VoyagerShell. Your programs keep running.";
 const PAST_THE_FIRST_CHECK: Duration = Duration::from_secs(25);
+const DEFAULT_LATEST: &str =
+    "https://github.com/isaacasamoah/voyagershell/releases/latest/download/latest.json";
 
 fn refused_update(
     native: &mut Native,
@@ -202,12 +204,37 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     cases.check(native, Case::SourceBuild, |native| {
         let manifest = native.install_publish(Site::Ahead)?;
+        let interfaces = native.install_interfaces()?;
+        let earlier = native.install_requests()?.len();
         let links = native.install_links()?;
         let folders = native.install_folders()?;
+        let update = native.install_network_update()?;
+        native.close()?;
+        native.install_launch(&versions.second)?;
         sleep(PAST_THE_FIRST_CHECK);
+        let offered = native.observe("the source build past the first check", |seen| {
+            Some(seen.shows(&Target::RESTART_OFFER))
+        })?;
+        let requests: Vec<String> = native
+            .install_requests()?
+            .into_iter()
+            .skip(earlier)
+            .collect();
         let links_after = native.install_links()?;
         let folders_after = native.install_folders()?;
         Verdict::new()
+            .expect(
+                "the sandbox has no network but loopback, so no build reaches the real releases address",
+                interfaces == ["lo"],
+            )
+            .expect(
+                "the stand-in release site received no request from the source build",
+                requests.is_empty(),
+            )
+            .expect(
+                "voyager update from the source build exited 1 and read the default releases address, not the stand-in",
+                update.code == Some(1) && update.stderr.contains(DEFAULT_LATEST),
+            )
             .expect(
                 "the source build staged nothing while a newer release was published",
                 links_after == links && links_after.next.is_none(),
@@ -216,8 +243,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "the builds folder gained no build and no .part folder",
                 folders_after == folders,
             )
-            .expect("the source build is still running", runs(native, &second))
+            .expect(
+                "the source build, relaunched past its first check, shows no Restart card",
+                !offered,
+            )
+            .expect("the source build is running", runs(native, &second))
             .observed("manifest", &manifest)?
+            .observed("interfaces", &interfaces)?
+            .observed("requests", &requests)?
+            .observed("update", &update)?
             .observed("waited", PAST_THE_FIRST_CHECK.as_secs())?
             .observed("links", json!({"before":links,"after":links_after}))?
             .observed("folders", json!({"before":folders,"after":folders_after}))

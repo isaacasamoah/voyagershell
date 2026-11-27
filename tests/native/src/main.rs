@@ -741,6 +741,10 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/native/avatar.rs", include_bytes!("native/avatar.rs")),
     ("src/native/input.rs", include_bytes!("native/input.rs")),
     ("src/native/install.rs", include_bytes!("native/install.rs")),
+    (
+        "src/native/loopback.rs",
+        include_bytes!("native/loopback.rs"),
+    ),
     ("src/native/settle.rs", include_bytes!("native/settle.rs")),
     (
         "src/native/terminal.rs",

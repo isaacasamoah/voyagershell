@@ -1,6 +1,7 @@
 mod avatar;
 mod input;
 mod install;
+mod loopback;
 mod settle;
 mod terminal;
 
