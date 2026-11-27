@@ -253,6 +253,15 @@ cannot create the folder it writes the shipped canvas into. The change goes to
 `actions.jsonl`. Core stays reachable, because its socket lives in the
 `herdr-core` folder inside it, which keeps its own mode.
 
+`Display::echo` in `src/x11.rs` times one echo. It captures a region of a
+window, presses a key and releases it with no pause between, then captures the
+same region every 1 ms until it differs from the first capture or the patience
+runs out. It returns the press time, the time to the capture that differed,
+none when nothing changed, the number of captures and their total cost, and the
+first and last capture. `Native::echo` checks that the candidate holds the
+keyboard, waits until `KEY_SPACING` after the previous echo's press, records the
+key in `actions.jsonl` and calls `Display::echo` on the candidate's window.
+
 The frame carries no tooltip text, so a hover popover is seen in pixels.
 `Native::hover_popover` moves the pointer to a corner with no control and takes two
 strips of the window, one above and one below the target and both outside its
@@ -263,15 +272,6 @@ It then hovers the target for `POPOVER_AFTER_HOVER`, takes the strips again and
 returns the number of pixels that differ in each strip. `actions.jsonl` records
 the counts as a `popover-strips` event, and a case records them as an observed
 value, so a negative result has a positive control beside it.
-
-`Display::echo` in `src/x11.rs` times one echo. It captures a region of a
-window, presses a key and releases it with no pause between, then captures the
-same region every 1 ms until it differs from the first capture or the patience
-runs out. It returns the press time, the time to the capture that differed,
-none when nothing changed, the number of captures and their total cost, and the
-first and last capture. `Native::echo` checks that the candidate holds the
-keyboard, waits until `KEY_SPACING` after the previous echo's press, records the
-key in `actions.jsonl` and calls `Display::echo` on the candidate's window.
 
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
@@ -1864,8 +1864,11 @@ before it wrote its end record, as `terminal-scrolling` does when it closes the 
 `tests/native/controls/frame-stall.patch` plants a 50 ms sleep in the terminal
 snapshot. Build with it and run `terminal-scrolling --probe frame`. The run's
 `maxMs` and `p95Ms` then exceed 50 ms, and a build without the patch does not.
-The same patch is the control for `terminal-input/typing-echo`. Built with it,
-the case fails on the expectation `19 in 20 timed keys were echoed in under 60 ms`.
+The limits of `terminal-input/typing-echo`, 19 in 20 echoes under
+`ECHO_LIMIT_MS` and none over `ECHO_CEILING_MS`, are in `src/journey/input.rs`.
+They count recorded samples rather than bound one wait, so they are not `Owed`
+values. `frame-stall.patch` is also the control for `terminal-input/typing-echo`.
+Built with it, the case fails on the expectation `19 in 20 timed keys were echoed in under 60 ms`.
 The sleep raised the case's `p50Ms` by about 50 ms, which shows that the case
 times the drawn echo.
 
