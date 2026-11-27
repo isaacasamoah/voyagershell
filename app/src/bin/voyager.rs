@@ -131,7 +131,7 @@ fn staged(staged: voyager_app::install::Staged) -> String {
             format!("Build {name} is already current; nothing is staged.")
         }
         voyager_app::install::Staged::AlreadyNext(name) => format!(
-            "Build {name} is already staged; nothing new is staged. Restart VoyagerShell or run voyager start to use it."
+            "Build {name} is already staged. Restart VoyagerShell or run voyager start to use it."
         ),
         voyager_app::install::Staged::Older { latest, current } => format!(
             "The latest release, {latest}, is older than the current build {current}; nothing is staged."
@@ -291,7 +291,7 @@ mod tests {
         );
         assert_eq!(
             staged(Staged::AlreadyNext("0.1.1".into())),
-            "Build 0.1.1 is already staged; nothing new is staged. Restart VoyagerShell or run voyager start to use it."
+            "Build 0.1.1 is already staged. Restart VoyagerShell or run voyager start to use it."
         );
         assert_eq!(
             staged(Staged::Older {
