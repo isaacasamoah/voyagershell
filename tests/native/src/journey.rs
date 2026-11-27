@@ -714,6 +714,9 @@ mod tests {
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
                 "tests/native/controls/profile-updates-kept-edit.patch".to_owned(),
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
+                "tests/native/controls/rests-where-put.patch".to_owned(),
+                "tests/native/controls/views-leave-avatar-put.patch".to_owned(),
+                "tests/native/controls/views-leave-avatar-put-parked.patch".to_owned(),
                 "tests/native/controls/core-events-unreported-idle.patch".to_owned(),
                 "tests/native/controls/core-events-reported-decays.patch".to_owned(),
                 "tests/native/controls/tool-call-round-trip.patch".to_owned(),
@@ -868,6 +871,16 @@ mod tests {
             ),
             (
                 Journey::Workspace,
+                "rests-where-put",
+                &[
+                    "split-vessel",
+                    "dock-vessel",
+                    "avatar-float",
+                    "avatar-small",
+                ],
+            ),
+            (
+                Journey::Workspace,
                 "create-fleet",
                 &[
                     "split-vessel",
@@ -927,6 +940,20 @@ mod tests {
             (
                 Journey::Workspace,
                 "voyage-switch-gives-keyboard",
+                &[
+                    "split-vessel",
+                    "dock-vessel",
+                    "avatar-float",
+                    "avatar-small",
+                    "create-fleet",
+                    "switch-fleet",
+                    "create-voyage",
+                    "switch-voyage",
+                ],
+            ),
+            (
+                Journey::Workspace,
+                "views-leave-avatar-put",
                 &[
                     "split-vessel",
                     "dock-vessel",

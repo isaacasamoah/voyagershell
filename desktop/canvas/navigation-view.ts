@@ -728,6 +728,7 @@ export function renderContext(
       ),
   );
   if (facts) row.child(div().child(facts.path.join(" / ")));
+  row.child(Marker.new("status-row"));
   const region = div().flex().flex_col().child(row);
   if (noticed(workspace) || workspace.worktrees?.status || unboundLine())
     region.child(workspace.statusView());
