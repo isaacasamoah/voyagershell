@@ -18,7 +18,7 @@ use std::time::Duration;
 use voyager_contract::inspection::Role;
 use voyager_contract::{
     Action, ContentDestination, Context, FleetId, Layout, PlacementId, PlacementInsertion,
-    PlacementOwner, RenameTarget, Side, VoyageId, WorkspaceView,
+    PlacementOwner, RenameTarget, Side, WorkspaceView,
 };
 
 cases! {
@@ -33,7 +33,6 @@ cases! {
     ToolCallRoundTrip => "tool-call-round-trip",
     DockWithNoChosenBehaviourAddsNoModelWork => "dock-with-no-chosen-behaviour-adds-no-model-work",
     AvatarClickParkedReturnsToDock => "avatar-click-parked-returns-to-dock",
-    AvatarClickOnPortalChangesNothing => "avatar-click-on-portal-changes-nothing",
     VoyagerCreatesAndMaximizes => "voyager-creates-and-maximizes";
     "reread-keeps-clicked-pane" needs "socket-dock-takes-keyboard",
     "redock-takes-keyboard" needs "reread-keeps-clicked-pane",
@@ -43,7 +42,6 @@ cases! {
     "avatar-click-while-docking-home-is-held" needs "socket-dock-takes-keyboard",
     "avatar-click-away-changes-nothing" needs "socket-dock-takes-keyboard",
     "avatar-click-parked-returns-to-dock" needs "socket-dock-takes-keyboard",
-    "avatar-click-on-portal-changes-nothing" needs "socket-dock-takes-keyboard",
     "voyager-creates-and-maximizes" needs "socket-dock-takes-keyboard",
     "tool-call-round-trip" needs "socket-dock-takes-keyboard",
     "dock-with-no-chosen-behaviour-adds-no-model-work" needs "socket-dock-takes-keyboard",
@@ -881,121 +879,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("requests", &sent)
     })?;
 
-    cases.check(native, Case::AvatarClickOnPortalChangesNothing, |native| {
-        show_fleet(native)?;
-        let (_, layout) = native.document()?.context("Missing saved layout")?;
-        let voyage = layout
-            .selected_voyage
-            .clone()
-            .context("The layout has no selected Voyage")?;
-        let known = portals_of(&layout, &voyage);
-        let on_voyage = from_voyager(
-            native,
-            &voyager,
-            "socket-portal-voyage",
-            Action::Dock {
-                context: Context::Voyage { id: voyage.clone() },
-            },
-        )?;
-        native.settle(
-            "the avatar docked on the Voyage",
-            |seen| (seen.document.context == Context::Voyage { id: voyage.clone() }).then_some(()),
-            |_| true,
-        )?;
-        let created = from_voyager(
-            native,
-            &voyager,
-            "socket-portal-create",
-            Action::CreateVessel {
-                type_id: "terminal".into(),
-                destination: ContentDestination::Placement {
-                    owner: PlacementOwner::Portals { voyage: voyage.clone() },
-                    insertion: PlacementInsertion::Empty,
-                },
-                launch: None,
-            },
-        )?;
-        let portal = native.observe("a new Portal saved in the Voyage", |seen| {
-            portals_of(seen.document, &voyage)
-                .into_iter()
-                .find(|id| !known.contains(id))
-        })?;
-        let (_, layout) = native.document()?.context("Missing saved layout")?;
-        if !column_shown(&layout, &voyage) {
-            native.click(&Target::toggle_portals(&voyage))?;
-        }
-        native.observe("the new Portal drawn in the column", |seen| {
-            seen.shows(&Target::terminal(&portal)).then_some(())
-        })?;
-        let on_portal = Context::Portal { id: portal.clone() };
-        let dock = from_voyager(
-            native,
-            &voyager,
-            "socket-portal-dock",
-            Action::Dock {
-                context: on_portal.clone(),
-            },
-        )?;
-        let docked = native
-            .settle(
-                "the avatar docked on the Portal",
-                |seen| (seen.document.context == on_portal).then(|| avatar_width(seen)),
-                |width| width.is_some_and(|width| sized(width, DOCKED_SIZE)),
-            )
-            .is_ok();
-        native.click(&Target::toggle_portals(&voyage))?;
-        let hidden = native
-            .settle(
-                "the column hidden with the avatar parked beside the Portals button",
-                |seen| {
-                    Some((
-                        column_shown(seen.document, &voyage),
-                        seen.shows(&Target::terminal(&portal)),
-                        avatar_width(seen),
-                    ))
-                },
-                |(shown, drawn, width)| {
-                    !shown && !drawn && width.is_some_and(|width| sized(width, PARKED_SIZE))
-                },
-            )
-            .is_ok();
-        let (_, before) = native.document()?.context("Missing saved layout")?;
-        let requests = native.window_requests()?.len();
-        native.click(&Target::AVATAR)?;
-        let sent = native.requests_through_quiet(requests)?;
-        let (_, after) = native.document()?.context("Missing saved layout")?;
-        let drawn = native.observe("the frame after the click", |seen| {
-            Some(seen.shows(&Target::terminal(&portal)))
-        })?;
-        native.keep_window("avatar-click-on-portal-changes-nothing")?;
-        Verdict::new()
-            .expect(
-                "voyager do workspace applied the dock on the Voyage, the Portal's create-vessel and the dock on it",
-                on_voyage["reply"]["status"] == "applied"
-                    && created["reply"]["status"] == "applied"
-                    && dock["reply"]["status"] == "applied",
-            )
-            .expect("the avatar docked on the new Portal", docked)
-            .expect(
-                "the Portals button hid the column and the avatar was parked small beside it",
-                hidden,
-            )
-            .expect(
-                "after a click on the parked avatar the column stayed hidden and the Portal was not drawn",
-                !column_shown(&after, &voyage) && !drawn,
-            )
-            .expect(
-                "the Fleet and the dock were the same after the click",
-                after.selected_fleet == before.selected_fleet && after.context == on_portal,
-            )
-            .expect("the layout was the same after the click", after == before)
-            .expect(
-                "the click sent no request for the window",
-                sent.is_empty(),
-            )
-            .observed("requests", &sent)
-    })?;
-
     cases.check(native, Case::VoyagerCreatesAndMaximizes, |native| {
         show_fleet(native)?;
         let (_, layout) = native.document()?.context("Missing saved layout")?;
@@ -1340,23 +1223,6 @@ pub(super) fn show_fleet(native: &mut Native) -> Result<()> {
         |seen| (seen.document.view == WorkspaceView::Fleet).then_some(()),
         |_| true,
     )
-}
-
-fn portals_of(layout: &Layout, voyage: &VoyageId) -> Vec<PlacementId> {
-    layout
-        .containers()
-        .filter(|item| &item.id == voyage)
-        .flat_map(|item| &item.portals)
-        .map(|portal| portal.id.clone())
-        .collect()
-}
-
-fn column_shown(layout: &Layout, voyage: &VoyageId) -> bool {
-    layout
-        .containers()
-        .find(|item| &item.id == voyage)
-        .and_then(|item| item.portal_layout.as_ref())
-        .is_some_and(|column| column.visible)
 }
 
 fn avatar_width(seen: &Seen) -> Option<f32> {

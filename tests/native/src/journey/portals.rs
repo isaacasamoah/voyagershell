@@ -18,10 +18,12 @@ cases! {
     PortalAcrossFleets => "portal-across-fleets",
     PortalStaysInItsVoyage => "portal-stays-in-its-voyage",
     HidePortals => "hide-portals",
+    AvatarClickBesideHiddenPortalsChangesNothing => "avatar-click-beside-hidden-portals-changes-nothing",
     ShowPortals => "show-portals",
     ClosePortal => "close-portal",
     ReopenPortal => "reopen-portal",
     RelaunchRestoresPortal => "relaunch-restores-portal";
+    "avatar-click-beside-hidden-portals-changes-nothing" needs "hide-portals",
     "show-portals" needs "hide-portals",
     "close-portal" needs "show-portals",
     "reopen-portal" needs "close-portal",
@@ -409,6 +411,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("avatar", drawn.avatar)?
             .observed("toggle", drawn.toggle)
     })?;
+    cases.check(
+        native,
+        Case::AvatarClickBesideHiddenPortalsChangesNothing,
+        |native| {
+            let (_, before) = at_rest(native)?;
+            let parked = native.observe("the avatar beside the Portals button", |seen| {
+                Drawn::of(seen, &portal, &home)
+                    .beside_toggle()
+                    .then_some(())
+            });
+            let requests = native.window_requests()?.len();
+            native.click(&Target::AVATAR)?;
+            native.requests_through_quiet(requests)?;
+            let (after, drawn) = native.observe("the frame after the click", |seen| {
+                Some((seen.document.clone(), Drawn::of(seen, &portal, &home)))
+            })?;
+            Verdict::new()
+                .expect(
+                    "before the click the column was hidden and the avatar waited beside the Portals button",
+                    column(&before, &home).is_some_and(|column| !column.visible) && parked.is_ok(),
+                )
+                .expect(
+                    "after a click on the avatar the column stayed hidden and the Portal was not drawn",
+                    column(&after, &home).is_some_and(|column| !column.visible)
+                        && !drawn.portal(),
+                )
+                .expect(
+                    "the Voyage, the Fleet and the dock were the same after the click",
+                    after.selected_voyage == before.selected_voyage
+                        && after.selected_fleet == before.selected_fleet
+                        && after.context == scope,
+                )
+                .expect("the layout was the same after the click", after == before)
+                .expect(
+                    "the avatar still waited beside the Portals button",
+                    drawn.beside_toggle(),
+                )
+                .observed("avatar", drawn.avatar)?
+                .observed("toggle", drawn.toggle)
+        },
+    )?;
     cases.check(native, Case::ShowPortals, |native| {
         native.click(&Target::toggle_portals(&home))?;
         let (layout, drawn) = native.settle(

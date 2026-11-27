@@ -44,6 +44,9 @@ panel-view.ts.
   on it.
 - `hide-portals` presses Ctrl+Alt+P in the first Vessel's terminal. The column
   hides, and the avatar is 38 pixels wide beside the toggle.
+- `avatar-click-beside-hidden-portals-changes-nothing` clicks the avatar beside
+  the toggle and waits 750 ms. The column stays hidden, the Portal is not drawn,
+  and the Voyage, the Fleet, the dock and the saved layout are unchanged.
 - `show-portals` shows the same Portal again, with no chooser.
 - `close-portal` closes the Portal. It stays in its Voyage with the same
   content and backend, and the column hides.

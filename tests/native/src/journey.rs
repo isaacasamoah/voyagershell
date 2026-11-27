@@ -891,11 +891,6 @@ mod tests {
             ),
             (
                 Journey::SocketDock,
-                "avatar-click-on-portal-changes-nothing",
-                &["socket-dock-takes-keyboard"],
-            ),
-            (
-                Journey::SocketDock,
                 "voyager-creates-and-maximizes",
                 &["socket-dock-takes-keyboard"],
             ),
@@ -918,6 +913,11 @@ mod tests {
                 Journey::Profile,
                 "seeded-core-document-kept",
                 &["live-edit-recolours", "second-build-keeps-voyage"],
+            ),
+            (
+                Journey::Portals,
+                "avatar-click-beside-hidden-portals-changes-nothing",
+                &["hide-portals"],
             ),
             (Journey::Portals, "show-portals", &["hide-portals"]),
             (
