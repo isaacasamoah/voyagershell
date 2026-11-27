@@ -1,39 +1,39 @@
 diff --git a/desktop/canvas/main.js b/desktop/canvas/main.js
-index 5d39a0ee..41e18e31 100644
+index d74aad08..accc9a95 100644
 --- a/desktop/canvas/main.js
 +++ b/desktop/canvas/main.js
 @@ -40,7 +40,6 @@ import {
+   noticeArrived,
    focusedPlacement,
-   focusSwitched,
    moveFocus,
 -  refocus,
    renderPanel,
  } from "./panel-view.js";
  import {
-@@ -639,7 +638,7 @@ export default class Canvas extends View {
+@@ -635,7 +634,7 @@ export default class Canvas extends View {
        !window.has_active_dialog()
      ) {
        moveFocus(this, "opening", task);
--      if (!switching) refocus(this, task);
-+      if (!switching) this.focus.focus();
+-      refocus(this, task, action, result);
++      this.focus.focus();
      }
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/main.ts b/desktop/canvas/main.ts
-index 943a1ff8..a4299f35 100644
+index 8d7b7d41..c36cd029 100644
 --- a/desktop/canvas/main.ts
 +++ b/desktop/canvas/main.ts
-@@ -781,7 +781,7 @@ export default class Canvas extends View {
+@@ -777,7 +777,7 @@ export default class Canvas extends View {
        !window.has_active_dialog()
      ) {
        moveFocus(this, "opening", task);
--      if (!switching) refocus(this, task);
-+      if (!switching) this.focus.focus();
+-      refocus(this, task, action, result);
++      this.focus.focus();
      }
      this.closeVoyage.observe(result.closePlan);
      for (const voyage of result.layout.voyages.filter((item) => !item.closed))
 diff --git a/desktop/canvas/panel-view.js b/desktop/canvas/panel-view.js
-index 3ce02ebc..71df3b98 100644
+index d8673b03..12e91ecd 100644
 --- a/desktop/canvas/panel-view.js
 +++ b/desktop/canvas/panel-view.js
 @@ -48,12 +48,7 @@ export function inspectNotice(workspace, cx) {
@@ -91,10 +91,10 @@ index 3ce02ebc..71df3b98 100644
  function focusDocked(workspace, cx) {
    const home = workspace.layout?.context.kind === "workspace";
 diff --git a/desktop/canvas/panel-view.ts b/desktop/canvas/panel-view.ts
-index b88ac386..ac82a725 100644
+index 3652e594..a4d78c88 100644
 --- a/desktop/canvas/panel-view.ts
 +++ b/desktop/canvas/panel-view.ts
-@@ -73,8 +73,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
+@@ -74,8 +74,7 @@ export function inspectNotice(workspace: Canvas, cx: UIContext) {
    workspace.refreshRequested = false;
    if (
      !changed &&
@@ -104,7 +104,7 @@ index b88ac386..ac82a725 100644
    )
      return;
    workspace.automaticRefresh = true;
-@@ -110,12 +109,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
+@@ -111,12 +110,8 @@ export function acceptDockResult(workspace: Canvas, cx: UIContext) {
    if (raw !== null) {
      const result: unknown = JSON.parse(raw);
      if (!validateResponse(result)) throw Error("Invalid native dock response");
@@ -118,7 +118,7 @@ index b88ac386..ac82a725 100644
    }
  }
  
-@@ -135,26 +130,14 @@ export function followDockNotice(workspace: Canvas, cx: UIContext) {
+@@ -136,26 +131,14 @@ export function followDockNotice(workspace: Canvas, cx: UIContext) {
    const dock = workspace_notice().dockRevision;
    const seen = seenDocks.get(workspace);
    if (seen === undefined) seenDocks.set(workspace, dock);
