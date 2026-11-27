@@ -1221,9 +1221,11 @@ export default class Canvas extends View {
   }
   layoutItems(group) {
     const owner = group.owner;
+    const key = owner.kind === "fleet" ? owner.id : owner.voyage;
     const items = [
       {
         label: "Save layout",
+        marker: { role: "save-layout", key },
         choose: (_version, cx) => this.saveLayout(owner, cx),
       },
     ];
@@ -1232,6 +1234,7 @@ export default class Canvas extends View {
       items.push(
         {
           label: `Load ${saved.name}`,
+          marker: { role: "load-layout", key: `${key}:${saved.name}` },
           choose: (version, cx) =>
             this.run(
               { operation: "load-arrangement", owner, name: saved.name },

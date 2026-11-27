@@ -718,6 +718,7 @@ mod tests {
                 "tests/native/controls/tool-call-round-trip-slow.patch".to_owned(),
                 "tests/native/controls/dock-with-no-chosen-behaviour-adds-no-model-work.patch"
                     .to_owned(),
+                "tests/native/controls/layouts-load.patch".to_owned(),
             ]);
         for patch in patches {
             let check = Command::new("git")
@@ -976,6 +977,11 @@ mod tests {
                 Journey::AdoptByLabel,
                 "command-fleet-holds-only-its-agent",
                 &["command-creates-fleet"],
+            ),
+            (
+                Journey::Arrangement,
+                "layout-save-load-then-home",
+                &["split-below"],
             ),
         ];
         for (journey, later, earlier) in table {

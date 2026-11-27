@@ -5,7 +5,9 @@
 A Vessel splits below or to the right, from its title buttons or from
 Ctrl+Shift+E and Ctrl+Shift+O. Dragging a divider resizes one branch and saves
 its share. A Vessel maximizes from its title button or Ctrl+Shift+Z, and
-restores the same way, with every divider back where it was. Dragging a Vessel's
+restores the same way, with every divider back where it was. The Fleet tab's
+context menu saves the tree under a name and loads it back, and Home keeps the
+loaded tree without starting a program. Dragging a Vessel's
 title onto another Vessel moves it beside that Vessel, and Escape, the Vessel
 itself or a release outside every Vessel cancels the move. The arrangement
 survives a relaunch, and a shell's grid has fewer rows or columns after its pane
@@ -14,7 +16,9 @@ or the window shrinks.
 ## How to get to it (user POV)
 
 Open the isolated fixture app with the sidebar open. Split the first Vessel
-below, then split the new Vessel right with the shortcut. Drag both dividers.
+below. Save the layout as Focus from the Fleet tab's context menu, close the
+second Vessel, load Focus, open Home and go back to the Fleet. Split the new
+Vessel right with the shortcut. Drag both dividers.
 Maximize and restore. Drag a Vessel onto another, then cancel three drags.
 Quit and open the app again, shrink the window, maximize and restore once
 more the other way, and split below with the shortcut.
@@ -25,14 +29,24 @@ Follow the exact doctor and run commands in ../SKILL.md with
 `--journey arrangement`. The Rust journey in
 tests/native/src/journey/arrangement.rs owns the recipe. The split tree
 belongs to app/src/panels.rs, the divider and its share tracker to
-desktop/src/split.rs, and the title buttons, shortcuts and drag preview to
-desktop/canvas/main.ts and panel-view.ts.
+desktop/src/split.rs, the title buttons, shortcuts, drag preview and layout
+menu to desktop/canvas/main.ts and panel-view.ts, and Home to
+navigation-view.ts.
 
 V1 is the first Vessel, and the journey makes V2, V3 and V4.
 
 - `split-below` splits V1 with its `split-bottom` button. The saved tree is V1
   above V2 at an even share, V2 is drawn below V1, V2's shell runs, and V1's
   `stty size` lost rows and kept its columns.
+- `layout-save-load-then-home` needs `split-below`. It context-clicks the
+  Fleet tab, clicks `save-layout`, types `Focus` and presses Enter, and the
+  document holds Focus with the Fleet's tree. It closes V2 with its
+  `close-panel` button, so the tree is V1 alone, then clicks `load-layout`
+  for Focus. The tree is the saved one, the placements and content records are
+  the same, V2 keeps the terminal address it had before the close and Core
+  lists it live, V2's terminal is drawn with the same shell and Core lists the
+  same live terminals. It clicks Home. The tree, the avatar's context, the dock and
+  Core's live terminals are unchanged. It then shows the Fleet again.
 - `split-right-shortcut` clicks V2's terminal and presses Ctrl+Shift+O. The
   tree splits V2, not V1, V3 is drawn right of V2, and V2 and V3 each have
   fewer columns than the full-width V1 had.
@@ -62,6 +76,11 @@ tests/native/controls/arrangement.patch stops the split tracker from applying
 a saved share. A candidate built with it must fail `restore-shortcut` on the
 expectation `all three terminals are drawn where they were before maximize`,
 because every divider returns to the middle.
+
+tests/native/controls/layouts-load.patch makes the Load entry remove the
+saved layout instead. A candidate built with it must fail
+`layout-save-load-then-home` on the expectation `after Load Focus the Fleet's
+tree is the saved tree`, because V2 stays out of the tree.
 
 ## Gotchas
 
