@@ -127,8 +127,9 @@ validates it and prints the coverage table. `features --write` regenerates the t
 as `journeys: a,b,c`. The list is the core set in `AFTER_MERGE_CORE` in
 `src/features.rs` (quit-restore, workspace, portals, voyage-close, arrangement,
 canvas-stack and agent-split, chosen by the declared invariants they cover per
-second of run time) plus every journey of each feature whose sources the range
-touches, in the order `journeys` lists them. The battery takes the list through
+second of run time), every journey of each feature whose sources the range
+touches, and every journey that has a case line below, in the order `journeys`
+lists them. The battery takes the list through
 `--journeys`. After it comes one `case: journey/case` line for each case that is
 new at HEAD, or whose `needs` lines differ from BASE's, in a journey file the
 range changes. Those are the cases whose declared needs a full run cannot prove,

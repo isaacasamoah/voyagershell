@@ -277,11 +277,6 @@ pub fn after_merge(root: &Path, registry: &Registry, range: &str) -> Result<Afte
         .iter()
         .flat_map(|selection| selection.feature.journeys.iter().map(String::as_str))
         .collect();
-    let journeys = Journey::ALL
-        .iter()
-        .map(|journey| journey.name())
-        .filter(|name| AFTER_MERGE_CORE.contains(name) || touched.contains(name))
-        .collect();
     let mut cases = Vec::new();
     for journey in Journey::ALL
         .iter()
@@ -295,6 +290,15 @@ pub fn after_merge(root: &Path, registry: &Registry, range: &str) -> Result<Afte
             }
         }
     }
+    let journeys = Journey::ALL
+        .iter()
+        .map(|journey| journey.name())
+        .filter(|name| {
+            AFTER_MERGE_CORE.contains(name)
+                || touched.contains(name)
+                || cases.iter().any(|(journey, _)| journey == name)
+        })
+        .collect();
     Ok(AfterMerge { journeys, cases })
 }
 
@@ -654,7 +658,6 @@ debug = "none"
     Second => "second",
     Third => "third";
     "second" needs "first",
-    "third" needs "second",
 }
 "#,
         )]);
@@ -664,6 +667,29 @@ debug = "none"
             "{lines}"
         );
         assert!(!lines.contains("/second"), "{lines}");
+    }
+
+    #[test]
+    fn a_range_changing_only_a_journey_file_puts_that_journey_on_the_journeys_line() {
+        let repo = Repo::new();
+        let base = repo.commit(&[(SCROLLING, TWO_CASES)]);
+        let head = repo.commit(&[(
+            SCROLLING,
+            r#"cases! {
+    First => "first",
+    Second => "second",
+    Third => "third";
+    "second" needs "first",
+}
+"#,
+        )]);
+        let selected = repo.after_merge(&base, &head);
+        assert!(!AFTER_MERGE_CORE.contains(&"terminal-scrolling"));
+        assert!(
+            selected.journeys.contains(&"terminal-scrolling"),
+            "{}",
+            selected.lines()
+        );
     }
 
     #[test]
