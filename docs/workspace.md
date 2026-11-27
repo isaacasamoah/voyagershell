@@ -1362,6 +1362,23 @@ sha256, unpacks it with the system `tar` and removes the archive. It then runs
 failed download, checksum, unpack, version check or rename removes the `.part`
 folder, leaves `next` as it was and exits 1 with the reason.
 
+A build compiled with `VOYAGER_RELEASE=1` checks for a newer release itself, but only
+when it runs from its own release folder, `builds/<its version>/`
+(`release::checker`). A source build, a `cargo run` and a `local-` build never check.
+The check starts once the app is ready, waits 10 seconds, and then runs every hour, or
+30 minutes after a failed check. It takes the same steps as `voyager update`, with the
+running version in place of `current`, so a release equal to or older than the
+running build offers nothing. When a build is staged, the app shows a card at the
+bottom right (`banner.rs`). The card names the version and the manifest's notes and
+says "Restart now, or the new version starts the next time you open VoyagerShell.
+Your programs keep running." Later hides the card. The staged build still starts at
+the next `voyager start`. Restart takes the Ctrl+Q path, which quits and keeps. When
+that succeeds, the app spawns one detached `sh` that waits for the app's process to
+exit and then runs `<install>/current/voyager start` (`release::relaunch`). Start
+applies `next` and falls back to the previous build at most once, so nothing
+relaunches a second time. If the quit fails, the quit error shows and nothing
+relaunches.
+
 `voyager start` reads `start.json` and first asks a running app to raise its
 window. When none answers, it applies `next`, so `previous` becomes the old
 `current`, and launches `current/voyager-shell` in its own process group with

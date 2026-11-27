@@ -511,6 +511,10 @@ fn journey_inputs(
             "it needs --audio on and a --voice-engine folder, which the battery does not supply"
                 .into(),
         ),
+        Journey::ReleaseUpdate => Err(
+            "it needs a release build and a newer source build as its second, which the battery does not supply"
+                .into(),
+        ),
         _ => Ok(Vec::new()),
     }
 }
@@ -1056,6 +1060,7 @@ mod tests {
             Journey::Voice,
             Journey::VoiceTalkOver,
             Journey::DailyStart,
+            Journey::ReleaseUpdate,
         ];
         for journey in Journey::ALL.iter().filter(|j| !seeded.contains(j)) {
             let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();

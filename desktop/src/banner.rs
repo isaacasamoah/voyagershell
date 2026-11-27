@@ -3,6 +3,7 @@ use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
     StatefulInteractiveElement, Styled, Window, div, px, relative, rgb,
 };
+use std::rc::Rc;
 use voyager_app::content::install::{Reason, Update};
 use voyager_contract::inspection::Role;
 
@@ -48,37 +49,89 @@ pub(crate) fn errors(text: String) -> impl IntoElement {
         .child(text)
 }
 
-pub(crate) struct Updates {
-    updates: Vec<Update>,
-    dismissed: bool,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Offer {
+    pub(crate) version: String,
+    pub(crate) notes: String,
 }
 
-impl Updates {
+#[derive(Clone, Copy)]
+pub(crate) enum Hide {
+    Updates,
+    Restart,
+}
+
+pub(crate) struct Notices {
+    updates: Vec<Update>,
+    updates_hidden: bool,
+    restart: Option<Offer>,
+    restart_hidden: bool,
+}
+
+pub(crate) const RESTART_WORDS: &str = "Restart now, or the new version starts the next time you open VoyagerShell. Your programs keep running.";
+
+impl Notices {
     pub(crate) fn new(updates: Vec<Update>) -> Self {
         Self {
             updates,
-            dismissed: false,
+            updates_hidden: false,
+            restart: None,
+            restart_hidden: false,
         }
     }
 
-    pub(crate) fn dismiss(&mut self) {
-        self.dismissed = true;
+    pub(crate) fn hide(&mut self, hide: Hide) {
+        match hide {
+            Hide::Updates => self.updates_hidden = true,
+            Hide::Restart => self.restart_hidden = true,
+        }
+    }
+
+    pub(crate) fn offer(&mut self, version: String, notes: String) {
+        self.restart = Some(Offer { version, notes });
+        self.restart_hidden = false;
     }
 
     pub(crate) fn view(
         &self,
-        dismiss: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+        hide: impl Fn(&Hide, &mut Window, &mut App) + 'static,
     ) -> Option<AnyElement> {
-        if self.dismissed || self.updates.is_empty() {
+        let hide = Rc::new(hide);
+        let restart = self
+            .restart
+            .as_ref()
+            .filter(|_| !self.restart_hidden)
+            .map(|offer| restart(offer, hide.clone()));
+        let updates = (!self.updates_hidden && !self.updates.is_empty())
+            .then(|| self.updates(move |_, window, cx| hide(&Hide::Updates, window, cx)));
+        if restart.is_none() && updates.is_none() {
             return None;
         }
+        Some(
+            div()
+                .absolute()
+                .bottom(px(8.))
+                .right(px(12.))
+                .max_h(relative(0.6))
+                .flex()
+                .flex_col()
+                .items_end()
+                .gap(px(6.))
+                .children(restart)
+                .children(updates)
+                .into_any_element(),
+        )
+    }
+
+    fn updates(
+        &self,
+        dismiss: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    ) -> AnyElement {
         let mut notice = div()
         .id("profile-updates")
-        .absolute()
-        .bottom(px(8.))
-        .right(px(12.))
+        .min_h(px(0.))
+        .flex_shrink()
         .max_w(px(640.))
-        .max_h(relative(0.6))
         .overflow_y_scroll()
         .bg(rgb(0x2b2a1a))
         .text_color(rgb(0xf3e9b5))
@@ -111,8 +164,68 @@ impl Updates {
                     .child(text),
             );
         }
-        Some(notice.into_any_element())
+        notice.into_any_element()
     }
+}
+
+fn restart_text(offer: &Offer) -> String {
+    let mut text = format!("VoyagerShell {} is ready.", offer.version);
+    if !offer.notes.is_empty() {
+        text.push('\n');
+        text.push_str(&offer.notes);
+    }
+    text.push('\n');
+    text.push_str(RESTART_WORDS);
+    text
+}
+
+fn restart(offer: &Offer, hide: Rc<dyn Fn(&Hide, &mut Window, &mut App)>) -> AnyElement {
+    let button = |id: &'static str, role: Role, label: &'static str| {
+        div()
+            .id(id)
+            .px(px(10.))
+            .py(px(4.))
+            .rounded(px(4.))
+            .cursor_pointer()
+            .bg(rgb(0x2f4a66))
+            .child(crate::inspect::control(role, String::new()))
+            .child(label)
+    };
+    let text = restart_text(offer);
+    div()
+        .id("restart-offer")
+        .flex_none()
+        .max_w(px(460.))
+        .bg(rgb(0x1b2838))
+        .text_color(rgb(0xd6e8ff))
+        .p(px(10.))
+        .rounded(px(6.))
+        .child(crate::inspect::labelled(
+            Role::RestartOffer,
+            String::new(),
+            text.clone(),
+        ))
+        .child(text)
+        .child(
+            div()
+                .mt(px(8.))
+                .flex()
+                .justify_end()
+                .gap(px(8.))
+                .child(
+                    button("restart-later", Role::RestartLater, "Later")
+                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                            hide(&Hide::Restart, window, cx)
+                        }),
+                )
+                .child(
+                    button("restart-now", Role::RestartNow, "Restart")
+                        .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                            window.dispatch_action(Box::new(crate::Restart), cx)
+                        }),
+                ),
+        )
+        .into_any_element()
 }
 
 #[cfg(test)]
@@ -141,5 +254,22 @@ mod tests {
             &StandardCanvas::NotNeeded,
         );
         assert_eq!(silent, "Canvas load failed: broken");
+    }
+
+    #[test]
+    fn the_restart_card_names_the_version_and_keeps_programs_running() {
+        let mut offer = Offer {
+            version: "0.1.1".into(),
+            notes: "Faster scrolling.".into(),
+        };
+        assert_eq!(
+            restart_text(&offer),
+            format!("VoyagerShell 0.1.1 is ready.\nFaster scrolling.\n{RESTART_WORDS}")
+        );
+        offer.notes.clear();
+        assert_eq!(
+            restart_text(&offer),
+            format!("VoyagerShell 0.1.1 is ready.\n{RESTART_WORDS}")
+        );
     }
 }

@@ -1698,6 +1698,51 @@ lacks. `daily-start-update.patch` clears `next` without moving `current`.
 session, so the first Vessel's counter stops at the update restart and
 `update-and-restart-keeps-programs` fails on the counter and the same pid.
 
+### Release update
+
+`release-update` shows the app's own update. That covers the check, the quiet download,
+the Restart card and the restart onto the newer build. It needs `--second-binary`, and
+the two builds differ from the `daily-start` pair. The candidate is a release build,
+built with `VOYAGER_RELEASE=1`. The second build is a source build whose crate versions
+are one patch higher. The run checks that the second build reports a newer version and
+stops with verifier blame when it does not. Build the pair from one commit:
+
+```sh
+VOYAGER_RELEASE=1 cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
+mkdir -p "$pair/release" && cp target/release/voyager-shell target/release/voyager "$pair/release/"
+sed -i '0,/^version = ".*"/s//version = "0.1.1"/' app/Cargo.toml contract/Cargo.toml desktop/Cargo.toml
+cargo build --release -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
+mkdir -p "$pair/source" && cp target/release/voyager-shell target/release/voyager "$pair/source/"
+git checkout app/Cargo.toml contract/Cargo.toml desktop/Cargo.toml
+```
+
+The run lays out an install in its evidence folder as `daily-start` does, but the
+candidate goes into `builds/<its version>`, the name a release install gives it. It
+writes a stand-in release site beside the install. `latest.json` there names the second
+build's version, and its archive packs the second build and its `voyager` command. A
+second archive holds a script that reports the next patch version, for the cases that
+must not stage a real build. The app and every `voyager` command the run starts get
+`VOYAGER_RELEASES_URL=file://<site>`. The run launches the candidate itself from
+`builds/<version>/voyager-shell` with its inspection, because the run clicks the card
+and an app started by `voyager start` writes no inspection. Restart's relaunch is
+handed to the verifier as a child subreaper, and the build it starts becomes the viewer,
+as in `daily-start`. `src/native/install.rs` owns the site and the restart.
+
+| Case | What it shows |
+| --- | --- |
+| `offers-restart` (setup) | The release build stages the second build as `next` and leaves `current` on itself, with no `.part` folder left. The card names the newer version, says the programs keep running and offers Restart and Later. The first Vessel's program keeps its pid and keeps counting. |
+| `bad-checksum-changes-nothing` | With a `latest.json` whose sha256 does not match, `voyager update` exits 1 and says the download is damaged. The links, the builds folder, the running app and the program are as they were. |
+| `failed-download-changes-nothing` | With a `latest.json` whose archive is missing, `voyager update` exits 1 and says the download failed. Nothing else changes. |
+| `restart-runs-the-newer-build` | A click on Restart quits and keeps, then runs `voyager start` once. It launches the second build and nothing else. `current` names it and `previous` the first, the same Voyage is selected and the program keeps its pid and keeps counting. This is the control case. |
+| `source-build-stages-nothing` | With the source build running and a newer `latest.json` published, nothing is staged and no folder appears within 25 seconds. That is more than twice the 10 second wait before a release build's first check. |
+
+`tests/native/controls/release-update.patch` makes Restart's relaunch do nothing, so
+`restart-runs-the-newer-build` fails. `release-update-checksum.patch` skips the sha256
+comparison, so `bad-checksum-changes-nothing` stages the stand-in and fails.
+`release-update-source.patch` treats every build as a release build. Apply it to the
+second build only, and `source-build-stages-nothing` fails because the source build
+stages the stand-in. The battery does not run this journey, because it needs this pair.
+
 `--video on` records the owned display with `ffmpeg` into `recording.webm` in the
 evidence, from the moment the display answers until cleanup. The recording is a demo,
 not evidence. The checks, captures and action log are the result.

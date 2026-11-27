@@ -638,6 +638,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/daily_start.rs"),
     ),
     (
+        "src/journey/release_update.rs",
+        include_bytes!("journey/release_update.rs"),
+    ),
+    (
         "src/journey/home_create.rs",
         include_bytes!("journey/home_create.rs"),
     ),

@@ -22,24 +22,24 @@ struct Quiet {
     layout: Value,
 }
 
-fn holds(linked: &Option<Linked>, sha256: &str) -> bool {
+pub(super) fn holds(linked: &Option<Linked>, sha256: &str) -> bool {
     linked
         .as_ref()
         .is_some_and(|linked| linked.sha256.as_deref() == Some(sha256))
 }
 
-fn runs(native: &Native, sha256: &str) -> bool {
+pub(super) fn runs(native: &Native, sha256: &str) -> bool {
     native.running() && native.candidate.sha256 == sha256
 }
 
-fn selected(native: &Native) -> Result<Option<String>> {
+pub(super) fn selected(native: &Native) -> Result<Option<String>> {
     Ok(native
         .document()?
         .and_then(|(_, layout)| layout.selected_voyage)
         .map(|voyage| voyage.0))
 }
 
-fn count(terminal: &Terminal, native: &Native) -> Result<Option<u64>> {
+pub(super) fn count(terminal: &Terminal, native: &Native) -> Result<Option<u64>> {
     Ok(terminal
         .screen(native)?
         .lines()
@@ -47,7 +47,11 @@ fn count(terminal: &Terminal, native: &Native) -> Result<Option<u64>> {
         .max())
 }
 
-fn climbed(terminal: &Terminal, native: &Native, from: Option<u64>) -> Result<Option<u64>> {
+pub(super) fn climbed(
+    terminal: &Terminal,
+    native: &Native,
+    from: Option<u64>,
+) -> Result<Option<u64>> {
     let Some(from) = from else {
         return Ok(None);
     };

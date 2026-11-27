@@ -483,7 +483,7 @@ pub struct CanvasHost {
     watch_error: Option<String>,
     quit_status: Option<String>,
     decorated: crate::window_frame::Decorated,
-    profile_updates: crate::banner::Updates,
+    pub(crate) banners: crate::banner::Notices,
     accessibility: bool,
     _observers: Vec<Subscription>,
 }
@@ -768,7 +768,7 @@ impl CanvasHost {
             watch_error,
             quit_status: None,
             decorated,
-            profile_updates: crate::banner::Updates::new(profile_updates),
+            banners: crate::banner::Notices::new(profile_updates),
             accessibility: window.is_a11y_active(),
             _observers: Vec::new(),
         }
@@ -813,8 +813,8 @@ impl Render for CanvasHost {
             .bg(rgb(0x111316))
             .children(content)
             .children(crate::window_frame::grips(window))
-            .children(self.profile_updates.view(cx.listener(|host, _, _, cx| {
-                host.profile_updates.dismiss();
+            .children(self.banners.view(cx.listener(|host, hide, _, cx| {
+                host.banners.hide(*hide);
                 cx.notify();
             })))
             .when(!errors.is_empty(), |view| {

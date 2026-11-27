@@ -198,6 +198,7 @@ edges:
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::conversation_client', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::core', from_owner: desktop-presentation, to_owner: core-adapter}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::omni', from_owner: desktop-presentation, to_owner: conversation-provider}
+  - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::release', from_owner: desktop-presentation, to_owner: application-queue}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_layer', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_parts', from_owner: desktop-presentation, to_owner: conversation-provider}
   - {from: 'rs:voyager_desktop', to: 'rs:voyager_app::voice_voyager', from_owner: desktop-presentation, to_owner: conversation-provider}

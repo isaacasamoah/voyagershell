@@ -32,8 +32,8 @@ mod window_frame;
 
 use anyhow::{Context as _, Result, bail};
 use gpui::{
-    AnyWindowHandle, App, AppContext, AsyncApp, Bounds, KeyBinding, TitlebarOptions, WindowBounds,
-    WindowDecorations, WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext, AsyncApp, Bounds, KeyBinding, TitlebarOptions, WeakEntity,
+    WindowBounds, WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_shell::{AppAssets, ShellRoot, ShellRuntime};
 use std::{
@@ -44,7 +44,7 @@ use std::{
 };
 use voyager_app::client::{Client, StartUp};
 
-gpui::actions!(voyager, [Quit]);
+gpui::actions!(voyager, [Quit, Restart]);
 
 pub fn version() -> String {
     let (major, minor, patch) = voyager_app::core::MINIMUM_CORE;
@@ -64,7 +64,32 @@ fn seed(path: &Path, data: &str) -> Result<()> {
     Ok(())
 }
 
-fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &mut App) {
+fn watch_releases(canvas: WeakEntity<host::CanvasHost>, cx: &mut App) {
+    let Some(install) = voyager_app::release::checker() else {
+        return;
+    };
+    let (sent, offers) = async_channel::unbounded();
+    voyager_app::release::watch(install, sent);
+    cx.spawn(async move |cx: &mut AsyncApp| {
+        while let Ok(offer) = offers.recv().await {
+            let _ = cx.update(|cx| {
+                canvas.update(cx, |canvas, cx| {
+                    canvas.banners.offer(offer.version, offer.notes);
+                    cx.notify();
+                })
+            });
+        }
+    })
+    .detach();
+}
+
+fn become_ready(
+    client: Client,
+    session: String,
+    window: AnyWindowHandle,
+    canvas: Option<WeakEntity<host::CanvasHost>>,
+    cx: &mut App,
+) {
     cx.spawn(async move |cx: &mut AsyncApp| {
         let (sent, received) = async_channel::bounded(1);
         std::thread::spawn(move || sent.send_blocking(client.start_up(&session)));
@@ -81,6 +106,9 @@ fn become_ready(client: Client, session: String, window: AnyWindowHandle, cx: &m
                 raises,
             ),
         };
+        if let Some(canvas) = canvas {
+            cx.update(|cx| watch_releases(canvas, cx));
+        }
         while raises.recv().await.is_ok() {
             cx.update(|cx| {
                 cx.activate(true);
@@ -196,6 +224,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 ..Default::default()
             };
             let ready_session = session.clone();
+            let mut ready_canvas = None;
             let opened = cx.open_window(options, |window, cx| {
                 inspect::install(inspect, window, cx);
                 #[cfg(feature = "frame-profiler")]
@@ -234,7 +263,9 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                         cx,
                     )
                 });
+                ready_canvas = Some(canvas.downgrade());
                 quit::register(
+                    std::rc::Rc::new(voyager_app::release::relaunch),
                     canvas.downgrade(),
                     quit_workspace,
                     quit_conversation,
@@ -247,7 +278,9 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 })
             });
             match opened {
-                Ok(window) => become_ready(ready_client, ready_session, window.into(), cx),
+                Ok(window) => {
+                    become_ready(ready_client, ready_session, window.into(), ready_canvas, cx)
+                }
                 Err(error) => {
                     eprintln!("Native window failed: {error}");
                     cx.quit();

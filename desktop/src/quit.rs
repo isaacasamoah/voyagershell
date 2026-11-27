@@ -1,4 +1,4 @@
-use crate::{Quit, host::CanvasHost};
+use crate::{Quit, Restart, host::CanvasHost};
 use gpui::{App, AsyncApp, WeakEntity};
 use std::{cell::RefCell, rc::Rc};
 use voyager_app::{
@@ -8,6 +8,12 @@ use voyager_app::{
     voice_layer::Layer,
 };
 
+#[derive(Clone, Copy)]
+enum After {
+    Quit,
+    Relaunch,
+}
+
 enum State {
     Ready,
     Pending,
@@ -16,6 +22,7 @@ enum State {
 
 #[derive(Clone)]
 struct Ending {
+    relaunch: Rc<dyn Fn() -> std::io::Result<()>>,
     canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
@@ -24,6 +31,7 @@ struct Ending {
 }
 
 pub fn register(
+    relaunch: Rc<dyn Fn() -> std::io::Result<()>>,
     canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
@@ -32,6 +40,7 @@ pub fn register(
     cx: &mut App,
 ) {
     let ending = Ending {
+        relaunch,
         canvas,
         workspace,
         conversation,
@@ -39,17 +48,19 @@ pub fn register(
         state: Rc::new(RefCell::new(State::Ready)),
     };
     let quit = ending.clone();
-    cx.on_action(move |_: &Quit, cx| quit.run(Lifecycle::QuitAndKeep, cx));
+    cx.on_action(move |_: &Quit, cx| quit.run(Lifecycle::QuitAndKeep, After::Quit, cx));
+    let restart = ending.clone();
+    cx.on_action(move |_: &Restart, cx| restart.run(Lifecycle::QuitAndKeep, After::Relaunch, cx));
     cx.spawn(async move |cx: &mut AsyncApp| {
         while let Ok(operation) = requests.recv().await {
-            cx.update(|cx| ending.run(operation, cx));
+            cx.update(|cx| ending.run(operation, After::Quit, cx));
         }
     })
     .detach();
 }
 
 impl Ending {
-    fn run(&self, operation: Lifecycle, cx: &mut App) {
+    fn run(&self, operation: Lifecycle, after: After, cx: &mut App) {
         match &*self.state.borrow() {
             State::Pending => return,
             State::Finished(_, Ok(())) => {
@@ -105,9 +116,18 @@ impl Ending {
                 ))
             };
             cx.update(|cx| {
-                match &result {
-                    Ok(()) => cx.quit(),
-                    Err(error) => ending.status(error.clone(), cx),
+                match (&result, after) {
+                    (Ok(()), After::Quit) => cx.quit(),
+                    (Ok(()), After::Relaunch) => match (ending.relaunch)() {
+                        Ok(()) => cx.quit(),
+                        Err(error) => ending.status(
+                            format!(
+                                "Programs keep running, but the restart did not begin: {error}. Press Ctrl+Q, then run voyager start."
+                            ),
+                            cx,
+                        ),
+                    },
+                    (Err(error), _) => ending.status(error.clone(), cx),
                 }
                 *ending.state.borrow_mut() = State::Finished(operation, result);
             });

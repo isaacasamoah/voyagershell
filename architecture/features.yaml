@@ -1309,7 +1309,7 @@ features:
     state: {behavior: covered, performance: none, visual: none, debug: covered}
     platforms: [linux]
     checks: []
-    native_journeys: [quit-restore, voyage-close, daily-start]
+    native_journeys: [quit-restore, voyage-close, daily-start, release-update]
     python_journeys: []
     invariants:
       - id: quit-keeps-programs
@@ -1325,8 +1325,9 @@ features:
           - 'journey:quit-restore/close-window-keeps'
           - 'journey:quit-restore/close-button-keeps'
           - 'journey:daily-start/update-and-restart-keeps-programs'
+          - 'journey:release-update/restart-runs-the-newer-build'
         formal: []
-        journeys: [daily-start, quit-restore]
+        journeys: [daily-start, quit-restore, release-update]
       - id: failed-start-touches-nothing
         kind: user
         says: 'When a build started by voyager start exits before it is ready, start returns to the previous build. The failed build started, stopped and closed no program, and the person''s Voyages reopen as they were.'
@@ -1351,6 +1352,33 @@ features:
         checks: ['journey:daily-start/rollback-runs-the-previous-build']
         formal: []
         journeys: [daily-start]
+      - id: update-waits-for-restart
+        kind: user
+        says: 'A release build checks for a newer release a little after it opens and then hourly. It downloads and checks the newer build without touching anything that runs, then offers Restart. Restart quits and keeps, and the newer build reopens the same Voyages with every program still running.'
+        owner: application-queue
+        guards: ['type:app/src/install.rs#Staged']
+        checks:
+          - 'test:app/src/release_tests.rs#the_app_offers_only_a_newer_release_and_never_itself'
+          - 'test:app/src/release_tests.rs#the_relaunch_runs_start_once_and_only_after_the_old_process_has_exited'
+          - 'journey:release-update/offers-restart'
+          - 'journey:release-update/restart-runs-the-newer-build'
+        formal: []
+        journeys: [release-update]
+      - id: failed-update-changes-nothing
+        kind: user
+        says: 'A source build, a cargo run and a build added with voyager update --from never check for a release and never stage one. A failed download, a checksum mismatch or a build that reports another version stages nothing, and the running app and every program stay as they were.'
+        owner: application-queue
+        guards: ['type:app/src/release.rs#Manifest']
+        checks:
+          - 'test:app/src/release_tests.rs#only_a_release_build_running_from_its_own_release_folder_checks'
+          - 'test:app/src/release_tests.rs#a_checksum_mismatch_removes_the_download_and_leaves_next_alone'
+          - 'test:app/src/release_tests.rs#a_failed_download_removes_the_partial_folder_and_leaves_next_alone'
+          - 'test:app/src/release_tests.rs#a_build_that_reports_another_version_is_refused'
+          - 'journey:release-update/bad-checksum-changes-nothing'
+          - 'journey:release-update/failed-download-changes-nothing'
+          - 'journey:release-update/source-build-stages-nothing'
+        formal: []
+        journeys: [release-update]
       - id: stop-is-explicit
         kind: user
         says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'
@@ -2164,6 +2192,7 @@ features:
       - tests/native/src/journey/profile.rs
       - tests/native/src/journey/profile_updates.rs
       - tests/native/src/journey/quit_restore.rs
+      - tests/native/src/journey/release_update.rs
       - tests/native/src/journey/scrolling.rs
       - tests/native/src/journey/slow_list.rs
       - tests/native/src/journey/slow_save.rs

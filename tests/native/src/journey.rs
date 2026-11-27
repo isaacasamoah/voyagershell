@@ -18,6 +18,7 @@ mod portals;
 mod profile;
 mod profile_updates;
 mod quit_restore;
+mod release_update;
 mod scrolling;
 mod slow_list;
 mod slow_save;
@@ -168,6 +169,7 @@ journeys! {
     AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     VoiceTalkOver => "voice-talk-over" in voice_talk_over, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     DailyStart => "daily-start" in daily_start, sidebar: None, window: None;
+    ReleaseUpdate => "release-update" in release_update, sidebar: None, window: None;
 }
 
 impl Journey {
@@ -189,8 +191,12 @@ impl Journey {
         !matches!(self, Self::VoyagerCommand)
     }
 
-    pub fn installs(self) -> bool {
-        matches!(self, Self::DailyStart)
+    pub fn installs(self) -> Option<crate::native::Layout> {
+        match self {
+            Self::DailyStart => Some(crate::native::Layout::Local),
+            Self::ReleaseUpdate => Some(crate::native::Layout::Release),
+            _ => None,
+        }
     }
 
     pub fn traces_tools(self) -> bool {
@@ -712,6 +718,8 @@ mod tests {
                 "tests/native/controls/daily-start-focus.patch".to_owned(),
                 "tests/native/controls/daily-start-rollback.patch".to_owned(),
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
+                "tests/native/controls/release-update-checksum.patch".to_owned(),
+                "tests/native/controls/release-update-source.patch".to_owned(),
                 "tests/native/controls/profile-updates-kept-edit.patch".to_owned(),
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
                 "tests/native/controls/core-events-unreported-idle.patch".to_owned(),
@@ -965,6 +973,11 @@ mod tests {
                     "create-voyage",
                     "switch-voyage",
                 ],
+            ),
+            (
+                Journey::ReleaseUpdate,
+                "source-build-stages-nothing",
+                &["restart-runs-the-newer-build"],
             ),
             (
                 Journey::SocketDock,
