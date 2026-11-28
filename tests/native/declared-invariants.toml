@@ -299,15 +299,15 @@ confidence = "stated"
 
 [[invariant]]
 id = "avatar-stays-put"
-says = "The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it."
+says = "The avatar is still at rest and moves only when the person moves it. Switching Fleets, opening Home or switching Voyage never docks or undocks it. While the place it is docked on is off screen, it is drawn parked in the status row, and it is drawn back at that place when the place is shown again. The floating avatar stays where it was dragged."
 kind = "user"
 owner = "desktop-presentation"
-source = "Isaac, 26 Oct 2026 (withdrew automatic return), 3 Nov 2026 owner UX note (switching screens leaves the avatar where placed), 9 Nov 2026 decision (still avatar replaces floating and periodic stretching)"
+source = "Isaac, 26 Oct 2026 (withdrew automatic return), 3 Nov 2026 owner UX note (switching screens leaves the avatar where placed), 9 Nov 2026 decision (still avatar replaces floating and periodic stretching); Isaac, 27 Nov 2026: switching Fleets, opening Home or switching Voyage never docks or undocks the avatar; while its dock is off screen it is drawn parked in the status row and returns to that place"
 features = ["avatar"]
 guard = []
 type_gap = "Not state-shaped: it is a rule about which events move the avatar, and no stored shape restricts its position. DI13 adds its journey."
-check = []
-gap = "No case yet. The unit that gives every user invariant in scope a journey (DI13) adds it."
+check = ["journey:workspace/rests-where-put", "journey:workspace/views-leave-avatar-put"]
+gap = "rests-where-put checks that a docked avatar stays still and in place over a rest window, and that a drop on empty canvas leaves it docked where it was. views-leave-avatar-put checks that switching Fleets, opening Home and switching Voyage send no dock, leave it docked on the same Vessel and draw it back in the same place. The floating avatar's free spot, where it rests while the workspace window is hidden, has no case yet, because the verifier does not yet drive a hidden window under Xvfb."
 confidence = "stated"
 
 [[invariant]]

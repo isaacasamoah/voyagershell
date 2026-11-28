@@ -28,6 +28,7 @@ impl Target {
     pub const HOME: Self = Self::single(Role::HomeNavigation);
     pub const WORKSPACE_DOCK: Self = Self::single(Role::WorkspaceDock);
     pub const STATUS: Self = Self::single(Role::WorkspaceStatus);
+    pub const STATUS_ROW: Self = Self::single(Role::StatusRow);
     pub const HOST_STATUS: Self = Self::single(Role::HostStatus);
     pub const REFRESH: Self = Self::single(Role::WorkspaceRefresh);
     pub const STOP_SESSION: Self = Self::single(Role::StopSession);

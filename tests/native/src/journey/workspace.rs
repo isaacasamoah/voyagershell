@@ -4,10 +4,12 @@ mod plan;
 
 use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
-use crate::inspection::Target;
-use crate::native::{Decorations, Native, Seen, Sharpness, Terminal, fleets, vessels, voyages};
+use crate::inspection::{Target, region};
+use crate::native::{
+    AVATAR_AT_REST, Decorations, Native, Seen, Sharpness, Terminal, fleets, hold, vessels, voyages,
+};
 use crate::sandbox;
-use crate::x11::{Key, Observed, Request};
+use crate::x11::{Key, Observed, Pixels, Request};
 use anyhow::Result;
 use avatar::Avatar;
 use model::{Model, Row, Tab};
@@ -16,7 +18,7 @@ use std::path::Path;
 use voyager_contract::inspection::{Rect, Role};
 use voyager_contract::{
     Axis, Context, Fleet, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, Voyage,
-    VoyageId,
+    VoyageId, WorkspaceView,
 };
 
 cases! {
@@ -25,12 +27,14 @@ cases! {
     AvatarSharp => "avatar-sharp",
     AvatarFloat => "avatar-float",
     AvatarSmall => "avatar-small",
+    RestsWherePut => "rests-where-put",
     CreateFleet => "create-fleet",
     SwitchFleet => "switch-fleet",
     FleetTabGivesKeyboard => "fleet-tab-gives-keyboard",
     CreateVoyage => "create-voyage",
     SwitchVoyage => "switch-voyage",
     VoyageSwitchGivesKeyboard => "voyage-switch-gives-keyboard",
+    ViewsLeaveAvatarPut => "views-leave-avatar-put",
     SplitFocusRemembered => "split-focus-remembered",
     ReopenVoyageFleet => "reopen-voyage-restores-fleet",
     RenameFleetEnter => "rename-fleet-enter",
@@ -56,12 +60,14 @@ cases! {
     "dock-vessel" needs "split-vessel",
     "avatar-float" needs "dock-vessel",
     "avatar-small" needs "avatar-float",
+    "rests-where-put" needs "avatar-small",
     "create-fleet" needs "avatar-small",
     "fleet-tab-gives-keyboard" needs "switch-fleet",
     "switch-fleet" needs "create-fleet",
     "create-voyage" needs "switch-fleet",
     "switch-voyage" needs "create-voyage",
     "voyage-switch-gives-keyboard" needs "switch-voyage",
+    "views-leave-avatar-put" needs "switch-voyage",
     "fleet-without-input-takes-no-keyboard" needs "switch-voyage",
     "fleet-tab-keeps-chat-keyboard" needs "switch-voyage",
 }
@@ -70,6 +76,7 @@ pub const CONTROL: Case = Case::RenameFleetEnter;
 
 const DOCKED_DIAMETER: f32 = 94.;
 const COMPACT_DIAMETER: f32 = 38.;
+const PARKED_TOLERANCE: f32 = 1.;
 const SHARP_TOLERANCE: f64 = 3.5;
 
 const FLEET_NAME: &str = "Native Fleet";
@@ -125,6 +132,26 @@ struct Landing {
     dock: Context,
     avatar: Option<Rect>,
     on_dock: bool,
+}
+
+#[derive(PartialEq, Serialize)]
+struct Parked {
+    avatar: Option<Rect>,
+    row: Option<Rect>,
+}
+
+impl Parked {
+    fn in_row(&self) -> bool {
+        let (Some(avatar), Some(row)) = (self.avatar, self.row) else {
+            return false;
+        };
+        let x = avatar.x + avatar.width / 2.;
+        let y = avatar.y + avatar.height / 2.;
+        (avatar.width - COMPACT_DIAMETER).abs() <= PARKED_TOLERANCE
+            && (avatar.height - COMPACT_DIAMETER).abs() <= PARKED_TOLERANCE
+            && (row.x..=row.x + row.width).contains(&x)
+            && (row.y..=row.y + row.height).contains(&y)
+    }
 }
 
 impl Landing {
@@ -405,6 +432,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("place", avatar.place())?
             .observed("sharpness", &sharpness)?
             .observed("landing", &landing)
+    })?;
+
+    cases.check(native, Case::RestsWherePut, |native| {
+        rests_where_put(native, &docked)
     })?;
 
     let made = cases.make(native, Case::CreateFleet, |native| {
@@ -700,6 +731,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         model.voyage = start.voyage.clone();
         model.fleet = start.fleet.clone();
         modelled(native, &model, verdict)
+    })?;
+
+    cases.check(native, Case::ViewsLeaveAvatarPut, |native| {
+        views_leave_avatar_put(native, &docked, &start, &second.id, &other.id)
     })?;
 
     cases.check(native, Case::SplitFocusRemembered, |native| {
@@ -1600,6 +1635,165 @@ fn drawn_as(subject: &RenameTarget, label: &str, name: &str) -> bool {
         }
         RenameTarget::Voyage { .. } | RenameTarget::Fleet { .. } => label == name,
     }
+}
+
+fn avatar_still(native: &Native) -> Result<(Landing, Option<Pixels>)> {
+    let (landing, area) = native.settle(
+        "the avatar's dock and place holding still",
+        |seen| {
+            let area = avatar_bounds(seen).map(|bounds| region(seen.frame, &bounds));
+            Some((landing(seen), area))
+        },
+        |_| true,
+    )?;
+    let look = match area {
+        Some(area) => Some(native.settle(
+            "the avatar's pixels holding still",
+            |_| native.look_at(area).ok(),
+            |_| true,
+        )?),
+        None => None,
+    };
+    Ok((landing, look))
+}
+
+fn rests_where_put(native: &mut Native, docked: &Context) -> Result<Verdict> {
+    let (put, look) = avatar_still(native)?;
+    hold(AVATAR_AT_REST)?;
+    let (rested, after_rest) = avatar_still(native)?;
+    let (window, seen) = (native.window_bounds()?, native.window_requests()?.len());
+    native.drag(&Target::AVATAR, &Target::window_drag("fleets"))?;
+    let (dropped, after_drop) = avatar_still(native)?;
+    let (moved, sent) = (
+        native.window_bounds()?,
+        native.requests_through_quiet(seen)?,
+    );
+    Verdict::new()
+        .expect(
+            "the docked avatar kept its dock, bounds and pixels over 3 s at rest",
+            put.stayed(docked)
+                && rested.stayed(docked)
+                && rested.avatar == put.avatar
+                && after_rest.is_some()
+                && after_rest == look,
+        )
+        .expect(
+            "a drop on the empty Fleet tab bar left the avatar docked on the Vessel, at the same bounds and pixels",
+            dropped.stayed(docked)
+                && dropped.avatar == put.avatar
+                && after_drop.is_some()
+                && after_drop == look,
+        )
+        .expect(
+            "the drop on the Fleet tab bar sent no window request and left the window's bounds as they were",
+            sent.is_empty() && moved == window,
+        )
+        .observed("put", &put)?
+        .observed("rested", &rested)?
+        .observed("dropped", &dropped)?
+        .observed("window before", window)?
+        .observed("window after", moved)?
+        .observed("window requests", &sent)
+}
+
+fn views_leave_avatar_put(
+    native: &mut Native,
+    docked: &Context,
+    start: &Start,
+    fleet: &FleetId,
+    voyage: &VoyageId,
+) -> Result<Verdict> {
+    let (put, look) = avatar_still(native)?;
+    let mut contexts = Vec::new();
+    native.click(&Target::name(&RenameTarget::Fleet { id: fleet.clone() }))?;
+    contexts.push(native.settle(
+        "the second Fleet selected and drawn",
+        |seen| {
+            let drawn = seen.document.selected_fleet.as_ref() == Some(fleet)
+                && shown(seen, self::fleet(seen.document, fleet)?);
+            drawn.then(|| seen.document.context.clone())
+        },
+        |_| true,
+    )?);
+    let parked = native.settle(
+        "the avatar and the status row holding still on the second Fleet",
+        |seen| {
+            Some(Parked {
+                avatar: avatar_bounds(seen),
+                row: Target::STATUS_ROW.find(seen.frame).map(|row| row.bounds),
+            })
+        },
+        |_| true,
+    )?;
+    native.click(&Target::HOME)?;
+    contexts.push(native.settle(
+        "the Home view selected and drawn",
+        |seen| {
+            let home = seen.document.home.as_ref()?.fleets.first()?;
+            let drawn = seen.document.view == WorkspaceView::Home && shown(seen, home);
+            drawn.then(|| seen.document.context.clone())
+        },
+        |_| true,
+    )?);
+    native.click(&Target::name(&RenameTarget::Voyage { id: voyage.clone() }))?;
+    contexts.push(native.settle(
+        "the second Voyage selected and drawn",
+        |seen| {
+            let selected = seen.document.selected_fleet.as_ref()?;
+            let drawn = seen.document.selected_voyage.as_ref() == Some(voyage)
+                && shown(seen, self::fleet(seen.document, selected)?);
+            drawn.then(|| seen.document.context.clone())
+        },
+        |_| true,
+    )?);
+    native.click(&Target::name(&RenameTarget::Voyage {
+        id: start.voyage.clone(),
+    }))?;
+    native.settle(
+        "the first Voyage selected and drawn",
+        |seen| {
+            let selected = seen.document.selected_fleet.as_ref()?;
+            (seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+                && shown(seen, self::fleet(seen.document, selected)?))
+            .then_some(())
+        },
+        |_| true,
+    )?;
+    native.click(&Target::name(&RenameTarget::Fleet {
+        id: start.fleet.clone(),
+    }))?;
+    native.settle(
+        "the first Voyage and its first Fleet shown again",
+        |seen| {
+            let shown_again = seen.document.selected_voyage.as_ref() == Some(&start.voyage)
+                && seen.document.selected_fleet.as_ref() == Some(&start.fleet)
+                && shown(seen, self::fleet(seen.document, &start.fleet)?);
+            shown_again.then_some(())
+        },
+        |_| true,
+    )?;
+    let (back, after) = avatar_still(native)?;
+    Verdict::new()
+        .expect(
+            "switching Fleet, opening Home and switching Voyage left the dock on the Vessel",
+            contexts.iter().all(|context| context == docked),
+        )
+        .expect(
+            "while the second Fleet is shown, the avatar is drawn at the parked size with its centre inside the status row",
+            parked.in_row(),
+        )
+        .expect(
+            "back on its Fleet, the avatar is drawn at the same bounds and pixels as before",
+            put.stayed(docked)
+                && back.stayed(docked)
+                && back.avatar == put.avatar
+                && after.is_some()
+                && after == look,
+        )
+        .observed("contexts", &contexts)?
+        .observed("parked", &parked)?
+        .observed("put", &put)?
+        .observed("back", &back)
 }
 
 fn landing(seen: &Seen) -> Landing {

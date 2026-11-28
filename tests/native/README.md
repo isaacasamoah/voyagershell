@@ -123,6 +123,22 @@ validates it and prints the coverage table. `features --write` regenerates the t
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
 `features --changed GIT_RANGE` lists the features and journeys a diff touches.
 
+`features --changed BASE..HEAD --journeys` prints the journeys to run after a merge,
+as `journeys: a,b,c`. The list is the core set in `AFTER_MERGE_CORE` in
+`src/features.rs` (quit-restore, workspace, portals, voyage-close, arrangement,
+canvas-stack and agent-split, chosen by the declared invariants they cover per
+second of run time), every journey of each feature whose sources the range
+touches, and every journey whose file the range changes, in the order `journeys`
+lists them. The battery takes the list through
+`--journeys`. After it comes one `case: journey/case` line for each case that is
+new at HEAD, or whose `needs` lines differ from BASE's, in a journey file the
+range changes. Those are the cases whose declared needs a full run cannot prove,
+because a full run gives every case the state of all the cases before it. Run
+each one picked with `--case`. The cases come from reading the text of each
+journey file's `cases!` block at BASE and at HEAD, and
+`every_journey_file_parses_to_its_compiled_cases_and_needs` fails first when a
+change to that block's format would make the reading wrong.
+
 ### Declared invariants
 
 `tests/native/declared-invariants.toml` holds the declared invariants the app keeps. The same
@@ -1827,6 +1843,25 @@ save before it takes the next request. `inspect-answered-during-held-save` then
 fails on the expectation `the inspect was answered before Core's held reply to
 the Fleet's save was released`.
 
+The `rests-where-put` patch docks the avatar on the Workspace when a drag ends on
+no target. `workspace/rests-where-put` then fails on the expectation `a drop on
+the empty Fleet tab bar left the avatar docked on the Vessel, at the same
+bounds and pixels`. It is the control for that case only.
+`Native::window_bounds` reads the candidate window's position and size, which
+`rests-where-put` records before and after its drop on the Fleet tab bar.
+
+The `views-leave-avatar-put` patch makes the Home button dock the avatar on the
+Home Voyage instead of only opening Home. `workspace/views-leave-avatar-put`
+then fails on the expectation `switching Fleet, opening Home and switching
+Voyage left the dock on the Vessel`. It is the control for that case only.
+
+The `views-leave-avatar-put-parked` patch draws the parked avatar at the top
+left of the workspace instead of in the status row, at the same 38 px size. `workspace/views-leave-avatar-put` then fails on
+the expectation `while the second Fleet is shown, the avatar is drawn at the
+parked size with its centre inside the status row`. It is the control for that
+expectation only. The case finds the row through `Target::STATUS_ROW`, the
+`status-row` role in [docs/inspection.md](../../docs/inspection.md).
+
 The `core-events` patch stops a foreground report from moving the activity
 counter. `foreground-reaches-agents-list` then fails, because the Agents row
 names a new program only after the canvas's 3 s loop.
@@ -2164,6 +2199,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `CORE_SILENT` | 60 s | Core silent past the owner's read. |
 | `CANVAS_REFRESH` | 3 s | The canvas's observation loop in `docs/terminal.md`. `foreign-exit` holds for it so that the loop has run, and `exit-shown-after-core-pause` stops Core for it. |
 | `AGENTS_ROW` | 1 s | The `core-events` journey's stated bound for the Agents row to name a program that Core reported. |
+| `AVATAR_AT_REST` | 3 s | How long `rests-where-put` holds with the avatar docked before it looks again, longer than the 2 s float an applied dock plays. |
 | `POPOVER_AFTER_HOVER` | 2 s | How long `hover_popover` holds the pointer on a target before it takes the strips again, which is longer than a popover needs to appear. The reviewer's probe used 3 s. |
 | `STRIPS_AT_REST` | 100 ms | The gap between the two looks that `hover_popover` takes with no pointer on the target, to tell a redraw from a popover. |
 | `VESSEL_CLOSED` | 1 s | The `core-events` journey's stated bound for the layout to hold a finished program's Vessel closed. |

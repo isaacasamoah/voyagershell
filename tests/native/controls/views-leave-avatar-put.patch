@@ -1,0 +1,46 @@
+diff --git a/desktop/canvas/navigation-view.js b/desktop/canvas/navigation-view.js
+index 422bad25..9b074194 100644
+--- a/desktop/canvas/navigation-view.js
++++ b/desktop/canvas/navigation-view.js
+@@ -122,7 +122,17 @@ export function renderSidebar(workspace, layout, voyage) {
+     .children(workspace.sidebar ? [svg("home.svg").size(14)] : [])
+     .child(workspace.sidebar ? "Home" : svg("home.svg").size(16))
+     .child(Marker.new("home-navigation"))
+-    .on_click((_event, cx) => workspace.run({ operation: "home" }, cx));
++    .on_click((_event, cx) =>
++      workspace.run(
++        workspace.layout?.home
++          ? {
++              operation: "dock",
++              context: { kind: "voyage", id: workspace.layout.home.id },
++            }
++          : { operation: "home" },
++        cx,
++      ),
++    );
+   if (workspace.sidebar) home.justify_start();
+   else home.justify_center();
+   navigation.child(
+diff --git a/desktop/canvas/navigation-view.ts b/desktop/canvas/navigation-view.ts
+index 8cd2015e..e9a86d8a 100644
+--- a/desktop/canvas/navigation-view.ts
++++ b/desktop/canvas/navigation-view.ts
+@@ -147,7 +147,17 @@ export function renderSidebar(
+     .children(workspace.sidebar ? [svg("home.svg").size(14)] : [])
+     .child(workspace.sidebar ? "Home" : svg("home.svg").size(16))
+     .child(Marker.new("home-navigation"))
+-    .on_click((_event, cx) => workspace.run({ operation: "home" }, cx));
++    .on_click((_event, cx) =>
++      workspace.run(
++        workspace.layout?.home
++          ? {
++              operation: "dock",
++              context: { kind: "voyage", id: workspace.layout.home.id },
++            }
++          : { operation: "home" },
++        cx,
++      ),
++    );
+   if (workspace.sidebar) home.justify_start();
+   else home.justify_center();
+   navigation.child(

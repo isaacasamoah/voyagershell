@@ -273,6 +273,10 @@ impl Native {
         )
     }
 
+    pub fn window_bounds(&self) -> Result<Geometry> {
+        self.x11()?.geometry(self.window)
+    }
+
     pub fn window_size(&self) -> Result<(u16, u16)> {
         let window = self.x11()?.geometry(self.window)?;
         Ok((window.width, window.height))

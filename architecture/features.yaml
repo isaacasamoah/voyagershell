@@ -893,12 +893,12 @@ features:
         journeys: [chat, portals]
       - id: avatar-stays-put
         kind: user
-        says: 'The avatar is still at rest and moves only when the user moves it. An undocked avatar stays where it was put, and switching screens does not move or undock it.'
+        says: 'The avatar is still at rest and moves only when the person moves it. Switching Fleets, opening Home or switching Voyage never docks or undocks it. While the place it is docked on is off screen, it is drawn parked in the status row, and it is drawn back at that place when the place is shown again. The floating avatar stays where it was dragged.'
         owner: desktop-presentation
         guards: []
-        checks: []
+        checks: ['journey:workspace/rests-where-put', 'journey:workspace/views-leave-avatar-put']
         formal: []
-        journeys: []
+        journeys: [workspace]
       - id: avatar-click-opens-home
         kind: user
         says: 'Clicking the avatar while it is home opens the home Voyage and the window stays up. Clicking it while it is parked, because the Fleet, Voyage or Vessel it is docked on is not on screen, shows that place again and the avatar stays docked on it. Clicking it while it is docked on a place that is on screen, or while it is docked on a Portal, changes nothing; opening a hidden Portal column is the Portals button''s job. A click made while a dock is still waiting for its reply waits for that reply and then does what a click does where the avatar lands.'
