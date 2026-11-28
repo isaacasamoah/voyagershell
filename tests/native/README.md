@@ -1738,6 +1738,7 @@ as in `daily-start`. `src/native/install.rs` owns the site and the restart, and
 | Case | What it shows |
 | --- | --- |
 | `offers-restart` (setup) | The release build stages the second build as `next` and leaves `current` on itself, with no `.part` folder left. The card names the newer version, says the programs keep running and offers Restart and Later. The first Vessel's program keeps its pid and keeps counting. |
+| `card-clears-the-avatar` | The card and the avatar are drawn apart, with Restart and Later both drawn: at the starting size with the avatar at home and docked on a bottom-right Vessel made by two splits, and at 900x700 with it docked there, parked in the status row while a new Fleet is shown, and at home. While the avatar is held over the card, the card stays where it was across two reads. At 600x600 with the avatar at home there is no room beside or above it, and the card is at the top-right corner, 12 px from the right and 8 px from the top. There the card is drawn over the avatar. The case reads the window's pixels where the middle of the avatar, inset by 30% of its side, lies under the card, and at least 90% of them must have each colour channel between the card's background and its text colour, which the card's subpixel-smoothed text keeps. Back at the starting size the card is where it began. The captures `card-home-narrow`, `card-docked-narrow`, `card-parked-narrow` and `card-no-room` are the stills of those places. |
 | `bad-checksum-changes-nothing` | With a `latest.json` whose sha256 does not match, `voyager update` exits 1 and says the download is damaged. The links, the builds folder, the running app and the program are as they were. |
 | `failed-download-changes-nothing` | With a `latest.json` whose archive is missing, `voyager update` exits 1 and says the download failed. Nothing else changes. |
 | `restart-runs-the-newer-build` | A click on Restart quits and keeps, then runs `voyager start` once. It launches the second build and nothing else. `current` names it and `previous` the first, the same Voyage is selected and the program keeps its pid and keeps counting. This is the control case. |
@@ -1750,7 +1751,13 @@ comparison, so `bad-checksum-changes-nothing` stages the stand-in and fails.
 `release-update-releases.patch` makes the releases address honour
 `VOYAGER_RELEASES_URL` in every build. Apply either one to the second build only, and
 `source-build-stages-nothing` fails. The listener records the source build's request,
-and the source build stages the stand-in. The battery does not run this journey, because it needs this pair.
+and the source build stages the stand-in. `release-update-card.patch` makes the card
+ignore the avatar, so `card-clears-the-avatar` fails at the starting size with the
+avatar docked and at 900x700. `release-update-card-drag.patch` makes the avatar record
+its rectangle during a drag, so the card moves from under the held avatar and
+`card-clears-the-avatar` fails. `release-update-card-order.patch` draws the fallback card
+under the avatar, so the 600x600 pixels are the avatar's and `card-clears-the-avatar`
+fails. The battery does not run this journey, because it needs this pair.
 
 `--video on` records the owned display with `ffmpeg` into `recording.webm` in the
 evidence, from the moment the display answers until cleanup. The recording is a demo,

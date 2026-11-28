@@ -8,6 +8,12 @@ use voyager_app::{
     voice_layer::Layer,
 };
 
+fn restart_failed(error: &std::io::Error) -> String {
+    format!(
+        "Programs keep running, but the restart did not begin: {error}. Press Ctrl+Q, then run voyager start."
+    )
+}
+
 #[derive(Clone, Copy)]
 enum After {
     Quit,
@@ -120,12 +126,7 @@ impl Ending {
                     (Ok(()), After::Quit) => cx.quit(),
                     (Ok(()), After::Relaunch) => match (ending.relaunch)() {
                         Ok(()) => cx.quit(),
-                        Err(error) => ending.status(
-                            format!(
-                                "Programs keep running, but the restart did not begin: {error}. Press Ctrl+Q, then run voyager start."
-                            ),
-                            cx,
-                        ),
+                        Err(error) => ending.status(restart_failed(&error), cx),
                     },
                     (Err(error), _) => ending.status(error.clone(), cx),
                 }
@@ -139,5 +140,19 @@ impl Ending {
         let _ = self
             .canvas
             .update(cx, |canvas, cx| canvas.quit_status(status, cx));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restart_failed;
+
+    #[test]
+    fn a_restart_that_did_not_begin_says_programs_keep_running_and_how_to_start() {
+        let error = std::io::Error::other("sh is missing");
+        assert_eq!(
+            restart_failed(&error),
+            "Programs keep running, but the restart did not begin: sh is missing. Press Ctrl+Q, then run voyager start."
+        );
     }
 }

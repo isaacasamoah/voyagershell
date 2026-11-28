@@ -1,0 +1,12 @@
+diff --git a/desktop/src/avatar/view.rs b/desktop/src/avatar/view.rs
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -463,7 +463,7 @@
+ 
+         let painted = self.painted.clone();
+         let geometry = Rc::clone(&self.targets);
+-        let workspace = self.surface == Surface::Workspace && !dragging;
++        let workspace = self.surface == Surface::Workspace;
+         let diagnostics = self.diagnostics_enabled;
+         let image = div()
+             .id("voyager-avatar")

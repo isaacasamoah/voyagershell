@@ -1,0 +1,12 @@
+diff --git a/desktop/src/banner.rs b/desktop/src/banner.rs
+--- a/desktop/src/banner.rs
++++ b/desktop/src/banner.rs
+@@ -216,7 +216,7 @@
+         let text = restart_text(offer);
+         let at = place(
+             window.viewport_size(),
+-            self.avatar.drawn(window, cx),
++            self.avatar.drawn(window, cx).filter(|_| false),
+             |width| card_height(&text, width, window),
+         );
+         let region = div()

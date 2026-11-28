@@ -579,6 +579,7 @@ impl CanvasHost {
         let avatar_observe = root
             .as_ref()
             .map(|root| workspace_binding.avatar.observe(root, cx));
+        let banner_avatar = workspace_binding.avatar.clone();
         let (watch, watch_error) = match root
             .as_ref()
             .filter(|_| !standard.needed())
@@ -768,7 +769,7 @@ impl CanvasHost {
             watch_error,
             quit_status: None,
             decorated,
-            banners: crate::banner::Notices::new(profile_updates),
+            banners: crate::banner::Notices::new(profile_updates, banner_avatar),
             accessibility: window.is_a11y_active(),
             _observers: Vec::new(),
         }
@@ -808,15 +809,16 @@ impl Render for CanvasHost {
         .cloned()
         .collect::<Vec<_>>()
         .join("\n");
+        let hide = cx.listener(|host, hide: &crate::banner::Hide, _, cx| {
+            host.banners.hide(*hide);
+            cx.notify();
+        });
         div()
             .size_full()
             .bg(rgb(0x111316))
             .children(content)
             .children(crate::window_frame::grips(window))
-            .children(self.banners.view(cx.listener(|host, hide, _, cx| {
-                host.banners.hide(*hide);
-                cx.notify();
-            })))
+            .children(self.banners.view(window, cx, hide))
             .when(!errors.is_empty(), |view| {
                 view.child(crate::banner::errors(errors))
             })

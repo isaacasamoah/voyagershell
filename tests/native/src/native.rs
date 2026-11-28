@@ -5,6 +5,8 @@ mod loopback;
 mod settle;
 mod terminal;
 
+#[cfg(test)]
+pub use avatar::artwork;
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
 pub use install::{Build, InstallLayout, Linked, STAND_IN_LINE, Site};

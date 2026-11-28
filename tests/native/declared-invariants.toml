@@ -70,6 +70,19 @@ check = ["test:app/src/release_tests.rs#only_a_release_build_running_from_its_ow
 confidence = "stated"
 
 [[invariant]]
+id = "restart-card-clears-the-avatar"
+says = "The Restart card keeps clear of where the avatar is drawn, beside or above it when there is room. When there is no room, it sits in the top-right corner of the Fleet area and is drawn over the avatar, so its words can be read. It holds still while the avatar is dragged and moves when the drag ends. When the avatar floats in its own small window, the card ignores where it used to be."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 28 Nov 2026: option C, and in the no-room case the card is drawn over the avatar so its words can be read"
+features = ["close-quit-restore"]
+guard = ["type:desktop/src/banner.rs#Place"]
+type_gap = "The card reads the rectangle where the avatar was last painted in the window. The avatar sets it each time it paints and never clears it. A floated avatar is ignored. When the place the avatar is docked on is not shown, the avatar is drawn parked in the status row, at the canvas's fallback target, and the card keeps clear of it there. In the shipped canvas at rest, the avatar is always drawn in the window unless it is floated. Two states leave it undrawn. One is a canvas edited to drop the fallback target. The other is a frame in which neither target is laid out yet. In both, the card keeps clear of where the avatar was last drawn. During a drag, the card keeps clear of where the avatar was before the drag, which is the hold this entry asks for."
+check = ["test:desktop/src/banner.rs#the_card_keeps_the_bottom_right_corner_when_it_clears_the_avatar", "test:desktop/src/banner.rs#the_card_moves_beside_the_avatar_and_then_above_it", "test:desktop/src/banner.rs#with_no_room_beside_or_above_the_card_takes_the_top_right_corner", "test:desktop/src/avatar/view.rs#a_floated_avatar_is_not_drawn_in_the_window_and_its_old_place_is_ignored", "journey:release-update/card-clears-the-avatar"]
+gap = "The hold during a drag is checked only by the real-surface case release-update/card-clears-the-avatar, which holds the avatar over the card and reads the card twice. No unit test covers it. The no-room fallback is checked by that case at 600x600 with the avatar at home, and by a unit test. There the still card-no-room shows the card drawn over the avatar, and the case checks the draw order: it reads the window's pixels where the middle of the avatar lies under the card, and at least 90% of them must be the card's colours. The 900x700 size is checked by that case with the avatar at home, docked on a bottom-right Vessel, and parked in the status row while a new Fleet is shown. The unit tests use the same size in logical pixels, 450 by 350. The floated case is checked only by a unit test: a floated avatar gives no rectangle, and with no rectangle the card takes its usual bottom-right place. No journey case floats the avatar. The case reads settled frames, so it does not prove that the card is clear in the single frame after the avatar lands. The three controls fail this case when applied: release-update-card.patch makes the card ignore the avatar, release-update-card-drag.patch makes the avatar record its rectangle during a drag, and release-update-card-order.patch draws the no-room card under the avatar. The journey's one negative control case stays restart-runs-the-newer-build."
+confidence = "stated"
+
+[[invariant]]
 id = "views-never-start-or-stop-programs"
 says = "Showing, hiding, closing, moving or switching to a Vessel or Portal never starts or stops its Program, and reopening it shows the same Program."
 kind = "user"

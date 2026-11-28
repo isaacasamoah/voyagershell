@@ -1,9 +1,9 @@
-use super::{Avatar, Drag, Geometry, Surface, paint};
+use super::{Avatar, Binding, Drag, Geometry, Surface, paint};
 use crate::{avatar_motion as motion, platform};
 use gpui::{
-    Bounds, Context, Entity, FocusHandle, IntoElement, MouseButton, ParentElement, Pixels, Point,
-    Render, Styled, Subscription, Task, Window, canvas, div, point, prelude::*, px, rgb, rgba,
-    size,
+    App, Bounds, Context, Entity, FocusHandle, IntoElement, MouseButton, ParentElement, Pixels,
+    Point, Render, Styled, Subscription, Task, Window, canvas, div, point, prelude::*, px, rgb,
+    rgba, size,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -12,6 +12,25 @@ use std::{
     time::Instant,
 };
 use voyager_contract::{Context as Scope, avatar_animation::Trigger};
+
+impl Binding {
+    pub(crate) fn drawn(&self, window: &Window, cx: &App) -> Option<Bounds<Pixels>> {
+        drawn_in(
+            window.bounds().origin,
+            self.avatar.read(cx).floating.is_some(),
+            self.targets.borrow().avatar,
+        )
+    }
+}
+
+fn drawn_in(
+    window: Point<Pixels>,
+    floated: bool,
+    painted: Option<Bounds<Pixels>>,
+) -> Option<Bounds<Pixels>> {
+    let painted = painted.filter(|_| !floated)?;
+    Some(Bounds::new(painted.origin - window, painted.size))
+}
 
 fn focused_dock(geometry: &Geometry, window: &Window) -> Option<Scope> {
     geometry
@@ -546,13 +565,17 @@ impl Render for AvatarView {
                     .child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, window, _| {
+                            move |bounds, _, window, cx| {
                                 if workspace && window.is_visible() {
                                     let mut geometry = geometry.borrow_mut();
-                                    geometry.avatar = Some(Bounds::new(
+                                    let drawn = Some(Bounds::new(
                                         window.bounds().origin + bounds.origin,
                                         bounds.size,
                                     ));
+                                    if geometry.avatar != drawn {
+                                        window.defer(cx, |window, _| window.refresh());
+                                    }
+                                    geometry.avatar = drawn;
                                     geometry.window_bounds = Some(window.window_bounds());
                                 }
                                 if diagnostics && !painted.replace(true) {
@@ -641,6 +664,18 @@ impl Render for AvatarView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_floated_avatar_is_not_drawn_in_the_window_and_its_old_place_is_ignored() {
+        let window = point(px(100.), px(50.));
+        let painted = Bounds::new(point(px(165.), px(127.)), size(px(94.), px(94.)));
+        assert_eq!(
+            drawn_in(window, false, Some(painted)),
+            Some(Bounds::new(point(px(65.), px(77.)), size(px(94.), px(94.))))
+        );
+        assert_eq!(drawn_in(window, true, Some(painted)), None);
+        assert_eq!(drawn_in(window, false, None), None);
+    }
 
     struct Probe {
         geometry: Geometry,
