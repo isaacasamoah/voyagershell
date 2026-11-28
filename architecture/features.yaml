@@ -1379,6 +1379,19 @@ features:
           - 'journey:release-update/source-build-stages-nothing'
         formal: []
         journeys: [release-update]
+      - id: restart-card-clears-the-avatar
+        kind: user
+        says: 'The Restart card keeps clear of where the avatar is drawn, beside or above it when there is room. When there is no room, it sits in the top-right corner of the Fleet area and is drawn over the avatar, so its words can be read. It holds still while the avatar is dragged and moves when the drag ends. When the avatar floats in its own small window, the card ignores where it used to be.'
+        owner: desktop-presentation
+        guards: ['type:desktop/src/banner.rs#Place']
+        checks:
+          - 'test:desktop/src/banner.rs#the_card_keeps_the_bottom_right_corner_when_it_clears_the_avatar'
+          - 'test:desktop/src/banner.rs#the_card_moves_beside_the_avatar_and_then_above_it'
+          - 'test:desktop/src/banner.rs#with_no_room_beside_or_above_the_card_takes_the_top_right_corner'
+          - 'test:desktop/src/avatar/view.rs#a_floated_avatar_is_not_drawn_in_the_window_and_its_old_place_is_ignored'
+          - 'journey:release-update/card-clears-the-avatar'
+        formal: []
+        journeys: [release-update]
       - id: stop-is-explicit
         kind: user
         says: 'Programs end only through Stop session after its confirmation dialog, or a confirmed Close Voyage, and only the programs that action names. Close Voyage lists exactly the programs it will stop, stops nothing before Confirm, and Cancel changes nothing. No key chord stops the session.'
