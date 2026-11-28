@@ -1,0 +1,14 @@
+diff --git a/app/src/release.rs b/app/src/release.rs
+index 935a196a..adb8dfdf 100644
+--- a/app/src/release.rs
++++ b/app/src/release.rs
+@@ -228,9 +228,6 @@ fn update_for(
+     install: &Install,
+     releases: impl FnOnce() -> String,
+ ) -> Result<Staged, String> {
+-    if !release {
+-        return Err("This is a source build, so voyager update won't replace it with a release. Update it with git, or run voyager update --from a folder.".into());
+-    }
+     let manifest = latest(&releases())?;
+     let current = install
+         .linked(Link::Current)

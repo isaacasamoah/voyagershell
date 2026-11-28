@@ -726,7 +726,7 @@ mod tests {
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
                 "tests/native/controls/release-update-checksum.patch".to_owned(),
                 "tests/native/controls/release-update-source.patch".to_owned(),
-                "tests/native/controls/release-update-releases.patch".to_owned(),
+                "tests/native/controls/release-update-refusal.patch".to_owned(),
                 "tests/native/controls/release-update-card.patch".to_owned(),
                 "tests/native/controls/release-update-card-drag.patch".to_owned(),
                 "tests/native/controls/release-update-card-order.patch".to_owned(),

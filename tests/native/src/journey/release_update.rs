@@ -32,8 +32,7 @@ const CARD_COLOUR_REACH: u8 = 8;
 const CARD_ON_TOP: f32 = 0.9;
 const FEWEST_SAMPLED: usize = 100;
 const AVATAR_INSET: f32 = 0.3;
-const DEFAULT_LATEST: &str =
-    "https://github.com/isaacasamoah/voyagershell/releases/latest/download/latest.json";
+const SOURCE_REFUSAL: &str = "This is a source build, so voyager update won't replace it with a release. Update it with git, or run voyager update --from a folder.";
 
 #[derive(PartialEq, Serialize)]
 struct Placed {
@@ -502,6 +501,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .collect();
         let links_after = native.install_links()?;
         let folders_after = native.install_folders()?;
+        let from = native.install_update(Build::StandIn)?;
+        let stand_in = native.install_sha256(Build::StandIn)?;
+        let links_from = native.install_links()?;
         Verdict::new()
             .expect(
                 "the sandbox has no network but loopback, so no build reaches the real releases address",
@@ -512,8 +514,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 requests.is_empty(),
             )
             .expect(
-                "voyager update from the source build exited 1 and read the default releases address, not the stand-in",
-                update.code == Some(1) && update.stderr.contains(DEFAULT_LATEST),
+                "voyager update from the source build exited 1 and printed only the source-build refusal",
+                update.code == Some(1) && update.stderr.trim_end() == SOURCE_REFUSAL,
             )
             .expect(
                 "the source build staged nothing while a newer release was published",
@@ -528,13 +530,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 !offered,
             )
             .expect("the source build is running", runs(native, &second))
+            .expect(
+                "voyager update --from a folder, run from the source build, exited 0 and staged that folder's build as next",
+                from.code == Some(0) && holds(&links_from.next, &stand_in),
+            )
             .observed("manifest", &manifest)?
             .observed("interfaces", &interfaces)?
             .observed("requests", &requests)?
             .observed("update", &update)?
             .observed("waited", PAST_FIRST_CHECK.within().as_secs())?
             .observed("links", json!({"before":links,"after":links_after}))?
-            .observed("folders", json!({"before":folders,"after":folders_after}))
+            .observed("folders", json!({"before":folders,"after":folders_after}))?
+            .observed("update --from", &from)?
+            .observed("links after --from", &links_from)
     })
 }
 
