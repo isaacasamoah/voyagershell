@@ -111,7 +111,7 @@ fn drawn_in(native: &Native, at: Geometry) -> Result<Drawn> {
     let pixels = native.look_at(at)?;
     let colours = pixels
         .rows()
-        .flat_map(|row| row.chunks_exact(4))
+        .flat_map(|row| row.as_chunks::<4>().0)
         .map(|pixel| [pixel[2], pixel[1], pixel[0]]);
     let (sampled, card) = colours.fold((0, 0), |(sampled, card), colour| {
         (sampled + 1, card + usize::from(card_colour(colour)))
