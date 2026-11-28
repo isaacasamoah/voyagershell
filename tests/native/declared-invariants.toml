@@ -11,7 +11,7 @@ owner = "application-queue"
 source = "AGENTS.md, User experience and proportionate safeguards; Isaac, 3 Nov 2026 owner UX note; #184 (Close button wired to Stop session would end every program)"
 features = ["close-quit-restore"]
 guard = ["type:app/src/families/terminal/lifecycle.rs#Lifecycle"]
-check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps", "journey:daily-start/update-and-restart-keeps-programs"]
+check = ["journey:quit-restore/quit-and-keep", "journey:quit-restore/relaunch-reattaches", "journey:quit-restore/relaunch-adopts-and-attaches", "journey:quit-restore/quit-busy-keeps-output", "journey:quit-restore/close-window-keeps", "journey:quit-restore/close-button-keeps", "journey:daily-start/update-and-restart-keeps-programs", "journey:release-update/restart-runs-the-newer-build"]
 confidence = "stated"
 
 [[invariant]]
@@ -45,6 +45,41 @@ source = "Isaac via Voyager, 26 Nov"
 features = ["close-quit-restore"]
 guard = ["type:app/src/install.rs#Install"]
 check = ["journey:daily-start/rollback-runs-the-previous-build"]
+confidence = "stated"
+
+[[invariant]]
+id = "update-waits-for-restart"
+says = "A release build checks for a newer release a little after it opens and then hourly. It downloads and checks the newer build without touching anything that runs, then offers Restart. Restart quits and keeps, and the newer build reopens the same Voyages with every program still running."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 27 Nov 2026, the PR 2 shapes of the release design"
+features = ["close-quit-restore"]
+guard = ["type:app/src/install.rs#Staged"]
+check = ["test:app/src/release_tests.rs#the_app_offers_only_a_newer_release_and_never_itself", "test:app/src/release_tests.rs#the_relaunch_runs_start_once_and_only_after_the_old_process_has_exited", "journey:release-update/offers-restart", "journey:release-update/restart-runs-the-newer-build"]
+confidence = "stated"
+
+[[invariant]]
+id = "failed-update-changes-nothing"
+says = "A source build, a cargo run and a build added with voyager update --from never check for a release and never stage one. A failed download, a checksum mismatch or a build that reports another version stages nothing, and the running app and every program stay as they were."
+kind = "user"
+owner = "application-queue"
+source = "Isaac via Voyager, 27 Nov 2026, the PR 2 shapes of the release design"
+features = ["close-quit-restore"]
+guard = ["type:app/src/release.rs#Manifest"]
+check = ["test:app/src/release_tests.rs#only_a_release_build_running_from_its_own_release_folder_checks", "test:app/src/release_tests.rs#a_checksum_mismatch_removes_the_download_and_leaves_next_alone", "test:app/src/release_tests.rs#a_failed_download_removes_the_partial_folder_and_leaves_next_alone", "test:app/src/release_tests.rs#a_build_that_reports_another_version_is_refused", "journey:release-update/bad-checksum-changes-nothing", "journey:release-update/failed-download-changes-nothing", "journey:release-update/source-build-stages-nothing"]
+confidence = "stated"
+
+[[invariant]]
+id = "restart-card-clears-the-avatar"
+says = "The Restart card keeps clear of where the avatar is drawn, beside or above it when there is room. When there is no room, it sits in the top-right corner of the Fleet area and is drawn over the avatar, so its words can be read. It holds still while the avatar is dragged and moves when the drag ends. When the avatar floats in its own small window, the card ignores where it used to be."
+kind = "user"
+owner = "desktop-presentation"
+source = "Isaac, 28 Nov 2026: option C, and in the no-room case the card is drawn over the avatar so its words can be read"
+features = ["close-quit-restore"]
+guard = ["type:desktop/src/banner.rs#Place"]
+type_gap = "The card reads the rectangle where the avatar was last painted in the window. The avatar sets it each time it paints and never clears it. A floated avatar is ignored. When the place the avatar is docked on is not shown, the avatar is drawn parked in the status row, at the canvas's fallback target, and the card keeps clear of it there. In the shipped canvas at rest, the avatar is always drawn in the window unless it is floated. Two states leave it undrawn. One is a canvas edited to drop the fallback target. The other is a frame in which neither target is laid out yet. In both, the card keeps clear of where the avatar was last drawn. During a drag, the card keeps clear of where the avatar was before the drag, which is the hold this entry asks for."
+check = ["test:desktop/src/banner.rs#the_card_keeps_the_bottom_right_corner_when_it_clears_the_avatar", "test:desktop/src/banner.rs#the_card_moves_beside_the_avatar_and_then_above_it", "test:desktop/src/banner.rs#with_no_room_beside_or_above_the_card_takes_the_top_right_corner", "test:desktop/src/avatar/view.rs#a_floated_avatar_is_not_drawn_in_the_window_and_its_old_place_is_ignored", "journey:release-update/card-clears-the-avatar"]
+gap = "The hold during a drag is checked only by the real-surface case release-update/card-clears-the-avatar, which holds the avatar over the card and reads the card twice. No unit test covers it. The no-room fallback is checked by that case at 600x600 with the avatar at home, and by a unit test. There the still card-no-room shows the card drawn over the avatar, and the case checks the draw order: it reads the window's pixels where the middle of the avatar lies under the card, and at least 90% of them must be the card's colours. The 900x700 size is checked by that case with the avatar at home, docked on a bottom-right Vessel, and parked in the status row while a new Fleet is shown. The unit tests use the same size in logical pixels, 450 by 350. The floated case is checked only in part. A unit test checks that drawn_in gives no rectangle when it is told the avatar is floated, and that with no rectangle the card takes its usual bottom-right place. No test reaches the wiring in avatar::Binding::drawn that reads whether the avatar is floated and passes it to drawn_in, so a change that always passes not floated there fails no test. A test of that wiring needs a real avatar, and making one makes an application client, which starts Core, so no unit test builds one. The avatar floats only while the workspace window is minimized, so the card is not on screen then; the clause matters for the frames around a restore. No journey case floats the avatar. The case reads settled frames, so it does not prove that the card is clear in the single frame after the avatar lands. The three controls fail this case when applied: release-update-card.patch makes the card ignore the avatar, release-update-card-drag.patch makes the avatar record its rectangle during a drag, and release-update-card-order.patch draws the no-room card under the avatar. The journey's one negative control case stays restart-runs-the-newer-build."
 confidence = "stated"
 
 [[invariant]]

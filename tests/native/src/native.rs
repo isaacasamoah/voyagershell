@@ -1,13 +1,15 @@
 mod avatar;
 mod input;
 mod install;
+mod loopback;
 mod settle;
 mod terminal;
 
+#[cfg(test)]
+pub use avatar::artwork;
 pub use avatar::{Reference, Sharpness};
 pub use input::{Held, Moved, Wheel};
-pub use install::{Build, Linked, STAND_IN_LINE};
-pub use settle::MODEL_WORK_WAIT;
+pub use install::{Build, InstallLayout, Linked, STAND_IN_LINE, Site};
 pub use settle::{
     AGENTS_ROW, CANVAS_REFRESH, CLIPS_KEPT, CORE_DEADLINE, CORE_SILENT, DOCK_FOLLOW_MARGIN,
     DRAG_REST, ENGINE_START, Elapsed, FLOAT_SPACING, FLOOR_WAIT, GRAB_AFTER_SWITCH, KEY_SPACING,
@@ -16,6 +18,7 @@ pub use settle::{
     STATUS_AFTER_CLICK, STRIPS_AT_REST, Stopwatch, VESSEL_CLOSED, after_entry, clock, epoch_millis,
     hold, now_millis,
 };
+pub use settle::{MODEL_WORK_WAIT, PAST_FIRST_CHECK};
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 pub use settle::AVATAR_AT_REST;
@@ -261,7 +264,7 @@ pub struct Native {
     pub audio: Option<Stack>,
     pub voice_engine: Option<PathBuf>,
     pub talk_over: Option<TalkOver>,
-    pub installs: bool,
+    pub installs: Option<InstallLayout>,
     install: Option<install::Install>,
     surface: Surface,
     display: Option<Owned>,
@@ -323,7 +326,7 @@ impl Native {
             audio: None,
             voice_engine: None,
             talk_over: None,
-            installs: false,
+            installs: None,
             install: None,
             surface,
             display: None,
@@ -386,8 +389,8 @@ impl Native {
         self.decorate()?;
         self.arrived()?;
         self.seed_core()?;
-        if self.installs {
-            return self.lay_out_install();
+        if let Some(layout) = self.installs {
+            return self.lay_out_install(layout);
         }
         self.start()?;
         self.bind_core()?;
@@ -762,6 +765,9 @@ impl Native {
         if let Some(talk_over) = self.talk_over {
             env.push((TalkOver::VARIABLE.into(), talk_over.value().into()));
         }
+        if let Some(releases) = self.install.as_ref().and_then(install::Install::releases) {
+            env.push(("VOYAGER_RELEASES_URL".into(), releases));
+        }
         Ok(env)
     }
 
@@ -770,6 +776,11 @@ impl Native {
             self.install.is_none(),
             "This run starts the app through its install, with voyager start"
         );
+        let program = self.candidate.path.clone();
+        self.start_from(&program)
+    }
+
+    fn start_from(&mut self, program: &Path) -> Result<()> {
         self.ready_to_launch()?;
         self.record_build()?;
         if let (Some(folder), 1) = (&self.voice_engine, self.launches) {
@@ -783,7 +794,7 @@ impl Native {
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect();
         let viewer = self.system.spawn(
-            &self.candidate.path,
+            program,
             &[
                 "--profile",
                 profile.to_str().context("Invalid profile path")?,

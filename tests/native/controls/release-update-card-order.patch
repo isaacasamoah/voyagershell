@@ -1,0 +1,12 @@
+diff --git a/desktop/src/banner.rs b/desktop/src/banner.rs
+--- a/desktop/src/banner.rs
++++ b/desktop/src/banner.rs
+@@ -232,7 +232,7 @@
+         match at.corner {
+             Corner::Bottom => region.justify_end().child(card).into_any_element(),
+             Corner::Top => {
+-                deferred(region.justify_start().child(card.occlude())).into_any_element()
++                region.justify_start().child(card.occlude()).into_any_element()
+             }
+         }
+     }

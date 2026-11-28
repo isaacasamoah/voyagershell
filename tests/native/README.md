@@ -1714,6 +1714,67 @@ lacks. `daily-start-update.patch` clears `next` without moving `current`.
 session, so the first Vessel's counter stops at the update restart and
 `update-and-restart-keeps-programs` fails on the counter and the same pid.
 
+### Release update
+
+`release-update` shows the app's own update. That covers the check, the quiet download,
+the Restart card and the restart onto the newer build. It needs `--second-binary`, and
+the two builds differ from the `daily-start` pair. The candidate is a release build,
+built with `VOYAGER_RELEASE=1`. The second build is a source build whose crate versions
+are one patch higher. The run checks that the second build reports a newer version and
+stops with verifier blame when it does not. Build the pair from one commit:
+
+```sh
+VOYAGER_RELEASE=1 cargo build --release --locked -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
+mkdir -p "$pair/release" && cp target/release/voyager-shell target/release/voyager "$pair/release/"
+sed -i '0,/^version = ".*"/s//version = "0.1.1"/' app/Cargo.toml contract/Cargo.toml desktop/Cargo.toml
+cargo build --release -p voyager-desktop -p voyager-app --bin voyager-shell --bin voyager
+mkdir -p "$pair/source" && cp target/release/voyager-shell target/release/voyager "$pair/source/"
+git checkout app/Cargo.toml contract/Cargo.toml desktop/Cargo.toml
+```
+
+The run lays out an install in its evidence folder as `daily-start` does, but the
+candidate goes into `builds/<its version>`, the name a release install gives it. It
+writes a stand-in release site beside the install. `latest.json` there names the second
+build's version, and its archive packs the second build and its `voyager` command. A
+second archive holds a script that reports the next patch version, for the cases that
+must not stage a real build. A listener on `127.0.0.1` in the verifier serves the site
+over HTTP and records every request it receives. The app and every `voyager` command
+the run starts get `VOYAGER_RELEASES_URL=http://127.0.0.1:<port>`, and the archive
+addresses in `latest.json` point at the same listener. The journey needs a sandbox with
+no network but loopback. The sandbox's `--unshare-net` gives it that, and the run reads
+`/proc/net/dev` and stops with verifier blame when any interface other than `lo` is
+present. So no build in the run can reach the real releases address on GitHub, from CI
+or from any other machine. The run launches the candidate itself from
+`builds/<version>/voyager-shell` with its inspection, because the run clicks the card
+and an app started by `voyager start` writes no inspection. Restart's relaunch is
+handed to the verifier as a child subreaper, and the build it starts becomes the viewer,
+as in `daily-start`. `src/native/install.rs` owns the site and the restart, and
+`src/native/loopback.rs` owns the listener and the interface read.
+
+| Case | What it shows |
+| --- | --- |
+| `offers-restart` (setup) | The release build stages the second build as `next` and leaves `current` on itself, with no `.part` folder left. The card names the newer version, says the programs keep running and offers Restart and Later. The first Vessel's program keeps its pid and keeps counting. |
+| `card-clears-the-avatar` | The card and the avatar are drawn apart, with Restart and Later both drawn. The case checks this at the starting size with the avatar at home and docked on a bottom-right Vessel made by two splits, and at 900x700 with it docked there, parked in the status row while a new Fleet is shown, and at home. While the avatar is held over the card, the card stays where it was across two reads. At 600x600 with the avatar at home there is no room beside or above it, and the card is at the top-right corner, 12 px from the right and 8 px from the top. There the card is drawn over the avatar. The case reads the window's pixels where the middle of the avatar, inset by 30% of its side, lies under the card, and at least 90% of them must have each colour channel between the card's background and its text colour, which the card's subpixel-smoothed text keeps. Back at the starting size the card is where it began. The captures `card-home-narrow`, `card-docked-narrow`, `card-parked-narrow` and `card-no-room` are the stills of those places. |
+| `bad-checksum-changes-nothing` | With a `latest.json` whose sha256 does not match, `voyager update` exits 1 and says the download is damaged. The links, the builds folder, the running app and the program are as they were. |
+| `failed-download-changes-nothing` | With a `latest.json` whose archive is missing, `voyager update` exits 1 and says the download failed. Nothing else changes. |
+| `restart-runs-the-newer-build` | A click on Restart quits and keeps, then runs `voyager start` once. It launches the second build and nothing else. `current` names it and `previous` the first, the same Voyage is selected and the program keeps its pid and keeps counting. This is the control case. |
+| `source-build-stages-nothing` | With the source build running and a newer `latest.json` published, `voyager update` from the source build exits 1 and names the default GitHub address. The run then quits and keeps, and relaunches the source build with its inspection. 25 seconds later, more than twice the 10 second wait before a release build's first check, it shows no Restart card. The listener has received no request since the case began, the sandbox has no interface but `lo`, nothing is staged and no folder appears. |
+
+`tests/native/controls/release-update.patch` makes Restart's relaunch do nothing, so
+`restart-runs-the-newer-build` fails. `release-update-checksum.patch` skips the sha256
+comparison, so `bad-checksum-changes-nothing` stages the stand-in and fails.
+`release-update-source.patch` treats every build as a release build.
+`release-update-releases.patch` makes the releases address honour
+`VOYAGER_RELEASES_URL` in every build. Apply either one to the second build only, and
+`source-build-stages-nothing` fails. The listener records the source build's request,
+and the source build stages the stand-in. `release-update-card.patch` makes the card
+ignore the avatar, so `card-clears-the-avatar` fails at the starting size with the
+avatar docked and at 900x700. `release-update-card-drag.patch` makes the avatar record
+its rectangle during a drag, so the card moves from under the held avatar and
+`card-clears-the-avatar` fails. `release-update-card-order.patch` draws the fallback card
+under the avatar, so the 600x600 pixels are the avatar's and `card-clears-the-avatar`
+fails. The battery does not run this journey, because it needs this pair.
+
 `--video on` records the owned display with `ffmpeg` into `recording.webm` in the
 evidence, from the moment the display answers until cleanup. The recording is a demo,
 not evidence. The checks, captures and action log are the result.
@@ -2148,6 +2209,7 @@ declared once, with its source, and the pull request that adds one names it.
 | `PROBE_AFTER_DOCK` | 50 ms | The bar for `typing-right-after-a-dock-reaches-the-vessel`. The probe key goes out this long after the first frame that shows the dock, and the keyboard must be back by then. |
 | `PROBE_LATEST` | 60 ms | How late the probe key may go out. A later send ends the run inconclusive. |
 | `MODEL_WORK_WAIT` | 2 s | How long `dock-with-no-chosen-behaviour-adds-no-model-work` watches Voyager's terminal after the docks for a new heard line. The control's line arrived inside it. |
+| `PAST_FIRST_CHECK` | 25 s | How long `source-build-stages-nothing` holds the relaunched source build before it looks for a Restart card. That is more than twice `FIRST_CHECK` in `app/src/release.rs`, the 10 s wait before a release build's first check. |
 
 `voyager-verification lint` fails with the rule `check-loosened` on a `Duration`
 constructor (`Duration::new` or `Duration::from_*`), a `sleep`, an

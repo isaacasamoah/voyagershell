@@ -2,10 +2,13 @@ use crate::install::{Install, Link, Staged, digest, running_executables};
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
-    fmt, fs,
+    fmt, fs, io,
+    os::unix::process::CommandExt,
     path::Path,
     process::{Command, Stdio},
     str::FromStr,
+    thread,
+    time::Duration,
 };
 
 pub const TARGET: &str = "linux-x86_64";
@@ -13,6 +16,10 @@ const RELEASES: &str = "https://github.com/isaacasamoah/voyagershell/releases/la
 const MANIFEST: &str = "latest.json";
 const MANIFEST_LIMIT: usize = 64 * 1024;
 const ARCHIVE: &str = "voyagershell-linux-x86_64.tar.gz";
+const FIRST_CHECK: Duration = Duration::from_secs(10);
+const EVERY: Duration = Duration::from_secs(60 * 60);
+const RETRY: Duration = Duration::from_secs(30 * 60);
+const RELAUNCH: &str = "while kill -0 \"$0\" 2>/dev/null; do sleep 0.1; done; exec \"$1\" start";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Version([u64; 3]);
@@ -219,6 +226,93 @@ pub fn update(install: &Install) -> Result<Staged, String> {
         .map_err(|error| error.to_string())?
         .and_then(|name| name.parse().ok());
     stage(install, &manifest, current)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Offer {
+    pub version: String,
+    pub notes: String,
+}
+
+pub fn running() -> Option<Version> {
+    env!("CARGO_PKG_VERSION").parse().ok()
+}
+
+pub fn checker() -> Option<Install> {
+    checker_for(release_build(), &std::env::current_exe().ok()?, running()?)
+}
+
+fn checker_for(release: bool, executable: &Path, running: Version) -> Option<Install> {
+    if !release {
+        return None;
+    }
+    let install = Install::locate(executable)?;
+    let folder = executable.parent()?.file_name()?.to_str()?;
+    (folder == running.to_string()).then_some(install)
+}
+
+pub fn offer(install: &Install, releases: &str, running: Version) -> Result<Option<Offer>, String> {
+    let manifest = latest(releases)?;
+    Ok(match stage(install, &manifest, Some(running))? {
+        Staged::Next(version) | Staged::AlreadyNext(version) => Some(Offer {
+            version,
+            notes: manifest.notes,
+        }),
+        Staged::AlreadyCurrent(_) | Staged::Older { .. } => None,
+    })
+}
+
+pub fn watch(install: Install, offers: async_channel::Sender<Offer>) {
+    let Some(running) = running() else {
+        return;
+    };
+    thread::spawn(move || {
+        thread::sleep(FIRST_CHECK);
+        let mut offered = None;
+        while !offers.is_closed() {
+            let wait = match offer(&install, &releases(), running) {
+                Ok(found) => {
+                    if let Some(found) = found
+                        && offered.as_ref() != Some(&found)
+                    {
+                        if offers.send_blocking(found.clone()).is_err() {
+                            return;
+                        }
+                        offered = Some(found);
+                    }
+                    EVERY
+                }
+                Err(error) => {
+                    eprintln!("The update check failed: {error}");
+                    RETRY
+                }
+            };
+            thread::sleep(wait);
+        }
+    });
+}
+
+pub fn relaunch() -> io::Result<()> {
+    let executable = std::env::current_exe()?;
+    let install = Install::locate(&executable)
+        .ok_or_else(|| io::Error::other("This build does not run from an install"))?;
+    relaunch_after(std::process::id(), &install.command())
+        .spawn()
+        .map(drop)
+}
+
+fn relaunch_after(pid: u32, command: &Path) -> Command {
+    let mut relaunch = Command::new("sh");
+    relaunch
+        .arg("-c")
+        .arg(RELAUNCH)
+        .arg(pid.to_string())
+        .arg(command)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0);
+    relaunch
 }
 
 #[cfg(test)]

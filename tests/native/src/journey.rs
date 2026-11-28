@@ -18,6 +18,7 @@ mod portals;
 mod profile;
 mod profile_updates;
 mod quit_restore;
+mod release_update;
 mod scrolling;
 mod slow_list;
 mod slow_save;
@@ -174,6 +175,7 @@ journeys! {
     AvatarDrag => "avatar-drag" in avatar_drag, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     VoiceTalkOver => "voice-talk-over" in voice_talk_over, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     DailyStart => "daily-start" in daily_start, sidebar: None, window: None;
+    ReleaseUpdate => "release-update" in release_update, sidebar: None, window: None;
 }
 
 impl Journey {
@@ -195,8 +197,12 @@ impl Journey {
         !matches!(self, Self::VoyagerCommand)
     }
 
-    pub fn installs(self) -> bool {
-        matches!(self, Self::DailyStart)
+    pub fn installs(self) -> Option<crate::native::InstallLayout> {
+        match self {
+            Self::DailyStart => Some(crate::native::InstallLayout::Local),
+            Self::ReleaseUpdate => Some(crate::native::InstallLayout::Release),
+            _ => None,
+        }
     }
 
     pub fn traces_tools(self) -> bool {
@@ -718,6 +724,12 @@ mod tests {
                 "tests/native/controls/daily-start-focus.patch".to_owned(),
                 "tests/native/controls/daily-start-rollback.patch".to_owned(),
                 "tests/native/controls/daily-start-counter.patch".to_owned(),
+                "tests/native/controls/release-update-checksum.patch".to_owned(),
+                "tests/native/controls/release-update-source.patch".to_owned(),
+                "tests/native/controls/release-update-releases.patch".to_owned(),
+                "tests/native/controls/release-update-card.patch".to_owned(),
+                "tests/native/controls/release-update-card-drag.patch".to_owned(),
+                "tests/native/controls/release-update-card-order.patch".to_owned(),
                 "tests/native/controls/profile-updates-kept-edit.patch".to_owned(),
                 "tests/native/controls/profile-updates-failed-standard.patch".to_owned(),
                 "tests/native/controls/rests-where-put.patch".to_owned(),
@@ -998,6 +1010,11 @@ mod tests {
                     "create-voyage",
                     "switch-voyage",
                 ],
+            ),
+            (
+                Journey::ReleaseUpdate,
+                "source-build-stages-nothing",
+                &["offers-restart", "restart-runs-the-newer-build"],
             ),
             (
                 Journey::SocketDock,

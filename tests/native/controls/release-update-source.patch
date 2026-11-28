@@ -1,0 +1,13 @@
+diff --git a/app/src/release.rs b/app/src/release.rs
+index ad27fa9..58b4471 100644
+--- a/app/src/release.rs
++++ b/app/src/release.rs
+@@ -112,7 +112,7 @@ impl Manifest {
+ }
+ 
+ pub fn release_build() -> bool {
+-    option_env!("VOYAGER_RELEASE") == Some("1")
++    true
+ }
+ 
+ pub fn releases() -> String {

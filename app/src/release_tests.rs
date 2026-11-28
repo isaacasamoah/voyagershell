@@ -307,3 +307,100 @@ fn latest_reads_the_manifest_beside_the_archive() {
     let refusal = latest(&format!("file://{}", scratch.0.display())).unwrap_err();
     assert!(refusal.starts_with("Cannot read file://"), "{refusal}");
 }
+
+fn located(scratch: &Scratch, folder: &str) -> PathBuf {
+    let install = scratch.install();
+    fs::create_dir_all(install.build(folder)).unwrap();
+    install.stage(folder).unwrap();
+    install.apply_next().unwrap();
+    install.build(folder).join(SHELL)
+}
+
+#[test]
+fn only_a_release_build_running_from_its_own_release_folder_checks() {
+    let scratch = Scratch::new("checker");
+    let running = version("0.1.0");
+    let release = located(&scratch, "0.1.0");
+    assert_eq!(
+        checker_for(true, &release, running),
+        Some(scratch.install())
+    );
+    assert_eq!(
+        checker_for(false, &release, running),
+        None,
+        "a source build"
+    );
+    let local = located(&scratch, "local-4aa675bc");
+    assert_eq!(checker_for(true, &local, running), None, "a local- build");
+    let other = located(&scratch, "0.0.9");
+    assert_eq!(
+        checker_for(true, &other, running),
+        None,
+        "a folder that names another version"
+    );
+    let cargo = scratch.0.join("target").join("release").join(SHELL);
+    assert_eq!(checker_for(true, &cargo, running), None, "a cargo build");
+}
+
+#[test]
+fn the_app_offers_only_a_newer_release_and_never_itself() {
+    let scratch = Scratch::new("offer");
+    let install = scratch.install();
+    let site = scratch.0.join("site");
+    fs::create_dir_all(&site).unwrap();
+    let publish = |version: &str, url: &str, sha256: &str| {
+        fs::write(
+            site.join(MANIFEST),
+            serde_json::json!({"version": version, "notes": "Faster scrolling.", "targets": {"linux-x86_64": {"url": url, "sha256": sha256}}})
+                .to_string(),
+        )
+        .unwrap();
+    };
+    let releases = format!("file://{}", site.display());
+    let nowhere = format!("file://{}/missing.tar.gz", scratch.0.display());
+    for version in ["0.1.0", "0.0.9"] {
+        publish(version, &nowhere, &"0".repeat(64));
+        assert_eq!(
+            offer(&install, &releases, self::version("0.1.0")).unwrap(),
+            None,
+            "{version}"
+        );
+    }
+    assert!(builds(&install).is_empty());
+    let (url, sha256) = scratch.archive("0.1.1");
+    publish("0.1.1", &url, &sha256);
+    let offered = Offer {
+        version: "0.1.1".into(),
+        notes: "Faster scrolling.".into(),
+    };
+    for _ in 0..2 {
+        assert_eq!(
+            offer(&install, &releases, version("0.1.0")).unwrap(),
+            Some(offered.clone())
+        );
+    }
+    assert_eq!(links(&install), [None, None, Some("0.1.1".into())]);
+}
+
+#[test]
+fn the_relaunch_runs_start_once_and_only_after_the_old_process_has_exited() {
+    let scratch = Scratch::new("relaunch");
+    let marker = scratch.0.join("started");
+    let command = scratch.0.join(COMMAND);
+    fs::write(
+        &command,
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\n", marker.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&command, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut old = Command::new("sleep").arg("1").spawn().unwrap();
+    let mut waiter = relaunch_after(old.id(), &command).spawn().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(
+        !marker.exists(),
+        "start ran while the old process was alive"
+    );
+    old.wait().unwrap();
+    assert!(waiter.wait().unwrap().success());
+    assert_eq!(fs::read_to_string(&marker).unwrap(), "start\n");
+}

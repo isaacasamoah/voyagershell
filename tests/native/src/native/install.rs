@@ -1,6 +1,8 @@
+use super::loopback::{self, Loopback};
 use super::{Defect, Native, REQUEST_PATIENCE};
+use crate::inspection::Target;
 use crate::sandbox;
-use crate::system::{Identity, Owned, Pinned, TimedOut, digest, stamp};
+use crate::system::{Identity, Owned, Pinned, TimedOut, digest, parent, stamp};
 use crate::x11::Observed;
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
@@ -21,6 +23,85 @@ const UPDATE_PATIENCE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(50);
 const COUNTER: &str = "if [ -z \"$BASH_EXECUTION_STRING\" ] && mkdir ~/.counting 2>/dev/null; then\n  i=0\n  while :; do echo \"count $i\"; i=$((i+1)); sleep 0.5; done\nfi\n";
 pub const STAND_IN_LINE: &str = "stand-in: exiting before it is ready";
+const SITE: &str = "site";
+const MANIFEST: &str = "latest.json";
+const ARCHIVE: &str = "voyagershell-linux-x86_64.tar.gz";
+const AHEAD: &str = "voyagershell-ahead.tar.gz";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InstallLayout {
+    Local,
+    Release,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub enum Site {
+    Second,
+    Damaged,
+    Missing,
+    Ahead,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Versions {
+    pub first: String,
+    pub second: String,
+    pub ahead: String,
+}
+
+struct Release {
+    site: PathBuf,
+    loopback: Loopback,
+    versions: Versions,
+}
+
+fn reported(path: &Path) -> Result<String> {
+    let output = Command::new(path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .output()?;
+    ensure!(
+        output.status.success(),
+        "{} --version failed",
+        path.display()
+    );
+    let printed = String::from_utf8_lossy(&output.stdout);
+    printed
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix(&format!("{SHELL} ")))
+        .map(str::to_owned)
+        .with_context(|| format!("{} --version printed {printed:?}", path.display()))
+}
+
+fn numbers(version: &str) -> Result<[u64; 3]> {
+    let parts: Vec<u64> = version
+        .split('.')
+        .map(str::parse)
+        .collect::<std::result::Result<_, _>>()
+        .with_context(|| format!("{version} is not a version like 0.1.0"))?;
+    parts
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("{version} is not a version like 0.1.0"))
+}
+
+fn pack(folder: &Path, shell: &Path, command: &Path, archive: &Path) -> Result<()> {
+    let packed = folder.join("voyagershell");
+    fs::create_dir_all(&packed)?;
+    fs::copy(shell, packed.join(SHELL))?;
+    fs::copy(command, packed.join(COMMAND))?;
+    fs::write(packed.join("LICENSE"), "MIT\n")?;
+    let status = Command::new("tar")
+        .arg("-czf")
+        .arg(archive)
+        .arg("-C")
+        .arg(folder)
+        .arg("voyagershell")
+        .stdin(Stdio::null())
+        .status()?;
+    ensure!(status.success(), "Packing {} failed", archive.display());
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Build {
@@ -86,9 +167,106 @@ pub(super) struct Install {
     sources: PathBuf,
     first: Pinned,
     second: Pinned,
+    release: Option<Release>,
 }
 
 impl Install {
+    pub(super) fn releases(&self) -> Option<String> {
+        self.release.as_ref().map(|release| release.loopback.url())
+    }
+
+    fn prepare_site(&mut self) -> Result<()> {
+        let first = reported(&self.first.path)?;
+        let second = reported(&self.second.path)?;
+        let [major, minor, patch] = numbers(&second)?;
+        ensure!(
+            numbers(&first)? < [major, minor, patch],
+            "The second build reports {second}, which is not newer than the first build's {first}"
+        );
+        let ahead = format!("{major}.{minor}.{}", patch + 1);
+        let site = self.root.with_file_name(SITE);
+        let work = self.root.with_file_name("site-work");
+        fs::create_dir_all(&site)?;
+        pack(
+            &work.join("second"),
+            &self.second.path,
+            &self.second.path.with_file_name(COMMAND),
+            &site.join(ARCHIVE),
+        )?;
+        let stand_in = work.join(SHELL);
+        fs::write(
+            &stand_in,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then\n  echo '{SHELL} {ahead}'\n  exit 0\nfi\nexit 1\n"
+            ),
+        )?;
+        fs::set_permissions(&stand_in, fs::Permissions::from_mode(0o755))?;
+        pack(
+            &work.join("ahead"),
+            &stand_in,
+            &self.second.path.with_file_name(COMMAND),
+            &site.join(AHEAD),
+        )?;
+        self.release = Some(Release {
+            loopback: Loopback::serve(site.clone())?,
+            site,
+            versions: Versions {
+                first,
+                second,
+                ahead,
+            },
+        });
+        Ok(())
+    }
+
+    fn publish(&self, served: Site) -> Result<serde_json::Value> {
+        let release = self
+            .release
+            .as_ref()
+            .context("This run lays out no release install")?;
+        let at = |file: &str| format!("{}/{file}", release.loopback.url());
+        let ahead = digest(&release.site.join(AHEAD))?;
+        let (version, url, sha256) = match served {
+            Site::Second => (
+                &release.versions.second,
+                at(ARCHIVE),
+                digest(&release.site.join(ARCHIVE))?,
+            ),
+            Site::Damaged => (&release.versions.ahead, at(AHEAD), "0".repeat(64)),
+            Site::Missing => (&release.versions.ahead, at("missing.tar.gz"), ahead),
+            Site::Ahead => (&release.versions.ahead, at(AHEAD), ahead),
+        };
+        let manifest = json!({
+            "version": version,
+            "commit": "0".repeat(40),
+            "core_min": "0.1.18",
+            "notes": format!("Stand-in release {version}."),
+            "targets": {"linux-x86_64": {"url": url, "sha256": sha256}},
+        });
+        let written = release.site.join(format!(".{MANIFEST}.tmp"));
+        fs::write(&written, serde_json::to_vec(&manifest)?)?;
+        fs::rename(&written, release.site.join(MANIFEST))?;
+        Ok(manifest)
+    }
+
+    fn folders(&self) -> Result<Vec<String>> {
+        let mut names = fs::read_dir(self.root.join(BUILDS))?
+            .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<Vec<_>>>()?;
+        names.sort();
+        Ok(names)
+    }
+
+    fn running(&self, file: &str) -> Vec<u32> {
+        self.apps()
+            .into_iter()
+            .filter(|pid| {
+                fs::read_link(format!("/proc/{pid}/exe"))
+                    .is_ok_and(|executable| executable.file_name().is_some_and(|name| name == file))
+            })
+            .collect()
+    }
+
     fn build(&self, name: &str) -> PathBuf {
         self.root.join(BUILDS).join(name)
     }
@@ -101,6 +279,21 @@ impl Install {
     }
 
     fn named(&self, name: &str) -> Linked {
+        if let Some(release) = &self.release {
+            let pinned = if name == release.versions.first {
+                Some(&self.first)
+            } else if name == release.versions.second {
+                Some(&self.second)
+            } else {
+                None
+            };
+            if let Some(pinned) = pinned {
+                return Linked {
+                    name: name.to_owned(),
+                    sha256: Some(pinned.sha256.clone()),
+                };
+            }
+        }
         let sha256 = [Build::First, Build::Second, Build::StandIn]
             .into_iter()
             .filter_map(|build| self.sha256(build).ok())
@@ -216,9 +409,12 @@ impl Install {
         }
     }
 
-    fn lay_out(&self, profile: &Path, session: &str) -> Result<()> {
+    fn lay_out(&self, profile: &Path, session: &str) -> Result<String> {
         let source = self.source(Build::First)?;
-        let name = format!("local-{}", &self.first.sha256[..8]);
+        let name = match &self.release {
+            Some(release) => release.versions.first.clone(),
+            None => format!("local-{}", &self.first.sha256[..8]),
+        };
         let folder = self.build(&name);
         fs::create_dir_all(&folder)?;
         for file in [SHELL, COMMAND] {
@@ -233,12 +429,12 @@ impl Install {
             self.root.join("start.json"),
             serde_json::to_vec(&json!({"profile":profile,"session":session}))?,
         )?;
-        Ok(())
+        Ok(name)
     }
 }
 
 impl Native {
-    pub(super) fn lay_out_install(&mut self) -> Result<()> {
+    pub(super) fn lay_out_install(&mut self, layout: InstallLayout) -> Result<()> {
         ensure!(
             self.surface.sidebar.is_none(),
             "An app started by voyager start writes no inspection, so the run cannot set its sidebar"
@@ -262,18 +458,173 @@ impl Native {
         fs::write(home.join(".bashrc"), COUNTER)?;
         fs::write(home.join(".bash_profile"), ". ~/.bashrc\n")?;
         fs::create_dir_all(evidence.join("install"))?;
-        let install = Install {
+        let mut install = Install {
             root: fs::canonicalize(evidence.join("install"))?,
             sources: evidence.join("install-sources"),
             first: self.candidate.clone(),
             second,
+            release: None,
         };
-        install.lay_out(&self.profile(), &self.system.session)?;
-        self.system.record(
-            json!({"event":"install","root":install.root,"current":install.link("current")?}),
-        )?;
+        let interfaces = loopback::interfaces()?;
+        if layout == InstallLayout::Release {
+            ensure!(
+                interfaces == ["lo"],
+                "The sandbox has network interfaces {interfaces:?}, not loopback alone, so a build could reach the real releases address"
+            );
+            install.prepare_site()?;
+            install.publish(Site::Second)?;
+        }
+        let name = install.lay_out(&self.profile(), &self.system.session)?;
+        self.system.record(json!({"event":"install","root":install.root,"current":install.link("current")?,"releases":install.releases(),"interfaces":interfaces,"versions":install.release.as_ref().map(|release| &release.versions)}))?;
         self.install = Some(install);
+        if layout == InstallLayout::Release {
+            self.install_launch(&name)?;
+        }
         Ok(())
+    }
+
+    pub fn install_launch(&mut self, name: &str) -> Result<()> {
+        let shell = self.install()?.build(name).join(SHELL);
+        self.start_from(&shell)?;
+        self.present()
+    }
+
+    pub fn install_requests(&self) -> Result<Vec<String>> {
+        Ok(self
+            .install()?
+            .release
+            .as_ref()
+            .context("This run lays out no release install")?
+            .loopback
+            .requests())
+    }
+
+    pub fn install_interfaces(&self) -> Result<Vec<String>> {
+        loopback::interfaces()
+    }
+
+    pub fn install_versions(&self) -> Result<Versions> {
+        Ok(self
+            .install()?
+            .release
+            .as_ref()
+            .context("This run lays out no release install")?
+            .versions
+            .clone())
+    }
+
+    pub fn install_publish(&mut self, served: Site) -> Result<serde_json::Value> {
+        let manifest = self.install()?.publish(served)?;
+        self.system
+            .record(json!({"event":"publish","served":served,"manifest":manifest}))?;
+        Ok(manifest)
+    }
+
+    pub fn install_folders(&self) -> Result<Vec<String>> {
+        self.install()?.folders()
+    }
+
+    pub fn install_staged(&self, name: &str) -> Result<Option<Links>> {
+        let began = Instant::now();
+        while began.elapsed() < UPDATE_PATIENCE {
+            let links = self.install_links()?;
+            if links.next.as_ref().is_some_and(|next| next.name == name) {
+                return Ok(Some(links));
+            }
+            sleep(POLL);
+        }
+        Ok(None)
+    }
+
+    pub fn install_network_update(&mut self) -> Result<Ran> {
+        Ok(self.run_installed(&["update"], |_| Ok(()))?.0)
+    }
+
+    pub fn install_restart(&mut self) -> Result<Ran> {
+        let install = self.install()?;
+        let logs = install.logs()?;
+        let shells = install.running(SHELL);
+        let me = std::process::id();
+        rustix::process::set_child_subreaper(Some(rustix::process::getpid()))?;
+        let restarted = (|| {
+            self.click(&Target::RESTART_NOW)?;
+            self.await_exit()?;
+            let began = Instant::now();
+            let mut starter = loop {
+                let found = self
+                    .install()?
+                    .running(COMMAND)
+                    .into_iter()
+                    .find(|pid| parent(*pid).is_ok_and(|parent| parent == me));
+                if let Some(pid) = found {
+                    break Owned::adopt(pid)?;
+                }
+                if began.elapsed() >= UPDATE_PATIENCE {
+                    return Ok(None);
+                }
+                sleep(POLL);
+            };
+            let began = Instant::now();
+            loop {
+                if let Some(status) = starter.child.try_wait()? {
+                    return Ok(Some(status));
+                }
+                ensure!(
+                    began.elapsed() < START_PATIENCE,
+                    TimedOut(format!(
+                        "voyager start did not finish within {} s of Restart",
+                        START_PATIENCE.as_secs()
+                    ))
+                );
+                sleep(POLL);
+            }
+        })();
+        rustix::process::set_child_subreaper(None)?;
+        let install = self.install()?;
+        let fresh: Vec<u32> = install
+            .running(SHELL)
+            .into_iter()
+            .filter(|pid| !shells.contains(pid))
+            .collect();
+        let launched = install
+            .logs()?
+            .into_iter()
+            .filter(|log| !logs.contains(log))
+            .map(|log| install.launched(&log))
+            .collect::<Result<Vec<_>>>()?;
+        let status = match restarted {
+            Ok(status) => status,
+            Err(error) => {
+                for pid in fresh {
+                    drop(Owned::adopt(pid));
+                }
+                return Err(error);
+            }
+        };
+        let mut strays = Vec::new();
+        let mut taken = None;
+        for pid in fresh {
+            let owned = Owned::adopt(pid)?;
+            if taken.is_none() {
+                taken = Some(owned);
+            } else {
+                strays.push(owned.identity.clone());
+            }
+        }
+        let ran = Ran {
+            arguments: vec!["restart".into()],
+            code: status.and_then(|status| status.code()),
+            stdout: String::new(),
+            stderr: String::new(),
+            launched,
+            strays,
+        };
+        self.system
+            .record(json!({"event":"install-restart","ran":ran}))?;
+        if let Some(viewer) = taken {
+            self.take_viewer(viewer)?;
+        }
+        Ok(ran)
     }
 
     fn install(&self) -> Result<&Install> {

@@ -87,6 +87,9 @@ impl Target {
         Self::keyed(Role::ProfileUpdate, path)
     }
 
+    pub const RESTART_OFFER: Self = Self::single(Role::RestartOffer);
+    pub const RESTART_NOW: Self = Self::single(Role::RestartNow);
+    pub const RESTART_LATER: Self = Self::single(Role::RestartLater);
     pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
     pub const CREATE_AGENTS: Self = Self::single(Role::CreateAgents);
 

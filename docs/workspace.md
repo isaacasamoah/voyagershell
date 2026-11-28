@@ -1362,6 +1362,42 @@ sha256, unpacks it with the system `tar` and removes the archive. It then runs
 failed download, checksum, unpack, version check or rename removes the `.part`
 folder, leaves `next` as it was and exits 1 with the reason.
 
+A build compiled with `VOYAGER_RELEASE=1` checks for a newer release itself, but only
+when it runs from its own release folder, `builds/<its version>/`
+(`release::checker`). A source build, a `cargo run` and a `local-` build never check.
+The check starts once the app is ready, waits 10 seconds, and then runs every hour, or
+30 minutes after a failed check. It takes the same steps as `voyager update`, with the
+running version in place of `current`, so a release equal to or older than the
+running build offers nothing. When a build is staged, the app shows a card
+(`banner.rs`). The card names the version and the manifest's notes and says "Restart
+now, or the new version starts the next time you open VoyagerShell. Your programs keep
+running." Later hides the card.
+
+The card keeps clear of the avatar's drawn position, wherever the avatar is
+(`banner::place`). Its usual place is the window's bottom-right corner, 12 px from the
+right and 8 px from the bottom, at most 460 px wide. When that place would come within
+8 px of the avatar, the card moves to the first region with room. The regions are right
+of the avatar, then left of it, then above it, each kept 8 px clear and anchored at its bottom-right.
+A region has room when it is at least 240 px wide and as tall as the card's text,
+shaped at that width, plus the buttons. When no region has room, the card takes one
+fixed place, the top-right corner of the window, which is the top-right corner of the
+Fleet area, with the same 12 px and 8 px margins. There the card is drawn over the
+avatar so its words can be read. It is painted as a deferred element, after the avatar
+overlay and before dialogs, and it blocks the pointer, so a press on the card does not
+reach the avatar under it. The avatar records its drawn rectangle while it paints and asks for one more frame when
+the rectangle changes, so the card follows one frame later
+(`avatar::Binding::drawn`). When the docked place is not shown, the avatar is drawn
+parked in the status row, and the card keeps clear of it there. While the avatar is dragged it records nothing, so the
+card holds still until the drag ends. A floated avatar is ignored, and the card takes
+its usual place. The profile-updates notice keeps the bottom-right corner on its
+own. The staged build still starts at
+the next `voyager start`. Restart takes the Ctrl+Q path, which quits and keeps. When
+that succeeds, the app spawns one detached `sh` that waits for the app's process to
+exit and then runs `<install>/current/voyager start` (`release::relaunch`). Start
+applies `next` and falls back to the previous build at most once, so nothing
+relaunches a second time. If the quit fails, the quit error shows and nothing
+relaunches.
+
 `voyager start` reads `start.json` and first asks a running app to raise its
 window. When none answers, it applies `next`, so `previous` becomes the old
 `current`, and launches `current/voyager-shell` in its own process group with

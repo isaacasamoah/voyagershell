@@ -1,0 +1,16 @@
+diff --git a/app/src/release.rs b/app/src/release.rs
+index ad27fa9..764f4c1 100644
+--- a/app/src/release.rs
++++ b/app/src/release.rs
+@@ -300,9 +300,8 @@ pub fn relaunch() -> io::Result<()> {
+     let executable = std::env::current_exe()?;
+     let install = Install::locate(&executable)
+         .ok_or_else(|| io::Error::other("This build does not run from an install"))?;
+-    relaunch_after(std::process::id(), &install.command())
+-        .spawn()
+-        .map(drop)
++    let _ = install;
++    Ok(())
+ }
+ 
+ fn relaunch_after(pid: u32, command: &Path) -> Command {

@@ -123,6 +123,11 @@ Run these commands with the `voyager` from the install:
 - `voyager update` downloads the latest release, checks its sha256 and that it
   runs, and stages it for the next start. It stages nothing when the current
   build is that release or a newer one.
+
+A release build checks for a newer release a little after it opens and then
+hourly. It downloads and checks the new build quietly, then offers Restart. Restart
+quits, keeps your programs running and opens the new build. If you choose Later,
+the new build starts the next time you open VoyagerShell.
 - `voyager rollback` stages the previous build for the next start.
 
 None of these restarts or updates Herdr Core, and none stops a program.

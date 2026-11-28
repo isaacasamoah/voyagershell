@@ -96,7 +96,7 @@ fn within(inner: &Rect, outer: &Rect) -> bool {
         && inner.y + inner.height <= outer.y + outer.height
 }
 
-fn overlaps(a: &Rect, b: &Rect) -> bool {
+pub fn overlaps(a: &Rect, b: &Rect) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
