@@ -1376,8 +1376,8 @@ running." Later hides the card.
 The card keeps clear of the avatar's drawn position, wherever the avatar is
 (`banner::place`). Its usual place is the window's bottom-right corner, 12 px from the
 right and 8 px from the bottom, at most 460 px wide. When that place would come within
-8 px of the avatar, the card moves to the first region with room: right of the avatar,
-then left of it, then above it, each kept 8 px clear and anchored at its bottom-right.
+8 px of the avatar, the card moves to the first region with room. The regions are right
+of the avatar, then left of it, then above it, each kept 8 px clear and anchored at its bottom-right.
 A region has room when it is at least 240 px wide and as tall as the card's text,
 shaped at that width, plus the buttons. When no region has room, the card takes one
 fixed place, the top-right corner of the window, which is the top-right corner of the
