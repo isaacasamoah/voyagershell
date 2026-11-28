@@ -1758,16 +1758,21 @@ as in `daily-start`. `src/native/install.rs` owns the site and the restart, and
 | `bad-checksum-changes-nothing` | With a `latest.json` whose sha256 does not match, `voyager update` exits 1 and says the download is damaged. The links, the builds folder, the running app and the program are as they were. |
 | `failed-download-changes-nothing` | With a `latest.json` whose archive is missing, `voyager update` exits 1 and says the download failed. Nothing else changes. |
 | `restart-runs-the-newer-build` | A click on Restart quits and keeps, then runs `voyager start` once. It launches the second build and nothing else. `current` names it and `previous` the first, the same Voyage is selected and the program keeps its pid and keeps counting. This is the control case. |
-| `source-build-stages-nothing` | With the source build running and a newer `latest.json` published, `voyager update` from the source build exits 1 and names the default GitHub address. The run then quits and keeps, and relaunches the source build with its inspection. 25 seconds later, more than twice the 10 second wait before a release build's first check, it shows no Restart card. The listener has received no request since the case began, the sandbox has no interface but `lo`, nothing is staged and no folder appears. |
+| `source-build-stages-nothing` | With the source build running and a newer `latest.json` published, `voyager update` from the source build exits 1 and prints only "This is a source build, so voyager update won't replace it with a release. Update it with git, or run voyager update --from a folder." The run then quits and keeps, and relaunches the source build with its inspection. 25 seconds later, more than twice the 10 second wait before a release build's first check, it shows no Restart card. The listener has received no request since the case began, the sandbox has no interface but `lo`, nothing is staged and no folder appears. Last, `voyager update --from` the stand-in folder, run from the source build, exits 0 and stages that build as `next`. |
 
 `tests/native/controls/release-update.patch` makes Restart's relaunch do nothing, so
 `restart-runs-the-newer-build` fails. `release-update-checksum.patch` skips the sha256
 comparison, so `bad-checksum-changes-nothing` stages the stand-in and fails.
-`release-update-source.patch` treats every build as a release build.
-`release-update-releases.patch` makes the releases address honour
-`VOYAGER_RELEASES_URL` in every build. Apply either one to the second build only, and
-`source-build-stages-nothing` fails. The listener records the source build's request,
-and the source build stages the stand-in. `release-update-card.patch` makes the card
+`release-update-refusal.patch` removes the source build's refusal. Apply it to the
+second build only, and `source-build-stages-nothing` fails on the refusal line. Without
+the refusal, a source build reads the default GitHub address, which the sandbox cannot
+reach, so the listener still receives nothing. The unit test
+`a_source_build_refuses_update_and_asks_a_serving_stand_in_nothing` in
+`app/src/release_tests.rs` hands the address to the update directly, and it counts the
+requests that reach its stand-in. `release-update-source.patch` treats every build as
+a release build. Apply it to the second build only, and `source-build-stages-nothing`
+fails. The listener records the source build's request, and the source build stages
+the stand-in. `release-update-card.patch` makes the card
 ignore the avatar, so `card-clears-the-avatar` fails at the starting size with the
 avatar docked and at 900x700. `release-update-card-drag.patch` makes the avatar record
 its rectangle during a drag, so the card moves from under the held avatar and

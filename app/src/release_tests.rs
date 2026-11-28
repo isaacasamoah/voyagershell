@@ -1,7 +1,10 @@
 use super::*;
 use crate::install::{COMMAND, SHELL};
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 struct Scratch(PathBuf);
 
@@ -51,6 +54,60 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+struct StandIn {
+    address: String,
+    asked: Arc<Mutex<Vec<String>>>,
+}
+
+impl StandIn {
+    fn serve(files: impl FnOnce(&str) -> Vec<(String, Vec<u8>)>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let files = files(&address);
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&asked);
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else {
+                    continue;
+                };
+                let mut head = Vec::new();
+                let mut byte = [0];
+                while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
+                    head.push(byte[0]);
+                }
+                let path = String::from_utf8_lossy(&head)
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                let body = files
+                    .iter()
+                    .find(|(name, _)| *name == path)
+                    .map(|(_, body)| body);
+                log.lock().unwrap().push(path);
+                let status = if body.is_some() {
+                    "200 OK"
+                } else {
+                    "404 Not Found"
+                };
+                let body = body.map(Vec::as_slice).unwrap_or_default();
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(body);
+            }
+        });
+        Self { address, asked }
+    }
+
+    fn asked(&self) -> Vec<String> {
+        self.asked.lock().unwrap().clone()
     }
 }
 
@@ -181,6 +238,66 @@ fn the_releases_address_moves_only_in_a_release_build() {
     assert_eq!(releases_for(true, None), RELEASES);
     assert_eq!(releases_for(true, Some(String::new())), RELEASES);
     assert!(!release_build(), "the tests run as a source build");
+}
+
+#[test]
+fn a_source_build_refuses_update_and_asks_a_serving_stand_in_nothing() {
+    let scratch = Scratch::new("source");
+    let install = scratch.install();
+    let (url, sha256) = scratch.archive("0.1.0");
+    stage(&install, &manifest("0.1.0", &url, &sha256), None).unwrap();
+    install.apply_next().unwrap();
+    let (url, sha256) = scratch.archive("0.1.1");
+    let site = StandIn::serve(|address| {
+        vec![
+            (
+                format!("/{MANIFEST}"),
+                serde_json::json!({"version": "0.1.1", "targets": {"linux-x86_64": {"url": format!("{address}/{ARCHIVE}"), "sha256": sha256}}})
+                    .to_string()
+                    .into_bytes(),
+            ),
+            (
+                format!("/{ARCHIVE}"),
+                fs::read(url.trim_start_matches("file://")).unwrap(),
+            ),
+        ]
+    });
+    let before = (links(&install), builds(&install));
+    assert_eq!(
+        before,
+        ([Some("0.1.0".into()), None, None], vec!["0.1.0".to_owned()])
+    );
+    assert_eq!(
+        update_for(false, &install, || site.address.clone()),
+        Err("This is a source build, so voyager update won't replace it with a release. Update it with git, or run voyager update --from a folder.".into())
+    );
+    assert_eq!((links(&install), builds(&install)), before);
+    assert!(site.asked().is_empty(), "{:?}", site.asked());
+    assert_eq!(
+        update_for(true, &install, || site.address.clone()),
+        Ok(Staged::Next("0.1.1".into()))
+    );
+    assert_eq!(
+        site.asked(),
+        [format!("/{MANIFEST}"), format!("/{ARCHIVE}")]
+    );
+    assert_eq!(
+        links(&install),
+        [Some("0.1.0".into()), None, Some("0.1.1".into())]
+    );
+}
+
+#[test]
+fn a_source_build_still_stages_a_build_added_from_a_folder() {
+    let scratch = Scratch::new("from");
+    let install = scratch.install();
+    scratch.archive("0.1.1");
+    let name = install
+        .add_from(&scratch.0.join("pack-0.1.1").join("voyagershell"))
+        .unwrap();
+    assert!(!release_build(), "the tests run as a source build");
+    assert_eq!(install.stage(&name).unwrap(), Staged::Next(name.clone()));
+    assert_eq!(links(&install), [None, None, Some(name)]);
 }
 
 #[test]

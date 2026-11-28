@@ -220,6 +220,17 @@ pub fn stage(
 }
 
 pub fn update(install: &Install) -> Result<Staged, String> {
+    update_for(release_build(), install, releases)
+}
+
+fn update_for(
+    release: bool,
+    install: &Install,
+    releases: impl FnOnce() -> String,
+) -> Result<Staged, String> {
+    if !release {
+        return Err("This is a source build, so voyager update won't replace it with a release. Update it with git, or run voyager update --from a folder.".into());
+    }
     let manifest = latest(&releases())?;
     let current = install
         .linked(Link::Current)
