@@ -66,7 +66,7 @@ owner = "application-queue"
 source = "Isaac via Voyager, 27 Nov 2026, the PR 2 shapes of the release design"
 features = ["close-quit-restore"]
 guard = ["type:app/src/release.rs#Manifest"]
-check = ["test:app/src/release_tests.rs#only_a_release_build_running_from_its_own_release_folder_checks", "test:app/src/release_tests.rs#a_checksum_mismatch_removes_the_download_and_leaves_next_alone", "test:app/src/release_tests.rs#a_failed_download_removes_the_partial_folder_and_leaves_next_alone", "test:app/src/release_tests.rs#a_build_that_reports_another_version_is_refused", "journey:release-update/bad-checksum-changes-nothing", "journey:release-update/failed-download-changes-nothing", "journey:release-update/source-build-stages-nothing"]
+check = ["test:app/src/release_tests.rs#only_a_release_build_running_from_its_own_release_folder_checks", "test:app/src/release_tests.rs#a_source_build_refuses_update_and_asks_a_serving_stand_in_nothing", "test:app/src/release_tests.rs#a_checksum_mismatch_removes_the_download_and_leaves_next_alone", "test:app/src/release_tests.rs#a_failed_download_removes_the_partial_folder_and_leaves_next_alone", "test:app/src/release_tests.rs#a_build_that_reports_another_version_is_refused", "journey:release-update/bad-checksum-changes-nothing", "journey:release-update/failed-download-changes-nothing", "journey:release-update/source-build-stages-nothing"]
 confidence = "stated"
 
 [[invariant]]
